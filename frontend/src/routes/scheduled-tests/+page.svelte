@@ -212,7 +212,7 @@
 					class="input input-bordered w-full"
 					placeholder="Task Name"
 					required
-					disabled
+					disabled={isEditing}
 				/>
 			</div>
 			<div>
