@@ -43,7 +43,7 @@ class CustomWorld {
 setWorldConstructor(CustomWorld);
 
 Before(async function () {
-	this.browser = await chromium.launch({ headless: true });
+	this.browser = await chromium.launch({ headless: process.env.IS_HEADLESS === 'true' });
 	this.context = await this.browser.newContext();
 	this.page = await this.context.newPage();
 	this.loginPage = new LoginPage(this.page);

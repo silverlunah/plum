@@ -27,9 +27,17 @@ const path = require('path');
 const envPath = path.join(__dirname, '../.env');
 
 if (!fs.existsSync(envPath)) {
-	const envContent = 'BASE_URL=https://www.saucedemo.com/v1/';
+	const envContent = 'BASE_URL=https://www.saucedemo.com/v1/\nIS_HEADLESS=false';
 	fs.writeFileSync(envPath, envContent);
 	console.log('.env file created in the root directory');
 } else {
-	console.log('.env file already exists aat' + __dirname);
+	let envContent = fs.readFileSync(envPath, 'utf8');
+
+	if (!envContent.includes('IS_HEADLESS=')) {
+		envContent += '\nIS_HEADLESS=false';
+		fs.writeFileSync(envPath, envContent);
+		console.log('IS_HEADLESS=false added to .env');
+	} else {
+		console.log('.env file already contains IS_HEADLESS setting');
+	}
 }
