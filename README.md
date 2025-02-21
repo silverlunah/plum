@@ -1,6 +1,6 @@
 **_Pre-requisite:_**
 
-1. After pulling the project, run `nmp run init`
+1. After pulling the project, run `npm run init`. This will run npm install throughout the monorepo and generate .env file (if you don't have one). Technically, you can skip this and run the docker command immediately, but you'll have to run this when you start coding/debugging test scripts anyway.
 
 **_I. How to Run:_**
 
