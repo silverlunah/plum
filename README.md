@@ -1,8 +1,6 @@
 **_Pre-requisite:_**
 
-1. Backend: Create an .env file or rename the existing .env.example file
-
-2. Root (optional): Run `npm install` to have prettier working while coding.
+1. After pulling the project, run `nmp run init`
 
 **_I. How to Run:_**
 
