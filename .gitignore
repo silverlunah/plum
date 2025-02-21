@@ -1,0 +1,85 @@
+#
+# This file is part of Plum.
+#
+# Plum is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Plum is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Plum. If not, see https://www.gnu.org/licenses/.
+#
+
+#-----------------------#
+#   Common .gitignore   #
+#-----------------------#
+# Node.js dependencies
+/node_modules/
+
+# Environment files
+.env
+
+# IDE or editor files
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+
+# npm package lock file (optional, if you don't want it in version control)
+# package-lock.json
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Coverage folder (if you're using a code coverage tool like Istanbul)
+/coverage/
+
+#-----------------------#
+#   Backend .gitignore  #
+#-----------------------#
+
+# Playwright test results and reports
+/backend/test-results/
+/backend/reports/
+/backend/node_modules/
+
+# Cron Job Config
+/backend/config/cron-jobs.json
+
+#-----------------------#
+#  Frontend .gitignore  #
+#-----------------------#
+/frontend/node_modules/
+
+# Output
+/frontend/.output
+/frontend/.vercel
+/frontend/.netlify
+/frontend/.wrangler
+/frontend/.svelte-kit
+/frontend/build
+
+# OS
+/frontend/.DS_Store
+/frontend/Thumbs.db
+
+# Env
+/frontend/.env
+/frontend/.env.*
+!/frontend/.env.example
+!/frontend/.env.test
+
+# Vite
+/frontend/vite.config.js.timestamp-*
+/frontend/vite.config.ts.timestamp-*

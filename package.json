@@ -1,0 +1,21 @@
+{
+	"name": "plum",
+	"version": "1.0.0",
+	"description": "a detached test automation environment that combines Playwright and Cucumber with a Svelte frontend and an Express backend. It allows users to trigger tests, monitor reports, and schedule test runs through an intuitive UI.",
+	"main": "index.js",
+	"scripts": {
+		"init": "(npm install) && (cd backend && npm install && npm run create-env) && (cd frontend && npm install)",
+		"format": "prettier --write .",
+		"add-license": "npx license-check-and-add add -f license-config.json",
+		"prepare": "husky"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"devDependencies": {
+		"husky": "^9.1.7",
+		"license-check-and-add": "^4.0.5",
+		"prettier": "^3.5.1",
+		"prettier-plugin-svelte": "^3.3.3"
+	}
+}

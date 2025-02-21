@@ -1,0 +1,28 @@
+{
+	"name": "plum-backend",
+	"version": "1.0.0",
+	"main": "index.js",
+	"scripts": {
+		"create-env": "node services/envService.js",
+		"test": "cucumber-js tests/features --format json:reports/cucumber_report.json ${TAG:+--tags \"$TAG\"}; node config/generate-report.js"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"devDependencies": {
+		"@playwright/test": "^1.50.1",
+		"@types/node": "^22.13.1",
+		"cucumber-html-reporter": "^7.2.0"
+	},
+	"dependencies": {
+		"@cucumber/cucumber": "^11.2.0",
+		"chai": "^5.2.0",
+		"chai-soft-assert": "^0.0.5",
+		"cors": "^2.8.5",
+		"dotenv": "^16.4.7",
+		"express": "^4.21.2",
+		"node-cron": "^3.0.3",
+		"playwright": "^1.50.1",
+		"socket.io": "^4.8.1"
+	}
+}

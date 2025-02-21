@@ -1,0 +1,29 @@
+{
+	"license": "./resources/gpl-3.0-license.txt",
+	"ignoreDefaultIgnores": false,
+	"licenseFormats": {
+		"js|ts": {
+			"prepend": "/*",
+			"append": " */\n",
+			"eachLine": {
+				"prepend": " * "
+			}
+		},
+		"svelte": {
+			"prepend": "<!--",
+			"append": " -->\n",
+			"eachLine": {
+				"prepend": " * "
+			}
+		},
+		"dotfile|^Dockerfile|yml|yaml|prettierignore|gitignore|env|example": {
+			"prepend": "#",
+			"append": "#\n",
+			"eachLine": {
+				"prepend": "# "
+			}
+		}
+	},
+	"trailingWhitespace": "TRIM",
+	"ignore": ["**/backend/tests/**", "**/.prettierrc", "**/.husky", "**/*.md"]
+}
