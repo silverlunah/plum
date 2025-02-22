@@ -1,3 +1,5 @@
+![alt-text="social-preview"](https://repository-images.githubusercontent.com/936477779/e928fce3-6d4c-4609-92a0-0a1091c99752)
+
 **_Pre-requisite:_**
 
 1. After pulling the project, run `npm run init`. This will run npm install throughout the monorepo and generate .env file (if you don't have one). Technically, you can skip this and run the docker command immediately, but you'll have to run this when you start coding/debugging test scripts anyway.
