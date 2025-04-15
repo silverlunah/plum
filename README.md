@@ -17,6 +17,7 @@
 5. View Report button will appear after the run is over
 
 **_II. To run without using UI (FOR DEBUGGING):_**
+This will automatically run headful.
 
 1. Go to backend folder `cd backend`
 
