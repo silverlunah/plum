@@ -34,6 +34,8 @@ But during development and debugging, you can go to `backend/tests/utils/hooks.j
 This is while running using CLI (see II.).<br />
 
 **_IV. Writing Tests_**<br/>
+NOTE: Always need to restart the docker container to show new tests in frontend. Use commands `docker-compose down` then <br /> `docker-compose up`. If you don't have docker-compose installed, `docker compose down` then `docker compose up`.<br />
+
 This will be in perspective of writing a fresh feature file. Cucumber with [Page Object Model (POM)](https://www.selenium.dev/documentation/test_practices/encouraged/page_object_models/) mainly works with 3 files: `feature`, `step definitions`, and `step files`. There should be a working test included in this project so you can reference it while you try to link feature, step definition, and page files.
 
 1. To write tests, begin by creating a `Feature file` in the `test/features` folder. The file should be responsible for the page/feature being tested. For example, if you're making a test case for login, you should put it in a `Login.feature` file (if the team decides to name by feature) or `LoginPage.feature` (if the team decides to name by page). Tests are written in Gherkin format. You can check the existing `.feature` files for the format. Learn more: [https://cucumber.io/docs/gherkin/](https://cucumber.io/docs/gherkin/).
