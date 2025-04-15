@@ -6,7 +6,7 @@
 
 **_I. How to Run:_**
 
-1. Run `docker-compose up --build`
+1. Run `docker-compose up --build` or `docker compose up` if you don't have docker-compose installed
 
 2. After build is done, go to: `http://localhost:5173/` (this will also appear in console)
 
