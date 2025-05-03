@@ -49,7 +49,8 @@ Thumbs.db
 #   Backend .gitignore  #
 #-----------------------#
 
-# Playwright test results and reports
+# Playwright tests, test results and reports
+/backend/tests/
 /backend/test-results/
 /backend/reports/
 /backend/node_modules/

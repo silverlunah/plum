@@ -17,9 +17,12 @@
 
 import fs from 'fs';
 import path from 'path';
+import fse from 'fs-extra'; // fs-extra for directory copying
 
 // Path to the settings.json file inside the backend/config directory
 const settingsFilePath = path.join(process.cwd(), 'config', 'settings.json');
+const scaffoldFolderPath = path.join(process.cwd(), '_scaffold');
+const userTestsFolderPath = path.join(process.cwd(), 'tests');
 
 // Check if the settings.json file exists
 if (!fs.existsSync(settingsFilePath)) {
@@ -45,4 +48,13 @@ if (!fs.existsSync(settingsFilePath)) {
 	console.log('✅ settings.json created with default values.');
 } else {
 	console.log('⚠️ settings.json already exists. Skipping creation.');
+}
+
+// Check if the tests folder exists, if not, copy the scaffold folder as tests
+if (!fs.existsSync(userTestsFolderPath)) {
+	console.log('🧪 `tests/` folder not found. Creating `tests/` from the scaffold folder...');
+	fse.copySync(scaffoldFolderPath, userTestsFolderPath);
+	console.log('✅ `tests/` folder created from scaffold.');
+} else {
+	console.log('⚠️ `tests/` folder already exists. Skipping creation.');
 }

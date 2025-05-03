@@ -125,15 +125,15 @@ switch (command) {
 		copyEnvFile();
 
 		const tagArg = process.argv[3]; // This is your tag, like @test-1
-		const customerTestsPath = path.resolve(process.cwd(), 'tests');
+		const userTestsPath = path.resolve(process.cwd(), 'tests');
 		const backendTestsPath = path.join(plumRoot, 'backend', 'tests');
 
-		// Copy customer tests into backend
-		if (fs.existsSync(customerTestsPath)) {
-			console.log('📦 Copying customer tests to the backend...');
-			fse.copySync(customerTestsPath, backendTestsPath);
+		// Copy user tests into backend
+		if (fs.existsSync(userTestsPath)) {
+			console.log('📦 Syncing your tests...');
+			fse.copySync(userTestsPath, backendTestsPath);
 		} else {
-			console.log('⚠️  No `tests/` folder found in the customer directory.');
+			console.log('⚠️  No `tests/` folder found in the user directory.');
 		}
 
 		// Run npm install

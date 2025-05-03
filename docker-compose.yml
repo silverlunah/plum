@@ -23,7 +23,7 @@ services:
     volumes:
       - ./backend/reports:/app/reports
       - ./backend/config:/app/config
-      - ../tests:/app/tests:rw
+      - ./backend/tests:/app/tests:rw
     networks:
       - app-network
 

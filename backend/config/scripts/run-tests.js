@@ -30,7 +30,7 @@ try {
 } finally {
 	// Always run the report generation after tests (even if they fail)
 	try {
-		execSync('node config/generate-report.js', { stdio: 'inherit' });
+		execSync('node config/scripts/generate-report.js', { stdio: 'inherit' });
 	} catch (error) {
 		console.error('Error running report generation:', error.message);
 	}
