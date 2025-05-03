@@ -1,5 +1,0 @@
-services:
-  backend:
-    volumes:
-      - "C:/Users/Jann/projects/test/tests:/app/tests"
-      - "C:/Users/Jann/projects/test/node_modules:/app/tests/node_modules"

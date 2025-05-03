@@ -45,6 +45,8 @@ Thumbs.db
 # Coverage folder (if you're using a code coverage tool like Istanbul)
 /coverage/
 
+docker-compose.override.yml
+
 #-----------------------#
 #   Backend .gitignore  #
 #-----------------------#
