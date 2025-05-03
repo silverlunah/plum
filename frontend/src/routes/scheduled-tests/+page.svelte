@@ -19,6 +19,7 @@
 	import { onMount } from 'svelte';
 
 	let scheduledTests = [];
+	let schedules = [];
 	let cronExpression = '';
 	let taskName = '';
 	let tags = '';
@@ -33,13 +34,20 @@
 	const cronRegex =
 		/^(\*|([0-5]?[0-9])) (\*|([01]?[0-9]|2[0-3])) (\*|([01]?[0-9]|3[01])) (\*|([1-9]|1[0-2])) (\*|[0-6])$/;
 
-	// Common cron expressions
-	const cronOptions = [
-		{ label: 'Every minute', value: '* * * * *' },
-		{ label: 'Every hour', value: '0 * * * *' },
-		{ label: 'Every midnight', value: '0 0 * * *' },
-		{ label: 'Every Sunday', value: '0 0 * * 0' }
-	];
+	// Fetch schedules from the settings.json through backend API
+	async function fetchSchedules() {
+		try {
+			const res = await fetch('http://localhost:3001/schedules');
+			const data = await res.json();
+
+			if (data.schedules) {
+				schedules = data.schedules;
+			}
+		} catch (error) {
+			errorMessage = 'Error fetching schedules.';
+			console.error('Error fetching schedules', error);
+		}
+	}
 
 	// Fetch scheduled tests (cron jobs) from the backend API
 	async function fetchScheduledTests() {
@@ -177,11 +185,14 @@
 
 	// Get human-readable label for cron expression
 	function getCronLabel(cronExpression) {
-		const match = cronOptions.find((option) => option.value === cronExpression);
+		const match = schedules.find((option) => option.value === cronExpression);
 		return match ? match.label : cronExpression;
 	}
 
-	onMount(fetchScheduledTests);
+	onMount(() => {
+		fetchScheduledTests();
+		fetchSchedules(); // <-- also call this here
+	});
 </script>
 
 <!-- Add/Modify modal -->
@@ -227,8 +238,8 @@
 					required
 				>
 					<option value="" disabled selected>Select Cron Expression</option>
-					{#each cronOptions as option}
-						<option value={option.value}>{option.label}</option>
+					{#each schedules as schedule}
+						<option value={schedule.value}>{schedule.label}</option>
 					{/each}
 				</select>
 			</div>

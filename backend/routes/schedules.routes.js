@@ -16,22 +16,17 @@
  */
 
 const express = require('express');
-const cors = require('cors');
-const app = express();
+const router = express.Router();
+const scheduleService = require('../services/scheduleService');
 
-app.use(cors({ origin: '*' }));
-app.use(express.json());
+/* -----------------------------------------------------
+ *                    Get Schedules
+ *  Description:
+ * 		Get all schedules from schedules/
+ * ------------------------------------------------------ */
+router.get('/', (req, res) => {
+	const schedules = scheduleService.getAllSchedules();
+	res.json({ schedules });
+});
 
-// Routes
-const testRoutes = require('./routes/tests.routes');
-const reportRoutes = require('./routes/reports.routes');
-const cronRoutes = require('./routes/cron.routes');
-const scheduleRoutes = require('./routes/schedules.routes');
-
-app.use('/tests', testRoutes);
-app.use('/reports', reportRoutes);
-app.use('/cron-jobs', cronRoutes);
-app.use('/reports', express.static('reports'));
-app.use('/schedules', scheduleRoutes);
-
-module.exports = app;
+module.exports = router;

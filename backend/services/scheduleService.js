@@ -15,23 +15,20 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-const express = require('express');
-const cors = require('cors');
-const app = express();
+const fs = require('fs');
+const path = require('path');
 
-app.use(cors({ origin: '*' }));
-app.use(express.json());
+const SETTINGS_PATH = path.join(__dirname, '../config/settings.json');
 
-// Routes
-const testRoutes = require('./routes/tests.routes');
-const reportRoutes = require('./routes/reports.routes');
-const cronRoutes = require('./routes/cron.routes');
-const scheduleRoutes = require('./routes/schedules.routes');
+const getAllSchedules = () => {
+	try {
+		const fileContent = fs.readFileSync(SETTINGS_PATH, 'utf8');
+		const settings = JSON.parse(fileContent);
+		return settings.cronJobSchedules || [];
+	} catch (error) {
+		console.error('Error reading or parsing the settings file:', error);
+		return [];
+	}
+};
 
-app.use('/tests', testRoutes);
-app.use('/reports', reportRoutes);
-app.use('/cron-jobs', cronRoutes);
-app.use('/reports', express.static('reports'));
-app.use('/schedules', scheduleRoutes);
-
-module.exports = app;
+module.exports = { getAllSchedules };

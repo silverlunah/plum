@@ -118,7 +118,7 @@ switch (command) {
 		break;
 
 	case 'local': {
-		console.log('--------------------------------------');
+		console.log('--------------------------------------\n');
 		console.log('🚀 Running Plum locally...');
 
 		// Copy .env file from root to backend
@@ -137,6 +137,7 @@ switch (command) {
 		}
 
 		// Run npm install
+		console.log('--------------------------------------\n');
 		console.log('Running `npm install`...');
 
 		execSync('npm install', {
@@ -144,6 +145,15 @@ switch (command) {
 			stdio: 'inherit'
 		});
 
+		console.log('Running `npx playwright install`...');
+
+		execSync('npx playwright install', {
+			cwd: path.join(plumRoot, 'backend'),
+			stdio: 'inherit'
+		});
+
+		// Run the tests with the tag filter, only if a tag is provided
+		console.log('--------------------------------------\n');
 		console.log('Running `npm run test` with:');
 		console.log('TAG =', tagArg ?? '');
 		console.log('TRIGGER =', 'command-line-trigger');

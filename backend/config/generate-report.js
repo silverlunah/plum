@@ -18,6 +18,7 @@
 const reporter = require('cucumber-html-reporter');
 const fs = require('fs');
 const path = require('path');
+const { reportsHistory } = require('../config/settings.json');
 
 /* -----------------------------------------------------
  *            Screenshot and Report Management
@@ -29,7 +30,7 @@ const path = require('path');
 
 const reportsDir = 'reports';
 const screenshotsDir = path.join(reportsDir, 'screenshots');
-const maxReports = 20;
+const maxReports = reportsHistory;
 
 // Ensure the reports and screenshots directories exist
 if (!fs.existsSync(reportsDir)) {

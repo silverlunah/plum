@@ -16,14 +16,9 @@
  */
 
 const { execSync } = require('child_process');
-const path = require('path');
-
 const tag = process.env.TAG; // Read the TAG environment variable
 
 try {
-	// Install Playwright
-	execSync('npx playwright install', { stdio: 'inherit' });
-
 	// Run the tests with the tag filter, only if a tag is provided
 	const cucumberCommand = tag
 		? `cucumber-js tests/features/**/*.feature --format json:reports/cucumber_report.json --tags "${tag}"`

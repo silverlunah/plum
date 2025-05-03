@@ -30,6 +30,8 @@
 		"**/backend/_scaffold/**",
 		"**/.prettierrc",
 		"**/.husky",
-		"**/*.md"
+		"**/*.md",
+		"**/backend/config/settings.json",
+		"**/backend/config/cronjobs.json"
 	]
 }
