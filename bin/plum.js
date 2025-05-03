@@ -40,7 +40,8 @@ function createEnvFile() {
 
 	// Check if .env file already exists
 	if (fs.existsSync(envFilePath)) {
-		console.log('⚠️ .env file already exists. Skipping creation.\n');
+		copyEnvFile();
+		console.log('⚠️ .env file already exists. Syncing .env file...\n');
 		return; // Exit if file exists
 	}
 
@@ -57,8 +58,6 @@ IS_HEADLESS=false
 // Function to copy .env file from root to backend
 function copyEnvFile() {
 	try {
-		console.log(rootEnvPath);
-		console.log(backendEnvPath);
 		if (fs.existsSync(rootEnvPath)) {
 			fse.copySync(rootEnvPath, backendEnvPath);
 			console.log('.env file copied to the backend folder.\n');
