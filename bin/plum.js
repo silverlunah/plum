@@ -150,10 +150,10 @@ switch (command) {
 
 		// Copy user tests into backend
 		if (fs.existsSync(userTestsPath)) {
-			console.log('📦 Syncing your tests...');
+			console.log('📦 Syncing your tests...\n');
 			fse.copySync(userTestsPath, backendTestsPath);
 		} else {
-			console.log('⚠️  No `tests/` folder found in the user directory.');
+			console.log('⚠️  No `tests/` folder found in the user directory.\n');
 		}
 
 		// Run npm install
