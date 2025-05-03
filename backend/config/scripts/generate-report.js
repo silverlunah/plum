@@ -18,7 +18,7 @@
 const reporter = require('cucumber-html-reporter');
 const fs = require('fs');
 const path = require('path');
-const { reportsHistory } = require('../config/settings.json');
+const { reportsHistory } = require('../settings.json');
 
 /* -----------------------------------------------------
  *            Screenshot and Report Management

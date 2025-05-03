@@ -26,7 +26,6 @@ try {
 
 	execSync(cucumberCommand, { stdio: 'inherit' });
 } catch (error) {
-	// Log the error to the console if tests fail
 	console.error('Tests failed:', error.message);
 } finally {
 	// Always run the report generation after tests (even if they fail)

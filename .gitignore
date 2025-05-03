@@ -57,6 +57,9 @@ Thumbs.db
 # Cron Job Config
 /backend/config/cron-jobs.json
 
+# Global Settings
+/backend/config/settings.json
+
 #-----------------------#
 #  Frontend .gitignore  #
 #-----------------------#
