@@ -60,9 +60,9 @@ function copyEnvFile() {
 	try {
 		if (fs.existsSync(rootEnvPath)) {
 			fse.copySync(rootEnvPath, backendEnvPath);
-			console.log('.env file copied to the backend folder.\n');
+			console.log('📦 .env file copied to the backend folder.\n');
 		} else {
-			console.log('.env file not found in the root directory.\n');
+			console.log('⚠️ .env file not found in the root directory.\n');
 		}
 	} catch (err) {
 		console.error('Error copying .env file:', err);
@@ -77,13 +77,13 @@ function copyEnvFile() {
  * ------------------------------------------------------ */
 switch (command) {
 	case 'init':
-		console.log('--------------------------------------');
+		console.log('--------------------------------------\n');
 		console.log('🟣  Initializing Plum...\n');
 
 		if (fs.existsSync(userTestsPath)) {
 			console.log('⚠️  A `tests/` folder already exists.\n');
 		} else {
-			console.log('🧪 Creating test scaffold...\n');
+			console.log('📦 Creating test scaffold...\n');
 			fse.copySync(scaffoldTestsPath, userTestsPath);
 			console.log('✅ `tests/` initialized with example files.\n');
 		}
@@ -93,11 +93,21 @@ switch (command) {
 		console.log(
 			'🟣  Plum is now ready!\n\n Scaffold test cases are included in the `tests/` folder.\n For more information about Cucumber, visit: https://cucumber.io/\n\n - To start the server, run:\n `plum start` \n\n - If you are developing locally, run:\n `plum local <@tag/blank if you want to run all tests>`'
 		);
-		console.log('--------------------------------------');
+		console.log('--------------------------------------\n');
 		break;
 
 	case 'start':
-		console.log('--------------------------------------');
+		console.log('--------------------------------------\n');
+
+		// Initialize project
+		console.log('🚀 Initializing plum...');
+		execSync('npm run init', {
+			cwd: plumRoot,
+			stdio: 'inherit'
+		});
+
+		console.log('--------------------------------------\n');
+
 		console.log('🚀 Running plum via Docker Compose...');
 
 		// Copy .env file from root to backend
@@ -124,7 +134,7 @@ switch (command) {
 			cwd: plumRoot,
 			stdio: 'inherit'
 		});
-		console.log('--------------------------------------');
+		console.log('--------------------------------------\n');
 		break;
 
 	case 'local': {
@@ -177,12 +187,12 @@ switch (command) {
 				TRIGGER: 'command-line-trigger'
 			}
 		});
-		console.log('--------------------------------------');
+		console.log('--------------------------------------\n');
 		break;
 	}
 
 	default:
-		console.log('--------------------------------------');
+		console.log('--------------------------------------\n');
 		console.log('Usage: plum <init|start|local>');
-		console.log('--------------------------------------');
+		console.log('--------------------------------------\n');
 }

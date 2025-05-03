@@ -1,6 +1,6 @@
 {
 	"name": "plum-e2e",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "A detached test automation environment that combines Playwright and Cucumber with a Svelte frontend and an Express backend. It allows users to trigger tests, monitor reports, and schedule test runs through an intuitive UI.",
 	"main": "index.js",
 	"scripts": {
