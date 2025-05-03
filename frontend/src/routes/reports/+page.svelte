@@ -104,6 +104,8 @@
 										<td>
 											{#if report.triggerType === 'manual-trigger'}
 												<span class="badge badge-primary">Manual Trigger</span>
+											{:else if report.triggerType === 'command-line-trigger'}
+												<span class="badge badge-primary">CLI Trigger</span>
 											{:else}
 												<span class="badge badge-secondary">Scheduled: {report.triggerType}</span>
 											{/if}

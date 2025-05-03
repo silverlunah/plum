@@ -19,9 +19,20 @@ const http = require('http');
 const { Server } = require('socket.io');
 const app = require('./app');
 const socketHandler = require('./websockets/socketHandler.js');
-
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
+const path = require('path');
+const fs = require('fs');
+
+// Always point to the mounted tests directory
+const testsDir = path.resolve(process.cwd(), 'tests');
+
+if (!fs.existsSync(testsDir)) {
+	console.error('❌ No tests folder found at /app/tests');
+	process.exit(1);
+}
+
+console.log('📂 Loading tests from:', testsDir);
 
 socketHandler(io);
 

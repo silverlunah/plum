@@ -79,9 +79,11 @@
 	}
 </script>
 
-<div class="flex w-full my-4">
+<div class="flex flex-col md:flex-row w-full my-4">
 	<!-- Left Panel: Run Tests -->
-	<div class="card bg-base-300 rounded-box grid flex-grow place-items-center w-1/2 p-4 mr-2 ml-4">
+	<div
+		class="card bg-base-300 rounded-box grid flex-grow place-items-center md:w-1/2 w-full p-4 md:mr-2 md:ml-4 mb-4 md:mb-0"
+	>
 		<div class="card-body items-center text-center">
 			<h2 class="card-title">Run Tests</h2>
 			<p>Enter a test case/suite ID or select an ID from the Test List</p>
@@ -109,7 +111,7 @@
 	</div>
 
 	<!-- Right Panel: Test List -->
-	<div class="card bg-base-300 rounded-box w-1/2 p-4 ml-2 mr-4">
+	<div class="card bg-base-300 rounded-box md:w-1/2 w-full p-4 md:ml-2 md:mr-4">
 		<div class="card-body items-center text-center">
 			<h2 class="card-title sticky top-0 bg-base-300 z-10">Test List</h2>
 			<div class="mt-4">
