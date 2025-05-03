@@ -15,9 +15,9 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-import fs from 'fs';
-import path from 'path';
-import fse from 'fs-extra'; // fs-extra for directory copying
+const fs = require('fs');
+const path = require('path');
+const fse = require('fs-extra'); // fs-extra for directory copying
 
 // Path to the settings.json file inside the backend/config directory
 const settingsFilePath = path.join(process.cwd(), 'config', 'settings.json');

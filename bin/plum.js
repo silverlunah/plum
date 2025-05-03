@@ -36,10 +36,21 @@ const backendEnvPath = path.join(plumRoot, 'backend', '.env');
 
 // Function to create the .env file with default values NOTE: DO NOT FORMAT envContent
 function createEnvFile() {
+	const envFilePath = path.join(process.cwd(), '.env');
+
+	// Check if .env file already exists
+	if (fs.existsSync(envFilePath)) {
+		console.log('⚠️ .env file already exists. Skipping creation.\n');
+		return; // Exit if file exists
+	}
+
+	// Default content for .env file
 	const envContent = `BASE_URL=https://www.saucedemo.com/v1/
 IS_HEADLESS=false
 `;
-	fs.writeFileSync(path.join(process.cwd(), '.env'), envContent, 'utf8');
+
+	// Write the content to the .env file
+	fs.writeFileSync(envFilePath, envContent, 'utf8');
 	console.log('✅ .env file created with default values.\n');
 }
 
