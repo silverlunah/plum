@@ -78,7 +78,7 @@ function copyEnvFile() {
 switch (command) {
 	case 'init':
 		console.log('--------------------------------------\n');
-		console.log('🟣  Initializing Plum...\n');
+		console.log('🟣  Preparing Plum...\n');
 
 		if (fs.existsSync(userTestsPath)) {
 			console.log('⚠️  A `tests/` folder already exists.\n');
@@ -90,8 +90,17 @@ switch (command) {
 
 		// Create .env file with default values
 		createEnvFile();
+
+		// Initialize project
+		console.log('--------------------------------------\n');
+		console.log('🚀 Initializing Plum...');
+		execSync('npm run init', {
+			cwd: plumRoot,
+			stdio: 'inherit'
+		});
+
 		console.log(
-			'🟣  Plum is now ready!\n\n Scaffold test cases are included in the `tests/` folder.\n For more information about Cucumber, visit: https://cucumber.io/\n\n - To start the server, run:\n `plum start` \n\n - If you are developing locally, run:\n `plum local <@tag/blank if you want to run all tests>`'
+			'🟣  Plum is now ready!\n\n Scaffold test cases are included in the `tests/` folder.\n For more information about Cucumber, visit: https://cucumber.io/\n\n - To start the server, run:\n `plum start` \n\n - If you are developing locally, run:\n `plum dev <@tag/blank if you want to run all tests>`'
 		);
 		console.log('--------------------------------------\n');
 		break;
@@ -99,16 +108,7 @@ switch (command) {
 	case 'start':
 		console.log('--------------------------------------\n');
 
-		// Initialize project
-		console.log('🚀 Initializing plum...');
-		execSync('npm run init', {
-			cwd: plumRoot,
-			stdio: 'inherit'
-		});
-
-		console.log('--------------------------------------\n');
-
-		console.log('🚀 Running plum via Docker Compose...');
+		console.log('🚀 Running Plum via Docker Compose...');
 
 		// Copy .env file from root to backend
 		copyEnvFile();
@@ -137,9 +137,9 @@ switch (command) {
 		console.log('--------------------------------------\n');
 		break;
 
-	case 'local': {
+	case 'dev': {
 		console.log('--------------------------------------\n');
-		console.log('🚀 Running Plum locally...');
+		console.log('🚀 Running Plum in Development Mode...');
 
 		// Copy .env file from root to backend
 		copyEnvFile();
@@ -193,6 +193,6 @@ switch (command) {
 
 	default:
 		console.log('--------------------------------------\n');
-		console.log('Usage: plum <init|start|local>');
+		console.log('Usage: plum <init|start|dev>');
 		console.log('--------------------------------------\n');
 }
