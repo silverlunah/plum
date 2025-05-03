@@ -1,4 +1,20 @@
 #!/usr/bin/env node
+/*
+ * This file is part of Plum.
+ *
+ * Plum is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Plum is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Plum. If not, see https://www.gnu.org/licenses/.
+ */
 
 import { execSync } from 'child_process';
 import fs from 'fs';
@@ -119,6 +135,14 @@ switch (command) {
 		} else {
 			console.log('⚠️  No `tests/` folder found in the customer directory.');
 		}
+
+		// Run npm install
+		console.log('Running `npm install`...');
+
+		execSync('npm install', {
+			cwd: path.join(plumRoot, 'backend'),
+			stdio: 'inherit'
+		});
 
 		console.log('Running `npm run test` with:');
 		console.log('TAG =', tagArg ?? '');
