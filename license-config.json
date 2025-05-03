@@ -25,5 +25,11 @@
 		}
 	},
 	"trailingWhitespace": "TRIM",
-	"ignore": ["**/backend/tests/**", "**/backend/_scaffold/**", "**/.prettierrc", "**/.husky", "**/*.md"]
+	"ignore": [
+		"**/backend/tests/**",
+		"**/backend/_scaffold/**",
+		"**/.prettierrc",
+		"**/.husky",
+		"**/*.md"
+	]
 }
