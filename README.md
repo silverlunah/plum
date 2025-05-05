@@ -1,4 +1,5 @@
 ![alt-text="social-preview"](https://repository-images.githubusercontent.com/936477779/e928fce3-6d4c-4609-92a0-0a1091c99752)
+
 <p align="center">
   📖 <a href="https://github.com/silverlunah/plum/wiki">Wiki</a> |
   📦 <a href="https://www.npmjs.com/package/plum-e2e">npm</a>
@@ -13,25 +14,29 @@ By combining [Playwright](https://playwright.dev) and [Cucumber](https://cucumbe
 You can view, run, schedule tests in a simple UI and even view the history of your runs in the Report page!
 
 **_Pre-requisite:_**
+
 1. Install Docker and ensure the Docker daemon is running.
 
 ## For Users
+
 For normal users. People that want to use Plum as a test environment for their website.
 
 **_I. How to Run:_**
-1. ```npm install -g plum-e2e```
-2. Create your project directory. Example: ```mkdir my-test-folder```
-3. Go inside the folder you created ```cd my-test-folder```
-4. Run ```plum init```
-     1. This will initialize Plum and will create your base files:
-        1. ```\tests``` folder: This include sample test cases for [SauceLabs](https://www.saucedemo.com/v1/)
-        2. ```.env``` file: Your starting .env file. You can set the BASE_URL to your own site after you're done with the scaffold tests.
+
+1. `npm install -g plum-e2e`
+2. Create your project directory. Example: `mkdir my-test-folder`
+3. Go inside the folder you created `cd my-test-folder`
+4. Run `plum init`
+   1. This will initialize Plum and will create your base files:
+      1. `\tests` folder: This include sample test cases for [SauceLabs](https://www.saucedemo.com/v1/)
+      2. `.env` file: Your starting .env file. You can set the BASE_URL to your own site after you're done with the scaffold tests.
 5. There are two ways to start testing:
-   1. By running the server. Run:<br/> ```plum start to start the server```
-   2. Without running the server. Recommended while you're writing your tests. Run:<br/> ```plum dev <@test-id>```. If no test ID is included, it will run all tests
-  
+   1. By running the server. Run:<br/> `plum start to start the server`
+   2. Without running the server. Recommended while you're writing your tests. Run:<br/> `plum dev <@test-id>`. If no test ID is included, it will run all tests
+
 ## Basic Structure
-After you run ```plum init```, these files will be created inside your project directory.
+
+After you run `plum init`, these files will be created inside your project directory.
 
 <pre>
 ╠═ tests
@@ -43,16 +48,19 @@ After you run ```plum init```, these files will be created inside your project d
 </pre>
 
 ## Tutorial
+
 1. For a complete guide on how to write tests, visit our [Wiki](https://github.com/silverlunah/plum/wiki)
 2. An easy way to learn is to check the scaffold files starting from the Feature files -> Step Definitions -> Page files and utils/hooks.js for the CustomWorld and Before hook page class initialization. Those are the main files you need to write a test case.
 
 ## For Developers/Contributors
+
 For people that want to contribute to the project
 
-1. Clone the project ```git clone https://github.com/silverlunah/plum.git```
-2. ```cd plum```
-3. Initialize the project by:<br/>```npm run init```
-4. Check if its running:<br/> ```docker compose up --build -d```
+1. Clone the project `git clone https://github.com/silverlunah/plum.git`
+2. `cd plum`
+3. Initialize the project by:<br/>`npm run init`
+4. Check if its running:<br/> `docker compose up --build -d`
 
 ## Other
-Plum is completely free to use! But if you want to share some love, here's my [PayPal](https://www.paypal.me/silverlunah) or [Wise]([https://www.paypal.me/silverlunah](https://wise.com/pay/me/janneserjosee))
+
+Plum is completely free to use! But if you want to share some love, here's my [PayPal](https://www.paypal.me/silverlunah) or [Wise](<[https://www.paypal.me/silverlunah](https://wise.com/pay/me/janneserjosee)>)
