@@ -55,4 +55,4 @@ For people that want to contribute to the project
 4. Check if its running:<br/> ```docker compose up --build -d```
 
 ## Other
-Plum is completely free to use! But if you want to share some love, here's my [PayPal](https://www.paypal.me/silverlunah)
+Plum is completely free to use! But if you want to share some love, here's my [PayPal](https://www.paypal.me/silverlunah) or [Wise]([https://www.paypal.me/silverlunah](https://wise.com/pay/me/janneserjosee))
