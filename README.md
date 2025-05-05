@@ -1,4 +1,8 @@
 ![alt-text="social-preview"](https://repository-images.githubusercontent.com/936477779/e928fce3-6d4c-4609-92a0-0a1091c99752)
+<p align="center">
+  📖 <a href="https://github.com/silverlunah/plum/wiki">Wiki</a> |
+  📦 <a href="https://www.npmjs.com/package/plum-e2e">npm</a>
+</p>
 
 ## Welcome to Plum!
 
@@ -38,29 +42,9 @@ After you run ```plum init```, these files will be created inside your project d
 ╚═ env.                : Your .env file
 </pre>
 
-## Test Structure
-Before you remove the scaffold tests, let's learn from those files first. This is the basic way of writing Cucumber tests.
-<br/>**Note: Naming convention depends on your preference**
-
-1. Open one of the scaffold feature files.
-   1. Feature is the name of the suite. Only one Feature should be in a single feature file.
-   2. Scenario is the name of the test case. There can be multiple Scenarios in a single feature file.
-   3. The ```@test-some-suite``` and ```@test-some-number``` are tags. We use those tags to call the test we want to run. It should always be placed on top of Feature or Scenario. You can use multiple tags in a single Feature or Scenario. This is useful for tagging, for example, ```@smoke`` tests, every feature or scenario that has @smoke test will run.
-   4. Make sure to group your tests for a page in a single Feature file. For example Login tests should be inside a ```LoginPage.feature``` file, while registrations tests in the ```RegistrationPage.feature``` file.
-2. Now let's check the step_definition. Step Definitions contains the reference for the steps in the feature files.
-   1. In your ```LoginPage.feature``` file, remember the ```Given``` step of ```@test-1```.
-   2. Open ```/step_definitions/LoginSteps.js```. Find the Given step from the feature file. In this function, you can see the function ```await this.loginPage.goToLoginPage();``` it triggers from ```pages/loginPage.js```. Codes should be minimal in this page so its easy to understand, keep the messy code in the page files. There are also no file restrictions on where you should place the step definitions, so this Given step can be in any file, lets say ```TestSteps.js```, as long as its inside the ```/step_definitions``` directory any feature file can read it.
-   3. These steps are re-usable so make sure to not duplicate steps!
-3. Now let's check the page file. This is where functions used in the step_definition is stored. This is where the complicated stuff are stored.
-   1. Go back to the ```/step_definitions/LoginSteps.js``` remember the function you saw earlier? ```await this.loginPage.goToLoginPage();``` remember that.
-   2. Go to ```/pages/LoginPage.js``` find the ```goToLoginPage()``` function. You can see the lines of code that it used to perform the action to go to the login page. This is where you will most likely code most of the time then call these functions in Step Definitions.
-   3. These functions are of course, highly re-usable just need to reference it in your ```utils.hooks.js``` ```CustomWorld``` so it can be carried into all of your Step Definitions.
-4. Utilities
-   1. In ```/utils```, there are three starting files namely ```constants.js```, ```hooks.js```, and ```utils.js```. You can make/delete utility files except for the ```hooks.js```. Make sure not to delete that file as it contains configurations for your Cucumber Playwright setup.
-   2. ```hooks.js```: This is an important file, so make sure to only use this to add and initialize your page files.
-     1.  Find the class ```CustomWorld``` in this file.
-     2.  Inside you will see the ```this.loginPage``` constructor. It gets initiated in the ```Before``` hook ```this.loginPage = new LoginPage(this.page);```.
-     3.  When making your own page file, you always have to include it here to make sure it can be used on your Step Definitions.
+## Tutorial
+1. For a complete guide on how to write tests, visit our [Wiki](https://github.com/silverlunah/plum/wiki)
+2. An easy way to learn is to check the scaffold files starting from the Feature files -> Step Definitions -> Page files and utils/hooks.js for the CustomWorld and Before hook page class initialization. Those are the main files you need to write a test case.
 
 ## For Developers/Contributors
 For people that want to contribute to the project
