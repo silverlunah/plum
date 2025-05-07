@@ -11,7 +11,7 @@ Plum makes setting up your testing framework easy. In just a few seconds, you ca
 
 By combining [Playwright](https://playwright.dev) and [Cucumber](https://cucumber.io), tests are easy to write and read. The code follows a POM (Page Object Model) structure, making it scalable and easy for developers to understand, while Cucumber test cases are written in [Gherkin](https://cucumber.io/docs/gherkin/) format, making them accessible to non-developers as well.
 
-You can view, run, schedule tests in a simple UI and even view the history of your runs in the Report page!
+You can view, run, and schedule tests in a simple UI. You can even view the history of your runs in the reports page!
 
 **_Pre-requisite:_**
 
@@ -19,7 +19,7 @@ You can view, run, schedule tests in a simple UI and even view the history of yo
 
 ## For Users
 
-For normal users. People that want to use Plum as a test environment for their website.
+People that want to use Plum as a test environment for their website.
 
 **_I. How to Run:_**
 
@@ -63,4 +63,4 @@ For people that want to contribute to the project
 
 ## Other
 
-Plum is completely free to use! But if you want to share some love, here's my [PayPal](https://www.paypal.me/silverlunah) or [Wise](<[https://www.paypal.me/silverlunah](https://wise.com/pay/me/janneserjosee)>)
+Plum is completely free to use! But if you want to share some love, here's my [PayPal](https://www.paypal.me/silverlunah) or [Wise](https://wise.com/pay/me/janneserjosee)
