@@ -11,7 +11,9 @@
 		"init": "(npm install) && (cd backend && npm install && npm run create-env && node config/scripts/create-settings.js) && (cd ../frontend && npm install && echo 'Frontend install complete')",
 		"format": "prettier --write .",
 		"add-license": "npx license-check-and-add add -f license-config.json",
-		"prepare": "husky"
+		"prepare": "husky",
+		"docker:up": "docker compose up -d --build",
+		"docker:down": "docker compose down"
 	},
 	"keywords": [],
 	"bin": {

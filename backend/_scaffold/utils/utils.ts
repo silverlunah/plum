@@ -8,12 +8,6 @@ export class Utils {
 	}
 
 	async goToPage(url: string) {
-		try {
-			await this.page.goto(url);
-
-			console.log('test');
-		} catch (error) {
-			console.log(error);
-		}
+		await this.page.goto(url);
 	}
 }
