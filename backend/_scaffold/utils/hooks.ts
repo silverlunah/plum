@@ -3,8 +3,6 @@ import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import { CustomWorld } from './world';
-import { Utils } from './utils';
-import { LoginPage } from '../pages/LoginPage';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -13,18 +11,11 @@ setWorldConstructor(CustomWorld);
 Before(async function (this: CustomWorld) {
 	const isHeadless = process.env.IS_HEADLESS?.toLowerCase() !== 'false';
 
-	/**-----------------------
-	 *  Default initializers
-	 ------------------------*/
 	this.browser = await chromium.launch({ headless: isHeadless });
 	this.context = await this.browser.newContext();
 	this.page = await this.context.newPage();
 
-	/**-----------------------
-	 * Initialize classes here
-	 ------------------------*/
-	this.utils = new Utils(this.page);
-	this.loginPage = new LoginPage(this.page);
+	this.initPages(this.page);
 });
 
 After(async function (this: CustomWorld, scenario: ITestCaseHookParameter) {

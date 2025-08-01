@@ -49,8 +49,8 @@ After you run `plum init`, these files will be created inside your project direc
 
 ## Tutorial
 
-1. For a complete guide on how to write tests, visit our [Wiki](https://github.com/silverlunah/plum/wiki)
-2. An easy way to learn is to check the scaffold files starting from the Feature files -> Step Definitions -> Page files and utils/hooks.js for the CustomWorld and Before hook page class initialization. Those are the main files you need to write a test case.
+1. For a complete guide on how to write tests, visit our [Coming Soon](https://github.com/silverlunah/plum/wiki)
+2. An easy way to learn is to check the scaffold files starting from the Feature files -> Step Definitions -> Page files and utils/world.ts for the CustomWorld initialization. Those are the main files you need to write a test case.
 
 ## For Developers/Contributors
 
