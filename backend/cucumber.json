@@ -1,6 +1,7 @@
 {
 	"default": {
-		"require": ["tests/step_definitions/*.js", "tests/utils/hooks.js"],
-		"featurePaths": ["tests/features/**/*.feature"]
+		"require": ["tests/step_definitions/*.ts", "tests/utils/hooks.ts"],
+		"featurePaths": ["tests/features/**/*.feature"],
+		"requireModule": ["ts-node/register"]
 	}
 }

@@ -16,19 +16,32 @@
  */
 
 const { execSync } = require('child_process');
-const tag = process.env.TAG; // Read the TAG environment variable
+const tag = process.env.TAG;
 
 try {
-	// Run the tests with the tag filter, only if a tag is provided
-	const cucumberCommand = tag
-		? `cucumber-js tests/features/**/*.feature --format json:reports/cucumber_report.json --tags "${tag}"`
-		: `cucumber-js tests/features/**/*.feature --format json:reports/cucumber_report.json`;
+	const baseCommand = [
+		'npx',
+		'cross-env',
+		'TS_NODE_TRANSPILE_ONLY=true',
+		'cucumber-js',
+		'tests/features/**/*.feature',
+		'--require-module',
+		'ts-node/register',
+		'--require',
+		'tests/step_definitions/**/*.ts',
+		'--format',
+		'json:reports/cucumber_report.json'
+	];
 
+	if (tag) {
+		baseCommand.push('--tags', `"${tag}"`);
+	}
+
+	const cucumberCommand = baseCommand.join(' ');
 	execSync(cucumberCommand, { stdio: 'inherit' });
 } catch (error) {
 	console.error('Tests failed:', error.message);
 } finally {
-	// Always run the report generation after tests (even if they fail)
 	try {
 		execSync('node config/scripts/generate-report.js', { stdio: 'inherit' });
 	} catch (error) {

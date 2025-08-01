@@ -1,4 +1,4 @@
-const { Given, When, Then } = require('@cucumber/cucumber');
+import { Given } from '@cucumber/cucumber';
 
 Given('I am in Demo Sauce Login page', async function () {
 	await this.loginPage.goToLoginPage();
