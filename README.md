@@ -31,7 +31,8 @@ People that want to use Plum as a test environment for their website.
       1. `\tests` folder: This include sample test cases for [SauceLabs](https://www.saucedemo.com/v1/)
       2. `.env` file: Your starting .env file. You can set the BASE_URL to your own site after you're done with the scaffold tests.
 5. There are two ways to start testing:
-   1. By running the server. Run:<br/> `plum start to start the server`
+   1. By running the server. Run:<br/> `plum start` to start the server
+      1. Access the UI at: http://localhost:5173/
    2. Without running the server. Recommended while you're writing your tests. Run:<br/> `plum dev <@test-id>`. If no test ID is included, it will run all tests
 
 ## Basic Structure
