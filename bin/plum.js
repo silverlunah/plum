@@ -113,11 +113,15 @@ switch (command) {
 		// Copy .env file from root to backend
 		copyEnvFile();
 
+		// Copy config from package root to user's project dir so Docker can mount it
+		const userConfigPath = path.join(process.cwd(), '.plum', 'config');
+		fse.copySync(path.join(plumRoot, 'backend', 'config'), userConfigPath);
+
 		// Convert Windows paths to safe format
 		const userTestsAbs = path.resolve(process.cwd(), 'tests').replace(/\\/g, '/');
 		const userModulesAbs = path.resolve(process.cwd(), 'node_modules').replace(/\\/g, '/');
 		const userReportsAbs = path.resolve(process.cwd(), 'reports').replace(/\\/g, '/');
-		const plumConfigAbs = path.join(plumRoot, 'backend', 'config').replace(/\\/g, '/');
+		const userConfigAbs = userConfigPath.replace(/\\/g, '/');
 
 		// Generate docker-compose.override.yml
 		const overrideYAML = [
@@ -125,7 +129,7 @@ switch (command) {
 			'  backend:',
 			'    volumes:',
 			`      - "${userReportsAbs}:/app/reports"`,
-			`      - "${plumConfigAbs}:/app/config"`,
+			`      - "${userConfigAbs}:/app/config"`,
 			`      - "${userTestsAbs}:/app/tests"`,
 			`      - "${userModulesAbs}:/app/tests/node_modules"`
 		].join('\n');
