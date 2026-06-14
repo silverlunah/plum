@@ -290,7 +290,7 @@
 											{/if}
 
 											{#if step.screenshot}
-												<details class="screenshot-wrap">
+												<details class="screenshot-wrap" open>
 													<summary class="screenshot-toggle">Screenshot</summary>
 													<img
 														class="screenshot"

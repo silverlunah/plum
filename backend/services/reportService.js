@@ -51,16 +51,23 @@ const getReportDetail = (fileName) => {
 
 	const features = raw.map((feature) => {
 		const scenarios = (feature.elements || []).map((scenario) => {
-			const steps = scenario.steps
-				.filter((s) => !s.hidden) // skip Before/After hooks
-				.map((step) => ({
+			const visibleSteps = (scenario.steps || []).filter((s) => !s.hidden);
+			const hookScreenshots = (scenario.steps || [])
+				.filter((s) => s.hidden)
+				.flatMap((step) => step.embeddings?.filter((e) => e.mime_type === 'image/png') ?? []);
+			const failedStepIndex = visibleSteps.findLastIndex((s) => s.result?.status === 'failed');
+
+			const steps = visibleSteps.map((step, index) => ({
 					keyword: step.keyword.trim(),
 					name: step.name ?? '',
 					status: step.result?.status ?? 'pending',
 					duration: Math.round((step.result?.duration ?? 0) / 1_000_000), // ns → ms
 					error: step.result?.error_message ?? null,
-					screenshot: step.embeddings?.find((e) => e.mime_type === 'image/png')?.data ?? null
-				}));
+				screenshot:
+					step.embeddings?.find((e) => e.mime_type === 'image/png')?.data ??
+					(index === failedStepIndex ? hookScreenshots[0]?.data : null) ??
+					null
+			}));
 
 			const worstStatus = steps.reduce((acc, s) => {
 				const rank = { failed: 3, pending: 2, skipped: 1, passed: 0 };
