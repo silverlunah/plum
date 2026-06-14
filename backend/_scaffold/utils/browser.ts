@@ -28,6 +28,7 @@ export async function teardown(
 		await _page.screenshot({ path: screenshotPath });
 		const screenshotData = fs.readFileSync(screenshotPath);
 		await attach(screenshotData, 'image/png');
+		fs.unlinkSync(screenshotPath);
 	}
 	await _browser?.close();
 }
