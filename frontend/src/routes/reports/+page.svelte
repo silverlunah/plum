@@ -67,7 +67,12 @@
 
 		{#if reports.length > 0}
 			<div class="rate-display">
-				<span class="rate-number" class:pass={passRate >= 80} class:warn={passRate < 80 && passRate >= 50} class:fail={passRate < 50}>
+				<span
+					class="rate-number"
+					class:pass={passRate >= 80}
+					class:warn={passRate < 80 && passRate >= 50}
+					class:fail={passRate < 50}
+				>
 					{passRate}%
 				</span>
 				<span class="rate-label">passing</span>
@@ -78,10 +83,7 @@
 	{#if reports.length > 0}
 		<div class="stats-bar">
 			<div class="pass-bar-track">
-				<div
-					class="pass-bar-fill"
-					style="width: {animateBar ? passRate + '%' : '0'}"
-				></div>
+				<div class="pass-bar-fill" style="width: {animateBar ? passRate + '%' : '0'}"></div>
 			</div>
 			<div class="bar-legend">
 				<span class="legend-pass">{passCount} passed</span>
@@ -120,7 +122,11 @@
 				style="animation-delay: {i * 45}ms"
 			>
 				<div class="item-left">
-					<span class="status-mark" class:pass={report.status === 'PASS'} class:fail={report.status !== 'PASS'}>
+					<span
+						class="status-mark"
+						class:pass={report.status === 'PASS'}
+						class:fail={report.status !== 'PASS'}
+					>
 						{report.status === 'PASS' ? '✓' : '✗'}
 					</span>
 					<div class="item-meta">
@@ -203,9 +209,15 @@
 		font-weight: 400;
 	}
 
-	.rate-number.pass { color: var(--pass); }
-	.rate-number.warn { color: var(--warn); }
-	.rate-number.fail { color: var(--fail); }
+	.rate-number.pass {
+		color: var(--pass);
+	}
+	.rate-number.warn {
+		color: var(--warn);
+	}
+	.rate-number.fail {
+		color: var(--fail);
+	}
 
 	.rate-label {
 		font-size: 0.75rem;
@@ -285,8 +297,12 @@
 		transform: scale(1.4);
 	}
 
-	.trend-dot.pass { background: var(--pass); }
-	.trend-dot.fail { background: var(--fail); }
+	.trend-dot.pass {
+		background: var(--pass);
+	}
+	.trend-dot.fail {
+		background: var(--fail);
+	}
 
 	.trend-hint {
 		font-size: 0.68rem;
@@ -326,8 +342,12 @@
 		box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
 	}
 
-	.report-item.is-pass { border-left-color: var(--pass); }
-	.report-item.is-fail { border-left-color: var(--fail); }
+	.report-item.is-pass {
+		border-left-color: var(--pass);
+	}
+	.report-item.is-fail {
+		border-left-color: var(--fail);
+	}
 
 	.item-left {
 		display: flex;
@@ -344,8 +364,12 @@
 		text-align: center;
 	}
 
-	.status-mark.pass { color: var(--pass); }
-	.status-mark.fail { color: var(--fail); }
+	.status-mark.pass {
+		color: var(--pass);
+	}
+	.status-mark.fail {
+		color: var(--fail);
+	}
 
 	.item-meta {
 		display: flex;

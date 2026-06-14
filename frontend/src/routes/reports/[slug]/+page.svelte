@@ -59,16 +59,30 @@
 		return 'kw-and';
 	}
 
-	$: passed = detail?.features.flatMap((f) => f.scenarios).filter((s) => s.status === 'passed').length ?? 0;
-	$: failed = detail?.features.flatMap((f) => f.scenarios).filter((s) => s.status === 'failed').length ?? 0;
-	$: skipped = detail?.features.flatMap((f) => f.scenarios).filter((s) => s.status === 'skipped' || s.status === 'pending').length ?? 0;
-	$: totalDuration = detail?.features.flatMap((f) => f.scenarios).reduce((s, sc) => s + sc.duration, 0) ?? 0;
+	$: passed =
+		detail?.features.flatMap((f) => f.scenarios).filter((s) => s.status === 'passed').length ?? 0;
+	$: failed =
+		detail?.features.flatMap((f) => f.scenarios).filter((s) => s.status === 'failed').length ?? 0;
+	$: skipped =
+		detail?.features
+			.flatMap((f) => f.scenarios)
+			.filter((s) => s.status === 'skipped' || s.status === 'pending').length ?? 0;
+	$: totalDuration =
+		detail?.features.flatMap((f) => f.scenarios).reduce((s, sc) => s + sc.duration, 0) ?? 0;
 	$: overallPass = meta?.status === 'PASS';
 </script>
 
 <div class="back-row">
 	<a href="/reports" class="back-link">
-		<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+		<svg
+			width="14"
+			height="14"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+			stroke-linecap="round"
+		>
 			<line x1="19" y1="12" x2="5" y2="12" />
 			<polyline points="12 19 5 12 12 5" />
 		</svg>
@@ -181,7 +195,11 @@
 						{#if open}
 							<div class="steps" transition:slide={{ duration: 200 }}>
 								{#each scenario.steps as step}
-									<div class="step" class:step-fail={step.status === 'failed'} class:step-skip={step.status === 'skipped' || step.status === 'pending'}>
+									<div
+										class="step"
+										class:step-fail={step.status === 'failed'}
+										class:step-skip={step.status === 'skipped' || step.status === 'pending'}
+									>
 										<div class="step-row">
 											<span class="step-status-icon">
 												{#if step.status === 'passed'}✓{:else if step.status === 'failed'}✗{:else}−{/if}
@@ -246,8 +264,12 @@
 		animation: fadeUp 0.35s var(--ease-out) both;
 	}
 
-	.report-header.pass { border-left-color: var(--pass); }
-	.report-header.fail { border-left-color: var(--fail); }
+	.report-header.pass {
+		border-left-color: var(--pass);
+	}
+	.report-header.fail {
+		border-left-color: var(--fail);
+	}
 
 	.header-main {
 		display: flex;
@@ -269,8 +291,12 @@
 		font-weight: 600;
 	}
 
-	.report-header.pass .status-icon { color: var(--pass); }
-	.report-header.fail .status-icon { color: var(--fail); }
+	.report-header.pass .status-icon {
+		color: var(--pass);
+	}
+	.report-header.fail .status-icon {
+		color: var(--fail);
+	}
 
 	h1 {
 		font-size: 2rem;
@@ -319,9 +345,15 @@
 		text-transform: uppercase;
 	}
 
-	.pass-color { color: var(--pass); }
-	.fail-color { color: var(--fail); }
-	.muted-color { color: var(--text-muted); }
+	.pass-color {
+		color: var(--pass);
+	}
+	.fail-color {
+		color: var(--fail);
+	}
+	.muted-color {
+		color: var(--text-muted);
+	}
 
 	/* ── Features ── */
 	.feature {
@@ -389,9 +421,15 @@
 		flex-shrink: 0;
 	}
 
-	.scenario-status-dot.pass { background: var(--pass); }
-	.scenario-status-dot.fail { background: var(--fail); }
-	.scenario-status-dot.skip { background: var(--text-muted); }
+	.scenario-status-dot.pass {
+		background: var(--pass);
+	}
+	.scenario-status-dot.fail {
+		background: var(--fail);
+	}
+	.scenario-status-dot.skip {
+		background: var(--text-muted);
+	}
 
 	.scenario-name {
 		flex: 1;
@@ -466,8 +504,12 @@
 		color: var(--text-muted);
 	}
 
-	.step-fail .step-status-icon { color: var(--fail); }
-	.step:not(.step-fail):not(.step-skip) .step-status-icon { color: var(--pass); }
+	.step-fail .step-status-icon {
+		color: var(--fail);
+	}
+	.step:not(.step-fail):not(.step-skip) .step-status-icon {
+		color: var(--pass);
+	}
 
 	.kw {
 		font-size: 0.72rem;
@@ -479,10 +521,23 @@
 		font-family: 'JetBrains Mono', monospace;
 	}
 
-	.kw-given { background: var(--accent-soft); color: var(--accent); }
-	.kw-when  { background: var(--warn-soft);   color: var(--warn); }
-	.kw-then  { background: var(--pass-soft);   color: var(--pass); }
-	.kw-and   { background: var(--bg-elevated); color: var(--text-muted); border: 1px solid var(--border); }
+	.kw-given {
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+	.kw-when {
+		background: var(--warn-soft);
+		color: var(--warn);
+	}
+	.kw-then {
+		background: var(--pass-soft);
+		color: var(--pass);
+	}
+	.kw-and {
+		background: var(--bg-elevated);
+		color: var(--text-muted);
+		border: 1px solid var(--border);
+	}
 
 	.step-name {
 		flex: 1;
@@ -551,12 +606,23 @@
 		animation: dotBeat 1.2s ease-in-out infinite;
 	}
 
-	.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
-	.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+	.loading-dots span:nth-child(2) {
+		animation-delay: 0.2s;
+	}
+	.loading-dots span:nth-child(3) {
+		animation-delay: 0.4s;
+	}
 
 	@keyframes dotBeat {
-		0%, 100% { opacity: 1; transform: scale(1); }
-		50% { opacity: 0.3; transform: scale(0.6); }
+		0%,
+		100% {
+			opacity: 1;
+			transform: scale(1);
+		}
+		50% {
+			opacity: 0.3;
+			transform: scale(0.6);
+		}
 	}
 
 	.error-state {

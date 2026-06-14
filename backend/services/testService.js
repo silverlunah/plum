@@ -92,7 +92,7 @@ const getTestSuites = () => {
 					testCase: scenarioMatch[1].trim(),
 					type: isOutline ? 'outline' : 'scenario',
 					steps: [...backgroundSteps],
-					...(isOutline ? { examples: null } : {}),
+					...(isOutline ? { examples: null } : {})
 				};
 				continue;
 			}
@@ -134,7 +134,7 @@ const getTestSuites = () => {
 			suites.push({
 				suiteName,
 				suiteId: suiteTags.length > 1 ? suiteTags : suiteTags[0],
-				tests,
+				tests
 			});
 		}
 	});

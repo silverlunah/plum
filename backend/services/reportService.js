@@ -59,7 +59,7 @@ const getReportDetail = (fileName) => {
 					status: step.result?.status ?? 'pending',
 					duration: Math.round((step.result?.duration ?? 0) / 1_000_000), // ns → ms
 					error: step.result?.error_message ?? null,
-					screenshot: step.embeddings?.find((e) => e.mime_type === 'image/png')?.data ?? null,
+					screenshot: step.embeddings?.find((e) => e.mime_type === 'image/png')?.data ?? null
 				}));
 
 			const worstStatus = steps.reduce((acc, s) => {
@@ -73,7 +73,7 @@ const getReportDetail = (fileName) => {
 				tags: (scenario.tags ?? []).map((t) => t.name),
 				status: worstStatus,
 				duration: steps.reduce((s, st) => s + st.duration, 0),
-				steps,
+				steps
 			};
 		});
 
@@ -83,7 +83,7 @@ const getReportDetail = (fileName) => {
 			name: feature.name,
 			uri: feature.uri,
 			status: featureStatus,
-			scenarios,
+			scenarios
 		};
 	});
 

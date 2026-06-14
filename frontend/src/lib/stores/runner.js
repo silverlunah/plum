@@ -25,12 +25,12 @@ export const runnerState = writable({
 	testCompleted: false,
 	latestReport: null,
 	status: 'idle', // 'idle' | 'running' | 'pass' | 'fail'
-	lastRunId: '',
+	lastRunId: ''
 });
 
 export const runnerConfig = writable({
 	workers: 1,
-	testID: '',
+	testID: ''
 });
 
 export const panelExpanded = writable(true);
@@ -48,7 +48,7 @@ export function triggerRun(id) {
 		testCompleted: false,
 		latestReport: null,
 		status: 'running',
-		lastRunId: runId,
+		lastRunId: runId
 	});
 	panelExpanded.set(true);
 	s.emit('run-test', runId, workers);

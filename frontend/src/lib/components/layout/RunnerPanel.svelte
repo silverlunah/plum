@@ -43,7 +43,7 @@
 				running: false,
 				testCompleted: true,
 				latestReport: report,
-				status: passed ? 'pass' : 'fail',
+				status: passed ? 'pass' : 'fail'
 			}));
 		});
 

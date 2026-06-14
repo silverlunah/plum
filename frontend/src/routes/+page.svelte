@@ -20,7 +20,6 @@
 	import { slide } from 'svelte/transition';
 	import { fetchSuites } from '$lib/api/tests';
 	import { runnerConfig, triggerRun } from '$lib/stores/runner';
-	import Badge from '$lib/components/ui/Badge.svelte';
 
 	let suites = [];
 	let search = '';
@@ -63,6 +62,10 @@
 	function runSuite(suite) {
 		const id = suiteIds(suite)[0];
 		run(id);
+	}
+
+	async function copyId(id) {
+		await navigator.clipboard.writeText(id);
 	}
 
 	$: q = search.trim().toLowerCase();
@@ -122,7 +125,7 @@
 				placeholder="Search suites or tests…"
 			/>
 			{#if search}
-				<button class="search-clear" on:click={() => (search = '')}>
+				<button class="search-clear" on:click={() => (search = '')} aria-label="Clear search">
 					<svg width="12" height="12" viewBox="0 0 14 14" fill="none">
 						<path
 							d="M1 1l12 12M13 1L1 13"
@@ -149,20 +152,16 @@
 					<div class="suite-meta">
 						<div class="suite-badges">
 							{#each suiteIds(suite) as id}
-								<Badge variant="tag">{id}</Badge>
+								<button class="id-pill" on:click={() => copyId(id)} title="Copy {id}">{id}</button>
 							{/each}
 						</div>
 						<span class="suite-name">{suite.suiteName}</span>
-						<span class="suite-count">{suite.tests.length} test{suite.tests.length !== 1 ? 's' : ''}</span>
+						<span class="suite-count"
+							>{suite.tests.length} test{suite.tests.length !== 1 ? 's' : ''}</span
+						>
 					</div>
 					<button class="run-btn suite-run" on:click={() => runSuite(suite)} title="Run suite">
-						<svg
-							width="11"
-							height="11"
-							viewBox="0 0 24 24"
-							fill="currentColor"
-							stroke="none"
-						>
+						<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none">
 							<polygon points="5,3 19,12 5,21" />
 						</svg>
 						Run suite
@@ -188,7 +187,7 @@
 
 								<div class="test-ids">
 									{#each testIds(test) as id}
-										<button class="id-pill" on:click={() => run(id)}>{id}</button>
+										<button class="id-pill" on:click={() => copyId(id)} title="Copy {id}">{id}</button>
 									{/each}
 								</div>
 
