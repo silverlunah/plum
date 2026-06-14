@@ -18,7 +18,6 @@
 
 import { execSync } from 'child_process';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fse from 'fs-extra';
@@ -306,22 +305,17 @@ switch (command) {
 			}
 		}
 
-		// Copy config to ~/.plum/config so Docker can mount it without polluting the project
-		const userConfigPath = path.join(os.homedir(), '.plum', 'config');
-		fse.copySync(path.join(plumRoot, 'backend', 'config'), userConfigPath);
-
 		// Convert Windows paths to safe format
 		const userTestsAbs = path.resolve(process.cwd(), 'tests').replace(/\\/g, '/');
 		const userReportsAbs = path.resolve(process.cwd(), 'reports').replace(/\\/g, '/');
-		const userConfigAbs = userConfigPath.replace(/\\/g, '/');
 
 		// Generate docker-compose.override.yml
+		// Config is served from the plum installation's backend/config directly via docker-compose.yml
 		const overrideYAML = [
 			'services:',
 			'  backend:',
 			'    volumes:',
 			`      - "${userReportsAbs}:/app/reports"`,
-			`      - "${userConfigAbs}:/app/config"`,
 			`      - "${userTestsAbs}:/app/tests"`
 		].join('\n');
 
