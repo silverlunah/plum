@@ -19,14 +19,9 @@ const express = require('express');
 const router = express.Router();
 const cronService = require('../services/cronService');
 
-/* -----------------------------------------------------
- *                   Get Cron Jobs
- *  Description:
- * 		- Get all cron jobs from config/cron-jobs.json
- * ------------------------------------------------------ */
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
 	try {
-		const cronJobs = cronService.getAllCronJobs();
+		const cronJobs = await cronService.getAllCronJobs();
 		res.json({ cronJobs });
 	} catch (error) {
 		console.error('Error fetching cron jobs:', error);
@@ -34,28 +29,13 @@ router.get('/', (req, res) => {
 	}
 });
 
-/* -----------------------------------------------------
- *                    Create Cron Job
- *  Description:
- * 		Add a new cron job to config/cron-jobs.json
- *  Params:
- * 		- cronExpression:
- * 			e.g. "* * * * *"
- * 			https://www.baeldung.com/cron-expressions
- * 		- taskName:
- * 			the unique identifier
- * 		- tags:
- * 			cucumber tag you want to run when cron job
- * 			is triggered.
- * ------------------------------------------------------ */
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
 	try {
 		const { cronExpression, taskName, tags } = req.body;
 		if (!cronExpression || !taskName || !tags) {
 			return res.status(400).json({ error: 'Missing required fields' });
 		}
-
-		cronService.addCronJob(req.body);
+		await cronService.addCronJob(req.body);
 		res.json({
 			message: `Cron job ${taskName} added with tags: ${tags}`,
 			taskName,
@@ -67,56 +47,25 @@ router.post('/', (req, res) => {
 	}
 });
 
-/* -----------------------------------------------------
- *                    Edit Cron Job
- *  Description:
- * 		Edit an existing cron job from
- * 		config/cron-jobs.json
- *  Params:
- * 		- taskName:
- * 			the unique identifier
- * 		- cronExpression:
- * 			e.g. "* * * * *"
- * 			https://www.baeldung.com/cron-expressions
- * 		- tags:
- * 			cucumber tag you want to run when cron job
- * 			is triggered.
- * ------------------------------------------------------ */
-router.put('/:taskName', (req, res) => {
+router.put('/:taskName', async (req, res) => {
 	try {
 		const { taskName } = req.params;
 		const { cronExpression, tags } = req.body;
-
 		if (!cronExpression || !tags) {
 			return res.status(400).json({ error: 'Missing required fields' });
 		}
-
-		const updatedCronJob = cronService.updateCronJob(taskName, req.body); // Assuming this is a function to update the cron job
-		res.json({
-			message: `Cron job ${taskName} updated`,
-			taskName,
-			cronExpression,
-			tags: updatedCronJob.tags
-		});
+		await cronService.updateCronJob(taskName, req.body);
+		res.json({ message: `Cron job ${taskName} updated`, taskName, cronExpression, tags });
 	} catch (error) {
 		console.error('Error updating cron job:', error);
 		res.status(500).json({ error: 'Failed to update cron job' });
 	}
 });
 
-/* -----------------------------------------------------
- *                    Delete Cron Job
- *  Description:
- * 		Delete cron job from config/cron-jobs.json
- * 		by taskName
- *  Params:
- * 		- taskName:
- * 			the unique identifier
- * ------------------------------------------------------ */
-router.delete('/:taskName', (req, res) => {
+router.delete('/:taskName', async (req, res) => {
 	try {
 		const { taskName } = req.params;
-		cronService.removeCronJob(taskName);
+		await cronService.removeCronJob(taskName);
 		res.json({ message: `Cron job ${taskName} deleted` });
 	} catch (error) {
 		console.error('Error deleting cron job:', error);

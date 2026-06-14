@@ -24,7 +24,9 @@ RUN npx playwright install --with-deps
 
 COPY . .
 
+RUN npx prisma generate
 RUN npm run create-env && sed -i 's/^IS_HEADLESS=false/IS_HEADLESS=true/' .env
 
 EXPOSE 3001
-CMD ["node", "server.js"]
+RUN chmod +x /app/entrypoint.sh
+ENTRYPOINT ["/bin/sh", "/app/entrypoint.sh"]

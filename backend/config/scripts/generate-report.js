@@ -86,6 +86,44 @@ const reportFileName = `${status}_cucumber_report_${process.env.TRIGGER}_${tag}_
 if (fs.existsSync(jsonReportFile)) {
 	fs.copyFileSync(jsonReportFile, path.join(reportsDir, reportFileName));
 	console.log(`Report saved: ${reportFileName}`);
+
+	// Persist metadata to database
+	(async () => {
+		try {
+			const { PrismaClient } = require('@prisma/client');
+			const prisma = new PrismaClient();
+
+			const triggerType = process.env.TRIGGER || 'command-line-trigger';
+			const builtInTriggers = ['manual-trigger', 'command-line-trigger', 'undefined'];
+			let cronJobId = null;
+
+			if (!builtInTriggers.includes(triggerType)) {
+				const job = await prisma.cronJob.findUnique({ where: { taskName: triggerType } });
+				if (job) cronJobId = job.id;
+			}
+
+			const rawTag = process.env.TAG || '@all-tests';
+			const tags = rawTag.replace(/^\(|\)$/g, '');
+
+			await prisma.report.upsert({
+				where: { fileName: reportFileName },
+				create: {
+					fileName: reportFileName,
+					status,
+					tags,
+					triggerType,
+					runners: runnerCount,
+					cronJobId
+				},
+				update: {}
+			});
+
+			await prisma.$disconnect();
+			console.log('Report metadata saved to database.');
+		} catch (e) {
+			console.error('Could not save report metadata to DB:', e.message);
+		}
+	})();
 } else {
 	console.log('Skipping report save — no cucumber_report.json.');
 }

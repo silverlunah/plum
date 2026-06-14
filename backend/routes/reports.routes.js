@@ -19,14 +19,24 @@ const express = require('express');
 const router = express.Router();
 const reportService = require('../services/reportService');
 
-router.get('/', (req, res) => {
-	const reports = reportService.getAllReports();
-	res.json({ reports });
+router.get('/', async (req, res) => {
+	try {
+		const reports = await reportService.getAllReports();
+		res.json({ reports });
+	} catch (error) {
+		console.error('Error fetching reports:', error);
+		res.status(500).json({ error: 'Failed to fetch reports' });
+	}
 });
 
-router.get('/latest', (req, res) => {
-	const latestReport = reportService.getLatestReport();
-	res.json({ latestReport });
+router.get('/latest', async (req, res) => {
+	try {
+		const latestReport = await reportService.getLatestReport();
+		res.json({ latestReport });
+	} catch (error) {
+		console.error('Error fetching latest report:', error);
+		res.status(500).json({ error: 'Failed to fetch latest report' });
+	}
 });
 
 router.get('/:fileName/detail', (req, res) => {

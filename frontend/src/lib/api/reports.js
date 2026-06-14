@@ -37,7 +37,7 @@ const BASE = 'http://localhost:3001';
 export async function fetchReports() {
 	const res = await fetch(`${BASE}/reports`);
 	const { reports } = await res.json();
-	return reports.map(parseReport).filter(Boolean);
+	return reports.map((r) => ({ ...r, date: new Date(r.createdAt).toLocaleString() }));
 }
 
 export async function fetchLatestReport() {
@@ -54,15 +54,4 @@ export async function fetchReportDetail(fileName) {
 	const res = await fetch(`${BASE}/reports/${encodeURIComponent(fileName)}/detail`);
 	if (!res.ok) throw new Error('Report not found');
 	return res.json();
-}
-
-export function parseReport(fileName) {
-	const match = fileName.match(
-		/(PASS|FAIL)_cucumber_report_(.+?)_\(([^)]+)\)(?:_runners_(\d+))?_(\d{4})_(\d{2})_(\d{2})T(\d{2})_(\d{2})_(\d{2})_\d{3}Z\.json/
-	);
-	if (!match) return null;
-	const [, status, triggerType, tags, runners = '1', year, month, day, hour, minute, second] =
-		match;
-	const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`).toLocaleString();
-	return { fileName, status, triggerType, tags, runners: Number(runners), date };
 }
