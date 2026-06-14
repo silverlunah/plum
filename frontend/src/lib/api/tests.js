@@ -1,4 +1,4 @@
-<!--
+/*
 This file is part of Plum.
 
 Plum is free software: you can redistribute it and/or modify
@@ -13,15 +13,12 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with Plum. If not, see https://www.gnu.org/licenses/.
--->
+*/
 
-<script>
-	import '../app.css';
-	import Nav from '$lib/components/layout/Nav.svelte';
-	import PageShell from '$lib/components/layout/PageShell.svelte';
-</script>
+const BASE = 'http://localhost:3001';
 
-<Nav />
-<PageShell>
-	<slot />
-</PageShell>
+export async function fetchSuites() {
+	const res = await fetch(`${BASE}/tests`);
+	const { suites } = await res.json();
+	return suites.suites ?? [];
+}

@@ -1,188 +1,332 @@
 <!--
- * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
- -->
+This file is part of Plum.
+
+Plum is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Plum is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Plum. If not, see https://www.gnu.org/licenses/.
+-->
 
 <script>
 	import { onMount } from 'svelte';
+	import { fly } from 'svelte/transition';
 	import { io } from 'socket.io-client';
+	import { fetchSuites } from '$lib/api/tests';
+	import { fetchLatestReport, reportUrl } from '$lib/api/reports';
+	import Button from '$lib/components/ui/Button.svelte';
+	import Badge from '$lib/components/ui/Badge.svelte';
+	import Terminal from '$lib/components/ui/Terminal.svelte';
 
-	let output = "Enter a test ID and click 'Run Test'...\n";
+	let output = 'Ready — enter a test ID or select one from the list.\n';
 	let socket;
-	let testCompleted = false;
 	let testID = '';
-	let outputRef;
-	let suites = [];
+	let running = false;
+	let testCompleted = false;
 	let latestReport = null;
+	let suites = [];
 
 	onMount(async () => {
 		socket = io('http://localhost:3001');
 
 		socket.on('log', (data) => {
 			output += data + '\n';
-			scrollToBottom();
 		});
 
 		socket.on('done', async () => {
-			output += '✅ Test completed!\n';
+			output += '✓ Test completed\n';
+			running = false;
 			testCompleted = true;
-			scrollToBottom();
-
-			// Fetch the latest report **after** test completion
-			await fetchLatestReport();
+			latestReport = await fetchLatestReport();
 		});
 
-		// Fetch test names from backend
 		try {
-			const response = await fetch('http://localhost:3001/tests');
-			const data = await response.json();
-
-			suites = data.suites.suites;
-		} catch (error) {
-			console.error('Error fetching test suites:', error);
+			suites = await fetchSuites();
+		} catch (e) {
+			console.error('Failed to fetch suites', e);
 		}
 	});
 
 	function runTest() {
-		const formattedTestID = testID.replace(/\sOR\s/gi, (match) => match.toLowerCase());
-		output = `Running test with ID: ${formattedTestID}...\n`;
+		const id = testID.trim().replace(/\sOR\s/gi, (m) => m.toLowerCase());
+		output = `Running: ${id || '(all tests)'}\n`;
 		testCompleted = false;
-		socket.emit('run-test', formattedTestID, 'manual-trigger');
+		running = true;
+		socket.emit('run-test', id, 'manual-trigger');
 	}
 
-	async function fetchLatestReport() {
-		const response = await fetch('http://localhost:3001/reports/latest');
-		const data = await response.json();
-		latestReport = data.latestReport;
-	}
-
-	async function scrollToBottom() {
-		await new Promise((resolve) => setTimeout(resolve, 50));
-		if (outputRef) outputRef.scrollTop = outputRef.scrollHeight;
-	}
-
-	function copyIdToTextbox(id) {
-		console.log('Selected Test ID:', id);
+	function selectId(id) {
 		testID = id;
+	}
+
+	function suiteIds(suite) {
+		return Array.isArray(suite.suiteId) ? suite.suiteId : [suite.suiteId];
+	}
+
+	function testIds(test) {
+		return Array.isArray(test.id) ? test.id : [test.id];
 	}
 </script>
 
-<div class="flex flex-col md:flex-row w-full my-4">
-	<!-- Left Panel: Run Tests -->
-	<div
-		class="card bg-base-300 rounded-box grid flex-grow place-items-center md:w-1/2 w-full p-4 md:mr-2 md:ml-4 mb-4 md:mb-0"
-	>
-		<div class="card-body items-center text-center">
-			<h2 class="card-title">Run Tests</h2>
-			<p>Enter a test case/suite ID or select an ID from the Test List</p>
-			<label class="form-control w-full max-w-xs mt-4">
-				<input
-					type="text"
-					class="input input-bordered w-full max-w-xs"
-					bind:value={testID}
-					placeholder="Enter test ID"
-				/>
-			</label>
-			<div class="card-actions justify-end">
-				<button class="btn btn-primary" on:click={runTest}>Run</button>
-				{#if testCompleted}
-					<a href={`http://localhost:3001/reports/${latestReport}`} target="_blank">
-						<button class="btn btn-primary">View Report</button>
-					</a>
-				{/if}
-			</div>
+<div class="page-header">
+	<h1>Run Tests</h1>
+	<p class="subtitle">Trigger test runs manually or select a suite from the list</p>
+</div>
+
+<div class="layout">
+	<!-- Left: runner -->
+	<section class="card">
+		<div class="input-row">
+			<input
+				type="text"
+				class="field-input"
+				bind:value={testID}
+				placeholder="@test-1 or @suite-login"
+				on:keydown={(e) => e.key === 'Enter' && !running && runTest()}
+			/>
+			<Button on:click={runTest} disabled={running}>
+				{running ? 'Running…' : 'Run'}
+			</Button>
 		</div>
 
-		<pre
-			bind:this={outputRef}
-			class="bg-black rounded-box p-4 w-full overflow-auto whitespace-pre-wrap h-64 max-h-64">{output}</pre>
-	</div>
+		<Terminal {output} />
 
-	<!-- Right Panel: Test List -->
-	<div class="card bg-base-300 rounded-box md:w-1/2 w-full p-4 md:ml-2 md:mr-4">
-		<div class="card-body items-center text-center">
-			<h2 class="card-title sticky top-0 bg-base-300 z-10">Test List</h2>
-			<div class="mt-4">
-				{#each suites as suite, suiteIndex}
-					<div class="collapse bg-base-200 mb-4">
-						<input type="radio" name="my-accordion-1" id="collapse-{suiteIndex}" />
-						<label
-							for="collapse-{suiteIndex}"
-							class="collapse-title font-medium justify-start cursor-pointer"
-						>
-							{#if Array.isArray(suite.suiteId)}
-								{#each suite.suiteId as suiteId}
-									<div class="badge badge-primary mr-2">{suiteId}</div>
+		{#if testCompleted && latestReport}
+			<div transition:fly={{ y: 6, duration: 240 }} class="report-link">
+				<a href={reportUrl(latestReport)} target="_blank" rel="noopener noreferrer">
+					<Button variant="outline" size="sm">View Report →</Button>
+				</a>
+			</div>
+		{/if}
+	</section>
+
+	<!-- Right: test list -->
+	<section class="card suite-card">
+		<p class="card-title">Test List</p>
+		<p class="card-subtitle">Click an ID to load it into the runner</p>
+
+		{#if suites.length === 0}
+			<p class="empty">No test suites found.</p>
+		{:else}
+			<div class="suites">
+				{#each suites as suite}
+					<details class="suite">
+						<summary class="suite-header">
+							<div class="suite-badges">
+								{#each suiteIds(suite) as id}
+									<Badge variant="tag">{id}</Badge>
 								{/each}
-							{:else}
-								<div class="badge badge-primary mr-2">{suite.suiteId}</div>
-							{/if}
-							{suite.suiteName}
-						</label>
-
-						<div class="collapse-content">
-							<button
-								class="btn btn-active btn-ghost btn-xs"
-								on:click={() =>
-									copyIdToTextbox(Array.isArray(suite.suiteId) ? suite.suiteId[0] : suite.suiteId)}
-							>
-								Select Suite
-							</button>
-
-							<div class="card rounded-lg shadow-md mt-2">
-								<div class="overflow-x-auto">
-									<table class="table">
-										<thead>
-											<tr>
-												<th>ID</th>
-												<th>Test Case</th>
-											</tr>
-										</thead>
-										<tbody>
-											{#each suite.tests as test}
-												<tr>
-													<th>
-														{#if Array.isArray(test.id)}
-															{#each test.id as testId}
-																<button
-																	class="btn btn-active btn-ghost btn-xs mr-1"
-																	on:click={() => copyIdToTextbox(testId)}
-																>
-																	{testId}
-																</button>
-															{/each}
-														{:else}
-															<button
-																class="btn btn-active btn-ghost btn-xs"
-																on:click={() => copyIdToTextbox(test.id)}
-															>
-																{test.id}
-															</button>
-														{/if}
-													</th>
-													<td>{test.testCase}</td>
-												</tr>
-											{/each}
-										</tbody>
-									</table>
-								</div>
 							</div>
+							<span class="suite-name">{suite.suiteName}</span>
+							<svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+								<polyline points="9 18 15 12 9 6" />
+							</svg>
+						</summary>
+
+						<div class="suite-body">
+							<button class="select-suite-btn" on:click={() => selectId(suiteIds(suite)[0])}>
+								Run entire suite
+							</button>
+							<table class="data-table">
+								<thead>
+									<tr>
+										<th>ID</th>
+										<th>Test Case</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each suite.tests as test}
+										<tr>
+											<td class="id-cell">
+												{#each testIds(test) as id}
+													<button class="id-btn" on:click={() => selectId(id)}>{id}</button>
+												{/each}
+											</td>
+											<td>{test.testCase}</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
 						</div>
-					</div>
+					</details>
 				{/each}
 			</div>
-		</div>
-	</div>
+		{/if}
+	</section>
 </div>
+
+<style>
+	.page-header {
+		margin-bottom: 2rem;
+	}
+
+	.page-header h1 {
+		font-size: 2rem;
+		margin-bottom: 0.25rem;
+	}
+
+	.subtitle {
+		color: var(--text-muted);
+		font-size: 0.9375rem;
+	}
+
+	.layout {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1.25rem;
+		align-items: start;
+	}
+
+	@media (max-width: 900px) {
+		.layout {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	/* Runner card */
+	.input-row {
+		display: flex;
+		gap: 0.625rem;
+		margin-bottom: 0.875rem;
+	}
+
+	.input-row .field-input {
+		flex: 1;
+	}
+
+	.report-link {
+		margin-top: 0.875rem;
+	}
+
+	/* Suite card */
+	.suite-card {
+		padding: 0;
+		overflow: hidden;
+	}
+
+	.suite-card .card-title,
+	.suite-card .card-subtitle {
+		padding: 1.5rem 1.5rem 0;
+	}
+
+	.suite-card .card-subtitle {
+		margin-bottom: 1rem;
+	}
+
+	.suites {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.suite {
+		border-top: 1px solid var(--border);
+	}
+
+	.suite:first-child {
+		border-top: none;
+	}
+
+	.suite-header {
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
+		padding: 0.875rem 1.5rem;
+		cursor: pointer;
+		list-style: none;
+		transition: background var(--duration-fast);
+	}
+
+	.suite-header::-webkit-details-marker {
+		display: none;
+	}
+
+	.suite-header:hover {
+		background: var(--bg-subtle);
+	}
+
+	.suite-badges {
+		display: flex;
+		gap: 0.25rem;
+		flex-shrink: 0;
+	}
+
+	.suite-name {
+		flex: 1;
+		font-size: 0.875rem;
+		color: var(--text);
+		font-weight: 400;
+	}
+
+	.chevron {
+		color: var(--text-muted);
+		flex-shrink: 0;
+		transition: transform var(--duration-fast) var(--ease-out);
+	}
+
+	details[open] .chevron {
+		transform: rotate(90deg);
+	}
+
+	.suite-body {
+		padding: 0.75rem 1.5rem 1rem;
+		border-top: 1px solid var(--border);
+		background: var(--bg-subtle);
+	}
+
+	.select-suite-btn {
+		font-size: 0.75rem;
+		font-weight: 400;
+		color: var(--accent);
+		background: var(--accent-soft);
+		border: none;
+		border-radius: var(--radius-sm);
+		padding: 0.25rem 0.75rem;
+		cursor: pointer;
+		margin-bottom: 0.75rem;
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast);
+	}
+
+	.select-suite-btn:hover {
+		filter: brightness(0.95);
+	}
+
+	.id-cell {
+		display: flex;
+		gap: 0.25rem;
+		flex-wrap: wrap;
+	}
+
+	.id-btn {
+		font-size: 0.7rem;
+		font-weight: 500;
+		color: var(--accent);
+		background: var(--accent-soft);
+		border: none;
+		border-radius: var(--radius-sm);
+		padding: 0.15rem 0.5rem;
+		cursor: pointer;
+		font-family: 'JetBrains Mono', monospace;
+		transition:
+			background var(--duration-fast),
+			filter var(--duration-fast);
+	}
+
+	.id-btn:hover {
+		filter: brightness(0.92);
+	}
+
+	.empty {
+		padding: 1.5rem;
+		color: var(--text-muted);
+		font-size: 0.875rem;
+	}
+</style>

@@ -15,13 +15,14 @@ You should have received a copy of the GNU General Public License
 along with Plum. If not, see https://www.gnu.org/licenses/.
 -->
 
-<script>
-	import '../app.css';
-	import Nav from '$lib/components/layout/Nav.svelte';
-	import PageShell from '$lib/components/layout/PageShell.svelte';
-</script>
-
-<Nav />
-<PageShell>
+<main class="shell">
 	<slot />
-</PageShell>
+</main>
+
+<style>
+	.shell {
+		max-width: 1200px;
+		margin: 0 auto;
+		padding: 2.5rem 1.5rem;
+	}
+</style>

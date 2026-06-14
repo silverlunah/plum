@@ -1,160 +1,164 @@
 <!--
- * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
- -->
+This file is part of Plum.
+
+Plum is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Plum is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Plum. If not, see https://www.gnu.org/licenses/.
+-->
 
 <script>
 	import { onMount } from 'svelte';
+	import { fetchReports, reportUrl } from '$lib/api/reports';
+	import Badge from '$lib/components/ui/Badge.svelte';
+	import Pagination from '$lib/components/ui/Pagination.svelte';
 
 	let reports = [];
 	let currentPage = 1;
-	const itemsPerPage = 10;
+	const PER_PAGE = 10;
 
-	async function fetchReports() {
-		const response = await fetch('http://localhost:3001/reports');
-		const data = await response.json();
+	$: totalPages = Math.ceil(reports.length / PER_PAGE);
+	$: paginated = reports.slice((currentPage - 1) * PER_PAGE, currentPage * PER_PAGE);
 
-		reports = data.reports.map((fileName) => {
-			// Updated regex to capture the trigger type and tags inside parentheses
-			const match = fileName.match(
-				/(PASS|FAIL)_cucumber_report_([^_]+)_\(([^)]+)\)_(\d{4})_(\d{2})_(\d{2})T(\d{2})_(\d{2})_(\d{2})_\d{3}Z\.html/
-			);
-			if (!match)
-				return {
-					fileName,
-					status: 'Unknown',
-					triggerType: 'Invalid Trigger',
-					tags: 'Invalid Tags',
-					date: 'Invalid Date'
-				};
-
-			const [_, status, triggerType, tagsString, year, month, day, hour, minute, second] = match;
-
-			// Format date properly
-			const rawDate = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`);
-			const formattedDate = rawDate.toLocaleString();
-
-			return { fileName, status, triggerType, tags: tagsString, date: formattedDate };
-		});
+	function triggerLabel(type) {
+		if (type === 'manual-trigger') return 'Manual';
+		if (type === 'command-line-trigger') return 'CLI';
+		return `Scheduled`;
 	}
 
-	// Calculate the start and end indices for pagination
-	function paginatedReports() {
-		const startIndex = (currentPage - 1) * itemsPerPage;
-		const endIndex = startIndex + itemsPerPage;
-		return reports.slice(startIndex, endIndex);
+	function triggerVariant(type) {
+		if (type === 'manual-trigger') return 'tag';
+		if (type === 'command-line-trigger') return 'neutral';
+		return 'schedule';
 	}
 
-	function goToPage(pageNumber) {
-		if (pageNumber < 1 || pageNumber > totalPages()) return;
-		currentPage = pageNumber;
+	function openReport(fileName) {
+		window.open(reportUrl(fileName), '_blank', 'noopener');
 	}
 
-	function totalPages() {
-		return Math.ceil(reports.length / itemsPerPage);
-	}
-
-	onMount(fetchReports);
+	onMount(async () => {
+		try {
+			reports = await fetchReports();
+		} catch (e) {
+			console.error('Failed to fetch reports', e);
+		}
+	});
 </script>
 
-<div class="flex justify-center items-center w-full my-4">
-	<div class="card bg-base-300 rounded-box p-4">
-		<div class="card-body text-left">
-			<h2 class="card-title sticky top-0 bg-base-300 z-10">Reports</h2>
-			<div class="mt-4">
-				{#if reports.length > 0}
-					<div class="overflow-x-auto">
-						<table class="table">
-							<thead>
-								<tr>
-									<th>Status</th>
-									<th>Type</th>
-									<th>Tags</th>
-									<th>Date</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each paginatedReports() as report}
-									<tr
-										on:click={() =>
-											window.open(`http://localhost:3001/reports/${report.fileName}`, '_blank')}
-										style="cursor: pointer;"
-									>
-										<td>
-											<span
-												class="badge"
-												class:badge-success={report.status === 'PASS'}
-												class:badge-error={report.status === 'FAIL'}
-											>
-												{report.status}
-											</span>
-										</td>
-										<td>
-											{#if report.triggerType === 'manual-trigger'}
-												<span class="badge badge-primary">Manual Trigger</span>
-											{:else if report.triggerType === 'command-line-trigger'}
-												<span class="badge badge-primary">CLI Trigger</span>
-											{:else}
-												<span class="badge badge-secondary">Scheduled: {report.triggerType}</span>
-											{/if}
-										</td>
-										<td>
-											<span class="badge badge-neutral">
-												{report.tags}
-											</span>
-										</td>
-										<td>
-											{report.date}
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-					<!-- Pagination Controls -->
-					<div class="flex justify-center mt-4">
-						<div class="btn-group">
-							<button
-								class="btn btn-ghost"
-								on:click={() => goToPage(currentPage - 1)}
-								disabled={currentPage === 1}
-							>
-								Previous
-							</button>
-							{#each Array(totalPages()) as _, i}
-								<button
-									class="btn mx-1"
-									on:click={() => goToPage(i + 1)}
-									class:btn-active={currentPage === i + 1}
-								>
-									{i + 1}
-								</button>
-							{/each}
-							<button
-								class="btn btn-primary"
-								on:click={() => goToPage(currentPage + 1)}
-								disabled={currentPage === totalPages()}
-							>
-								Next
-							</button>
-						</div>
-					</div>
-				{:else}
-					<p>No reports available.</p>
-				{/if}
-			</div>
-		</div>
-	</div>
+<div class="page-header">
+	<h1>Reports</h1>
+	<p class="subtitle">Click a row to open the full HTML report</p>
 </div>
+
+<div class="card">
+	{#if reports.length === 0}
+		<p class="empty">No reports yet. Run a test to generate one.</p>
+	{:else}
+		<div class="table-wrap">
+			<table class="data-table">
+				<thead>
+					<tr>
+						<th>Status</th>
+						<th>Trigger</th>
+						<th>Tags</th>
+						<th>Date</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each paginated as report}
+						<tr class="row" on:click={() => openReport(report.fileName)}>
+							<td>
+								<Badge variant={report.status === 'PASS' ? 'pass' : 'fail'}>
+									{report.status}
+								</Badge>
+							</td>
+							<td>
+								<Badge variant={triggerVariant(report.triggerType)}>
+									{triggerLabel(report.triggerType)}
+								</Badge>
+							</td>
+							<td>
+								<span class="tag-text">{report.tags}</span>
+							</td>
+							<td class="date">{report.date}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+
+		<div class="pagination-wrap">
+			<Pagination
+				current={currentPage}
+				total={totalPages}
+				on:change={(e) => (currentPage = e.detail)}
+			/>
+		</div>
+	{/if}
+</div>
+
+<style>
+	.page-header {
+		margin-bottom: 2rem;
+	}
+
+	.page-header h1 {
+		font-size: 2rem;
+		margin-bottom: 0.25rem;
+	}
+
+	.subtitle {
+		color: var(--text-muted);
+		font-size: 0.9375rem;
+	}
+
+	.card {
+		padding: 0;
+		overflow: hidden;
+	}
+
+	.table-wrap {
+		overflow-x: auto;
+	}
+
+	.row {
+		cursor: pointer;
+		transition: background var(--duration-fast);
+	}
+
+	.row:hover {
+		background: var(--bg-subtle);
+	}
+
+	.tag-text {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.78rem;
+		color: var(--text-muted);
+	}
+
+	.date {
+		color: var(--text-muted);
+		font-size: 0.8125rem;
+		white-space: nowrap;
+	}
+
+	.empty {
+		padding: 3rem 1.5rem;
+		color: var(--text-muted);
+		font-size: 0.9375rem;
+		text-align: center;
+	}
+
+	.pagination-wrap {
+		padding: 1rem 1.5rem;
+		border-top: 1px solid var(--border);
+	}
+</style>

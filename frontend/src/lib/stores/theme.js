@@ -1,4 +1,4 @@
-<!--
+/*
 This file is part of Plum.
 
 Plum is free software: you can redistribute it and/or modify
@@ -13,15 +13,18 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with Plum. If not, see https://www.gnu.org/licenses/.
--->
+*/
 
-<script>
-	import '../app.css';
-	import Nav from '$lib/components/layout/Nav.svelte';
-	import PageShell from '$lib/components/layout/PageShell.svelte';
-</script>
+import { writable } from 'svelte/store';
+import { browser } from '$app/environment';
 
-<Nav />
-<PageShell>
-	<slot />
-</PageShell>
+const KEY = 'plum-theme';
+const initial = browser ? (localStorage.getItem(KEY) ?? 'light') : 'light';
+
+export const theme = writable(initial);
+
+theme.subscribe((val) => {
+	if (!browser) return;
+	localStorage.setItem(KEY, val);
+	document.documentElement.setAttribute('data-theme', val);
+});
