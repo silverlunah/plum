@@ -78,7 +78,9 @@ let tag = process.env.TAG || '(@all-tests)';
 if (tag && !tag.startsWith('(')) tag = `(${tag})`;
 
 const timestamp = new Date().toISOString().replace(/[-:.]/g, '_');
-const reportFileName = `${status}_cucumber_report_${process.env.TRIGGER}_${tag}_${timestamp}.json`;
+const runners = Number.parseInt(process.env.REPORT_RUNNERS || process.env.PARALLEL || '1', 10);
+const runnerCount = Number.isFinite(runners) && runners > 0 ? runners : 1;
+const reportFileName = `${status}_cucumber_report_${process.env.TRIGGER}_${tag}_runners_${runnerCount}_${timestamp}.json`;
 
 // Save a timestamped snapshot of the cucumber JSON
 if (fs.existsSync(jsonReportFile)) {

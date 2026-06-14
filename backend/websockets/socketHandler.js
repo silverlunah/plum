@@ -22,7 +22,13 @@ const socketHandler = (io) => {
 		console.log('WebSocket connection established');
 		socket.on('run-test', (testID, workers) => {
 			const tag = testID ? `${testID}` : '';
-			const env = { ...process.env, TAG: tag, TRIGGER: 'manual-trigger' };
+			const runnerCount = Number(workers) > 1 ? Number(workers) : 1;
+			const env = {
+				...process.env,
+				TAG: tag,
+				TRIGGER: 'manual-trigger',
+				REPORT_RUNNERS: String(runnerCount)
+			};
 			if (workers && workers > 1) env.PARALLEL = String(workers);
 
 			const testProcess = spawn('npm', ['run', 'test'], { env });

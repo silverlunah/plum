@@ -135,6 +135,9 @@
 							<Badge variant={triggerVariant(report.triggerType)}>
 								{triggerLabel(report.triggerType)}
 							</Badge>
+							<Badge variant="neutral">
+								{report.runners} runner{report.runners !== 1 ? 's' : ''}
+							</Badge>
 						</div>
 					</div>
 				</div>

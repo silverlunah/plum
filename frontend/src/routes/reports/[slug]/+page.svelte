@@ -59,6 +59,52 @@
 		return 'kw-and';
 	}
 
+	function scenarioTestTag(scenario) {
+		return scenario.tags.find((tag) => /^@test[\w-]*/i.test(tag));
+	}
+
+	function visibleTags(scenario) {
+		const testTag = scenarioTestTag(scenario);
+		if (testTag) return [testTag];
+		return scenario.tags.filter((tag) => tag !== meta?.tags && !tag.includes('suite'));
+	}
+
+	function worstStatus(scenarios) {
+		const rank = { failed: 3, pending: 2, skipped: 1, passed: 0 };
+		return scenarios.reduce(
+			(status, scenario) =>
+				(rank[scenario.status] ?? 0) > (rank[status] ?? 0) ? scenario.status : status,
+			'passed'
+		);
+	}
+
+	function groupedScenarios(scenarios) {
+		const groups = new Map();
+
+		for (const scenario of scenarios) {
+			const testTag = scenarioTestTag(scenario);
+			const key = testTag || `${scenario.keyword}:${scenario.name}`;
+
+			if (!groups.has(key)) {
+				groups.set(key, {
+					key,
+					name: scenario.name,
+					tags: visibleTags(scenario),
+					scenarios: [],
+					duration: 0,
+					status: scenario.status
+				});
+			}
+
+			const group = groups.get(key);
+			group.scenarios.push(scenario);
+			group.duration += scenario.duration;
+			group.status = worstStatus(group.scenarios);
+		}
+
+		return Array.from(groups.values());
+	}
+
 	$: passed =
 		detail?.features.flatMap((f) => f.scenarios).filter((s) => s.status === 'passed').length ?? 0;
 	$: failed =
@@ -70,6 +116,11 @@
 	$: totalDuration =
 		detail?.features.flatMap((f) => f.scenarios).reduce((s, sc) => s + sc.duration, 0) ?? 0;
 	$: overallPass = meta?.status === 'PASS';
+	$: groupedFeatures =
+		detail?.features.map((feature) => ({
+			...feature,
+			scenarioGroups: groupedScenarios(feature.scenarios)
+		})) ?? [];
 </script>
 
 <div class="back-row">
@@ -139,12 +190,18 @@
 					<span class="stat-num">{fmtDuration(totalDuration)}</span>
 					<span class="stat-label">total</span>
 				</div>
+				{#if meta}
+					<div class="stat">
+						<span class="stat-num">{meta.runners}</span>
+						<span class="stat-label">runner{meta.runners !== 1 ? 's' : ''}</span>
+					</div>
+				{/if}
 			</div>
 		</div>
 	</div>
 
 	<!-- Features -->
-	{#each detail.features as feature, fi}
+	{#each groupedFeatures as feature, fi}
 		<div class="feature" style="animation-delay: {fi * 60}ms">
 			<div class="feature-header">
 				<Badge variant={feature.status === 'passed' ? 'pass' : 'fail'}>
@@ -155,27 +212,32 @@
 			</div>
 
 			<div class="scenarios">
-				{#each feature.scenarios as scenario, si}
-					{@const scenId = `${fi}-${si}`}
+				{#each feature.scenarioGroups as group, si}
+					{@const scenId = `${fi}-${group.key}`}
 					{@const open = expandedScenarios.has(scenId)}
 					<div class="scenario" style="animation-delay: {(fi * 5 + si) * 40}ms">
 						<button class="scenario-header" on:click={() => toggleScenario(scenId)}>
 							<span
 								class="scenario-status-dot"
-								class:pass={scenario.status === 'passed'}
-								class:fail={scenario.status === 'failed'}
-								class:skip={scenario.status === 'skipped' || scenario.status === 'pending'}
+								class:pass={group.status === 'passed'}
+								class:fail={group.status === 'failed'}
+								class:skip={group.status === 'skipped' || group.status === 'pending'}
 							></span>
 
-							<span class="scenario-name">{scenario.name}</span>
+							<span class="scenario-name">
+								{group.name}
+								{#if group.scenarios.length > 1}
+									<span class="scenario-count">{group.scenarios.length} cases</span>
+								{/if}
+							</span>
 
 							<div class="scenario-tags">
-								{#each scenario.tags.filter((t) => t !== meta?.tags && !t.includes('suite')) as tag}
+								{#each group.tags as tag}
 									<span class="tag-chip">{tag}</span>
 								{/each}
 							</div>
 
-							<span class="scenario-duration">{fmtDuration(scenario.duration)}</span>
+							<span class="scenario-duration">{fmtDuration(group.duration)}</span>
 
 							<svg
 								width="13"
@@ -194,36 +256,51 @@
 
 						{#if open}
 							<div class="steps" transition:slide={{ duration: 200 }}>
-								{#each scenario.steps as step}
-									<div
-										class="step"
-										class:step-fail={step.status === 'failed'}
-										class:step-skip={step.status === 'skipped' || step.status === 'pending'}
-									>
-										<div class="step-row">
-											<span class="step-status-icon">
-												{#if step.status === 'passed'}✓{:else if step.status === 'failed'}✗{:else}−{/if}
-											</span>
-											<span class="kw {keywordClass(step.keyword)}">{step.keyword}</span>
-											<span class="step-name">{step.name}</span>
-											<span class="step-duration">{fmtDuration(step.duration)}</span>
+								{#each group.scenarios as scenario, exampleIndex}
+									{#if group.scenarios.length > 1}
+										<div class="example-header">
+											<span
+												class="scenario-status-dot"
+												class:pass={scenario.status === 'passed'}
+												class:fail={scenario.status === 'failed'}
+												class:skip={scenario.status === 'skipped' || scenario.status === 'pending'}
+											></span>
+											<span>Case {exampleIndex + 1}</span>
+											<span class="scenario-duration">{fmtDuration(scenario.duration)}</span>
 										</div>
+									{/if}
 
-										{#if step.error}
-											<pre class="step-error">{step.error}</pre>
-										{/if}
+									{#each scenario.steps as step}
+										<div
+											class="step"
+											class:step-fail={step.status === 'failed'}
+											class:step-skip={step.status === 'skipped' || step.status === 'pending'}
+										>
+											<div class="step-row">
+												<span class="step-status-icon">
+													{#if step.status === 'passed'}✓{:else if step.status === 'failed'}✗{:else}−{/if}
+												</span>
+												<span class="kw {keywordClass(step.keyword)}">{step.keyword}</span>
+												<span class="step-name">{step.name}</span>
+												<span class="step-duration">{fmtDuration(step.duration)}</span>
+											</div>
 
-										{#if step.screenshot}
-											<details class="screenshot-wrap">
-												<summary class="screenshot-toggle">Screenshot</summary>
-												<img
-													class="screenshot"
-													src="data:image/png;base64,{step.screenshot}"
-													alt="Failure screenshot"
-												/>
-											</details>
-										{/if}
-									</div>
+											{#if step.error}
+												<pre class="step-error">{step.error}</pre>
+											{/if}
+
+											{#if step.screenshot}
+												<details class="screenshot-wrap">
+													<summary class="screenshot-toggle">Screenshot</summary>
+													<img
+														class="screenshot"
+														src="data:image/png;base64,{step.screenshot}"
+														alt="Failure screenshot"
+													/>
+												</details>
+											{/if}
+										</div>
+									{/each}
 								{/each}
 							</div>
 						{/if}
@@ -437,6 +514,23 @@
 		color: var(--text);
 		font-weight: 400;
 		text-align: left;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-width: 0;
+	}
+
+	.scenario-count {
+		font-size: 0.65rem;
+		font-weight: 500;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: 100px;
+		padding: 0.05rem 0.4rem;
+		white-space: nowrap;
 	}
 
 	.scenario-tags {
@@ -476,6 +570,27 @@
 		border-top: 1px solid var(--border);
 		background: var(--bg-subtle);
 		padding: 0.5rem 0;
+	}
+
+	.example-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.625rem 1rem 0.25rem 1.25rem;
+		color: var(--text-muted);
+		font-size: 0.72rem;
+		font-weight: 500;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+	}
+
+	.example-header:not(:first-child) {
+		margin-top: 0.375rem;
+		border-top: 1px dashed var(--border);
+	}
+
+	.example-header .scenario-duration {
+		margin-left: auto;
 	}
 
 	.step {

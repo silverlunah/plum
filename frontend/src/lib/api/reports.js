@@ -47,7 +47,7 @@ export async function fetchLatestReport() {
 }
 
 export function reportUrl(fileName) {
-	return `${BASE}/reports/${fileName}`;
+	return `/reports/${encodeURIComponent(fileName)}`;
 }
 
 export async function fetchReportDetail(fileName) {
@@ -58,10 +58,11 @@ export async function fetchReportDetail(fileName) {
 
 export function parseReport(fileName) {
 	const match = fileName.match(
-		/(PASS|FAIL)_cucumber_report_([^_]+)_\(([^)]+)\)_(\d{4})_(\d{2})_(\d{2})T(\d{2})_(\d{2})_(\d{2})_\d{3}Z\.json/
+		/(PASS|FAIL)_cucumber_report_(.+?)_\(([^)]+)\)(?:_runners_(\d+))?_(\d{4})_(\d{2})_(\d{2})T(\d{2})_(\d{2})_(\d{2})_\d{3}Z\.json/
 	);
 	if (!match) return null;
-	const [, status, triggerType, tags, year, month, day, hour, minute, second] = match;
+	const [, status, triggerType, tags, runners = '1', year, month, day, hour, minute, second] =
+		match;
 	const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`).toLocaleString();
-	return { fileName, status, triggerType, tags, date };
+	return { fileName, status, triggerType, tags, runners: Number(runners), date };
 }

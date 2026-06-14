@@ -16,7 +16,7 @@
  -->
 
 <script>
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { fetchSuites } from '$lib/api/tests';
 	import { runnerConfig, triggerRun } from '$lib/stores/runner';
@@ -24,6 +24,8 @@
 	let suites = [];
 	let search = '';
 	let expandedSteps = new Set();
+	let copiedIds = new Set();
+	const copyTimers = new Map();
 
 	onMount(async () => {
 		try {
@@ -66,7 +68,23 @@
 
 	async function copyId(id) {
 		await navigator.clipboard.writeText(id);
+		copiedIds.add(id);
+		copiedIds = copiedIds;
+
+		if (copyTimers.has(id)) clearTimeout(copyTimers.get(id));
+		copyTimers.set(
+			id,
+			setTimeout(() => {
+				copiedIds.delete(id);
+				copiedIds = copiedIds;
+				copyTimers.delete(id);
+			}, 1400)
+		);
 	}
+
+	onDestroy(() => {
+		for (const timer of copyTimers.values()) clearTimeout(timer);
+	});
 
 	$: q = search.trim().toLowerCase();
 	$: filtered = suites
@@ -152,7 +170,15 @@
 					<div class="suite-meta">
 						<div class="suite-badges">
 							{#each suiteIds(suite) as id}
-								<button class="id-pill" on:click={() => copyId(id)} title="Copy {id}">{id}</button>
+								<button
+									class="id-pill"
+									class:copied={copiedIds.has(id)}
+									on:click={() => copyId(id)}
+									title={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
+									aria-label={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
+								>
+									{id}
+								</button>
 							{/each}
 						</div>
 						<span class="suite-name">{suite.suiteName}</span>
@@ -187,7 +213,15 @@
 
 								<div class="test-ids">
 									{#each testIds(test) as id}
-										<button class="id-pill" on:click={() => copyId(id)} title="Copy {id}">{id}</button>
+										<button
+											class="id-pill"
+											class:copied={copiedIds.has(id)}
+											on:click={() => copyId(id)}
+											title={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
+											aria-label={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
+										>
+											{id}
+										</button>
 									{/each}
 								</div>
 
@@ -371,7 +405,7 @@
 	.suite {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-lg);
-		overflow: hidden;
+		overflow: visible;
 		background: var(--bg-elevated);
 		animation: fadeUp 0.35s var(--ease-out) both;
 	}
@@ -384,6 +418,7 @@
 		padding: 0.875rem 1.25rem;
 		background: var(--bg-subtle);
 		border-bottom: 1px solid var(--border);
+		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 	}
 
 	.suite-meta {
@@ -495,6 +530,7 @@
 	}
 
 	.id-pill {
+		position: relative;
 		font-size: 0.68rem;
 		font-weight: 500;
 		letter-spacing: 0.04em;
@@ -507,11 +543,38 @@
 		font-family: 'JetBrains Mono', monospace;
 		transition:
 			background var(--duration-fast),
+			color var(--duration-fast),
 			filter var(--duration-fast);
 	}
 
 	.id-pill:hover {
 		filter: brightness(0.92);
+	}
+
+	.id-pill.copied {
+		color: var(--pass);
+		background: var(--pass-soft);
+	}
+
+	.id-pill.copied::after {
+		content: 'Copied';
+		position: absolute;
+		left: 50%;
+		bottom: calc(100% + 6px);
+		z-index: 50;
+		transform: translateX(-50%);
+		padding: 0.16rem 0.42rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--bg-elevated);
+		color: var(--pass);
+		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+		font-family: var(--font-body);
+		font-size: 0.65rem;
+		font-weight: 500;
+		letter-spacing: 0;
+		pointer-events: none;
+		animation: copiedPop 1.4s var(--ease-out) both;
 	}
 
 	.test-name {
@@ -653,5 +716,21 @@
 		font-size: 0.9375rem;
 		padding: 3rem 0;
 		text-align: center;
+	}
+
+	@keyframes copiedPop {
+		0% {
+			opacity: 0;
+			transform: translate(-50%, 4px) scale(0.96);
+		}
+		12%,
+		78% {
+			opacity: 1;
+			transform: translate(-50%, 0) scale(1);
+		}
+		100% {
+			opacity: 0;
+			transform: translate(-50%, -2px) scale(0.98);
+		}
 	}
 </style>
