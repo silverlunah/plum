@@ -180,7 +180,10 @@ switch (command) {
 		// Copy .env file from root to backend
 		copyEnvFile();
 
-		const tagArg = process.argv[3]; // This is your tag, like @test-1
+		const devArgs = process.argv.slice(3);
+		const parallelIdx = devArgs.indexOf('--parallel');
+		const parallelArg = parallelIdx !== -1 ? devArgs[parallelIdx + 1] : null;
+		const tagArg = devArgs.find((a) => a.startsWith('@')) ?? null;
 		const userTestsPath = path.resolve(process.cwd(), 'tests');
 		const backendTestsPath = path.join(plumRoot, 'backend', 'tests');
 
@@ -212,6 +215,7 @@ switch (command) {
 		console.log('--------------------------------------\n');
 		console.log('Running `npm run test` with:');
 		console.log('TAG =', tagArg ?? '');
+		console.log('PARALLEL =', parallelArg ?? 'off');
 		console.log('TRIGGER =', 'command-line-trigger');
 
 		execSync('npm run test', {
@@ -220,7 +224,8 @@ switch (command) {
 			env: {
 				...process.env,
 				TAG: tagArg ?? '',
-				TRIGGER: 'command-line-trigger'
+				TRIGGER: 'command-line-trigger',
+				...(parallelArg ? { PARALLEL: parallelArg } : {})
 			}
 		});
 		console.log('--------------------------------------\n');

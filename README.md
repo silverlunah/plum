@@ -43,12 +43,13 @@ plum init
 
 ### Commands
 
-| Command            | Description                                                                |
-| ------------------ | -------------------------------------------------------------------------- |
-| `plum init`        | Scaffold the `tests/` folder and `.env` file in your project directory     |
-| `plum dev [tag]`   | Run tests locally without Docker. Pass a tag to filter (e.g. `@test-1`)    |
-| `plum start`       | Start the full stack via Docker and open the UI at `http://localhost:5173` |
-| `plum create-step` | Interactive prompt to generate a step definition and page object           |
+| Command                       | Description                                                                |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| `plum init`                   | Scaffold the `tests/` folder and `.env` file in your project directory     |
+| `plum dev [tag]`              | Run tests locally without Docker. Pass a tag to filter (e.g. `@test-1`)    |
+| `plum dev --parallel N [tag]` | Run tests in parallel with N workers (e.g. `plum dev --parallel 4`)        |
+| `plum start`                  | Start the full stack via Docker and open the UI at `http://localhost:5173` |
+| `plum create-step`            | Interactive prompt to generate a step definition and page object           |
 
 ---
 
@@ -150,18 +151,20 @@ npm run init
 
 Run these from the `backend/` directory:
 
-| Command                | Description                                                      |
-| ---------------------- | ---------------------------------------------------------------- |
-| `npm run init`         | Create `.env` and copy scaffold into `backend/tests/`            |
-| `npm run dev [-- tag]` | Run tests from `backend/tests/` directly                         |
-| `npm run create-step`  | Interactive prompt to generate a step definition and page object |
+| Command                    | Description                                                      |
+| -------------------------- | ---------------------------------------------------------------- |
+| `npm run init`             | Create `.env` and copy scaffold into `backend/tests/`            |
+| `npm test [-- tag]`        | Run tests from `backend/tests/` directly                         |
+| `npm test -- --parallel N` | Run tests in parallel with N workers                             |
+| `npm run create-step`      | Interactive prompt to generate a step definition and page object |
 
 ```bash
 cd backend
-npm run init               # sets up .env and tests/ for local development
-npm run dev                # run all tests
-npm run dev -- @test-1     # run a specific test by tag
-npm run create-step        # generate a new step and page interactively
+npm run init                  # sets up .env and tests/ for local development
+npm test                      # run all tests
+npm test -- @test-1           # run a specific test by tag
+npm test -- --parallel 4      # run tests in parallel
+npm run create-step           # generate a new step and page interactively
 ```
 
 ### Docker

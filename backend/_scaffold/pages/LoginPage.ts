@@ -13,4 +13,36 @@ export class LoginPage {
 	static async skipTest() {
 		test.skip();
 	}
+
+	static async iEnterUsername(username: string) {
+		await page().fill('#user-name', username);
+	}
+
+	static async iEnterPassword(password: string) {
+		await page().fill('#password', password);
+	}
+
+	static async iClickOnTheLoginButton() {
+		await page().click('#login-button');
+	}
+
+	static async fillLoginForm(fields: { field: string; value: string }[]) {
+		for (const { field, value } of fields) {
+			if (field === 'username') await page().fill('#user-name', value);
+			if (field === 'password') await page().fill('#password', value);
+		}
+		await page().click('#login-button');
+	}
+
+	static async verifyLoginOutcome(outcome: string) {
+		if (outcome === 'success') {
+			await page().waitForSelector('.title');
+		} else {
+			await page().waitForSelector('.error-message-container');
+		}
+	}
+
+	static async verifyLoginFailed() {
+		await page().waitForSelector('.error-message-container');
+	}
 }
