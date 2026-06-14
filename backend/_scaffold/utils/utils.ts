@@ -1,13 +1,7 @@
-import { Page } from '@playwright/test';
+import { page } from './browser';
 
 export class Utils {
-	private page: Page;
-
-	constructor(page: Page) {
-		this.page = page;
-	}
-
-	async goToPage(url: string) {
-		await this.page.goto(url);
+	static async goToPage(url: string) {
+		await page().goto(url);
 	}
 }

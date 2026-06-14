@@ -16,7 +16,8 @@
  */
 
 const { execSync } = require('child_process');
-const tag = process.env.TAG;
+const pc = require('picocolors');
+const tag = process.env.TAG || process.argv[2];
 
 try {
 	const baseCommand = [
@@ -27,6 +28,8 @@ try {
 		'tests/features/**/*.feature',
 		'--require-module',
 		'ts-node/register',
+		'--require',
+		'tests/utils/hooks.ts',
 		'--require',
 		'tests/step_definitions/**/*.ts',
 		'--format',
@@ -40,11 +43,11 @@ try {
 	const cucumberCommand = baseCommand.join(' ');
 	execSync(cucumberCommand, { stdio: 'inherit' });
 } catch (error) {
-	console.error('Tests failed:', error.message);
+	console.error(pc.red('✗') + ' Tests failed: ' + error.message);
 } finally {
 	try {
 		execSync('node config/scripts/generate-report.js', { stdio: 'inherit' });
 	} catch (error) {
-		console.error('Error running report generation:', error.message);
+		console.error(pc.red('✗') + ' Report generation failed: ' + error.message);
 	}
 }
