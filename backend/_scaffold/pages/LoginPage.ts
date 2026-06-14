@@ -13,4 +13,16 @@ export class LoginPage {
 	static async skipTest() {
 		test.skip();
 	}
+
+	static async iEnterUsername(username: string) {
+		await page().fill('#user-name', username);
+	}
+
+	static async iEnterPassword(password: string) {
+		await page().fill('#password', password);
+	}
+
+	static async iClickOnTheLoginButton() {
+		await page().click('#login-button');
+	}
 }
