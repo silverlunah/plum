@@ -19,37 +19,9 @@ const fs = require('fs');
 const path = require('path');
 const reportsDir = 'reports';
 const screenshotsDir = path.join(reportsDir, 'screenshots');
-const maxReports = 20;
 
 if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
 if (!fs.existsSync(screenshotsDir)) fs.mkdirSync(screenshotsDir, { recursive: true });
-
-// Clean up old timestamped report JSON files
-const existingReports = fs
-	.readdirSync(reportsDir)
-	.filter((f) => f.endsWith('.json') && (f.startsWith('PASS_') || f.startsWith('FAIL_')))
-	.sort(
-		(a, b) =>
-			fs.statSync(path.join(reportsDir, b)).mtime - fs.statSync(path.join(reportsDir, a)).mtime
-	);
-
-while (existingReports.length >= maxReports) {
-	fs.unlinkSync(path.join(reportsDir, existingReports.pop()));
-}
-
-// Clean up old screenshots
-const existingScreenshots = fs
-	.readdirSync(screenshotsDir)
-	.filter((f) => f.endsWith('.png') || f.endsWith('.jpg'))
-	.sort(
-		(a, b) =>
-			fs.statSync(path.join(screenshotsDir, b)).mtime -
-			fs.statSync(path.join(screenshotsDir, a)).mtime
-	);
-
-while (existingScreenshots.length >= maxReports) {
-	fs.unlinkSync(path.join(screenshotsDir, existingScreenshots.pop()));
-}
 
 // Determine PASS/FAIL from cucumber JSON output
 const jsonReportFile = path.join(reportsDir, 'cucumber_report.json');

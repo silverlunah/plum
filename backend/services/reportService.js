@@ -104,4 +104,25 @@ const getReportDetail = (fileName) => {
 	return { features };
 };
 
-module.exports = { getAllReports, getLatestReport, saveReport, getReportDetail };
+const deleteReport = async (fileName) => {
+	await prisma.report.delete({ where: { fileName } });
+	const filePath = path.join(REPORTS_DIR, fileName);
+	if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+};
+
+const deleteReports = async (fileNames) => {
+	await prisma.report.deleteMany({ where: { fileName: { in: fileNames } } });
+	for (const fileName of fileNames) {
+		const filePath = path.join(REPORTS_DIR, fileName);
+		if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+	}
+};
+
+module.exports = {
+	getAllReports,
+	getLatestReport,
+	saveReport,
+	getReportDetail,
+	deleteReport,
+	deleteReports
+};
