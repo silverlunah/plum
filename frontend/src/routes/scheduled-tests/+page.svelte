@@ -109,7 +109,12 @@
 	function openEditModal(job) {
 		isEditing = true;
 		editTaskName = job.taskName;
-		form = { taskName: job.taskName, cronExpression: job.cronExpression, tags: job.tags, workers: job.workers ?? 1 };
+		form = {
+			taskName: job.taskName,
+			cronExpression: job.cronExpression,
+			tags: job.tags,
+			workers: job.workers ?? 1
+		};
 		const isPreset = scheduleOptions.some((o) => o.value === job.cronExpression);
 		useCustomCron = !isPreset;
 		selectedSchedule = isPreset ? job.cronExpression : CUSTOM_SENTINEL;
@@ -221,7 +226,7 @@
 				{#if form.cronExpression}
 					<p class="cron-desc" class:cron-invalid={!CRON_REGEX.test(form.cronExpression)}>
 						{CRON_REGEX.test(form.cronExpression)
-							? (describeCron(form.cronExpression) || form.cronExpression)
+							? describeCron(form.cronExpression) || form.cronExpression
 							: 'Invalid cron expression'}
 					</p>
 				{/if}
@@ -404,8 +409,15 @@
 	}
 
 	@keyframes statusPulse {
-		0%, 100% { opacity: 1; transform: scale(1); }
-		50% { opacity: 0.4; transform: scale(0.65); }
+		0%,
+		100% {
+			opacity: 1;
+			transform: scale(1);
+		}
+		50% {
+			opacity: 0.4;
+			transform: scale(0.65);
+		}
 	}
 
 	.tag-text {
@@ -491,7 +503,9 @@
 		border: none;
 		border-right: 1px solid var(--border);
 		cursor: pointer;
-		transition: background var(--duration-fast), color var(--duration-fast);
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast);
 	}
 
 	.seg-btn:last-child {

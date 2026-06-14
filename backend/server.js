@@ -69,14 +69,12 @@ server.listen(3001, async () => {
 	// Watch reports/ — notify UI when a new report file lands
 	const reportsDir = path.resolve(process.cwd(), 'reports');
 	fs.mkdirSync(reportsDir, { recursive: true });
-	chokidar
-		.watch(reportsDir, { ...watchOpts, interval: 1200 })
-		.on('add', (filePath) => {
-			const name = path.basename(filePath);
-			if ((name.startsWith('PASS_') || name.startsWith('FAIL_')) && name.endsWith('.json')) {
-				console.log(`📊 New report: ${name} — notifying clients`);
-				io.emit('report-ready');
-			}
-		});
+	chokidar.watch(reportsDir, { ...watchOpts, interval: 1200 }).on('add', (filePath) => {
+		const name = path.basename(filePath);
+		if ((name.startsWith('PASS_') || name.startsWith('FAIL_')) && name.endsWith('.json')) {
+			console.log(`📊 New report: ${name} — notifying clients`);
+			io.emit('report-ready');
+		}
+	});
 	console.log('👀 Watching for new reports...');
 });

@@ -19,7 +19,16 @@
 	import { onMount } from 'svelte';
 	import { slide, fly } from 'svelte/transition';
 	import { io } from 'socket.io-client';
-	import { socket, runnerState, runnerConfig, panelExpanded, triggerRun, testsVersion, reportsVersion, activeCronJobs } from '$lib/stores/runner';
+	import {
+		socket,
+		runnerState,
+		runnerConfig,
+		panelExpanded,
+		triggerRun,
+		testsVersion,
+		reportsVersion,
+		activeCronJobs
+	} from '$lib/stores/runner';
 	import { fetchLatestReport, reportUrl } from '$lib/api/reports';
 	import Terminal from '$lib/components/ui/Terminal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
@@ -89,16 +98,15 @@
 						? 'var(--pass)'
 						: 'var(--border)';
 
-	$: statusLabel =
-		state.running
-			? 'running'
-			: state.status === 'pass'
-				? 'passed'
-				: state.status === 'fail'
-					? 'failed'
-					: anyCronRunning
-						? 'scheduled'
-						: 'ready';
+	$: statusLabel = state.running
+		? 'running'
+		: state.status === 'pass'
+			? 'passed'
+			: state.status === 'fail'
+				? 'failed'
+				: anyCronRunning
+					? 'scheduled'
+					: 'ready';
 
 	function handleKeydown(e) {
 		if (e.key === 'Enter' && !state.running) triggerRun();
