@@ -15,50 +15,34 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-const reporter = require('cucumber-html-reporter');
 const fs = require('fs');
 const path = require('path');
 const { reportsHistory } = require('../settings.json');
-
-/* -----------------------------------------------------
- *            Screenshot and Report Management
- *
- *  Description:
- * 		To avoid reports and screenshots extract
- *  	status, tags, run name, and date.
- * ------------------------------------------------------ */
 
 const reportsDir = 'reports';
 const screenshotsDir = path.join(reportsDir, 'screenshots');
 const maxReports = reportsHistory;
 
-// Ensure the reports and screenshots directories exist
-if (!fs.existsSync(reportsDir)) {
-	fs.mkdirSync(reportsDir, { recursive: true });
-}
+if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+if (!fs.existsSync(screenshotsDir)) fs.mkdirSync(screenshotsDir, { recursive: true });
 
-if (!fs.existsSync(screenshotsDir)) {
-	fs.mkdirSync(screenshotsDir, { recursive: true });
-}
-
-// Remove the oldest report depending on maxReport
+// Clean up old timestamped report JSON files
 const existingReports = fs
 	.readdirSync(reportsDir)
-	.filter((file) => file.startsWith('PASS_') || file.startsWith('FAIL_'))
+	.filter((f) => f.endsWith('.json') && (f.startsWith('PASS_') || f.startsWith('FAIL_')))
 	.sort(
 		(a, b) =>
 			fs.statSync(path.join(reportsDir, b)).mtime - fs.statSync(path.join(reportsDir, a)).mtime
 	);
 
 while (existingReports.length >= maxReports) {
-	const oldestReport = existingReports.pop();
-	fs.unlinkSync(path.join(reportsDir, oldestReport));
+	fs.unlinkSync(path.join(reportsDir, existingReports.pop()));
 }
 
-// Remove the oldest screenshot depending on maxReport
+// Clean up old screenshots
 const existingScreenshots = fs
 	.readdirSync(screenshotsDir)
-	.filter((file) => file.endsWith('.png') || file.endsWith('.jpg'))
+	.filter((f) => f.endsWith('.png') || f.endsWith('.jpg'))
 	.sort(
 		(a, b) =>
 			fs.statSync(path.join(screenshotsDir, b)).mtime -
@@ -66,70 +50,40 @@ const existingScreenshots = fs
 	);
 
 while (existingScreenshots.length >= maxReports) {
-	const oldestScreenshot = existingScreenshots.pop();
-	fs.unlinkSync(path.join(screenshotsDir, oldestScreenshot));
+	fs.unlinkSync(path.join(screenshotsDir, existingScreenshots.pop()));
 }
 
-/* -----------------------------------------------------
- *               Generate the report name
- *
- *  Description:
- * 		This is where the reports page will
- *  	extract status, tags, run name, and date.
- * ------------------------------------------------------ */
-
+// Determine PASS/FAIL from cucumber JSON output
 const jsonReportFile = path.join(reportsDir, 'cucumber_report.json');
 let status = 'PASS';
 
 if (fs.existsSync(jsonReportFile)) {
-	const reportData = fs.readFileSync(jsonReportFile, 'utf8');
-
-	// Ensure the JSON is not empty
-	if (reportData) {
-		const parsedData = JSON.parse(reportData);
-
+	try {
+		const parsedData = JSON.parse(fs.readFileSync(jsonReportFile, 'utf8'));
 		const hasFailures = parsedData.some((feature) =>
-			feature.elements.some((scenario) =>
-				scenario.steps.some((step) => step.result.status === 'failed')
+			feature.elements?.some((scenario) =>
+				scenario.steps?.some((step) => step.result?.status === 'failed')
 			)
 		);
-
-		if (hasFailures) {
-			status = 'FAIL';
-		}
-	} else {
-		console.log('Report file is empty or malformed');
+		if (hasFailures) status = 'FAIL';
+	} catch (e) {
+		console.error('Could not parse cucumber_report.json:', e.message);
 	}
+} else {
+	console.log('No cucumber_report.json found.');
 }
 
-let tag = process.env.TAG;
-
-if (!tag) {
-	tag = '(@all-tests)';
-}
-
-if (tag && !tag.startsWith('(') && !tag.endsWith(')')) {
-	tag = `(${tag})`;
-}
+// Build filename with same convention as before, now .json
+let tag = process.env.TAG || '(@all-tests)';
+if (tag && !tag.startsWith('(')) tag = `(${tag})`;
 
 const timestamp = new Date().toISOString().replace(/[-:.]/g, '_');
-const reportFileName = `${status}_cucumber_report_${process.env.TRIGGER}_${tag}_${timestamp}.html`;
+const reportFileName = `${status}_cucumber_report_${process.env.TRIGGER}_${tag}_${timestamp}.json`;
 
-const options = {
-	theme: 'bootstrap',
-	jsonFile: jsonReportFile,
-	output: path.join(reportsDir, reportFileName),
-	reportSuiteAsScenarios: true,
-	launchReport: true, // Automatically opens the report in a browser
-	metadata: {
-		'App Name': 'Plum',
-		'Test Environment': 'Local',
-		Browser: 'Chromium',
-		Platform: 'Ubuntu',
-		Parallel: 'Scenarios',
-		Executed: 'Local'
-	}
-};
-
-reporter.generate(options);
-console.log(`Generated report: ${reportFileName}`);
+// Save a timestamped snapshot of the cucumber JSON
+if (fs.existsSync(jsonReportFile)) {
+	fs.copyFileSync(jsonReportFile, path.join(reportsDir, reportFileName));
+	console.log(`Report saved: ${reportFileName}`);
+} else {
+	console.log('Skipping report save — no cucumber_report.json.');
+}
