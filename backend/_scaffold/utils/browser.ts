@@ -15,7 +15,7 @@ export async function setup(): Promise<void> {
 
 export async function teardown(
 	attach: (data: Buffer, mime: string) => Promise<void>,
-	failed: boolean,
+	failed: boolean
 ): Promise<void> {
 	if (failed && _page) {
 		const screenshotDir = 'reports/screenshots';
