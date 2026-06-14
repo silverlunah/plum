@@ -4,7 +4,6 @@
 	"main": "index.js",
 	"scripts": {
 		"init": "node services/envService.js && node config/scripts/create-settings.js",
-		"dev": "node config/scripts/run-tests.js",
 		"create-step": "node config/scripts/create-step.mjs",
 		"create-env": "node services/envService.js",
 		"test": "node config/scripts/run-tests.js"
