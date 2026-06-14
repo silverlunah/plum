@@ -17,10 +17,11 @@
 
 const { execSync } = require('child_process');
 const pc = require('picocolors');
-const tag = process.env.TAG || process.argv[2];
 
 const parallelIdx = process.argv.indexOf('--parallel');
-const parallel = process.env.PARALLEL || (parallelIdx !== -1 ? process.argv[parallelIdx + 1] : null);
+const parallel =
+	process.env.PARALLEL || (parallelIdx !== -1 ? process.argv[parallelIdx + 1] : null);
+const tag = process.env.TAG || process.argv.slice(2).find((a) => a.startsWith('@'));
 
 try {
 	const baseCommand = [
