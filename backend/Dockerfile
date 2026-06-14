@@ -15,7 +15,7 @@
 # along with Plum. If not, see https://www.gnu.org/licenses/.
 #
 
-FROM mcr.microsoft.com/playwright:v1.41.1
+FROM mcr.microsoft.com/playwright:v1.50.0
 WORKDIR /app
 
 COPY package.json package-lock.json ./
