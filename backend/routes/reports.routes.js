@@ -19,24 +19,20 @@ const express = require('express');
 const router = express.Router();
 const reportService = require('../services/reportService');
 
-/* -----------------------------------------------------
- *                    Get Reports
- *  Description:
- * 		Get all reports from reports/
- * ------------------------------------------------------ */
 router.get('/', (req, res) => {
 	const reports = reportService.getAllReports();
 	res.json({ reports });
 });
 
-/* -----------------------------------------------------
- *                  Get Latest Report
- *  Description:
- * 		Get latest report
- * ------------------------------------------------------ */
 router.get('/latest', (req, res) => {
 	const latestReport = reportService.getLatestReport();
 	res.json({ latestReport });
+});
+
+router.get('/:fileName/detail', (req, res) => {
+	const detail = reportService.getReportDetail(req.params.fileName);
+	if (!detail) return res.status(404).json({ error: 'Report not found' });
+	res.json(detail);
 });
 
 module.exports = router;

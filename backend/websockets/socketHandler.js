@@ -20,12 +20,18 @@ const { spawn } = require('child_process');
 const socketHandler = (io) => {
 	io.on('connection', (socket) => {
 		console.log('WebSocket connection established');
-		socket.on('run-test', (testID) => {
+		socket.on('run-test', (testID, workers) => {
 			const tag = testID ? `${testID}` : '';
+			const runnerCount = Number(workers) > 1 ? Number(workers) : 1;
+			const env = {
+				...process.env,
+				TAG: tag,
+				TRIGGER: 'manual-trigger',
+				REPORT_RUNNERS: String(runnerCount)
+			};
+			if (workers && workers > 1) env.PARALLEL = String(workers);
 
-			const testProcess = spawn('npm', ['run', 'test'], {
-				env: { ...process.env, TAG: tag, TRIGGER: 'manual-trigger' }
-			});
+			const testProcess = spawn('npm', ['run', 'test'], { env });
 
 			testProcess.stdout.on('data', (data) => {
 				socket.emit('log', data.toString());
@@ -36,8 +42,8 @@ const socketHandler = (io) => {
 			});
 
 			testProcess.on('close', (code) => {
-				socket.emit('log', `Test finished with code ${code}`);
-				socket.emit('done');
+				socket.emit('log', `\nTest finished with code ${code}`);
+				socket.emit('done', code);
 			});
 		});
 	});

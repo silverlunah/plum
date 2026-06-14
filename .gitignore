@@ -24,10 +24,6 @@
 # Environment files
 .env
 
-# IDE or editor files
-.vscode/
-.idea/
-
 # Logs
 *.log
 

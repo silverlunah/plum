@@ -17,18 +17,13 @@
 
 <script>
 	import '../app.css';
-	import Navigation from './components/Navigation.svelte';
+	import Nav from '$lib/components/layout/Nav.svelte';
+	import PageShell from '$lib/components/layout/PageShell.svelte';
+	import RunnerPanel from '$lib/components/layout/RunnerPanel.svelte';
 </script>
 
-<div class="layout">
-	<Navigation></Navigation>
+<Nav />
+<PageShell>
 	<slot />
-</div>
-
-<style>
-	.layout {
-		display: flex;
-		flex-direction: column;
-		min-height: 100vh; /* Full viewport height */
-	}
-</style>
+</PageShell>
+<RunnerPanel />

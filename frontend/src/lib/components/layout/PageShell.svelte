@@ -1,4 +1,4 @@
-/*
+<!--
  * This file is part of Plum.
  *
  * Plum is free software: you can redistribute it and/or modify
@@ -13,11 +13,16 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Plum. If not, see https://www.gnu.org/licenses/.
- */
+ -->
 
-/** @type {import('tailwindcss').Config} */
-export default {
-	content: ['./src/**/*.{html,js,svelte,ts}'],
-	theme: { extend: {} },
-	plugins: []
-};
+<main class="shell">
+	<slot />
+</main>
+
+<style>
+	.shell {
+		max-width: 1200px;
+		margin: 0 auto;
+		padding: 2.5rem 1.5rem 5rem; /* bottom clearance for RunnerPanel */
+	}
+</style>

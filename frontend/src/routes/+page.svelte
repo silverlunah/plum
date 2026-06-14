@@ -16,173 +16,721 @@
  -->
 
 <script>
-	import { onMount } from 'svelte';
-	import { io } from 'socket.io-client';
+	import { onDestroy, onMount } from 'svelte';
+	import { slide } from 'svelte/transition';
+	import { fetchSuites } from '$lib/api/tests';
+	import { runnerConfig, triggerRun } from '$lib/stores/runner';
 
-	let output = "Enter a test ID and click 'Run Test'...\n";
-	let socket;
-	let testCompleted = false;
-	let testID = '';
-	let outputRef;
 	let suites = [];
-	let latestReport = null;
+	let search = '';
+	let expandedSteps = new Set();
+	let copiedIds = new Set();
+	const copyTimers = new Map();
 
 	onMount(async () => {
-		socket = io('http://localhost:3001');
-
-		socket.on('log', (data) => {
-			output += data + '\n';
-			scrollToBottom();
-		});
-
-		socket.on('done', async () => {
-			output += '✅ Test completed!\n';
-			testCompleted = true;
-			scrollToBottom();
-
-			// Fetch the latest report **after** test completion
-			await fetchLatestReport();
-		});
-
-		// Fetch test names from backend
 		try {
-			const response = await fetch('http://localhost:3001/tests');
-			const data = await response.json();
-
-			suites = data.suites.suites;
-		} catch (error) {
-			console.error('Error fetching test suites:', error);
+			suites = await fetchSuites();
+		} catch (e) {
+			console.error('Failed to fetch suites', e);
 		}
 	});
 
-	function runTest() {
-		const formattedTestID = testID.replace(/\sOR\s/gi, (match) => match.toLowerCase());
-		output = `Running test with ID: ${formattedTestID}...\n`;
-		testCompleted = false;
-		socket.emit('run-test', formattedTestID, 'manual-trigger');
+	function suiteIds(suite) {
+		return Array.isArray(suite.suiteId) ? suite.suiteId : [suite.suiteId];
 	}
 
-	async function fetchLatestReport() {
-		const response = await fetch('http://localhost:3001/reports/latest');
-		const data = await response.json();
-		latestReport = data.latestReport;
+	function testIds(test) {
+		return Array.isArray(test.id) ? test.id : [test.id];
 	}
 
-	async function scrollToBottom() {
-		await new Promise((resolve) => setTimeout(resolve, 50));
-		if (outputRef) outputRef.scrollTop = outputRef.scrollHeight;
+	function primaryId(test) {
+		return Array.isArray(test.id) ? test.id[0] : test.id;
 	}
 
-	function copyIdToTextbox(id) {
-		console.log('Selected Test ID:', id);
-		testID = id;
+	function toggleSteps(id) {
+		if (expandedSteps.has(id)) {
+			expandedSteps.delete(id);
+		} else {
+			expandedSteps.add(id);
+		}
+		expandedSteps = expandedSteps;
 	}
+
+	function run(id) {
+		runnerConfig.update((c) => ({ ...c, testID: id }));
+		triggerRun(id);
+	}
+
+	function runSuite(suite) {
+		const id = suiteIds(suite)[0];
+		run(id);
+	}
+
+	async function copyId(id) {
+		await navigator.clipboard.writeText(id);
+		copiedIds.add(id);
+		copiedIds = copiedIds;
+
+		if (copyTimers.has(id)) clearTimeout(copyTimers.get(id));
+		copyTimers.set(
+			id,
+			setTimeout(() => {
+				copiedIds.delete(id);
+				copiedIds = copiedIds;
+				copyTimers.delete(id);
+			}, 1400)
+		);
+	}
+
+	onDestroy(() => {
+		for (const timer of copyTimers.values()) clearTimeout(timer);
+	});
+
+	$: q = search.trim().toLowerCase();
+	$: filtered = suites
+		.map((suite) => {
+			if (!q) return suite;
+			const suiteMatches = suite.suiteName.toLowerCase().includes(q);
+			const matchedTests = suite.tests.filter(
+				(t) =>
+					t.testCase.toLowerCase().includes(q) ||
+					testIds(t).some((id) => id.toLowerCase().includes(q))
+			);
+			if (!suiteMatches && matchedTests.length === 0) return null;
+			return { ...suite, tests: suiteMatches ? suite.tests : matchedTests };
+		})
+		.filter(Boolean);
+
+	$: totalTests = suites.reduce((n, s) => n + s.tests.length, 0);
+	$: visibleTests = filtered.reduce((n, s) => n + s.tests.length, 0);
 </script>
 
-<div class="flex flex-col md:flex-row w-full my-4">
-	<!-- Left Panel: Run Tests -->
-	<div
-		class="card bg-base-300 rounded-box grid flex-grow place-items-center md:w-1/2 w-full p-4 md:mr-2 md:ml-4 mb-4 md:mb-0"
-	>
-		<div class="card-body items-center text-center">
-			<h2 class="card-title">Run Tests</h2>
-			<p>Enter a test case/suite ID or select an ID from the Test List</p>
-			<label class="form-control w-full max-w-xs mt-4">
-				<input
-					type="text"
-					class="input input-bordered w-full max-w-xs"
-					bind:value={testID}
-					placeholder="Enter test ID"
-				/>
-			</label>
-			<div class="card-actions justify-end">
-				<button class="btn btn-primary" on:click={runTest}>Run</button>
-				{#if testCompleted}
-					<a href={`http://localhost:3001/reports/${latestReport}`} target="_blank">
-						<button class="btn btn-primary">View Report</button>
-					</a>
+<div class="page-header">
+	<div class="header-top">
+		<div>
+			<h1>Tests</h1>
+			<p class="subtitle">
+				{#if q}
+					{visibleTests} of {totalTests} tests
+				{:else}
+					{suites.length} suite{suites.length !== 1 ? 's' : ''} · {totalTests} test{totalTests !== 1
+						? 's'
+						: ''}
 				{/if}
-			</div>
+			</p>
 		</div>
-
-		<pre
-			bind:this={outputRef}
-			class="bg-black rounded-box p-4 w-full overflow-auto whitespace-pre-wrap h-64 max-h-64">{output}</pre>
 	</div>
 
-	<!-- Right Panel: Test List -->
-	<div class="card bg-base-300 rounded-box md:w-1/2 w-full p-4 md:ml-2 md:mr-4">
-		<div class="card-body items-center text-center">
-			<h2 class="card-title sticky top-0 bg-base-300 z-10">Test List</h2>
-			<div class="mt-4">
-				{#each suites as suite, suiteIndex}
-					<div class="collapse bg-base-200 mb-4">
-						<input type="radio" name="my-accordion-1" id="collapse-{suiteIndex}" />
-						<label
-							for="collapse-{suiteIndex}"
-							class="collapse-title font-medium justify-start cursor-pointer"
-						>
-							{#if Array.isArray(suite.suiteId)}
-								{#each suite.suiteId as suiteId}
-									<div class="badge badge-primary mr-2">{suiteId}</div>
-								{/each}
-							{:else}
-								<div class="badge badge-primary mr-2">{suite.suiteId}</div>
-							{/if}
-							{suite.suiteName}
-						</label>
-
-						<div class="collapse-content">
-							<button
-								class="btn btn-active btn-ghost btn-xs"
-								on:click={() =>
-									copyIdToTextbox(Array.isArray(suite.suiteId) ? suite.suiteId[0] : suite.suiteId)}
-							>
-								Select Suite
-							</button>
-
-							<div class="card rounded-lg shadow-md mt-2">
-								<div class="overflow-x-auto">
-									<table class="table">
-										<thead>
-											<tr>
-												<th>ID</th>
-												<th>Test Case</th>
-											</tr>
-										</thead>
-										<tbody>
-											{#each suite.tests as test}
-												<tr>
-													<th>
-														{#if Array.isArray(test.id)}
-															{#each test.id as testId}
-																<button
-																	class="btn btn-active btn-ghost btn-xs mr-1"
-																	on:click={() => copyIdToTextbox(testId)}
-																>
-																	{testId}
-																</button>
-															{/each}
-														{:else}
-															<button
-																class="btn btn-active btn-ghost btn-xs"
-																on:click={() => copyIdToTextbox(test.id)}
-															>
-																{test.id}
-															</button>
-														{/if}
-													</th>
-													<td>{test.testCase}</td>
-												</tr>
-											{/each}
-										</tbody>
-									</table>
-								</div>
-							</div>
-						</div>
-					</div>
-				{/each}
-			</div>
+	<div class="search-row">
+		<div class="search-wrap">
+			<svg
+				class="search-icon"
+				width="14"
+				height="14"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+			</svg>
+			<input
+				type="text"
+				class="search-input"
+				bind:value={search}
+				placeholder="Search suites or tests…"
+			/>
+			{#if search}
+				<button class="search-clear" on:click={() => (search = '')} aria-label="Clear search">
+					<svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+						<path
+							d="M1 1l12 12M13 1L1 13"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+						/>
+					</svg>
+				</button>
+			{/if}
 		</div>
 	</div>
 </div>
+
+{#if filtered.length === 0}
+	<p class="empty">
+		{q ? `No tests matching "${search}"` : 'No test suites found.'}
+	</p>
+{:else}
+	<div class="suites">
+		{#each filtered as suite, si}
+			<div class="suite" style="animation-delay: {si * 55}ms">
+				<div class="suite-header">
+					<div class="suite-meta">
+						<div class="suite-badges">
+							{#each suiteIds(suite) as id}
+								<button
+									class="id-pill"
+									class:copied={copiedIds.has(id)}
+									on:click={() => copyId(id)}
+									title={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
+									aria-label={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
+								>
+									{id}
+								</button>
+							{/each}
+						</div>
+						<span class="suite-name">{suite.suiteName}</span>
+						<span class="suite-count"
+							>{suite.tests.length} test{suite.tests.length !== 1 ? 's' : ''}</span
+						>
+					</div>
+					<button class="run-btn suite-run" on:click={() => runSuite(suite)} title="Run suite">
+						<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+							<polygon points="5,3 19,12 5,21" />
+						</svg>
+						Run suite
+					</button>
+				</div>
+
+				<div class="tests">
+					{#each suite.tests as test, ti}
+						{@const pid = primaryId(test)}
+						{@const stepsOpen = expandedSteps.has(pid)}
+						<div class="test-row" style="animation-delay: {(si * 4 + ti) * 30}ms">
+							<div class="test-main">
+								<button
+									class="run-icon-btn"
+									on:click={() => run(pid)}
+									title="Run {pid}"
+									aria-label="Run {test.testCase}"
+								>
+									<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+										<polygon points="5,3 19,12 5,21" />
+									</svg>
+								</button>
+
+								<div class="test-ids">
+									{#each testIds(test) as id}
+										<button
+											class="id-pill"
+											class:copied={copiedIds.has(id)}
+											on:click={() => copyId(id)}
+											title={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
+											aria-label={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
+										>
+											{id}
+										</button>
+									{/each}
+								</div>
+
+								<span class="test-name">
+									{test.testCase}
+									{#if test.type === 'outline'}
+										<span class="outline-badge">outline</span>
+									{/if}
+								</span>
+
+								{#if test.steps?.length > 0}
+									<button
+										class="steps-toggle"
+										on:click={() => toggleSteps(pid)}
+										aria-expanded={stepsOpen}
+									>
+										<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											class:rotated={stepsOpen}
+										>
+											<polyline points="9 18 15 12 9 6" />
+										</svg>
+										{stepsOpen ? 'Hide' : 'Steps'}
+									</button>
+								{/if}
+							</div>
+
+							{#if stepsOpen && test.steps?.length > 0}
+								<div class="steps" transition:slide={{ duration: 180 }}>
+									<ol class="step-list">
+										{#each test.steps as step}
+											<li class="step">{step}</li>
+										{/each}
+									</ol>
+
+									{#if test.examples}
+										<div class="examples">
+											<span class="examples-label">Examples</span>
+											<div class="examples-table-wrap">
+												<table class="examples-table">
+													<thead>
+														<tr>
+															{#each test.examples.headers as h}
+																<th>{h}</th>
+															{/each}
+														</tr>
+													</thead>
+													<tbody>
+														{#each test.examples.rows as row}
+															<tr>
+																{#each row as cell}
+																	<td>{cell}</td>
+																{/each}
+															</tr>
+														{/each}
+													</tbody>
+												</table>
+											</div>
+										</div>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/each}
+	</div>
+{/if}
+
+<style>
+	.page-header {
+		margin-bottom: 1.75rem;
+		padding-bottom: 1.5rem;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.header-top {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-bottom: 1.25rem;
+	}
+
+	h1 {
+		font-size: 2.5rem;
+		margin-bottom: 0.25rem;
+	}
+
+	.subtitle {
+		color: var(--text-muted);
+		font-size: 0.875rem;
+	}
+
+	/* ── Search ── */
+	.search-row {
+		display: flex;
+		gap: 0.75rem;
+	}
+
+	.search-wrap {
+		position: relative;
+		flex: 1;
+		max-width: 480px;
+	}
+
+	.search-icon {
+		position: absolute;
+		left: 0.75rem;
+		top: 50%;
+		transform: translateY(-50%);
+		color: var(--text-muted);
+		pointer-events: none;
+	}
+
+	.search-input {
+		width: 100%;
+		padding: 0.55rem 0.875rem 0.55rem 2.25rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		background: var(--bg-subtle);
+		color: var(--text);
+		font-family: var(--font-body);
+		font-size: 0.875rem;
+		font-weight: 300;
+		outline: none;
+		transition:
+			border-color var(--duration-fast),
+			box-shadow var(--duration-fast);
+	}
+
+	.search-input:focus {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 3px var(--accent-soft);
+		background: var(--bg-elevated);
+	}
+
+	.search-input::placeholder {
+		color: var(--text-muted);
+	}
+
+	.search-clear {
+		position: absolute;
+		right: 0.625rem;
+		top: 50%;
+		transform: translateY(-50%);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
+		border: none;
+		background: var(--border);
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast);
+	}
+
+	.search-clear:hover {
+		background: var(--text-muted);
+		color: var(--bg);
+	}
+
+	/* ── Suites ── */
+	.suites {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.suite {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		overflow: visible;
+		background: var(--bg-elevated);
+		animation: fadeUp 0.35s var(--ease-out) both;
+	}
+
+	.suite-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.875rem 1.25rem;
+		background: var(--bg-subtle);
+		border-bottom: 1px solid var(--border);
+		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+	}
+
+	.suite-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.suite-badges {
+		display: flex;
+		gap: 0.25rem;
+		flex-shrink: 0;
+	}
+
+	.suite-name {
+		font-size: 0.9rem;
+		font-weight: 400;
+		color: var(--text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.suite-count {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		flex-shrink: 0;
+	}
+
+	.run-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-family: var(--font-body);
+		font-size: 0.75rem;
+		font-weight: 400;
+		padding: 0.3rem 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--bg-elevated);
+		color: var(--text-muted);
+		cursor: pointer;
+		white-space: nowrap;
+		flex-shrink: 0;
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast),
+			border-color var(--duration-fast);
+	}
+
+	.run-btn:hover {
+		background: var(--accent-soft);
+		color: var(--accent);
+		border-color: var(--accent);
+	}
+
+	/* ── Tests ── */
+	.tests {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.test-row {
+		border-bottom: 1px solid var(--border);
+		animation: fadeUp 0.3s var(--ease-out) both;
+	}
+
+	.test-row:last-child {
+		border-bottom: none;
+	}
+
+	.test-main {
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
+		padding: 0.75rem 1.25rem;
+	}
+
+	.run-icon-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		border: 1px solid var(--border);
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		flex-shrink: 0;
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast),
+			border-color var(--duration-fast);
+	}
+
+	.run-icon-btn:hover {
+		background: var(--accent);
+		color: #fff;
+		border-color: var(--accent);
+	}
+
+	.test-ids {
+		display: flex;
+		gap: 0.25rem;
+		flex-shrink: 0;
+	}
+
+	.id-pill {
+		position: relative;
+		font-size: 0.68rem;
+		font-weight: 500;
+		letter-spacing: 0.04em;
+		color: var(--accent);
+		background: var(--accent-soft);
+		border: none;
+		border-radius: 100px;
+		padding: 0.15rem 0.55rem;
+		cursor: pointer;
+		font-family: 'JetBrains Mono', monospace;
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast),
+			filter var(--duration-fast);
+	}
+
+	.id-pill:hover {
+		filter: brightness(0.92);
+	}
+
+	.id-pill.copied {
+		color: var(--pass);
+		background: var(--pass-soft);
+	}
+
+	.id-pill.copied::after {
+		content: 'Copied';
+		position: absolute;
+		left: 50%;
+		bottom: calc(100% + 6px);
+		z-index: 50;
+		transform: translateX(-50%);
+		padding: 0.16rem 0.42rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--bg-elevated);
+		color: var(--pass);
+		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+		font-family: var(--font-body);
+		font-size: 0.65rem;
+		font-weight: 500;
+		letter-spacing: 0;
+		pointer-events: none;
+		animation: copiedPop 1.4s var(--ease-out) both;
+	}
+
+	.test-name {
+		flex: 1;
+		font-size: 0.875rem;
+		color: var(--text);
+		min-width: 0;
+	}
+
+	.outline-badge {
+		display: inline-block;
+		font-size: 0.62rem;
+		font-weight: 500;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		background: var(--warn-soft);
+		color: var(--warn);
+		padding: 0.1rem 0.4rem;
+		border-radius: 100px;
+		margin-left: 0.4rem;
+		vertical-align: middle;
+	}
+
+	.steps-toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		font-family: var(--font-body);
+		font-size: 0.72rem;
+		font-weight: 400;
+		color: var(--text-muted);
+		background: transparent;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.2rem 0.5rem;
+		cursor: pointer;
+		flex-shrink: 0;
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast);
+	}
+
+	.steps-toggle:hover {
+		background: var(--bg-subtle);
+		color: var(--text);
+	}
+
+	.steps-toggle svg {
+		transition: transform var(--duration-fast) var(--ease-out);
+	}
+
+	.steps-toggle svg.rotated {
+		transform: rotate(90deg);
+	}
+
+	/* ── Steps panel ── */
+	.steps {
+		padding: 0.75rem 1.25rem 0.875rem 3.75rem;
+		background: var(--bg-subtle);
+		border-top: 1px solid var(--border);
+	}
+
+	.step-list {
+		list-style: none;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+
+	.step {
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		font-family: 'JetBrains Mono', monospace;
+		line-height: 1.5;
+		padding-left: 1rem;
+		position: relative;
+	}
+
+	.step::before {
+		content: '›';
+		position: absolute;
+		left: 0;
+		color: var(--accent);
+		font-family: var(--font-body);
+	}
+
+	/* ── Examples table ── */
+	.examples {
+		margin-top: 0.75rem;
+		padding-top: 0.75rem;
+		border-top: 1px dashed var(--border);
+	}
+
+	.examples-label {
+		display: block;
+		font-size: 0.68rem;
+		font-weight: 500;
+		letter-spacing: 0.07em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		margin-bottom: 0.5rem;
+	}
+
+	.examples-table-wrap {
+		overflow-x: auto;
+	}
+
+	.examples-table {
+		border-collapse: collapse;
+		font-size: 0.78rem;
+		font-family: 'JetBrains Mono', monospace;
+		width: auto;
+	}
+
+	.examples-table th {
+		text-align: left;
+		padding: 0.3rem 0.75rem;
+		font-size: 0.7rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		border-bottom: 1px solid var(--border);
+		font-family: var(--font-body);
+		font-weight: 500;
+	}
+
+	.examples-table td {
+		padding: 0.3rem 0.75rem;
+		color: var(--text-muted);
+		border-bottom: 1px solid var(--border);
+	}
+
+	.examples-table tbody tr:last-child td {
+		border-bottom: none;
+	}
+
+	.empty {
+		color: var(--text-muted);
+		font-size: 0.9375rem;
+		padding: 3rem 0;
+		text-align: center;
+	}
+
+	@keyframes copiedPop {
+		0% {
+			opacity: 0;
+			transform: translate(-50%, 4px) scale(0.96);
+		}
+		12%,
+		78% {
+			opacity: 1;
+			transform: translate(-50%, 0) scale(1);
+		}
+		100% {
+			opacity: 0;
+			transform: translate(-50%, -2px) scale(0.98);
+		}
+	}
+</style>

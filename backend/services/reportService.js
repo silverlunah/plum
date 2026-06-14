@@ -22,29 +22,79 @@ const REPORTS_DIR = path.join(__dirname, '../reports');
 
 const getAllReports = () => {
 	const files = fs.readdirSync(REPORTS_DIR);
-
-	// Get all files ending with '.html'
-	const htmlFiles = files.filter((file) => file.endsWith('.html'));
-
-	// Sort files by modification time (latest first)
-	const sortedFiles = htmlFiles.sort((a, b) => {
-		const aStats = fs.statSync(path.join(REPORTS_DIR, a));
-		const bStats = fs.statSync(path.join(REPORTS_DIR, b));
-		return bStats.mtime - aStats.mtime; // Sort in descending order of modification time
+	const jsonFiles = files.filter(
+		(f) => f.endsWith('.json') && (f.startsWith('PASS_') || f.startsWith('FAIL_'))
+	);
+	return jsonFiles.sort((a, b) => {
+		const at = fs.statSync(path.join(REPORTS_DIR, a)).mtime;
+		const bt = fs.statSync(path.join(REPORTS_DIR, b)).mtime;
+		return bt - at;
 	});
-
-	return sortedFiles;
 };
 
 const getLatestReport = () => {
-	const reportFiles = getAllReports()
-		.map((file) => ({
-			file,
-			time: fs.statSync(path.join(REPORTS_DIR, file)).mtime.getTime()
-		}))
-		.sort((a, b) => b.time - a.time);
-
-	return reportFiles.length ? reportFiles[0].file : null;
+	const files = getAllReports();
+	return files.length ? files[0] : null;
 };
 
-module.exports = { getAllReports, getLatestReport };
+const getReportDetail = (fileName) => {
+	const filePath = path.join(REPORTS_DIR, fileName);
+	if (!filePath.startsWith(REPORTS_DIR)) return null; // path traversal guard
+	if (!fs.existsSync(filePath)) return null;
+
+	let raw;
+	try {
+		raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+	} catch {
+		return null;
+	}
+
+	const features = raw.map((feature) => {
+		const scenarios = (feature.elements || []).map((scenario) => {
+			const visibleSteps = (scenario.steps || []).filter((s) => !s.hidden);
+			const hookScreenshots = (scenario.steps || [])
+				.filter((s) => s.hidden)
+				.flatMap((step) => step.embeddings?.filter((e) => e.mime_type === 'image/png') ?? []);
+			const failedStepIndex = visibleSteps.findLastIndex((s) => s.result?.status === 'failed');
+
+			const steps = visibleSteps.map((step, index) => ({
+					keyword: step.keyword.trim(),
+					name: step.name ?? '',
+					status: step.result?.status ?? 'pending',
+					duration: Math.round((step.result?.duration ?? 0) / 1_000_000), // ns → ms
+					error: step.result?.error_message ?? null,
+				screenshot:
+					step.embeddings?.find((e) => e.mime_type === 'image/png')?.data ??
+					(index === failedStepIndex ? hookScreenshots[0]?.data : null) ??
+					null
+			}));
+
+			const worstStatus = steps.reduce((acc, s) => {
+				const rank = { failed: 3, pending: 2, skipped: 1, passed: 0 };
+				return (rank[s.status] ?? 0) > (rank[acc] ?? 0) ? s.status : acc;
+			}, 'passed');
+
+			return {
+				name: scenario.name,
+				keyword: scenario.keyword,
+				tags: (scenario.tags ?? []).map((t) => t.name),
+				status: worstStatus,
+				duration: steps.reduce((s, st) => s + st.duration, 0),
+				steps
+			};
+		});
+
+		const featureStatus = scenarios.some((s) => s.status === 'failed') ? 'failed' : 'passed';
+
+		return {
+			name: feature.name,
+			uri: feature.uri,
+			status: featureStatus,
+			scenarios
+		};
+	});
+
+	return { features };
+};
+
+module.exports = { getAllReports, getLatestReport, getReportDetail };

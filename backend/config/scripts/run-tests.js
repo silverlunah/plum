@@ -21,6 +21,7 @@ const pc = require('picocolors');
 const parallelIdx = process.argv.indexOf('--parallel');
 const parallel =
 	process.env.PARALLEL || (parallelIdx !== -1 ? process.argv[parallelIdx + 1] : null);
+const runners = parallel || process.env.REPORT_RUNNERS || '1';
 const tag = process.env.TAG || process.argv.slice(2).find((a) => a.startsWith('@'));
 
 try {
@@ -54,7 +55,10 @@ try {
 	console.error(pc.red('✗') + ' Tests failed: ' + error.message);
 } finally {
 	try {
-		execSync('node config/scripts/generate-report.js', { stdio: 'inherit' });
+		execSync('node config/scripts/generate-report.js', {
+			stdio: 'inherit',
+			env: { ...process.env, REPORT_RUNNERS: runners }
+		});
 	} catch (error) {
 		console.error(pc.red('✗') + ' Report generation failed: ' + error.message);
 	}
