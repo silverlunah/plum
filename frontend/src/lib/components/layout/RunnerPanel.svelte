@@ -19,7 +19,7 @@
 	import { onMount } from 'svelte';
 	import { slide, fly } from 'svelte/transition';
 	import { io } from 'socket.io-client';
-	import { socket, runnerState, runnerConfig, panelExpanded, triggerRun } from '$lib/stores/runner';
+	import { socket, runnerState, runnerConfig, panelExpanded, triggerRun, testsVersion, reportsVersion, activeCronJobs } from '$lib/stores/runner';
 	import { fetchLatestReport, reportUrl } from '$lib/api/reports';
 	import Terminal from '$lib/components/ui/Terminal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
@@ -47,31 +47,58 @@
 			}));
 		});
 
+		s.on('tests-changed', () => {
+			testsVersion.update((v) => v + 1);
+		});
+
+		s.on('report-ready', () => {
+			reportsVersion.update((v) => v + 1);
+		});
+
+		s.on('cron-start', ({ taskName }) => {
+			activeCronJobs.update((j) => ({ ...j, [taskName]: true }));
+		});
+
+		s.on('cron-done', ({ taskName }) => {
+			activeCronJobs.update((j) => {
+				const next = { ...j };
+				delete next[taskName];
+				return next;
+			});
+			reportsVersion.update((v) => v + 1);
+		});
+
 		return () => s.disconnect();
 	});
 
 	$: state = $runnerState;
 	$: cfg = $runnerConfig;
-	$: workerCount = Math.min(cfg.workers, 4);
-	$: dots = Array.from({ length: workerCount });
+	$: dots = Array.from({ length: cfg.workers });
+	$: cronJobs = Object.keys($activeCronJobs);
+	$: anyCronRunning = cronJobs.length > 0;
+	$: anyRunning = state.running || anyCronRunning;
 
 	$: statusColor =
 		state.status === 'pass'
 			? 'var(--pass)'
 			: state.status === 'fail'
 				? 'var(--fail)'
-				: state.status === 'running'
+				: state.running
 					? 'var(--accent)'
-					: 'var(--border)';
+					: anyCronRunning
+						? 'var(--pass)'
+						: 'var(--border)';
 
 	$: statusLabel =
-		state.status === 'running'
+		state.running
 			? 'running'
 			: state.status === 'pass'
 				? 'passed'
 				: state.status === 'fail'
 					? 'failed'
-					: 'ready';
+					: anyCronRunning
+						? 'scheduled'
+						: 'ready';
 
 	function handleKeydown(e) {
 		if (e.key === 'Enter' && !state.running) triggerRun();
@@ -142,7 +169,7 @@
 							class:active={cfg.workers === n}
 							on:click={() => runnerConfig.update((c) => ({ ...c, workers: n }))}
 						>
-							{n === 1 ? 'Off' : n}
+							{n}
 						</button>
 					{/each}
 				</div>
@@ -152,15 +179,38 @@
 				</Button>
 			</div>
 
-			<Terminal output={state.output} />
-
-			{#if state.testCompleted && state.latestReport}
-				<div class="report-row" transition:fly={{ y: 6, duration: 200 }}>
-					<a href={reportUrl(state.latestReport)} target="_blank" rel="noopener noreferrer">
-						<Button variant="outline" size="sm">View Report →</Button>
-					</a>
+			<div class="main-row">
+				<!-- Terminal column -->
+				<div class="terminal-col">
+					<Terminal output={state.output} />
+					{#if state.testCompleted && state.latestReport}
+						<div class="report-row" transition:fly={{ y: 6, duration: 200 }}>
+							<a href={reportUrl(state.latestReport)} target="_blank" rel="noopener noreferrer">
+								<Button variant="outline" size="sm">View Report →</Button>
+							</a>
+						</div>
+					{/if}
 				</div>
-			{/if}
+
+				<!-- Sidebar: scheduled jobs -->
+				<div class="sidebar">
+					<div class="sidebar-section">
+						<span class="sidebar-label">Scheduled</span>
+						{#if cronJobs.length === 0}
+							<span class="sidebar-empty">none running</span>
+						{:else}
+							<ul class="cron-list">
+								{#each cronJobs as name}
+									<li class="cron-item" transition:fly={{ x: -6, duration: 180 }}>
+										<span class="cron-dot"></span>
+										<span class="cron-name">{name}</span>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</div>
+				</div>
+			</div>
 		</div>
 	{/if}
 </div>
@@ -372,7 +422,88 @@
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 	}
 
+	/* ── Main row: terminal + sidebar ── */
+	.main-row {
+		display: flex;
+		gap: 1rem;
+		align-items: flex-start;
+	}
+
+	.terminal-col {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		/* Constrain terminal height via the Terminal component's wrapper */
+		--terminal-max-height: 140px;
+	}
+
 	.report-row {
 		display: flex;
+	}
+
+	/* ── Sidebar ── */
+	.sidebar {
+		width: 260px;
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		padding-left: 1.25rem;
+		border-left: 1px solid var(--border);
+	}
+
+	.sidebar-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.sidebar-label {
+		font-size: 0.65rem;
+		font-weight: 600;
+		letter-spacing: 0.09em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+
+	.sidebar-empty {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		font-style: italic;
+	}
+
+	.cron-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.cron-item {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+
+	.cron-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--pass);
+		flex-shrink: 0;
+		animation: statusPulse 1.6s ease-in-out infinite;
+	}
+
+	.cron-name {
+		font-size: 0.75rem;
+		font-family: 'JetBrains Mono', monospace;
+		color: var(--text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 </style>

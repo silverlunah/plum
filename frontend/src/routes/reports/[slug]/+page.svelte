@@ -123,6 +123,8 @@
 		})) ?? [];
 </script>
 
+<svelte:head><title>Report — Plum</title></svelte:head>
+
 <div class="back-row">
 	<a href="/reports" class="back-link">
 		<svg

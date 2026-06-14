@@ -35,6 +35,15 @@ export const runnerConfig = writable({
 
 export const panelExpanded = writable(true);
 
+// Increments whenever the backend detects a change in tests/features/
+export const testsVersion = writable(0);
+
+// Increments whenever a new report file is detected
+export const reportsVersion = writable(0);
+
+// Map of taskName → true for every cron job currently executing
+export const activeCronJobs = writable({});
+
 export function triggerRun(id) {
 	const s = get(socket);
 	if (!s) return;
