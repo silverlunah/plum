@@ -36,8 +36,8 @@ const socketHandler = (io) => {
 			});
 
 			testProcess.on('close', (code) => {
-				socket.emit('log', `Test finished with code ${code}`);
-				socket.emit('done');
+				socket.emit('log', `\nTest finished with code ${code}`);
+				socket.emit('done', code);
 			});
 		});
 	});

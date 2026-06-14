@@ -4,7 +4,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-Before(async () => {
+Before(async ({ pickle }: ITestCaseHookParameter) => {
+	const tags = pickle.tags.map((t) => t.name).join(' ');
+	console.log(`\n▶ ${pickle.name}${tags ? `  ${tags}` : ''}`);
 	await setup();
 });
 
