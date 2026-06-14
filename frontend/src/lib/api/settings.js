@@ -17,32 +17,32 @@
 
 const BASE = 'http://localhost:3001';
 
-export async function fetchCronJobs() {
-	const res = await fetch(`${BASE}/cron-jobs`);
-	const { cronJobs } = await res.json();
-	return cronJobs ?? [];
+export async function fetchProject() {
+	const res = await fetch(`${BASE}/settings/project`);
+	if (!res.ok) return { name: '', logoUrl: '' };
+	return res.json();
 }
 
-export async function saveCronJob({
-	taskName,
-	cronExpression,
-	tags,
-	workers,
-	isEditing,
-	editTaskName
-}) {
-	const formattedTags = tags.replace(/\sOR\s/gi, (m) => m.toLowerCase());
-	const url = isEditing ? `${BASE}/cron-jobs/${editTaskName}` : `${BASE}/cron-jobs`;
-	const method = isEditing ? 'PUT' : 'POST';
-	const res = await fetch(url, {
-		method,
+export async function saveProject({ name, logoUrl }) {
+	const res = await fetch(`${BASE}/settings/project`, {
+		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ cronExpression, taskName, tags: formattedTags, workers })
+		body: JSON.stringify({ name, logoUrl })
 	});
 	return res.json();
 }
 
-export async function deleteCronJob(taskName) {
-	const res = await fetch(`${BASE}/cron-jobs/${taskName}`, { method: 'DELETE' });
+export async function exportBackup() {
+	const res = await fetch(`${BASE}/backup/export`);
+	if (!res.ok) throw new Error('Export failed');
+	return res.json();
+}
+
+export async function importBackup(data) {
+	const res = await fetch(`${BASE}/backup/import`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(data)
+	});
 	return res.json();
 }

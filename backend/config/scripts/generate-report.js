@@ -17,41 +17,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { reportsHistory } = require('../settings.json');
-
 const reportsDir = 'reports';
 const screenshotsDir = path.join(reportsDir, 'screenshots');
-const maxReports = reportsHistory;
 
 if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
 if (!fs.existsSync(screenshotsDir)) fs.mkdirSync(screenshotsDir, { recursive: true });
-
-// Clean up old timestamped report JSON files
-const existingReports = fs
-	.readdirSync(reportsDir)
-	.filter((f) => f.endsWith('.json') && (f.startsWith('PASS_') || f.startsWith('FAIL_')))
-	.sort(
-		(a, b) =>
-			fs.statSync(path.join(reportsDir, b)).mtime - fs.statSync(path.join(reportsDir, a)).mtime
-	);
-
-while (existingReports.length >= maxReports) {
-	fs.unlinkSync(path.join(reportsDir, existingReports.pop()));
-}
-
-// Clean up old screenshots
-const existingScreenshots = fs
-	.readdirSync(screenshotsDir)
-	.filter((f) => f.endsWith('.png') || f.endsWith('.jpg'))
-	.sort(
-		(a, b) =>
-			fs.statSync(path.join(screenshotsDir, b)).mtime -
-			fs.statSync(path.join(screenshotsDir, a)).mtime
-	);
-
-while (existingScreenshots.length >= maxReports) {
-	fs.unlinkSync(path.join(screenshotsDir, existingScreenshots.pop()));
-}
 
 // Determine PASS/FAIL from cucumber JSON output
 const jsonReportFile = path.join(reportsDir, 'cucumber_report.json');
@@ -86,6 +56,44 @@ const reportFileName = `${status}_cucumber_report_${process.env.TRIGGER}_${tag}_
 if (fs.existsSync(jsonReportFile)) {
 	fs.copyFileSync(jsonReportFile, path.join(reportsDir, reportFileName));
 	console.log(`Report saved: ${reportFileName}`);
+
+	// Persist metadata to database
+	(async () => {
+		try {
+			const { PrismaClient } = require('@prisma/client');
+			const prisma = new PrismaClient();
+
+			const triggerType = process.env.TRIGGER || 'command-line-trigger';
+			const builtInTriggers = ['manual-trigger', 'command-line-trigger', 'undefined'];
+			let cronJobId = null;
+
+			if (!builtInTriggers.includes(triggerType)) {
+				const job = await prisma.cronJob.findUnique({ where: { taskName: triggerType } });
+				if (job) cronJobId = job.id;
+			}
+
+			const rawTag = process.env.TAG || '@all-tests';
+			const tags = rawTag.replace(/^\(|\)$/g, '');
+
+			await prisma.report.upsert({
+				where: { fileName: reportFileName },
+				create: {
+					fileName: reportFileName,
+					status,
+					tags,
+					triggerType,
+					runners: runnerCount,
+					cronJobId
+				},
+				update: {}
+			});
+
+			await prisma.$disconnect();
+			console.log('Report metadata saved to database.');
+		} catch (e) {
+			console.error('Could not save report metadata to DB:', e.message);
+		}
+	})();
 } else {
 	console.log('Skipping report save — no cucumber_report.json.');
 }

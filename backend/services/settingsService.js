@@ -15,18 +15,22 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-const express = require('express');
-const router = express.Router();
-const scheduleService = require('../services/scheduleService');
+const prisma = require('./prisma');
 
-/* -----------------------------------------------------
- *                    Get Schedules
- *  Description:
- * 		Get all schedules from schedules/
- * ------------------------------------------------------ */
-router.get('/', (req, res) => {
-	const schedules = scheduleService.getAllSchedules();
-	res.json({ schedules });
-});
+const getProject = async () => {
+	let project = await prisma.project.findUnique({ where: { id: 1 } });
+	if (!project) {
+		project = await prisma.project.create({ data: { id: 1, name: '', logoUrl: '' } });
+	}
+	return project;
+};
 
-module.exports = router;
+const updateProject = async ({ name, logoUrl }) => {
+	return prisma.project.upsert({
+		where: { id: 1 },
+		create: { id: 1, name: name ?? '', logoUrl: logoUrl ?? '' },
+		update: { name: name ?? '', logoUrl: logoUrl ?? '' }
+	});
+};
+
+module.exports = { getProject, updateProject };

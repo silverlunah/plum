@@ -25,7 +25,8 @@
 	const links = [
 		{ href: '/', label: 'Run Tests' },
 		{ href: '/reports', label: 'Reports' },
-		{ href: '/scheduled-tests', label: 'Scheduled' }
+		{ href: '/scheduled-tests', label: 'Scheduled' },
+		{ href: '/settings', label: 'Settings' }
 	];
 
 	function toggleTheme() {

@@ -31,7 +31,7 @@
 		"**/.prettierrc",
 		"**/.husky",
 		"**/*.md",
-		"**/backend/config/settings.json",
-		"**/backend/config/cronjobs.json"
+		"**/prisma/migrations/**",
+		"**/prisma/schema.prisma"
 	]
 }

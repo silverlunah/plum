@@ -18,7 +18,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
-	import { fetchSchedules, fetchCronJobs, saveCronJob, deleteCronJob } from '$lib/api/schedules';
+	import { fetchCronJobs, saveCronJob, deleteCronJob } from '$lib/api/schedules';
 	import { activeCronJobs } from '$lib/stores/runner';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
@@ -30,8 +30,14 @@
 	const CUSTOM_SENTINEL = '__custom__';
 	const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+	const scheduleOptions = [
+		{ label: 'Every minute', value: '* * * * *' },
+		{ label: 'Every hour', value: '0 * * * *' },
+		{ label: 'Every midnight', value: '0 0 * * *' },
+		{ label: 'Every Sunday', value: '0 0 * * 0' }
+	];
+
 	let cronJobs = [];
-	let scheduleOptions = [];
 	let toast = null;
 
 	let modalOpen = false;
@@ -172,7 +178,7 @@
 	}
 
 	onMount(async () => {
-		[cronJobs, scheduleOptions] = await Promise.all([fetchCronJobs(), fetchSchedules()]);
+		cronJobs = await fetchCronJobs();
 	});
 </script>
 
@@ -260,7 +266,8 @@
 						class:active={form.workers === n}
 						on:click={() => (form.workers = n)}
 					>
-						{n}
+						<span class="seg-num">{n}</span>
+						<span class="seg-label">{n === 1 ? 'runner' : 'runners'}</span>
 					</button>
 				{/each}
 			</div>
@@ -336,7 +343,7 @@
 							</td>
 							<td>
 								<span class="workers-badge" class:multi={job.workers > 1}>
-									{job.workers > 1 ? `×${job.workers}` : '—'}
+									×{job.workers}
 								</span>
 							</td>
 							<td class="actions-cell">
@@ -495,8 +502,10 @@
 	}
 
 	.seg-btn {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
 		padding: 0.375rem 0.875rem;
-		font-size: 0.8125rem;
 		font-family: inherit;
 		background: var(--bg-elevated);
 		color: var(--text-muted);
@@ -506,6 +515,20 @@
 		transition:
 			background var(--duration-fast),
 			color var(--duration-fast);
+	}
+
+	.seg-num {
+		font-size: 0.875rem;
+		font-weight: 600;
+		line-height: 1.2;
+	}
+
+	.seg-label {
+		font-size: 0.625rem;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		opacity: 0.75;
+		line-height: 1.2;
 	}
 
 	.seg-btn:last-child {
@@ -520,6 +543,10 @@
 	.seg-btn.active {
 		background: var(--accent);
 		color: #fff;
+	}
+
+	.seg-btn.active .seg-label {
+		opacity: 0.85;
 	}
 
 	/* Workers badge in table */

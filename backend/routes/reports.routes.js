@@ -19,20 +19,53 @@ const express = require('express');
 const router = express.Router();
 const reportService = require('../services/reportService');
 
-router.get('/', (req, res) => {
-	const reports = reportService.getAllReports();
-	res.json({ reports });
+router.get('/', async (req, res) => {
+	try {
+		const reports = await reportService.getAllReports();
+		res.json({ reports });
+	} catch (error) {
+		console.error('Error fetching reports:', error);
+		res.status(500).json({ error: 'Failed to fetch reports' });
+	}
 });
 
-router.get('/latest', (req, res) => {
-	const latestReport = reportService.getLatestReport();
-	res.json({ latestReport });
+router.get('/latest', async (req, res) => {
+	try {
+		const latestReport = await reportService.getLatestReport();
+		res.json({ latestReport });
+	} catch (error) {
+		console.error('Error fetching latest report:', error);
+		res.status(500).json({ error: 'Failed to fetch latest report' });
+	}
 });
 
 router.get('/:fileName/detail', (req, res) => {
 	const detail = reportService.getReportDetail(req.params.fileName);
 	if (!detail) return res.status(404).json({ error: 'Report not found' });
 	res.json(detail);
+});
+
+router.delete('/bulk', async (req, res) => {
+	const { fileNames } = req.body;
+	if (!Array.isArray(fileNames) || fileNames.length === 0)
+		return res.status(400).json({ error: 'fileNames array required' });
+	try {
+		await reportService.deleteReports(fileNames);
+		res.json({ deleted: fileNames.length });
+	} catch (error) {
+		console.error('Error deleting reports:', error);
+		res.status(500).json({ error: 'Failed to delete reports' });
+	}
+});
+
+router.delete('/:fileName', async (req, res) => {
+	try {
+		await reportService.deleteReport(req.params.fileName);
+		res.json({ deleted: req.params.fileName });
+	} catch (error) {
+		console.error('Error deleting report:', error);
+		res.status(500).json({ error: 'Failed to delete report' });
+	}
 });
 
 module.exports = router;

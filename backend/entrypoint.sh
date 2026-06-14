@@ -1,4 +1,4 @@
-#
+#!/bin/sh
 # This file is part of Plum.
 #
 # Plum is free software: you can redistribute it and/or modify
@@ -13,20 +13,10 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with Plum. If not, see https://www.gnu.org/licenses/.
-#
+set -e
 
-FROM mcr.microsoft.com/playwright:v1.50.0
-WORKDIR /app
+echo "Running database migrations..."
+npx prisma migrate deploy
 
-COPY package.json package-lock.json ./
-RUN npm install
-RUN npx playwright install --with-deps
-
-COPY . .
-
-RUN npx prisma generate
-RUN npm run create-env && sed -i 's/^IS_HEADLESS=false/IS_HEADLESS=true/' .env
-
-EXPOSE 3001
-RUN chmod +x /app/entrypoint.sh
-ENTRYPOINT ["/bin/sh", "/app/entrypoint.sh"]
+echo "Starting server..."
+exec node server.js

@@ -15,20 +15,8 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-const fs = require('fs');
-const path = require('path');
+const { PrismaClient } = require('@prisma/client');
 
-const SETTINGS_PATH = path.join(__dirname, '../config/settings.json');
+const prisma = new PrismaClient();
 
-const getAllSchedules = () => {
-	try {
-		const fileContent = fs.readFileSync(SETTINGS_PATH, 'utf8');
-		const settings = JSON.parse(fileContent);
-		return settings.cronJobSchedules || [];
-	} catch (error) {
-		console.error('Error reading or parsing the settings file:', error);
-		return [];
-	}
-};
-
-module.exports = { getAllSchedules };
+module.exports = prisma;

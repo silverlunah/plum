@@ -15,114 +15,31 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-const fs = require('fs');
-const path = require('path');
 const cron = require('node-cron');
 const { spawn } = require('child_process');
+const prisma = require('./prisma');
 
-const CRON_JOBS_FILE = path.join(__dirname, '../config/cron-jobs.json');
-let cronJobs = {};
+const scheduledJobs = {};
 let _io = null;
 
 const setSocketIO = (io) => {
 	_io = io;
 };
 
-const loadCronJobs = () => {
-	if (fs.existsSync(CRON_JOBS_FILE)) {
-		cronJobs = JSON.parse(fs.readFileSync(CRON_JOBS_FILE, 'utf8'));
-
-		// Schedule all loaded cron jobs and store only necessary data in memory
-		Object.keys(cronJobs).forEach((taskName) => {
-			const { cronExpression, tags, workers } = cronJobs[taskName];
-			const scheduledCronJob = cron.schedule(cronExpression, () => {
-				console.log(`Running scheduled task: ${taskName}`);
-				if (_io) _io.emit('cron-start', { taskName });
-
-				const env = { ...process.env, TAG: tags, TRIGGER: taskName };
-				if (workers && workers > 1) env.PARALLEL = String(workers);
-
-				const task = spawn('npm', ['run', 'test'], { env });
-
-				task.stdout.on('data', (data) => console.log(data.toString()));
-				task.stderr.on('data', (data) => console.error(data.toString()));
-				task.on('close', (code) => {
-					console.log(`Task ${taskName} finished with code ${code}`);
-					if (_io) _io.emit('cron-done', { taskName, code });
-				});
-			});
-
-			// Store the reference to the cron job only in memory
-			cronJobs[taskName].cronJob = scheduledCronJob;
-		});
-	}
-};
-
-const saveCronJobs = () => {
-	// Save only cron job data (not the reference to the cron job object) to the file
-	const cronJobsData = Object.keys(cronJobs).reduce((acc, taskName) => {
-		const { cronExpression, tags, workers } = cronJobs[taskName];
-		acc[taskName] = { cronExpression, tags, workers: workers ?? 1 };
-		return acc;
-	}, {});
-
-	fs.writeFileSync(CRON_JOBS_FILE, JSON.stringify(cronJobsData, null, 2), 'utf8');
-};
-
-const getAllCronJobs = () =>
-	Object.keys(cronJobs).map((taskName) => ({
-		taskName,
-		cronExpression: cronJobs[taskName].cronExpression,
-		tags: cronJobs[taskName].tags,
-		workers: cronJobs[taskName].workers ?? 1
-	}));
-
-const addCronJob = ({ cronExpression, taskName, tags, workers }) => {
-	if (!cronExpression || !taskName || !tags) {
-		return { status: 400, message: 'Missing required parameters' };
+function scheduleJob(taskName, cronExpression, tags, workers) {
+	if (scheduledJobs[taskName]) {
+		scheduledJobs[taskName].stop();
+		delete scheduledJobs[taskName];
 	}
 
-	cronJobs[taskName] = { cronExpression, tags, workers: workers ?? 1 };
-	saveCronJobs();
-	loadCronJobs(); // Re-load and schedule the new cron job
-	return { status: 201, message: `Cron job ${taskName} added` };
-};
-
-const removeCronJob = (taskName) => {
-	if (!cronJobs[taskName]) {
-		return { status: 404, message: `Cron job ${taskName} not found` };
-	}
-
-	// Stop the cron job before removing
-	cronJobs[taskName].cronJob.stop();
-
-	delete cronJobs[taskName];
-	saveCronJobs();
-	loadCronJobs(); // Re-load and re-schedule cron jobs without the removed one
-	return { status: 200, message: `Cron job ${taskName} deleted` };
-};
-
-const updateCronJob = (taskName, { cronExpression, tags, workers }) => {
-	if (!cronJobs[taskName]) {
-		return { status: 404, message: `Cron job ${taskName} not found` };
-	}
-
-	// Stop the old cron job
-	cronJobs[taskName].cronJob.stop();
-
-	const resolvedWorkers = workers ?? 1;
-	cronJobs[taskName] = { cronExpression, tags, workers: resolvedWorkers };
-
-	// Reschedule the updated cron job and store the reference
-	const scheduledCronJob = cron.schedule(cronExpression, () => {
+	scheduledJobs[taskName] = cron.schedule(cronExpression, () => {
 		console.log(`Running scheduled task: ${taskName}`);
 		if (_io) _io.emit('cron-start', { taskName });
 
 		const env = { ...process.env, TAG: tags, TRIGGER: taskName };
-		if (resolvedWorkers > 1) env.PARALLEL = String(resolvedWorkers);
+		if (workers && workers > 1) env.PARALLEL = String(workers);
 
 		const task = spawn('npm', ['run', 'test'], { env });
-
 		task.stdout.on('data', (data) => console.log(data.toString()));
 		task.stderr.on('data', (data) => console.error(data.toString()));
 		task.on('close', (code) => {
@@ -130,14 +47,71 @@ const updateCronJob = (taskName, { cronExpression, tags, workers }) => {
 			if (_io) _io.emit('cron-done', { taskName, code });
 		});
 	});
+}
 
-	// Store the new cron job reference in memory
-	cronJobs[taskName].cronJob = scheduledCronJob;
+const init = async () => {
+	const jobs = await prisma.cronJob.findMany();
+	for (const job of jobs) {
+		scheduleJob(job.taskName, job.cronExpression, job.tags, job.workers);
+	}
+	console.log(`⏰ Scheduled ${jobs.length} cron job(s) from database`);
+};
 
-	saveCronJobs();
+const reload = async () => {
+	for (const name of Object.keys(scheduledJobs)) {
+		scheduledJobs[name].stop();
+		delete scheduledJobs[name];
+	}
+	await init();
+};
+
+const getAllCronJobs = async () => {
+	return prisma.cronJob.findMany({ orderBy: { createdAt: 'asc' } });
+};
+
+const addCronJob = async ({ taskName, cronExpression, tags, workers }) => {
+	if (!cronExpression || !taskName || !tags) {
+		return { status: 400, message: 'Missing required parameters' };
+	}
+	const job = await prisma.cronJob.create({
+		data: { taskName, cronExpression, tags, workers: workers ?? 1 }
+	});
+	scheduleJob(job.taskName, job.cronExpression, job.tags, job.workers);
+	return { status: 201, message: `Cron job ${taskName} added` };
+};
+
+const removeCronJob = async (taskName) => {
+	const job = await prisma.cronJob.findUnique({ where: { taskName } });
+	if (!job) return { status: 404, message: `Cron job ${taskName} not found` };
+
+	if (scheduledJobs[taskName]) {
+		scheduledJobs[taskName].stop();
+		delete scheduledJobs[taskName];
+	}
+
+	await prisma.cronJob.delete({ where: { taskName } });
+	return { status: 200, message: `Cron job ${taskName} deleted` };
+};
+
+const updateCronJob = async (taskName, { cronExpression, tags, workers }) => {
+	const job = await prisma.cronJob.findUnique({ where: { taskName } });
+	if (!job) return { status: 404, message: `Cron job ${taskName} not found` };
+
+	const updated = await prisma.cronJob.update({
+		where: { taskName },
+		data: { cronExpression, tags, workers: workers ?? 1 }
+	});
+
+	scheduleJob(updated.taskName, updated.cronExpression, updated.tags, updated.workers);
 	return { status: 200, message: `Cron job ${taskName} updated` };
 };
 
-loadCronJobs(); // Initial load and scheduling of cron jobs
-
-module.exports = { getAllCronJobs, addCronJob, removeCronJob, updateCronJob, setSocketIO };
+module.exports = {
+	init,
+	reload,
+	getAllCronJobs,
+	addCronJob,
+	removeCronJob,
+	updateCronJob,
+	setSocketIO
+};

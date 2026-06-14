@@ -1,0 +1,53 @@
+/*
+This file is part of Plum.
+
+Plum is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Plum is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Plum. If not, see https://www.gnu.org/licenses/.
+*/
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model CronJob {
+  id             Int      @id @default(autoincrement())
+  taskName       String   @unique
+  cronExpression String
+  tags           String
+  workers        Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  reports        Report[]
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  fileName    String   @unique
+  status      String
+  tags        String
+  triggerType String   @default("manual-trigger")
+  runners     Int      @default(1)
+  cronJobId   Int?
+  cronJob     CronJob? @relation(fields: [cronJobId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+}
+
+model Project {
+  id      Int    @id @default(autoincrement())
+  name    String @default("")
+  logoUrl String @default("")
+}
