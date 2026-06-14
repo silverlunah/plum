@@ -1,4 +1,4 @@
-import { Given, When } from '@cucumber/cucumber';
+import { Given, When, Then, DataTable } from '@cucumber/cucumber';
 import { LoginPage } from '../pages/LoginPage';
 
 Given('I am in Demo Sauce Login page', async () => {
@@ -19,4 +19,17 @@ When('I enter {string} in password field', async (password: string) => {
 
 When('I click on the login button', async () => {
 	await LoginPage.iClickOnTheLoginButton();
+});
+
+When('I fill in the login form:', async (dataTable: DataTable) => {
+	const fields = dataTable.hashes() as { field: string; value: string }[];
+	await LoginPage.fillLoginForm(fields);
+});
+
+Then('the login outcome should be {string}', async (outcome: string) => {
+	await LoginPage.verifyLoginOutcome(outcome);
+});
+
+Then('the login should fail', async () => {
+	await LoginPage.verifyLoginFailed();
 });
