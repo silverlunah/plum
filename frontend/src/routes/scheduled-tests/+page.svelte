@@ -18,7 +18,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
-	import { fetchSchedules, fetchCronJobs, saveCronJob, deleteCronJob } from '$lib/api/schedules';
+	import { fetchCronJobs, saveCronJob, deleteCronJob } from '$lib/api/schedules';
 	import { activeCronJobs } from '$lib/stores/runner';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
@@ -30,8 +30,14 @@
 	const CUSTOM_SENTINEL = '__custom__';
 	const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+	const scheduleOptions = [
+		{ label: 'Every minute', value: '* * * * *' },
+		{ label: 'Every hour', value: '0 * * * *' },
+		{ label: 'Every midnight', value: '0 0 * * *' },
+		{ label: 'Every Sunday', value: '0 0 * * 0' }
+	];
+
 	let cronJobs = [];
-	let scheduleOptions = [];
 	let toast = null;
 
 	let modalOpen = false;
@@ -172,7 +178,7 @@
 	}
 
 	onMount(async () => {
-		[cronJobs, scheduleOptions] = await Promise.all([fetchCronJobs(), fetchSchedules()]);
+		cronJobs = await fetchCronJobs();
 	});
 </script>
 

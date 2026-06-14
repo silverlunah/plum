@@ -26,7 +26,6 @@ app.use(express.json());
 const testRoutes = require('./routes/tests.routes');
 const reportRoutes = require('./routes/reports.routes');
 const cronRoutes = require('./routes/cron.routes');
-const scheduleRoutes = require('./routes/schedules.routes');
 const settingsRoutes = require('./routes/settings.routes');
 const backupRoutes = require('./routes/backup.routes');
 
@@ -34,7 +33,6 @@ app.use('/tests', testRoutes);
 app.use('/reports', reportRoutes);
 app.use('/cron-jobs', cronRoutes);
 app.use('/reports', express.static('reports'));
-app.use('/schedules', scheduleRoutes);
 app.use('/settings', settingsRoutes);
 app.use('/backup', backupRoutes);
 

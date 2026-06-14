@@ -17,11 +17,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { reportsHistory } = require('../settings.json');
-
 const reportsDir = 'reports';
 const screenshotsDir = path.join(reportsDir, 'screenshots');
-const maxReports = reportsHistory;
+const maxReports = 20;
 
 if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
 if (!fs.existsSync(screenshotsDir)) fs.mkdirSync(screenshotsDir, { recursive: true });

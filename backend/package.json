@@ -3,7 +3,7 @@
 	"version": "1.0.0",
 	"main": "index.js",
 	"scripts": {
-		"init": "node services/envService.js && node config/scripts/create-settings.js",
+		"init": "node services/envService.js",
 		"create-step": "node config/scripts/create-step.mjs",
 		"create-env": "node services/envService.js",
 		"test": "node config/scripts/run-tests.js"
