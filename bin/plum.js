@@ -405,7 +405,7 @@ switch (command) {
 
 	case 'create-step': {
 		const createStepScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-step.mjs');
-		execSync(`node ${createStepScript}`, {
+		execSync(`node "${createStepScript}"`, {
 			cwd: process.cwd(),
 			stdio: 'inherit',
 			env: {

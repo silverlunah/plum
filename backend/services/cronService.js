@@ -39,7 +39,7 @@ function scheduleJob(taskName, cronExpression, tags, workers) {
 		const env = { ...process.env, TAG: tags, TRIGGER: taskName };
 		if (workers && workers > 1) env.PARALLEL = String(workers);
 
-		const task = spawn('npm', ['run', 'test'], { env });
+		const task = spawn('npm', ['run', 'test'], { env, shell: true });
 		task.stdout.on('data', (data) => console.log(data.toString()));
 		task.stderr.on('data', (data) => console.error(data.toString()));
 		task.on('close', (code) => {
