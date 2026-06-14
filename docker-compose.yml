@@ -40,7 +40,6 @@ services:
       DATABASE_URL: 'postgresql://plum:plum@postgres:5432/plum'
     volumes:
       - ./backend/reports:/app/reports
-      - ./backend/config:/app/config
       - ./backend/tests:/app/tests:rw
     depends_on:
       postgres:
