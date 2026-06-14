@@ -1,3 +1,19 @@
+/*
+This file is part of Plum.
+
+Plum is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Plum is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Plum. If not, see https://www.gnu.org/licenses/.
+*/
 import * as clack from '@clack/prompts';
 import pc from 'picocolors';
 import fs from 'fs';
@@ -79,7 +95,10 @@ function appendStepToFile(filePath, stepType, stepText, methodName, pageClassNam
 		const existing = cucumberImportMatch[1].split(',').map((s) => s.trim());
 		if (!existing.includes(stepType)) {
 			const updated = [...existing, stepType].join(', ');
-			content = content.replace(cucumberImportMatch[0], `import { ${updated} } from '@cucumber/cucumber';`);
+			content = content.replace(
+				cucumberImportMatch[0],
+				`import { ${updated} } from '@cucumber/cucumber';`
+			);
 		}
 	}
 
@@ -110,8 +129,8 @@ async function main() {
 			{ value: 'Given', label: 'Given', hint: 'initial context' },
 			{ value: 'When', label: 'When', hint: 'action' },
 			{ value: 'And', label: 'And', hint: 'continuation (uses When)' },
-			{ value: 'Then', label: 'Then', hint: 'expected outcome' },
-		],
+			{ value: 'Then', label: 'Then', hint: 'expected outcome' }
+		]
 	});
 	if (clack.isCancel(stepTypeChoice)) {
 		clack.cancel('Cancelled.');
@@ -123,7 +142,7 @@ async function main() {
 	const stepText = await clack.text({
 		message: 'Step text',
 		placeholder: 'I am on the login page',
-		validate: (v) => (!v.trim() ? 'Step text is required' : undefined),
+		validate: (v) => (!v.trim() ? 'Step text is required' : undefined)
 	});
 	if (clack.isCancel(stepText)) {
 		clack.cancel('Cancelled.');
@@ -139,8 +158,8 @@ async function main() {
 		message: 'Add to step definition file',
 		options: [
 			{ value: '__new__', label: pc.green('+ New Step Definition') },
-			...existingFiles.map((f) => ({ value: f, label: f })),
-		],
+			...existingFiles.map((f) => ({ value: f, label: f }))
+		]
 	});
 	if (clack.isCancel(stepFile)) {
 		clack.cancel('Cancelled.');
@@ -153,7 +172,7 @@ async function main() {
 			message: 'Step definition name',
 			placeholder: 'home',
 			hint: 'e.g. "home" → HomeSteps.ts',
-			validate: (v) => (!v.trim() ? 'Name is required' : undefined),
+			validate: (v) => (!v.trim() ? 'Name is required' : undefined)
 		});
 		if (clack.isCancel(newName)) {
 			clack.cancel('Cancelled.');
@@ -173,8 +192,8 @@ async function main() {
 		message: 'Which page does this step use?',
 		options: [
 			{ value: '__new__', label: pc.green('+ New Page') },
-			...existingPages.map((f) => ({ value: f, label: f })),
-		],
+			...existingPages.map((f) => ({ value: f, label: f }))
+		]
 	});
 	if (clack.isCancel(pageChoice)) {
 		clack.cancel('Cancelled.');
@@ -187,7 +206,7 @@ async function main() {
 			message: 'Page name',
 			placeholder: 'home',
 			hint: '"Page.ts" will be appended — e.g. "home" → HomePage.ts',
-			validate: (v) => (!v.trim() ? 'Page name is required' : undefined),
+			validate: (v) => (!v.trim() ? 'Page name is required' : undefined)
 		});
 		if (clack.isCancel(newPageName)) {
 			clack.cancel('Cancelled.');
@@ -223,7 +242,7 @@ async function main() {
 		fs.writeFileSync(
 			stepFilePath,
 			generateStepFile(stepType, stepText, methodName, pageClassName, pageBaseName),
-			'utf8',
+			'utf8'
 		);
 		clack.log.success(pc.green(`Created ${stepFileName}`));
 	} else {
@@ -235,9 +254,9 @@ async function main() {
 		[
 			`${pc.dim('Step:')}  ${pc.white(`${stepType}('${stepText}')`)}`,
 			`${pc.dim('Page:')}  ${pc.white(`${pageClassName}.${methodName}()`)}`,
-			`${pc.dim('Files:')} ${pc.white(stepFileName)} ${pc.dim('+')} ${pc.white(pageFileName)}`,
+			`${pc.dim('Files:')} ${pc.white(stepFileName)} ${pc.dim('+')} ${pc.white(pageFileName)}`
 		].join('\n'),
-		'Summary',
+		'Summary'
 	);
 
 	clack.outro(pc.magenta('Done! Remember to implement the page method.'));

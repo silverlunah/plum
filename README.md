@@ -43,12 +43,12 @@ plum init
 
 ### Commands
 
-| Command | Description |
-|---|---|
-| `plum init` | Scaffold the `tests/` folder and `.env` file in your project directory |
-| `plum dev [tag]` | Run tests locally without Docker. Pass a tag to filter (e.g. `@test-1`) |
-| `plum start` | Start the full stack via Docker and open the UI at `http://localhost:5173` |
-| `plum create-step` | Interactive prompt to generate a step definition and page object |
+| Command            | Description                                                                |
+| ------------------ | -------------------------------------------------------------------------- |
+| `plum init`        | Scaffold the `tests/` folder and `.env` file in your project directory     |
+| `plum dev [tag]`   | Run tests locally without Docker. Pass a tag to filter (e.g. `@test-1`)    |
+| `plum start`       | Start the full stack via Docker and open the UI at `http://localhost:5173` |
+| `plum create-step` | Interactive prompt to generate a step definition and page object           |
 
 ---
 
@@ -83,19 +83,19 @@ Create a `.ts` file in `tests/pages/`. Methods are **static** — they use `page
 import { page } from '../utils/browser';
 
 export class LoginPage {
-  static async goToLoginPage() {
-    await page().goto(process.env.BASE_URL as string);
-  }
+	static async goToLoginPage() {
+		await page().goto(process.env.BASE_URL as string);
+	}
 
-  static async login(email: string, password: string) {
-    await page().fill('#email', email);
-    await page().fill('#password', password);
-    await page().click('button[type="submit"]');
-  }
+	static async login(email: string, password: string) {
+		await page().fill('#email', email);
+		await page().fill('#password', password);
+		await page().click('button[type="submit"]');
+	}
 
-  static async verifyDashboardVisible() {
-    await page().waitForSelector('#dashboard');
-  }
+	static async verifyDashboardVisible() {
+		await page().waitForSelector('#dashboard');
+	}
 }
 ```
 
@@ -110,15 +110,15 @@ import { Given, When, Then } from '@cucumber/cucumber';
 import { LoginPage } from '../pages/LoginPage';
 
 Given('I am on the login page', async () => {
-  await LoginPage.goToLoginPage();
+	await LoginPage.goToLoginPage();
 });
 
 When('I log in with valid credentials', async () => {
-  await LoginPage.login('user@example.com', 'password');
+	await LoginPage.login('user@example.com', 'password');
 });
 
 Then('I should see the dashboard', async () => {
-  await LoginPage.verifyDashboardVisible();
+	await LoginPage.verifyDashboardVisible();
 });
 ```
 
@@ -150,11 +150,11 @@ npm run init
 
 Run these from the `backend/` directory:
 
-| Command | Description |
-|---|---|
-| `npm run init` | Create `.env` and copy scaffold into `backend/tests/` |
-| `npm run dev [-- tag]` | Run tests from `backend/tests/` directly |
-| `npm run create-step` | Interactive prompt to generate a step definition and page object |
+| Command                | Description                                                      |
+| ---------------------- | ---------------------------------------------------------------- |
+| `npm run init`         | Create `.env` and copy scaffold into `backend/tests/`            |
+| `npm run dev [-- tag]` | Run tests from `backend/tests/` directly                         |
+| `npm run create-step`  | Interactive prompt to generate a step definition and page object |
 
 ```bash
 cd backend

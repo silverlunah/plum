@@ -114,7 +114,9 @@ switch (command) {
 			execSync('code --install-extension cucumberopen.cucumber-official', { stdio: 'inherit' });
 			console.log('✅ Cucumber VS Code extension installed.\n');
 		} catch {
-			console.log('⚠️  Could not install VS Code extension automatically. Install manually: cucumberopen.cucumber-official\n');
+			console.log(
+				'⚠️  Could not install VS Code extension automatically. Install manually: cucumberopen.cucumber-official\n'
+			);
 		}
 
 		// Initialize project
