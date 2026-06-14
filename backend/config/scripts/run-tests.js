@@ -19,6 +19,9 @@ const { execSync } = require('child_process');
 const pc = require('picocolors');
 const tag = process.env.TAG || process.argv[2];
 
+const parallelIdx = process.argv.indexOf('--parallel');
+const parallel = process.env.PARALLEL || (parallelIdx !== -1 ? process.argv[parallelIdx + 1] : null);
+
 try {
 	const baseCommand = [
 		'npx',
@@ -38,6 +41,10 @@ try {
 
 	if (tag) {
 		baseCommand.push('--tags', `"${tag}"`);
+	}
+
+	if (parallel) {
+		baseCommand.push('--parallel', parallel);
 	}
 
 	const cucumberCommand = baseCommand.join(' ');

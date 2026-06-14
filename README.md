@@ -47,6 +47,7 @@ plum init
 | ------------------ | -------------------------------------------------------------------------- |
 | `plum init`        | Scaffold the `tests/` folder and `.env` file in your project directory     |
 | `plum dev [tag]`   | Run tests locally without Docker. Pass a tag to filter (e.g. `@test-1`)    |
+| `plum dev --parallel N [tag]` | Run tests in parallel with N workers (e.g. `plum dev --parallel 4`) |
 | `plum start`       | Start the full stack via Docker and open the UI at `http://localhost:5173` |
 | `plum create-step` | Interactive prompt to generate a step definition and page object           |
 
@@ -154,6 +155,7 @@ Run these from the `backend/` directory:
 | ---------------------- | ---------------------------------------------------------------- |
 | `npm run init`         | Create `.env` and copy scaffold into `backend/tests/`            |
 | `npm run dev [-- tag]` | Run tests from `backend/tests/` directly                         |
+| `npm run dev -- --parallel N` | Run tests in parallel with N workers                    |
 | `npm run create-step`  | Interactive prompt to generate a step definition and page object |
 
 ```bash
