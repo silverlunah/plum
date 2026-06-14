@@ -1,4 +1,21 @@
 <!--
+ * This file is part of Plum.
+ *
+ * Plum is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Plum is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Plum. If not, see https://www.gnu.org/licenses/.
+ -->
+
+<!--
 This file is part of Plum.
 
 Plum is free software: you can redistribute it and/or modify
@@ -28,10 +45,13 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 	let output = 'Ready — enter a test ID or select one from the list.\n';
 	let socket;
 	let testID = '';
+	let workers = 1;
 	let running = false;
 	let testCompleted = false;
 	let latestReport = null;
 	let suites = [];
+
+	const WORKER_OPTIONS = [1, 2, 4, 8];
 
 	onMount(async () => {
 		socket = io('http://localhost:3001');
@@ -56,10 +76,11 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 
 	function runTest() {
 		const id = testID.trim().replace(/\sOR\s/gi, (m) => m.toLowerCase());
-		output = `Running: ${id || '(all tests)'}\n`;
+		const workerLabel = workers > 1 ? ` · ${workers} workers` : '';
+		output = `Running: ${id || '(all tests)'}${workerLabel}\n`;
 		testCompleted = false;
 		running = true;
-		socket.emit('run-test', id, 'manual-trigger');
+		socket.emit('run-test', id, workers);
 	}
 
 	function selectId(id) {
@@ -96,6 +117,29 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 			</Button>
 		</div>
 
+		<div class="workers-row">
+			<span class="workers-label">
+				<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+				</svg>
+				Workers
+			</span>
+			<div class="workers-control">
+				{#each WORKER_OPTIONS as n}
+					<button
+						class="worker-btn"
+						class:active={workers === n}
+						on:click={() => (workers = n)}
+					>
+						{n === 1 ? 'Off' : n}
+					</button>
+				{/each}
+			</div>
+			{#if workers > 1}
+				<span class="workers-hint">{workers} parallel runners</span>
+			{/if}
+		</div>
+
 		<Terminal {output} />
 
 		{#if testCompleted && latestReport}
@@ -125,7 +169,16 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 								{/each}
 							</div>
 							<span class="suite-name">{suite.suiteName}</span>
-							<svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+							<svg
+								class="chevron"
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+							>
 								<polyline points="9 18 15 12 9 6" />
 							</svg>
 						</summary>
@@ -199,6 +252,68 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 
 	.input-row .field-input {
 		flex: 1;
+	}
+
+	.workers-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 0.875rem;
+	}
+
+	.workers-label {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		flex-shrink: 0;
+	}
+
+	.workers-control {
+		display: flex;
+		gap: 2px;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 2px;
+	}
+
+	.worker-btn {
+		font-family: var(--font-body);
+		font-size: 0.75rem;
+		font-weight: 400;
+		min-width: 2rem;
+		padding: 0.2rem 0.5rem;
+		border: none;
+		border-radius: 4px;
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast);
+	}
+
+	.worker-btn:hover:not(.active) {
+		background: var(--bg-elevated);
+		color: var(--text);
+	}
+
+	.worker-btn.active {
+		background: var(--bg-elevated);
+		color: var(--accent);
+		font-weight: 500;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+	}
+
+	.workers-hint {
+		font-size: 0.75rem;
+		color: var(--accent);
+		font-weight: 400;
 	}
 
 	.report-link {

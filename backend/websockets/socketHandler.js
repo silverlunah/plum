@@ -20,12 +20,12 @@ const { spawn } = require('child_process');
 const socketHandler = (io) => {
 	io.on('connection', (socket) => {
 		console.log('WebSocket connection established');
-		socket.on('run-test', (testID) => {
+		socket.on('run-test', (testID, workers) => {
 			const tag = testID ? `${testID}` : '';
+			const env = { ...process.env, TAG: tag, TRIGGER: 'manual-trigger' };
+			if (workers && workers > 1) env.PARALLEL = String(workers);
 
-			const testProcess = spawn('npm', ['run', 'test'], {
-				env: { ...process.env, TAG: tag, TRIGGER: 'manual-trigger' }
-			});
+			const testProcess = spawn('npm', ['run', 'test'], { env });
 
 			testProcess.stdout.on('data', (data) => {
 				socket.emit('log', data.toString());
