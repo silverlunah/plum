@@ -22,14 +22,14 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 /* ── Design tokens ─────────────────────────────────────────────────────── */
 
 :root {
-	--bg: #ffffff;
+	--bg: #fdfcfb;
 	--bg-subtle: #f7f6f4;
 	--bg-elevated: #ffffff;
 	--border: #e9e5df;
 	--text: #18160f;
 	--text-muted: #9c9185;
-	--accent: #7c3aed;
-	--accent-soft: #ede9fe;
+	--accent: #5c1b87;
+	--accent-soft: #f3eaff;
 	--pass: #16a34a;
 	--pass-soft: #dcfce7;
 	--fail: #dc2626;
@@ -59,8 +59,8 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 	--border: #2e2c1e;
 	--text: #f0ede6;
 	--text-muted: #706a5e;
-	--accent: #a78bfa;
-	--accent-soft: #1e1830;
+	--accent: #d0a5f5;
+	--accent-soft: #1b0d30;
 	--pass: #22c55e;
 	--pass-soft: #0d2118;
 	--fail: #f87171;
@@ -90,15 +90,24 @@ body {
 	font-weight: 300;
 	font-size: 1rem;
 	line-height: 1.65;
-	background: var(--bg);
+	background-color: var(--bg);
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+	background-size: 200px 200px;
 	color: var(--text);
 	transition:
-		background var(--duration-base) var(--ease-out),
+		background-color var(--duration-base) var(--ease-out),
 		color var(--duration-base) var(--ease-out);
 	-webkit-font-smoothing: antialiased;
 }
 
-h1,
+h1 {
+	font-family: var(--font-display);
+	font-weight: 400;
+	line-height: 1.1;
+	letter-spacing: -0.015em;
+	color: var(--text);
+}
+
 h2,
 h3 {
 	font-family: var(--font-display);
@@ -245,4 +254,17 @@ button {
 .alert-error {
 	background: var(--fail-soft);
 	color: var(--fail);
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+
+@keyframes fadeUp {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }

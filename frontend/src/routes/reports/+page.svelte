@@ -1,4 +1,21 @@
 <!--
+ * This file is part of Plum.
+ *
+ * Plum is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Plum is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Plum. If not, see https://www.gnu.org/licenses/.
+ -->
+
+<!--
 This file is part of Plum.
 
 Plum is free software: you can redistribute it and/or modify
@@ -73,8 +90,8 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 					</tr>
 				</thead>
 				<tbody>
-					{#each paginated as report}
-						<tr class="row" on:click={() => openReport(report.fileName)}>
+					{#each paginated as report, i}
+						<tr class="row" style="animation-delay: {i * 40}ms" on:click={() => openReport(report.fileName)}>
 							<td>
 								<Badge variant={report.status === 'PASS' ? 'pass' : 'fail'}>
 									{report.status}
@@ -108,11 +125,13 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 <style>
 	.page-header {
 		margin-bottom: 2rem;
+		padding-bottom: 1.5rem;
+		border-bottom: 1px solid var(--border);
 	}
 
 	.page-header h1 {
-		font-size: 2rem;
-		margin-bottom: 0.25rem;
+		font-size: 2.5rem;
+		margin-bottom: 0.375rem;
 	}
 
 	.subtitle {
@@ -132,6 +151,7 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 	.row {
 		cursor: pointer;
 		transition: background var(--duration-fast);
+		animation: fadeUp 0.32s var(--ease-out) both;
 	}
 
 	.row:hover {

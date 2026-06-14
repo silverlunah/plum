@@ -119,18 +119,28 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 
 		<div class="workers-row">
 			<span class="workers-label">
-				<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-					<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+				<svg
+					width="12"
+					height="12"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<rect x="2" y="3" width="20" height="14" rx="2" /><line
+						x1="8"
+						y1="21"
+						x2="16"
+						y2="21"
+					/><line x1="12" y1="17" x2="12" y2="21" />
 				</svg>
 				Workers
 			</span>
 			<div class="workers-control">
 				{#each WORKER_OPTIONS as n}
-					<button
-						class="worker-btn"
-						class:active={workers === n}
-						on:click={() => (workers = n)}
-					>
+					<button class="worker-btn" class:active={workers === n} on:click={() => (workers = n)}>
 						{n === 1 ? 'Off' : n}
 					</button>
 				{/each}
@@ -160,8 +170,8 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 			<p class="empty">No test suites found.</p>
 		{:else}
 			<div class="suites">
-				{#each suites as suite}
-					<details class="suite">
+				{#each suites as suite, i}
+					<details class="suite" style="animation-delay: {i * 55}ms">
 						<summary class="suite-header">
 							<div class="suite-badges">
 								{#each suiteIds(suite) as id}
@@ -218,11 +228,13 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 <style>
 	.page-header {
 		margin-bottom: 2rem;
+		padding-bottom: 1.5rem;
+		border-bottom: 1px solid var(--border);
 	}
 
 	.page-header h1 {
-		font-size: 2rem;
-		margin-bottom: 0.25rem;
+		font-size: 2.5rem;
+		margin-bottom: 0.375rem;
 	}
 
 	.subtitle {
@@ -232,7 +244,7 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 
 	.layout {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
+		grid-template-columns: 1fr 1.35fr;
 		gap: 1.25rem;
 		align-items: start;
 	}
@@ -342,6 +354,7 @@ along with Plum. If not, see https://www.gnu.org/licenses/.
 
 	.suite {
 		border-top: 1px solid var(--border);
+		animation: fadeUp 0.35s var(--ease-out) both;
 	}
 
 	.suite:first-child {
