@@ -343,7 +343,7 @@
 							</td>
 							<td>
 								<span class="workers-badge" class:multi={job.workers > 1}>
-									{job.workers > 1 ? `×${job.workers}` : '—'}
+									×{job.workers}
 								</span>
 							</td>
 							<td class="actions-cell">
