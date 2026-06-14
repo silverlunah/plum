@@ -161,35 +161,31 @@ switch (command) {
 		// Scaffold plum.plugins.json for user-managed dependencies
 		scaffoldPluginsFile();
 
-		// Create .vscode/settings.json and install Cucumber extension — only if VS Code is available
+		// Always create .vscode/settings.json for Cucumber extension config
 		{
-			let vscodeAvailable = false;
+			const vscodeSettingsPath = path.join(process.cwd(), '.vscode', 'settings.json');
+			if (!fs.existsSync(vscodeSettingsPath)) {
+				fs.mkdirSync(path.dirname(vscodeSettingsPath), { recursive: true });
+				fs.writeFileSync(
+					vscodeSettingsPath,
+					JSON.stringify(
+						{
+							'cucumber.glue': ['tests/step_definitions/**/*.ts'],
+							'cucumber.features': ['tests/features/**/*.feature']
+						},
+						null,
+						2
+					) + '\n',
+					'utf8'
+				);
+				console.log('✅ .vscode/settings.json created for Cucumber extension.\n');
+			} else {
+				console.log('⚠️  .vscode/settings.json already exists. Skipping.\n');
+			}
+
+			// Install extension via CLI only when the code command is available
 			try {
 				execSync('code --version', { stdio: 'ignore' });
-				vscodeAvailable = true;
-			} catch {}
-
-			if (vscodeAvailable) {
-				const vscodeSettingsPath = path.join(process.cwd(), '.vscode', 'settings.json');
-				if (!fs.existsSync(vscodeSettingsPath)) {
-					fs.mkdirSync(path.dirname(vscodeSettingsPath), { recursive: true });
-					fs.writeFileSync(
-						vscodeSettingsPath,
-						JSON.stringify(
-							{
-								'cucumber.glue': ['tests/step_definitions/**/*.ts'],
-								'cucumber.features': ['tests/features/**/*.feature']
-							},
-							null,
-							2
-						) + '\n',
-						'utf8'
-					);
-					console.log('✅ .vscode/settings.json created for Cucumber extension.\n');
-				} else {
-					console.log('⚠️  .vscode/settings.json already exists. Skipping.\n');
-				}
-
 				try {
 					execSync('code --install-extension cucumberopen.cucumber-official', { stdio: 'inherit' });
 					console.log('✅ Cucumber VS Code extension installed.\n');
@@ -198,8 +194,43 @@ switch (command) {
 						'⚠️  Could not install VS Code extension automatically. Install manually: cucumberopen.cucumber-official\n'
 					);
 				}
+			} catch {
+				console.log(
+					'ℹ️  Install the Cucumber VS Code extension manually: cucumberopen.cucumber-official\n'
+				);
+			}
+		}
+
+		// Scaffold tsconfig.json so VS Code resolves Plum's types without a local node_modules
+		{
+			const tsconfigPath = path.join(process.cwd(), 'tsconfig.json');
+			if (!fs.existsSync(tsconfigPath)) {
+				const backendModules = path.join(plumRoot, 'backend', 'node_modules').replace(/\\/g, '/');
+				const tsconfig = {
+					compilerOptions: {
+						target: 'ES2020',
+						module: 'CommonJS',
+						moduleResolution: 'node',
+						esModuleInterop: true,
+						strict: false,
+						skipLibCheck: true,
+						baseUrl: '.',
+						paths: {
+							playwright: [`${backendModules}/playwright`],
+							'@playwright/test': [`${backendModules}/@playwright/test`],
+							'@cucumber/cucumber': [`${backendModules}/@cucumber/cucumber`],
+							dotenv: [`${backendModules}/dotenv`],
+							chai: [`${backendModules}/chai`],
+							'chai-soft-assert': [`${backendModules}/chai-soft-assert`]
+						},
+						typeRoots: [`${backendModules}/@types`]
+					},
+					include: ['tests/**/*.ts']
+				};
+				fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2) + '\n', 'utf8');
+				console.log('✅ tsconfig.json created for IDE type resolution.\n');
 			} else {
-				console.log('ℹ️  VS Code not detected — skipping .vscode setup.\n');
+				console.log('⚠️  tsconfig.json already exists. Skipping.\n');
 			}
 		}
 
