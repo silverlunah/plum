@@ -1,2 +1,2 @@
-npm run format
+npx lint-staged
 npm run add-license
