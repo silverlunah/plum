@@ -55,6 +55,69 @@ IS_HEADLESS=false
 	console.log('✅ .env file created with default values.\n');
 }
 
+// Scaffold plum.plugins.json if it doesn't exist yet
+function scaffoldPluginsFile() {
+	const pluginsPath = path.join(process.cwd(), 'plum.plugins.json');
+	if (fs.existsSync(pluginsPath)) {
+		console.log('⚠️  plum.plugins.json already exists. Skipping.\n');
+		return;
+	}
+	const content = {
+		'//': 'Add npm packages your tests depend on. Plum installs them automatically before each run.',
+		'// example': 'To add a package: put its name and version under "dependencies", e.g. "@faker-js/faker": "^9.0.0"',
+		dependencies: {}
+	};
+	fs.writeFileSync(pluginsPath, JSON.stringify(content, null, 2) + '\n', 'utf8');
+	console.log('✅ plum.plugins.json created. Add npm packages here to extend your tests.\n');
+}
+
+// Install user plugins listed in plum.plugins.json into the backend
+function installPlugins() {
+	const pluginsPath = path.join(process.cwd(), 'plum.plugins.json');
+	if (!fs.existsSync(pluginsPath)) return;
+
+	let plugins;
+	try {
+		plugins = JSON.parse(fs.readFileSync(pluginsPath, 'utf8'));
+	} catch {
+		console.log('⚠️  Could not parse plum.plugins.json. Skipping plugin install.\n');
+		return;
+	}
+
+	const deps = plugins.dependencies ?? {};
+	const packages = Object.entries(deps).map(([name, version]) => `${name}@${version}`);
+	if (packages.length === 0) return;
+
+	console.log(`📦 Installing plugins: ${packages.join(', ')}\n`);
+	execSync(`npm install ${packages.join(' ')}`, {
+		cwd: path.join(plumRoot, 'backend'),
+		stdio: 'inherit'
+	});
+}
+
+// Ensure user's .gitignore contains Plum-generated entries
+function ensureGitignore() {
+	const gitignorePath = path.join(process.cwd(), '.gitignore');
+	const plumEntries = ['.plum/', 'reports/'];
+	const plumBlock = `\n# Plum (auto-generated)\n${plumEntries.join('\n')}\n`;
+
+	if (!fs.existsSync(gitignorePath)) {
+		fs.writeFileSync(gitignorePath, plumBlock.trimStart(), 'utf8');
+		console.log('✅ .gitignore created with Plum entries.\n');
+		return;
+	}
+
+	const existing = fs.readFileSync(gitignorePath, 'utf8');
+	const missing = plumEntries.filter((e) => !existing.includes(e));
+	if (missing.length === 0) {
+		console.log('⚠️  .gitignore already contains Plum entries. Skipping.\n');
+		return;
+	}
+
+	fs.appendFileSync(gitignorePath, `\n# Plum (auto-generated)\n${missing.join('\n')}\n`);
+	console.log('✅ .gitignore updated with Plum entries.\n');
+}
+
 // Function to copy .env file from root to backend
 function copyEnvFile() {
 	try {
@@ -91,32 +154,112 @@ switch (command) {
 		// Create .env file with default values
 		createEnvFile();
 
-		// Create .vscode/settings.json for Cucumber extension step linkage
-		const vscodeSettingsPath = path.join(process.cwd(), '.vscode', 'settings.json');
-		if (!fs.existsSync(vscodeSettingsPath)) {
-			fs.mkdirSync(path.dirname(vscodeSettingsPath), { recursive: true });
-			const vscodeSettings = JSON.stringify(
-				{
-					'cucumber.glue': ['tests/step_definitions/**/*.ts'],
-					'cucumber.features': ['tests/features/**/*.feature']
-				},
-				null,
-				2
-			);
-			fs.writeFileSync(vscodeSettingsPath, vscodeSettings, 'utf8');
-			console.log('✅ .vscode/settings.json created for Cucumber extension.\n');
-		} else {
-			console.log('⚠️  .vscode/settings.json already exists. Skipping.\n');
+		// Create or update .gitignore with Plum-generated paths
+		ensureGitignore();
+
+		// Scaffold plum.plugins.json for user-managed dependencies
+		scaffoldPluginsFile();
+
+		// Create .vscode/settings.json and install Cucumber extension — only if VS Code is available
+		{
+			let vscodeAvailable = false;
+			try {
+				execSync('code --version', { stdio: 'ignore' });
+				vscodeAvailable = true;
+			} catch {}
+
+			if (vscodeAvailable) {
+				const vscodeSettingsPath = path.join(process.cwd(), '.vscode', 'settings.json');
+				if (!fs.existsSync(vscodeSettingsPath)) {
+					fs.mkdirSync(path.dirname(vscodeSettingsPath), { recursive: true });
+					fs.writeFileSync(
+						vscodeSettingsPath,
+						JSON.stringify(
+							{
+								'cucumber.glue': ['tests/step_definitions/**/*.ts'],
+								'cucumber.features': ['tests/features/**/*.feature']
+							},
+							null,
+							2
+						) + '\n',
+						'utf8'
+					);
+					console.log('✅ .vscode/settings.json created for Cucumber extension.\n');
+				} else {
+					console.log('⚠️  .vscode/settings.json already exists. Skipping.\n');
+				}
+
+				try {
+					execSync('code --install-extension cucumberopen.cucumber-official', { stdio: 'inherit' });
+					console.log('✅ Cucumber VS Code extension installed.\n');
+				} catch {
+					console.log(
+						'⚠️  Could not install VS Code extension automatically. Install manually: cucumberopen.cucumber-official\n'
+					);
+				}
+			} else {
+				console.log('ℹ️  VS Code not detected — skipping .vscode setup.\n');
+			}
 		}
 
-		// Install Cucumber VS Code extension
-		try {
-			execSync('code --install-extension cucumberopen.cucumber-official', { stdio: 'inherit' });
-			console.log('✅ Cucumber VS Code extension installed.\n');
-		} catch {
-			console.log(
-				'⚠️  Could not install VS Code extension automatically. Install manually: cucumberopen.cucumber-official\n'
-			);
+		// Create README.md in user's project if one doesn't exist
+		{
+			const userReadmePath = path.join(process.cwd(), 'README.md');
+			if (!fs.existsSync(userReadmePath)) {
+				const readmeContent = [
+					'# My Tests',
+					'',
+					'Powered by [Plum](https://github.com/silverlunah/plum) — Playwright + Cucumber.',
+					'',
+					'## Commands',
+					'',
+					'| Command | Description |',
+					'|---|---|',
+					'| `plum dev` | Run all tests locally |',
+					'| `plum dev @tag` | Run tests matching a tag |',
+					'| `plum dev --parallel N` | Run tests across N parallel workers |',
+					'| `plum start` | Start the full UI via Docker (`http://localhost:5173`) |',
+					'| `plum create-step` | Interactively generate a new step definition |',
+					'',
+					'## Configuration',
+					'',
+					'| File | Purpose |',
+					'|---|---|',
+					'| `.env` | Set `BASE_URL` and `IS_HEADLESS` |',
+					'| `plum.plugins.json` | Add extra npm packages for your tests |',
+					'',
+					'## Test Structure',
+					'',
+					'```',
+					'tests/',
+					'  features/          — Gherkin .feature files',
+					'  step_definitions/  — TypeScript step implementations',
+					'  pages/             — Page Object Models',
+					'  utils/             — Browser setup, hooks, helpers',
+					'```',
+					'',
+					'Tags are used to filter which tests to run:',
+					'',
+					'```gherkin',
+					'@suite-login',
+					'Feature: Login',
+					'',
+					'  @test-login-1',
+					'  Scenario: User can log in',
+					'    Given I am on the login page',
+					'    ...',
+					'```',
+					'',
+					'```bash',
+					'plum dev @test-login-1   # single scenario',
+					'plum dev @suite-login    # whole suite',
+					'```',
+				].join('\n');
+				fs.writeFileSync(userReadmePath, readmeContent + '\n', 'utf8');
+				console.log('✅ README.md created with command reference.\n');
+			} else {
+				console.log('⚠️  README.md already exists. Skipping.\n');
+			}
 		}
 
 		// Initialize project
@@ -128,7 +271,7 @@ switch (command) {
 		});
 
 		console.log(
-			'🟣  Plum is now ready!\n\n Scaffold test cases are included in the `tests/` folder.\n For more information about Cucumber, visit: https://cucumber.io/\n\n - To start the server, run:\n `plum start` \n\n - If you are developing locally, run:\n `plum dev <@tag/blank if you want to run all tests>`'
+			'🟣  Plum is now ready!\n\n Scaffold test cases are in `tests/`.\n Add extra npm packages to `plum.plugins.json`.\n\n - Run tests locally:\n   `plum dev` or `plum dev @tag`\n\n - Start the full UI (requires Docker):\n   `plum start`\n\n - Generate a step:\n   `plum create-step`'
 		);
 		console.log('--------------------------------------\n');
 		break;
@@ -141,13 +284,32 @@ switch (command) {
 		// Copy .env file from root to backend
 		copyEnvFile();
 
+		// Merge user plugins into backend/package.json before Docker build
+		{
+			const userPluginsPath = path.join(process.cwd(), 'plum.plugins.json');
+			if (fs.existsSync(userPluginsPath)) {
+				try {
+					const userPlugins = JSON.parse(fs.readFileSync(userPluginsPath, 'utf8'));
+					const backendPkgPath = path.join(plumRoot, 'backend', 'package.json');
+					const backendPkg = JSON.parse(fs.readFileSync(backendPkgPath, 'utf8'));
+					const pluginDeps = userPlugins.dependencies ?? {};
+					if (Object.keys(pluginDeps).length > 0) {
+						backendPkg.dependencies = { ...backendPkg.dependencies, ...pluginDeps };
+						fs.writeFileSync(backendPkgPath, JSON.stringify(backendPkg, null, '\t') + '\n', 'utf8');
+						console.log(`📦 Merged plugins into backend: ${Object.keys(pluginDeps).join(', ')}\n`);
+					}
+				} catch {
+					console.log('⚠️  Could not read plum.plugins.json. Skipping plugin merge.\n');
+				}
+			}
+		}
+
 		// Copy config from package root to user's project dir so Docker can mount it
 		const userConfigPath = path.join(process.cwd(), '.plum', 'config');
 		fse.copySync(path.join(plumRoot, 'backend', 'config'), userConfigPath);
 
 		// Convert Windows paths to safe format
 		const userTestsAbs = path.resolve(process.cwd(), 'tests').replace(/\\/g, '/');
-		const userModulesAbs = path.resolve(process.cwd(), 'node_modules').replace(/\\/g, '/');
 		const userReportsAbs = path.resolve(process.cwd(), 'reports').replace(/\\/g, '/');
 		const userConfigAbs = userConfigPath.replace(/\\/g, '/');
 
@@ -158,15 +320,14 @@ switch (command) {
 			'    volumes:',
 			`      - "${userReportsAbs}:/app/reports"`,
 			`      - "${userConfigAbs}:/app/config"`,
-			`      - "${userTestsAbs}:/app/tests"`,
-			`      - "${userModulesAbs}:/app/tests/node_modules"`
+			`      - "${userTestsAbs}:/app/tests"`
 		].join('\n');
 
 		fs.writeFileSync(overrideFilePath, overrideYAML + '\n', 'utf8');
 		console.log('✅ docker-compose.override.yml written');
 
-		// Run docker compose
-		execSync('docker compose up', {
+		// Run docker compose (--build picks up any plugin or config changes)
+		execSync('docker compose up --build', {
 			cwd: plumRoot,
 			stdio: 'inherit'
 		});
@@ -203,6 +364,9 @@ switch (command) {
 			cwd: path.join(plumRoot, 'backend'),
 			stdio: 'inherit'
 		});
+
+		// Install user-defined plugins from plum.plugins.json
+		installPlugins();
 
 		console.log('Running `npx playwright install`...');
 

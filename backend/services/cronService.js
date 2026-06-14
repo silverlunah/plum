@@ -22,6 +22,11 @@ const { spawn } = require('child_process');
 
 const CRON_JOBS_FILE = path.join(__dirname, '../config/cron-jobs.json');
 let cronJobs = {};
+let _io = null;
+
+const setSocketIO = (io) => {
+	_io = io;
+};
 
 const loadCronJobs = () => {
 	if (fs.existsSync(CRON_JOBS_FILE)) {
@@ -29,17 +34,22 @@ const loadCronJobs = () => {
 
 		// Schedule all loaded cron jobs and store only necessary data in memory
 		Object.keys(cronJobs).forEach((taskName) => {
-			const { cronExpression, tags } = cronJobs[taskName];
+			const { cronExpression, tags, workers } = cronJobs[taskName];
 			const scheduledCronJob = cron.schedule(cronExpression, () => {
-				console.log(`Running new task: ${taskName}`);
+				console.log(`Running scheduled task: ${taskName}`);
+				if (_io) _io.emit('cron-start', { taskName });
 
-				const task = spawn('npm', ['run', 'test'], {
-					env: { ...process.env, TAG: tags, TRIGGER: taskName }
-				});
+				const env = { ...process.env, TAG: tags, TRIGGER: taskName };
+				if (workers && workers > 1) env.PARALLEL = String(workers);
+
+				const task = spawn('npm', ['run', 'test'], { env });
 
 				task.stdout.on('data', (data) => console.log(data.toString()));
 				task.stderr.on('data', (data) => console.error(data.toString()));
-				task.on('close', (code) => console.log(`Task ${taskName} finished with code ${code}`));
+				task.on('close', (code) => {
+					console.log(`Task ${taskName} finished with code ${code}`);
+					if (_io) _io.emit('cron-done', { taskName, code });
+				});
 			});
 
 			// Store the reference to the cron job only in memory
@@ -51,8 +61,8 @@ const loadCronJobs = () => {
 const saveCronJobs = () => {
 	// Save only cron job data (not the reference to the cron job object) to the file
 	const cronJobsData = Object.keys(cronJobs).reduce((acc, taskName) => {
-		const { cronExpression, tags } = cronJobs[taskName];
-		acc[taskName] = { cronExpression, tags }; // Exclude the cronJob reference
+		const { cronExpression, tags, workers } = cronJobs[taskName];
+		acc[taskName] = { cronExpression, tags, workers: workers ?? 1 };
 		return acc;
 	}, {});
 
@@ -63,15 +73,16 @@ const getAllCronJobs = () =>
 	Object.keys(cronJobs).map((taskName) => ({
 		taskName,
 		cronExpression: cronJobs[taskName].cronExpression,
-		tags: cronJobs[taskName].tags
+		tags: cronJobs[taskName].tags,
+		workers: cronJobs[taskName].workers ?? 1
 	}));
 
-const addCronJob = ({ cronExpression, taskName, tags }) => {
+const addCronJob = ({ cronExpression, taskName, tags, workers }) => {
 	if (!cronExpression || !taskName || !tags) {
 		return { status: 400, message: 'Missing required parameters' };
 	}
 
-	cronJobs[taskName] = { cronExpression, tags };
+	cronJobs[taskName] = { cronExpression, tags, workers: workers ?? 1 };
 	saveCronJobs();
 	loadCronJobs(); // Re-load and schedule the new cron job
 	return { status: 201, message: `Cron job ${taskName} added` };
@@ -91,7 +102,7 @@ const removeCronJob = (taskName) => {
 	return { status: 200, message: `Cron job ${taskName} deleted` };
 };
 
-const updateCronJob = (taskName, { cronExpression, tags }) => {
+const updateCronJob = (taskName, { cronExpression, tags, workers }) => {
 	if (!cronJobs[taskName]) {
 		return { status: 404, message: `Cron job ${taskName} not found` };
 	}
@@ -99,29 +110,34 @@ const updateCronJob = (taskName, { cronExpression, tags }) => {
 	// Stop the old cron job
 	cronJobs[taskName].cronJob.stop();
 
-	// Update the cron job with new values
-	cronJobs[taskName] = { cronExpression, tags };
+	const resolvedWorkers = workers ?? 1;
+	cronJobs[taskName] = { cronExpression, tags, workers: resolvedWorkers };
 
 	// Reschedule the updated cron job and store the reference
 	const scheduledCronJob = cron.schedule(cronExpression, () => {
-		console.log(`Running updated task: ${taskName}`);
+		console.log(`Running scheduled task: ${taskName}`);
+		if (_io) _io.emit('cron-start', { taskName });
 
-		const task = spawn('npm', ['run', 'test'], {
-			env: { ...process.env, TAG: tags, TRIGGER: taskName }
-		});
+		const env = { ...process.env, TAG: tags, TRIGGER: taskName };
+		if (resolvedWorkers > 1) env.PARALLEL = String(resolvedWorkers);
+
+		const task = spawn('npm', ['run', 'test'], { env });
 
 		task.stdout.on('data', (data) => console.log(data.toString()));
 		task.stderr.on('data', (data) => console.error(data.toString()));
-		task.on('close', (code) => console.log(`Task ${taskName} finished with code ${code}`));
+		task.on('close', (code) => {
+			console.log(`Task ${taskName} finished with code ${code}`);
+			if (_io) _io.emit('cron-done', { taskName, code });
+		});
 	});
 
 	// Store the new cron job reference in memory
 	cronJobs[taskName].cronJob = scheduledCronJob;
 
-	saveCronJobs(); // Save the updated cron jobs to file (excluding cron job references)
+	saveCronJobs();
 	return { status: 200, message: `Cron job ${taskName} updated` };
 };
 
 loadCronJobs(); // Initial load and scheduling of cron jobs
 
-module.exports = { getAllCronJobs, addCronJob, removeCronJob, updateCronJob };
+module.exports = { getAllCronJobs, addCronJob, removeCronJob, updateCronJob, setSocketIO };

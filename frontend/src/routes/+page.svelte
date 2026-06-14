@@ -19,7 +19,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { fetchSuites } from '$lib/api/tests';
-	import { runnerConfig, triggerRun } from '$lib/stores/runner';
+	import { runnerConfig, triggerRun, testsVersion } from '$lib/stores/runner';
 
 	let suites = [];
 	let search = '';
@@ -27,13 +27,18 @@
 	let copiedIds = new Set();
 	const copyTimers = new Map();
 
-	onMount(async () => {
+	async function loadSuites() {
 		try {
 			suites = await fetchSuites();
 		} catch (e) {
 			console.error('Failed to fetch suites', e);
 		}
-	});
+	}
+
+	onMount(loadSuites);
+
+	// Re-fetch when the backend notifies us that test files changed
+	$: if ($testsVersion) loadSuites();
 
 	function suiteIds(suite) {
 		return Array.isArray(suite.suiteId) ? suite.suiteId : [suite.suiteId];
@@ -104,6 +109,8 @@
 	$: totalTests = suites.reduce((n, s) => n + s.tests.length, 0);
 	$: visibleTests = filtered.reduce((n, s) => n + s.tests.length, 0);
 </script>
+
+<svelte:head><title>Run Tests — Plum</title></svelte:head>
 
 <div class="page-header">
 	<div class="header-top">

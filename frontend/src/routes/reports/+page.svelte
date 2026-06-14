@@ -18,6 +18,7 @@
 <script>
 	import { onMount, tick } from 'svelte';
 	import { fetchReports } from '$lib/api/reports';
+	import { reportsVersion } from '$lib/stores/runner';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
 
@@ -45,7 +46,7 @@
 		return 'schedule';
 	}
 
-	onMount(async () => {
+	async function loadReports() {
 		try {
 			reports = await fetchReports();
 			await tick();
@@ -53,8 +54,14 @@
 		} catch (e) {
 			console.error('Failed to fetch reports', e);
 		}
-	});
+	}
+
+	onMount(loadReports);
+
+	$: if ($reportsVersion) loadReports();
 </script>
+
+<svelte:head><title>Reports — Plum</title></svelte:head>
 
 <div class="page-header">
 	<div class="header-top">

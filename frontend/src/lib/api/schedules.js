@@ -46,14 +46,14 @@ export async function fetchCronJobs() {
 	return cronJobs ?? [];
 }
 
-export async function saveCronJob({ taskName, cronExpression, tags, isEditing, editTaskName }) {
+export async function saveCronJob({ taskName, cronExpression, tags, workers, isEditing, editTaskName }) {
 	const formattedTags = tags.replace(/\sOR\s/gi, (m) => m.toLowerCase());
 	const url = isEditing ? `${BASE}/cron-jobs/${editTaskName}` : `${BASE}/cron-jobs`;
 	const method = isEditing ? 'PUT' : 'POST';
 	const res = await fetch(url, {
 		method,
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ cronExpression, taskName, tags: formattedTags })
+		body: JSON.stringify({ cronExpression, taskName, tags: formattedTags, workers })
 	});
 	return res.json();
 }

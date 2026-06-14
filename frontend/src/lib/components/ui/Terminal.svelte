@@ -77,8 +77,8 @@
 		background: var(--terminal-bg);
 		color: var(--terminal-text);
 		padding: 1rem;
-		min-height: 220px;
-		max-height: 280px;
+		min-height: 120px;
+		max-height: 160px;
 		overflow-y: auto;
 		white-space: pre-wrap;
 		word-break: break-word;
