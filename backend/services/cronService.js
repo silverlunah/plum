@@ -57,6 +57,14 @@ const init = async () => {
 	console.log(`⏰ Scheduled ${jobs.length} cron job(s) from database`);
 };
 
+const reload = async () => {
+	for (const name of Object.keys(scheduledJobs)) {
+		scheduledJobs[name].stop();
+		delete scheduledJobs[name];
+	}
+	await init();
+};
+
 const getAllCronJobs = async () => {
 	return prisma.cronJob.findMany({ orderBy: { createdAt: 'asc' } });
 };
@@ -98,4 +106,12 @@ const updateCronJob = async (taskName, { cronExpression, tags, workers }) => {
 	return { status: 200, message: `Cron job ${taskName} updated` };
 };
 
-module.exports = { init, getAllCronJobs, addCronJob, removeCronJob, updateCronJob, setSocketIO };
+module.exports = {
+	init,
+	reload,
+	getAllCronJobs,
+	addCronJob,
+	removeCronJob,
+	updateCronJob,
+	setSocketIO
+};

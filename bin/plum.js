@@ -397,6 +397,17 @@ switch (command) {
 		break;
 	}
 
+	case 'stop':
+		console.log('--------------------------------------\n');
+		console.log('🛑 Stopping Plum...');
+		execSync('docker compose down', {
+			cwd: plumRoot,
+			stdio: 'inherit'
+		});
+		console.log('✅ Plum stopped. Your data is preserved in the database volume.\n');
+		console.log('--------------------------------------\n');
+		break;
+
 	case 'create-step': {
 		const createStepScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-step.mjs');
 		execSync(`node ${createStepScript}`, {
@@ -412,6 +423,11 @@ switch (command) {
 
 	default:
 		console.log('--------------------------------------\n');
-		console.log('Usage: plum <init|start|dev|create-step>');
-		console.log('--------------------------------------\n');
+		console.log('Usage: plum <command>\n');
+		console.log('  init          Set up a new Plum project');
+		console.log('  start         Start the full UI stack via Docker');
+		console.log('  stop          Stop Docker containers (data is preserved)');
+		console.log('  dev           Run tests locally without Docker');
+		console.log('  create-step   Interactively scaffold a new step definition');
+		console.log('\n--------------------------------------\n');
 }
