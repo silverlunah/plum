@@ -1,0 +1,27 @@
+# Dev tooling — not needed by end users
+.claude/
+.husky/
+.prettierrc
+.prettierignore
+.vscode/
+license-config.json
+resources/comments-format.text
+
+# Git & CI
+.gitignore
+.github/
+
+# Local runtime artifacts
+.plum/
+docker-compose.override.yml
+backend/reports/
+backend/tests/
+backend/.env
+backend/config/cron-jobs.json
+backend/config/settings.json
+backend/config/*.bak
+
+# Node dependencies (installed fresh on the user's machine)
+node_modules/
+backend/node_modules/
+frontend/node_modules/

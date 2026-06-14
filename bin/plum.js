@@ -18,6 +18,7 @@
 
 import { execSync } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fse from 'fs-extra';
@@ -99,7 +100,7 @@ function installPlugins() {
 // Ensure user's .gitignore contains Plum-generated entries
 function ensureGitignore() {
 	const gitignorePath = path.join(process.cwd(), '.gitignore');
-	const plumEntries = ['.plum/', 'reports/'];
+	const plumEntries = ['reports/'];
 	const plumBlock = `\n# Plum (auto-generated)\n${plumEntries.join('\n')}\n`;
 
 	if (!fs.existsSync(gitignorePath)) {
@@ -305,8 +306,8 @@ switch (command) {
 			}
 		}
 
-		// Copy config from package root to user's project dir so Docker can mount it
-		const userConfigPath = path.join(process.cwd(), '.plum', 'config');
+		// Copy config to ~/.plum/config so Docker can mount it without polluting the project
+		const userConfigPath = path.join(os.homedir(), '.plum', 'config');
 		fse.copySync(path.join(plumRoot, 'backend', 'config'), userConfigPath);
 
 		// Convert Windows paths to safe format
