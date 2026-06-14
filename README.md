@@ -151,12 +151,12 @@ npm run init
 
 Run these from the `backend/` directory:
 
-| Command                        | Description                                                      |
-| ------------------------------ | ---------------------------------------------------------------- |
-| `npm run init`                 | Create `.env` and copy scaffold into `backend/tests/`            |
-| `npm test [-- tag]`            | Run tests from `backend/tests/` directly                         |
-| `npm test -- --parallel N`     | Run tests in parallel with N workers                             |
-| `npm run create-step`          | Interactive prompt to generate a step definition and page object |
+| Command                    | Description                                                      |
+| -------------------------- | ---------------------------------------------------------------- |
+| `npm run init`             | Create `.env` and copy scaffold into `backend/tests/`            |
+| `npm test [-- tag]`        | Run tests from `backend/tests/` directly                         |
+| `npm test -- --parallel N` | Run tests in parallel with N workers                             |
+| `npm run create-step`      | Interactive prompt to generate a step definition and page object |
 
 ```bash
 cd backend
