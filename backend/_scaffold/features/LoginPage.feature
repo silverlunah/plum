@@ -6,15 +6,15 @@ Feature: Demo Sauce Login
     Given I am in Demo Sauce Login page
 
   # ── Basic Scenario ─────────────────────────────────────────────────────────
-  @test-login-valid-credentials
-  Scenario: Passing login test
+  @test-1
+  Scenario: User can log in with valid credentials
     When I enter "standard_user" in username field
     And I enter "secret_sauce" in password field
     And I click on the login button
     Then I should be navigated to the products page
 
-  @test-login-invalid-credentials
-  Scenario: Failing login test
+  @test-2
+  Scenario: User cannot log in with invalid credentials
     When I enter "invalid_user" in username field
     And I enter "invalid_password" in password field
     And I click on the login button
@@ -23,8 +23,8 @@ Feature: Demo Sauce Login
   # ── Scenario Outline ───────────────────────────────────────────────────────
   # Runs once per row in the Examples table.
   # Use <placeholder> in steps to reference column headers.
-  @test-login-outline
-  Scenario Outline: Login with multiple users
+  @test-3
+  Scenario Outline: User login attempts with different credentials
     When I enter "<username>" in username field
     And I enter "<password>" in password field
     And I click on the login button
@@ -39,8 +39,8 @@ Feature: Demo Sauce Login
   # ── Data Table ─────────────────────────────────────────────────────────────
   # Pass structured data directly into a step.
   # Access rows in your step definition via dataTable.hashes().
-  @test-login-datatable
-  Scenario: Login using a data table
+  @test-4
+  Scenario: User can log in using a data table
     When I fill in the login form:
       | field    | value         |
       | username | standard_user |
