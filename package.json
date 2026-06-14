@@ -24,11 +24,15 @@
 	"devDependencies": {
 		"husky": "^9.1.7",
 		"license-check-and-add": "^4.0.5",
+		"lint-staged": "^17.0.7",
 		"prettier": "^3.5.1",
 		"prettier-plugin-svelte": "^3.3.3"
 	},
 	"dependencies": {
 		"fs-extra": "^11.3.0"
 	},
-	"type": "module"
+	"type": "module",
+	"lint-staged": {
+		"*.{js,ts,svelte,json,md,css,html}": "prettier --write"
+	}
 }

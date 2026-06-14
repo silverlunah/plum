@@ -58,11 +58,11 @@ const getReportDetail = (fileName) => {
 			const failedStepIndex = visibleSteps.findLastIndex((s) => s.result?.status === 'failed');
 
 			const steps = visibleSteps.map((step, index) => ({
-					keyword: step.keyword.trim(),
-					name: step.name ?? '',
-					status: step.result?.status ?? 'pending',
-					duration: Math.round((step.result?.duration ?? 0) / 1_000_000), // ns → ms
-					error: step.result?.error_message ?? null,
+				keyword: step.keyword.trim(),
+				name: step.name ?? '',
+				status: step.result?.status ?? 'pending',
+				duration: Math.round((step.result?.duration ?? 0) / 1_000_000), // ns → ms
+				error: step.result?.error_message ?? null,
 				screenshot:
 					step.embeddings?.find((e) => e.mime_type === 'image/png')?.data ??
 					(index === failedStepIndex ? hookScreenshots[0]?.data : null) ??

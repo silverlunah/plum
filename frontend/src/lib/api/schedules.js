@@ -46,7 +46,14 @@ export async function fetchCronJobs() {
 	return cronJobs ?? [];
 }
 
-export async function saveCronJob({ taskName, cronExpression, tags, workers, isEditing, editTaskName }) {
+export async function saveCronJob({
+	taskName,
+	cronExpression,
+	tags,
+	workers,
+	isEditing,
+	editTaskName
+}) {
 	const formattedTags = tags.replace(/\sOR\s/gi, (m) => m.toLowerCase());
 	const url = isEditing ? `${BASE}/cron-jobs/${editTaskName}` : `${BASE}/cron-jobs`;
 	const method = isEditing ? 'PUT' : 'POST';

@@ -68,9 +68,9 @@ BASE_URL=https://your-app.com
 IS_HEADLESS=false
 ```
 
-| Variable      | Description                                           |
-| ------------- | ----------------------------------------------------- |
-| `BASE_URL`    | The base URL Playwright navigates to during tests     |
+| Variable      | Description                                              |
+| ------------- | -------------------------------------------------------- |
+| `BASE_URL`    | The base URL Playwright navigates to during tests        |
 | `IS_HEADLESS` | Run the browser headlessly (`true`) or visibly (`false`) |
 
 ---
@@ -81,10 +81,10 @@ If your tests need extra npm packages (e.g. a faker library, an assertion helper
 
 ```json
 {
-  "dependencies": {
-    "@faker-js/faker": "^9.0.0",
-    "dayjs": "^1.11.0"
-  }
+	"dependencies": {
+		"@faker-js/faker": "^9.0.0",
+		"dayjs": "^1.11.0"
+	}
 }
 ```
 
@@ -163,19 +163,19 @@ Use tags (`@suite-login`, `@test-login-1`) to filter which tests to run.
 import { page } from '../utils/browser';
 
 export class LoginPage {
-  static async goToLoginPage() {
-    await page().goto(process.env.BASE_URL as string);
-  }
+	static async goToLoginPage() {
+		await page().goto(process.env.BASE_URL as string);
+	}
 
-  static async login(email: string, password: string) {
-    await page().fill('#email', email);
-    await page().fill('#password', password);
-    await page().click('button[type="submit"]');
-  }
+	static async login(email: string, password: string) {
+		await page().fill('#email', email);
+		await page().fill('#password', password);
+		await page().click('button[type="submit"]');
+	}
 
-  static async verifyDashboardVisible() {
-    await page().waitForSelector('#dashboard');
-  }
+	static async verifyDashboardVisible() {
+		await page().waitForSelector('#dashboard');
+	}
 }
 ```
 
@@ -190,15 +190,15 @@ import { Given, When, Then } from '@cucumber/cucumber';
 import { LoginPage } from '../pages/LoginPage';
 
 Given('I am on the login page', async () => {
-  await LoginPage.goToLoginPage();
+	await LoginPage.goToLoginPage();
 });
 
 When('I log in with valid credentials', async () => {
-  await LoginPage.login('user@example.com', 'password');
+	await LoginPage.login('user@example.com', 'password');
 });
 
 Then('I should see the dashboard', async () => {
-  await LoginPage.verifyDashboardVisible();
+	await LoginPage.verifyDashboardVisible();
 });
 ```
 
@@ -206,14 +206,14 @@ Then('I should see the dashboard', async () => {
 
 ## Command Reference
 
-| Command                         | When to use                                      |
-| ------------------------------- | ------------------------------------------------ |
-| `plum init`                     | First-time setup in a new project folder         |
-| `plum dev`                      | Run all tests locally                            |
-| `plum dev @tag`                 | Run tests matching a tag locally                 |
-| `plum dev --parallel N`         | Run tests across N parallel workers locally      |
-| `plum start`                    | Start the full UI stack via Docker               |
-| `plum create-step`              | Interactively scaffold a new step definition     |
+| Command                 | When to use                                  |
+| ----------------------- | -------------------------------------------- |
+| `plum init`             | First-time setup in a new project folder     |
+| `plum dev`              | Run all tests locally                        |
+| `plum dev @tag`         | Run tests matching a tag locally             |
+| `plum dev --parallel N` | Run tests across N parallel workers locally  |
+| `plum start`            | Start the full UI stack via Docker           |
+| `plum create-step`      | Interactively scaffold a new step definition |
 
 ---
 

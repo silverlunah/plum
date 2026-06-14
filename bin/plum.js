@@ -64,7 +64,8 @@ function scaffoldPluginsFile() {
 	}
 	const content = {
 		'//': 'Add npm packages your tests depend on. Plum installs them automatically before each run.',
-		'// example': 'To add a package: put its name and version under "dependencies", e.g. "@faker-js/faker": "^9.0.0"',
+		'// example':
+			'To add a package: put its name and version under "dependencies", e.g. "@faker-js/faker": "^9.0.0"',
 		dependencies: {}
 	};
 	fs.writeFileSync(pluginsPath, JSON.stringify(content, null, 2) + '\n', 'utf8');
@@ -253,7 +254,7 @@ switch (command) {
 					'```bash',
 					'plum dev @test-login-1   # single scenario',
 					'plum dev @suite-login    # whole suite',
-					'```',
+					'```'
 				].join('\n');
 				fs.writeFileSync(userReadmePath, readmeContent + '\n', 'utf8');
 				console.log('✅ README.md created with command reference.\n');
