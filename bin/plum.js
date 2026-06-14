@@ -91,6 +91,32 @@ switch (command) {
 		// Create .env file with default values
 		createEnvFile();
 
+		// Create .vscode/settings.json for Cucumber extension step linkage
+		const vscodeSettingsPath = path.join(process.cwd(), '.vscode', 'settings.json');
+		if (!fs.existsSync(vscodeSettingsPath)) {
+			fs.mkdirSync(path.dirname(vscodeSettingsPath), { recursive: true });
+			const vscodeSettings = JSON.stringify(
+				{
+					'cucumber.glue': ['tests/step_definitions/**/*.ts'],
+					'cucumber.features': ['tests/features/**/*.feature']
+				},
+				null,
+				2
+			);
+			fs.writeFileSync(vscodeSettingsPath, vscodeSettings, 'utf8');
+			console.log('✅ .vscode/settings.json created for Cucumber extension.\n');
+		} else {
+			console.log('⚠️  .vscode/settings.json already exists. Skipping.\n');
+		}
+
+		// Install Cucumber VS Code extension
+		try {
+			execSync('code --install-extension cucumberopen.cucumber-official', { stdio: 'inherit' });
+			console.log('✅ Cucumber VS Code extension installed.\n');
+		} catch {
+			console.log('⚠️  Could not install VS Code extension automatically. Install manually: cucumberopen.cucumber-official\n');
+		}
+
 		// Initialize project
 		console.log('--------------------------------------\n');
 		console.log('🚀 Initializing Plum...');
@@ -199,8 +225,21 @@ switch (command) {
 		break;
 	}
 
+	case 'create-step': {
+		const createStepScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-step.mjs');
+		execSync(`node ${createStepScript}`, {
+			cwd: process.cwd(),
+			stdio: 'inherit',
+			env: {
+				...process.env,
+				TESTS_ROOT: userTestsPath
+			}
+		});
+		break;
+	}
+
 	default:
 		console.log('--------------------------------------\n');
-		console.log('Usage: plum <init|start|dev>');
+		console.log('Usage: plum <init|start|dev|create-step>');
 		console.log('--------------------------------------\n');
 }

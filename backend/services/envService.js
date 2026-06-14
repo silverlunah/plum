@@ -17,27 +17,21 @@
 
 const fs = require('fs');
 const path = require('path');
+const pc = require('picocolors');
 
-/* -----------------------------------------------------
- *                   .env Generator
- *  Description:
- * 		If .env file doesn't exist, this will create
- * 		a .env file in root with sauce demo's base URL
- * ------------------------------------------------------ */
 const envPath = path.join(__dirname, '../.env');
 
 if (!fs.existsSync(envPath)) {
 	const envContent = 'BASE_URL=https://www.saucedemo.com/v1/\nIS_HEADLESS=false';
 	fs.writeFileSync(envPath, envContent);
-	console.log('.env file created in the root directory');
+	console.log(pc.green('✓') + ' .env created with default values.');
 } else {
 	let envContent = fs.readFileSync(envPath, 'utf8');
-
 	if (!envContent.includes('IS_HEADLESS=')) {
 		envContent += '\nIS_HEADLESS=false';
 		fs.writeFileSync(envPath, envContent);
-		console.log('IS_HEADLESS=false added to .env');
+		console.log(pc.cyan('↳') + ' IS_HEADLESS=false added to .env.');
 	} else {
-		console.log('.env file already contains IS_HEADLESS setting');
+		console.log(pc.yellow('⚠') + ' .env already exists. Skipping.');
 	}
 }
