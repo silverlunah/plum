@@ -33,6 +33,27 @@ export function reportUrl(fileName) {
 	return `/reports/${encodeURIComponent(fileName)}`;
 }
 
+// Parses metadata out of a report filename.
+// Format: {STATUS}_cucumber_report_{trigger}_{tags}_runners_{n}_{timestamp}.json
+export function parseReport(fileName) {
+	const m = fileName.match(
+		/^(PASS|FAIL)_cucumber_report_(.+?)_(\([^)]+\))_runners_(\d+)_(\d{4}_\d{2}_\d{2}T[\d_]+Z)\.json$/
+	);
+	if (!m) return null;
+	const [, status, triggerType, tags, runners, tsRaw] = m;
+	const isoStr = tsRaw.replace(
+		/^(\d{4})_(\d{2})_(\d{2})T(\d{2})_(\d{2})_(\d{2})_(\d+)Z$/,
+		'$1-$2-$3T$4:$5:$6.$7Z'
+	);
+	return {
+		status,
+		triggerType,
+		tags,
+		runners: parseInt(runners, 10),
+		date: new Date(isoStr).toLocaleString()
+	};
+}
+
 export async function fetchReportDetail(fileName) {
 	const res = await fetch(`${BASE}/reports/${encodeURIComponent(fileName)}/detail`);
 	if (!res.ok) throw new Error('Report not found');
