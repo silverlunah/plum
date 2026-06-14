@@ -31,7 +31,7 @@ const socketHandler = (io) => {
 			};
 			if (workers && workers > 1) env.PARALLEL = String(workers);
 
-			const testProcess = spawn('npm', ['run', 'test'], { env });
+			const testProcess = spawn('npm', ['run', 'test'], { env, shell: true });
 
 			testProcess.stdout.on('data', (data) => {
 				socket.emit('log', data.toString());
