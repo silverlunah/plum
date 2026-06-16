@@ -38,6 +38,8 @@ services:
       - '3001:3001'
     environment:
       DATABASE_URL: 'postgresql://plum:plum@postgres:5432/plum'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     volumes:
       - ./backend/reports:/app/reports
       - ./backend/tests:/app/tests:rw

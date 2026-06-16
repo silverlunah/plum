@@ -23,47 +23,50 @@ router.get('/', async (req, res) => {
 	try {
 		const reports = await reportService.getAllReports();
 		res.json({ reports });
-	} catch (error) {
-		console.error('Error fetching reports:', error);
+	} catch {
 		res.status(500).json({ error: 'Failed to fetch reports' });
 	}
 });
 
 router.get('/latest', async (req, res) => {
 	try {
-		const latestReport = await reportService.getLatestReport();
-		res.json({ latestReport });
-	} catch (error) {
-		console.error('Error fetching latest report:', error);
+		const latestReportId = await reportService.getLatestReportId();
+		res.json({ latestReportId });
+	} catch {
 		res.status(500).json({ error: 'Failed to fetch latest report' });
 	}
 });
 
-router.get('/:fileName/detail', (req, res) => {
-	const detail = reportService.getReportDetail(req.params.fileName);
+router.get('/:id', async (req, res) => {
+	const id = parseInt(req.params.id, 10);
+	if (isNaN(id)) return res.status(400).json({ error: 'Invalid report id' });
+	const detail = await reportService.getReportDetail(id);
 	if (!detail) return res.status(404).json({ error: 'Report not found' });
 	res.json(detail);
 });
 
 router.delete('/bulk', async (req, res) => {
-	const { fileNames } = req.body;
-	if (!Array.isArray(fileNames) || fileNames.length === 0)
-		return res.status(400).json({ error: 'fileNames array required' });
+	const { ids } = req.body;
+	if (!Array.isArray(ids) || ids.length === 0) {
+		return res.status(400).json({ error: 'ids array required' });
+	}
+	const numericIds = ids.map(Number).filter((n) => !isNaN(n));
+	if (numericIds.length === 0) return res.status(400).json({ error: 'No valid ids' });
 	try {
-		await reportService.deleteReports(fileNames);
-		res.json({ deleted: fileNames.length });
-	} catch (error) {
-		console.error('Error deleting reports:', error);
+		await reportService.deleteReports(numericIds);
+		res.json({ deleted: numericIds.length });
+	} catch {
 		res.status(500).json({ error: 'Failed to delete reports' });
 	}
 });
 
-router.delete('/:fileName', async (req, res) => {
+router.delete('/:id', async (req, res) => {
+	const id = parseInt(req.params.id, 10);
+	if (isNaN(id)) return res.status(400).json({ error: 'Invalid report id' });
 	try {
-		await reportService.deleteReport(req.params.fileName);
-		res.json({ deleted: req.params.fileName });
-	} catch (error) {
-		console.error('Error deleting report:', error);
+		await reportService.deleteReport(id);
+		res.json({ deleted: id });
+	} catch {
 		res.status(500).json({ error: 'Failed to delete report' });
 	}
 });

@@ -1,0 +1,59 @@
+#
+# This file is part of Plum.
+#
+# Plum is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Plum is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Plum. If not, see https://www.gnu.org/licenses/.
+#
+
+# Runner node — backend + postgres only, no frontend UI.
+# Start with: plum node start --token <secret> --primary http://primary:3001
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: plum
+      POSTGRES_USER: plum
+      POSTGRES_PASSWORD: plum
+    volumes:
+      - node_postgres_data:/var/lib/postgresql/data
+    networks:
+      - node-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U plum']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    ports:
+      - '3001:3001'
+    environment:
+      DATABASE_URL: 'postgresql://plum:plum@postgres:5432/plum'
+      PLUM_MODE: 'node'
+    volumes:
+      - ./backend/reports:/app/reports
+      - ./backend/tests:/app/tests:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - node-network
+
+networks:
+  node-network:
+    driver: bridge
+
+volumes:
+  node_postgres_data:

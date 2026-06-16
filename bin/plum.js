@@ -25,6 +25,7 @@ import fse from 'fs-extra';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const command = process.argv[2];
+const subcommand = process.argv[3];
 const plumRoot = path.resolve(__dirname, '..');
 const userTestsPath = path.join(process.cwd(), 'tests');
 const scaffoldTestsPath = path.join(plumRoot, 'backend', '_scaffold');
@@ -243,52 +244,90 @@ switch (command) {
 					'',
 					'Powered by [Plum](https://github.com/silverlunah/plum) — Playwright + Cucumber.',
 					'',
+					'## Getting Started',
+					'',
+					"Your project is ready. Here's what to do next:",
+					'',
+					"1. **Open `.env`** and set `BASE_URL` to your application's URL.",
+					'2. **Run the example tests** to confirm everything works:',
+					'   ```bash',
+					'   plum dev',
+					'   ```',
+					'3. **Write your first test** — edit a file in `tests/features/` or generate a step:',
+					'   ```bash',
+					'   plum create-step',
+					'   ```',
+					'4. **Start the full UI** (requires Docker) to trigger tests and view reports in the browser:',
+					'   ```bash',
+					'   plum start',
+					'   ```',
+					'   Then open **http://localhost:5173**.',
+					'',
+					'---',
+					'',
 					'## Commands',
 					'',
 					'| Command | Description |',
-					'|---|---|',
+					'| --- | --- |',
 					'| `plum dev` | Run all tests locally |',
 					'| `plum dev @tag` | Run tests matching a tag |',
 					'| `plum dev --parallel N` | Run tests across N parallel workers |',
-					'| `plum start` | Start the full UI via Docker (`http://localhost:5173`) |',
+					'| `plum start` | Start the full UI via Docker |',
+					'| `plum stop` | Stop the server |',
 					'| `plum create-step` | Interactively generate a new step definition |',
+					'',
+					'---',
 					'',
 					'## Configuration',
 					'',
 					'| File | Purpose |',
-					'|---|---|',
-					'| `.env` | Set `BASE_URL` and `IS_HEADLESS` |',
-					'| `plum.plugins.json` | Add extra npm packages for your tests |',
+					'| --- | --- |',
+					'| `.env` | Set `BASE_URL` (your app) and `IS_HEADLESS` (`true`/`false`) |',
+					'| `plum.plugins.json` | Add extra npm packages your tests need |',
+					'',
+					'---',
 					'',
 					'## Test Structure',
 					'',
 					'```',
 					'tests/',
-					'  features/          — Gherkin .feature files',
+					'  features/          — Gherkin .feature files (write your scenarios here)',
 					'  step_definitions/  — TypeScript step implementations',
 					'  pages/             — Page Object Models',
-					'  utils/             — Browser setup, hooks, helpers',
+					'  utils/             — Browser setup, hooks, shared helpers',
 					'```',
 					'',
-					'Tags are used to filter which tests to run:',
+					'Each scenario needs a unique tag so you can run it by itself:',
 					'',
 					'```gherkin',
 					'@suite-login',
 					'Feature: Login',
 					'',
 					'  @test-login-1',
-					'  Scenario: User can log in',
+					'  Scenario: User can log in with valid credentials',
 					'    Given I am on the login page',
-					'    ...',
+					'    When I enter valid credentials',
+					'    Then I should see the dashboard',
 					'```',
 					'',
 					'```bash',
-					'plum dev @test-login-1   # single scenario',
-					'plum dev @suite-login    # whole suite',
-					'```'
+					'plum dev @test-login-1   # run a single scenario',
+					'plum dev @suite-login    # run the whole suite',
+					'```',
+					'',
+					'---',
+					'',
+					'## Cucumber & Gherkin Resources',
+					'',
+					'New to Cucumber? These links will get you up to speed quickly:',
+					'',
+					'- [Gherkin syntax reference](https://cucumber.io/docs/gherkin/reference/) — Feature files, Scenarios, Given/When/Then, tags, Scenario Outlines',
+					'- [Step definitions guide](https://cucumber.io/docs/cucumber/step-definitions/) — Connecting Gherkin steps to TypeScript code',
+					'- [Playwright docs](https://playwright.dev/docs/intro) — Browser automation API used inside page objects',
+					'- [Plum documentation](https://github.com/silverlunah/plum) — Full README and reference'
 				].join('\n');
 				fs.writeFileSync(userReadmePath, readmeContent + '\n', 'utf8');
-				console.log('✅ README.md created with command reference.\n');
+				console.log('✅ README.md created with quick-start guide.\n');
 			} else {
 				console.log('⚠️  README.md already exists. Skipping.\n');
 			}
@@ -307,6 +346,18 @@ switch (command) {
 		);
 		console.log('--------------------------------------\n');
 		break;
+
+	case 'server':
+		if (subcommand === 'stop') {
+			console.log('--------------------------------------\n');
+			console.log('🛑 Stopping Plum server...');
+			execSync('docker compose down', { cwd: plumRoot, stdio: 'inherit' });
+			console.log('✅ Plum server stopped. Your data is preserved.\n');
+			console.log('--------------------------------------\n');
+			break;
+		}
+	// fall through to start for 'plum server start' or 'plum server'
+	// intentional fall-through
 
 	case 'start':
 		console.log('--------------------------------------\n');
@@ -434,6 +485,66 @@ switch (command) {
 		console.log('--------------------------------------\n');
 		break;
 
+	case 'node': {
+		if (subcommand === 'stop') {
+			console.log('--------------------------------------\n');
+			console.log('🛑 Stopping Plum node...');
+			execSync('docker compose -f docker-compose.node.yml down', {
+				cwd: plumRoot,
+				stdio: 'inherit'
+			});
+			console.log('✅ Plum node stopped.\n');
+			console.log('--------------------------------------\n');
+			break;
+		}
+
+		// 'plum node start' — parse --token and --primary flags
+		const nodeArgs = process.argv.slice(3);
+		const tokenIdx = nodeArgs.indexOf('--token');
+		const nodeToken = tokenIdx !== -1 ? nodeArgs[tokenIdx + 1] : process.env.NODE_TOKEN || '';
+		const primaryIdx = nodeArgs.indexOf('--primary');
+		const primaryUrl = primaryIdx !== -1 ? nodeArgs[primaryIdx + 1] : process.env.PRIMARY_URL || '';
+
+		console.log('--------------------------------------\n');
+		console.log('🚀 Starting Plum node (runner mode)...');
+		if (!nodeToken) {
+			console.log(
+				'⚠️  No --token provided. The node will accept requests without authentication.\n'
+			);
+		}
+
+		// Build override for node mode
+		const userTestsAbs = path.resolve(process.cwd(), 'tests').replace(/\\/g, '/');
+		const userReportsAbs = path.resolve(process.cwd(), 'reports').replace(/\\/g, '/');
+		const nodeOverridePath = path.join(plumRoot, 'docker-compose.node-override.yml');
+
+		const nodeOverride = [
+			'services:',
+			'  backend:',
+			'    volumes:',
+			`      - "${userReportsAbs}:/app/reports"`,
+			`      - "${userTestsAbs}:/app/tests"`,
+			'    environment:',
+			`      NODE_TOKEN: "${nodeToken}"`,
+			`      PRIMARY_URL: "${primaryUrl}"`,
+			'      PLUM_MODE: "node"'
+		].join('\n');
+
+		fs.writeFileSync(nodeOverridePath, nodeOverride + '\n', 'utf8');
+
+		copyEnvFile();
+
+		execSync(
+			'docker compose -f docker-compose.node.yml -f docker-compose.node-override.yml up --build',
+			{
+				cwd: plumRoot,
+				stdio: 'inherit'
+			}
+		);
+		console.log('--------------------------------------\n');
+		break;
+	}
+
 	case 'create-step': {
 		const createStepScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-step.mjs');
 		execSync(`node "${createStepScript}"`, {
@@ -450,10 +561,14 @@ switch (command) {
 	default:
 		console.log('--------------------------------------\n');
 		console.log('Usage: plum <command>\n');
-		console.log('  init          Set up a new Plum project');
-		console.log('  start         Start the full UI stack via Docker');
-		console.log('  stop          Stop Docker containers (data is preserved)');
-		console.log('  dev           Run tests locally without Docker');
-		console.log('  create-step   Interactively scaffold a new step definition');
+		console.log('  init                 Set up a new Plum project');
+		console.log('  server start         Start the full UI stack via Docker  (alias: plum start)');
+		console.log('  server stop          Stop the server  (alias: plum stop)');
+		console.log('  node start           Start a runner node (no UI, receives remote jobs)');
+		console.log('    --token <secret>   Auth token the primary must send');
+		console.log('    --primary <url>    URL of the primary Plum server');
+		console.log('  node stop            Stop the runner node');
+		console.log('  dev                  Run tests locally without Docker');
+		console.log('  create-step          Interactively scaffold a new step definition');
 		console.log('\n--------------------------------------\n');
 }

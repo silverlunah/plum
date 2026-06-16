@@ -1,0 +1,103 @@
+/*
+ * This file is part of Plum.
+ *
+ * Plum is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Plum is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Plum. If not, see https://www.gnu.org/licenses/.
+ */
+
+const express = require('express');
+const router = express.Router();
+const { spawn } = require('child_process');
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { authGuard } = require('../middleware/auth');
+const { TRIGGER_REMOTE } = require('../constants/triggers');
+
+// In-memory job store for active remote executions.
+// Jobs are purged after 10 minutes post-completion.
+const jobs = {};
+
+// Health check — primary server uses this to confirm the node is reachable
+router.get('/ping', authGuard, (req, res) => {
+	res.json({ ok: true, mode: process.env.PLUM_MODE || 'server' });
+});
+
+// Start a remote test job
+router.post('/execute', authGuard, (req, res) => {
+	const { tags, browser = 'chromium', workers = 1 } = req.body;
+	const jobId = crypto.randomUUID();
+
+	jobs[jobId] = {
+		status: 'running',
+		logs: '',
+		exitCode: null,
+		startedAt: Date.now(),
+		meta: { tags: tags || '', browser, workers }
+	};
+
+	const env = {
+		...process.env,
+		TAG: tags || '',
+		TRIGGER: TRIGGER_REMOTE,
+		BROWSER: browser,
+		REPORT_RUNNERS: String(workers)
+	};
+	if (workers > 1) env.PARALLEL = String(workers);
+
+	const proc = spawn('npm', ['run', 'test'], { env, shell: true });
+	proc.stdout.on('data', (d) => {
+		jobs[jobId].logs += d.toString();
+	});
+	proc.stderr.on('data', (d) => {
+		jobs[jobId].logs += d.toString();
+	});
+	proc.on('close', (code) => {
+		jobs[jobId].status = code === 0 ? 'done' : 'error';
+		jobs[jobId].exitCode = code;
+
+		try {
+			const reportPath = path.resolve(process.cwd(), 'reports', 'cucumber_report.json');
+			if (fs.existsSync(reportPath)) {
+				jobs[jobId].reportContent = fs.readFileSync(reportPath, 'utf8');
+			}
+		} catch {}
+
+		setTimeout(() => delete jobs[jobId], 600_000);
+	});
+
+	res.json({ jobId, status: 'started' });
+});
+
+// Fetch the final report content after a job completes
+router.get('/report/:jobId', authGuard, (req, res) => {
+	const job = jobs[req.params.jobId];
+	if (!job) return res.status(404).json({ error: 'Job not found' });
+	if (!job.reportContent) return res.status(404).json({ error: 'Report not ready' });
+	res.json({ content: job.reportContent, meta: job.meta });
+});
+
+// Poll job status and streamed logs
+router.get('/execute/:jobId', authGuard, (req, res) => {
+	const job = jobs[req.params.jobId];
+	if (!job) return res.status(404).json({ error: 'Job not found' });
+
+	const offset = parseInt(req.query.offset || '0', 10);
+	res.json({
+		status: job.status,
+		logs: job.logs.slice(offset),
+		exitCode: job.exitCode
+	});
+});
+
+module.exports = router;

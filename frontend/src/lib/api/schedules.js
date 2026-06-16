@@ -15,10 +15,10 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-const BASE = 'http://localhost:3001';
+import { API_BASE } from '$lib/constants';
 
 export async function fetchCronJobs() {
-	const res = await fetch(`${BASE}/cron-jobs`);
+	const res = await fetch(`${API_BASE}/cron-jobs`);
 	const { cronJobs } = await res.json();
 	return cronJobs ?? [];
 }
@@ -28,21 +28,50 @@ export async function saveCronJob({
 	cronExpression,
 	tags,
 	workers,
+	browser,
+	runnerIds,
 	isEditing,
 	editTaskName
 }) {
 	const formattedTags = tags.replace(/\sOR\s/gi, (m) => m.toLowerCase());
-	const url = isEditing ? `${BASE}/cron-jobs/${editTaskName}` : `${BASE}/cron-jobs`;
+	const url = isEditing
+		? `${API_BASE}/cron-jobs/${encodeURIComponent(editTaskName)}`
+		: `${API_BASE}/cron-jobs`;
 	const method = isEditing ? 'PUT' : 'POST';
 	const res = await fetch(url, {
 		method,
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ cronExpression, taskName, tags: formattedTags, workers })
+		body: JSON.stringify({
+			cronExpression,
+			taskName,
+			tags: formattedTags,
+			workers,
+			browser,
+			runnerIds
+		})
+	});
+	return res.json();
+}
+
+export async function toggleCronJob(taskName, enabled) {
+	const res = await fetch(`${API_BASE}/cron-jobs/${encodeURIComponent(taskName)}/toggle`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ enabled })
+	});
+	return res.json();
+}
+
+export async function runCronJobNow(taskName) {
+	const res = await fetch(`${API_BASE}/cron-jobs/${encodeURIComponent(taskName)}/run`, {
+		method: 'POST'
 	});
 	return res.json();
 }
 
 export async function deleteCronJob(taskName) {
-	const res = await fetch(`${BASE}/cron-jobs/${taskName}`, { method: 'DELETE' });
+	const res = await fetch(`${API_BASE}/cron-jobs/${encodeURIComponent(taskName)}`, {
+		method: 'DELETE'
+	});
 	return res.json();
 }

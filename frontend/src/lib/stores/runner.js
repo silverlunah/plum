@@ -20,25 +20,28 @@ import { writable, get } from 'svelte/store';
 export const socket = writable(null);
 
 export const runnerState = writable({
-	output: 'Ready — select a test from the list.\n',
+	output: '',
 	running: false,
 	testCompleted: false,
-	latestReport: null,
+	latestReportId: null, // number | null — set after test finishes
 	status: 'idle', // 'idle' | 'running' | 'pass' | 'fail'
-	lastRunId: ''
+	lastRunId: '',
+	lanes: [], // [{ id, name, testCount, status, logs }] multi-runner only
+	currentRun: null // { tag, workers, browser, runners } — set while running
 });
 
 export const runnerConfig = writable({
 	workers: 1,
-	testID: ''
+	testID: '',
+	browser: 'chromium',
+	selectedRunners: ['built-in']
 });
 
-export const panelExpanded = writable(true);
+export const panelExpanded = writable(false);
 
-// Increments whenever the backend detects a change in tests/features/
+export const builtInEnabled = writable(true);
+
 export const testsVersion = writable(0);
-
-// Increments whenever a new report file is detected
 export const reportsVersion = writable(0);
 
 // Map of taskName → true for every cron job currently executing
@@ -48,17 +51,25 @@ export function triggerRun(id) {
 	const s = get(socket);
 	if (!s) return;
 
-	const { workers, testID } = get(runnerConfig);
+	const { workers, testID, browser, selectedRunners } = get(runnerConfig);
 	const runId = (id !== undefined ? id : testID).trim().replace(/\sOR\s/gi, (m) => m.toLowerCase());
 
 	runnerState.set({
 		output: `Running: ${runId || '(all tests)'}\n`,
 		running: true,
 		testCompleted: false,
-		latestReport: null,
+		latestReportId: null,
 		status: 'running',
-		lastRunId: runId
+		lastRunId: runId,
+		lanes: [],
+		currentRun: { tag: runId, workers, browser, runners: selectedRunners }
 	});
 	panelExpanded.set(true);
-	s.emit('run-test', runId, workers);
+
+	s.emit('run-test', { tag: runId, workers, browser, runners: selectedRunners });
+}
+
+export function cancelRun() {
+	const s = get(socket);
+	if (s) s.emit('cancel-test');
 }

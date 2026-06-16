@@ -17,41 +17,34 @@
 
 <script>
 	import { onMount, tick } from 'svelte';
-	import { fetchReports, deleteReport, deleteReports } from '$lib/api/reports';
+	import { fetchReports, deleteReport, deleteReports, reportUrl } from '$lib/api/reports';
 	import { reportsVersion } from '$lib/stores/runner';
+	import { REPORTS_PER_PAGE } from '$lib/constants';
+	import { isScheduled, triggerLabel, triggerVariant, stagger } from '$lib/utils/format';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
-	import Modal from '$lib/components/ui/Modal.svelte';
+	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
+	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 
 	let reports = [];
 	let currentPage = 1;
-	const PER_PAGE = 15;
 	let animateBar = false;
 
 	let selected = new Set();
 	let deleteModal = { open: false, targets: [] };
 	let deleting = false;
 
-	$: totalPages = Math.ceil(reports.length / PER_PAGE);
-	$: paginated = reports.slice((currentPage - 1) * PER_PAGE, currentPage * PER_PAGE);
+	$: totalPages = Math.ceil(reports.length / REPORTS_PER_PAGE);
+	$: paginated = reports.slice(
+		(currentPage - 1) * REPORTS_PER_PAGE,
+		currentPage * REPORTS_PER_PAGE
+	);
 	$: passCount = reports.filter((r) => r.status === 'PASS').length;
 	$: failCount = reports.length - passCount;
 	$: passRate = reports.length ? Math.round((passCount / reports.length) * 100) : 0;
 	$: trend = reports.slice(0, 12).reverse();
-	$: allOnPageSelected = paginated.length > 0 && paginated.every((r) => selected.has(r.fileName));
+	$: allOnPageSelected = paginated.length > 0 && paginated.every((r) => selected.has(r.id));
 	$: someSelected = selected.size > 0;
-
-	function triggerLabel(type) {
-		if (type === 'manual-trigger') return 'Manual';
-		if (type === 'command-line-trigger' || type === 'undefined') return 'CLI';
-		return 'Scheduled';
-	}
-
-	function triggerVariant(type) {
-		if (type === 'manual-trigger') return 'tag';
-		if (type === 'command-line-trigger' || type === 'undefined') return 'neutral';
-		return 'schedule';
-	}
 
 	async function loadReports() {
 		try {
@@ -67,12 +60,12 @@
 	onMount(loadReports);
 	$: if ($reportsVersion) loadReports();
 
-	function toggleSelect(fileName, e) {
+	function toggleSelect(id, e) {
 		e.preventDefault();
 		e.stopPropagation();
 		const next = new Set(selected);
-		if (next.has(fileName)) next.delete(fileName);
-		else next.add(fileName);
+		if (next.has(id)) next.delete(id);
+		else next.add(id);
 		selected = next;
 	}
 
@@ -80,11 +73,11 @@
 		e.stopPropagation();
 		if (allOnPageSelected) {
 			const next = new Set(selected);
-			paginated.forEach((r) => next.delete(r.fileName));
+			paginated.forEach((r) => next.delete(r.id));
 			selected = next;
 		} else {
 			const next = new Set(selected);
-			paginated.forEach((r) => next.add(r.fileName));
+			paginated.forEach((r) => next.add(r.id));
 			selected = next;
 		}
 	}
@@ -93,10 +86,10 @@
 		deleteModal = { open: true, targets };
 	}
 
-	function openSingleDelete(fileName, e) {
+	function openSingleDelete(id, e) {
 		e.preventDefault();
 		e.stopPropagation();
-		openDeleteModal([fileName]);
+		openDeleteModal([id]);
 	}
 
 	async function confirmDelete() {
@@ -105,7 +98,7 @@
 			if (deleteModal.targets.length === 1) {
 				await deleteReport(deleteModal.targets[0]);
 			} else {
-				await deleteReports(deleteModal.targets);
+				await deleteReports([...deleteModal.targets]);
 			}
 			deleteModal = { open: false, targets: [] };
 			await loadReports();
@@ -119,28 +112,21 @@
 
 <svelte:head><title>Reports — Plum</title></svelte:head>
 
-<Modal
+<ConfirmModal
 	bind:open={deleteModal.open}
 	title={deleteModal.targets.length === 1
 		? 'Delete report?'
 		: `Delete ${deleteModal.targets.length} reports?`}
+	confirmLabel="Delete"
+	loading={deleting}
+	on:confirm={confirmDelete}
 >
-	<p class="modal-body">
-		{#if deleteModal.targets.length === 1}
-			This will permanently remove the report and its data file.
-		{:else}
-			This will permanently remove {deleteModal.targets.length} reports and their data files.
-		{/if}
-	</p>
-	<div class="modal-actions">
-		<button class="btn-cancel" on:click={() => (deleteModal.open = false)} disabled={deleting}>
-			Cancel
-		</button>
-		<button class="btn-danger" on:click={confirmDelete} disabled={deleting}>
-			{deleting ? 'Deleting…' : 'Delete'}
-		</button>
-	</div>
-</Modal>
+	{#if deleteModal.targets.length === 1}
+		This will permanently remove the report and its data file.
+	{:else}
+		This will permanently remove {deleteModal.targets.length} reports and their data files.
+	{/if}
+</ConfirmModal>
 
 <div class="page-header">
 	<div class="header-top">
@@ -151,27 +137,19 @@
 			</p>
 		</div>
 
-		<div class="header-actions">
-			{#if someSelected}
-				<button class="btn-delete-selected" on:click={() => openDeleteModal([...selected])}>
-					Delete ({selected.size})
-				</button>
-			{/if}
-
-			{#if reports.length > 0}
-				<div class="rate-display">
-					<span
-						class="rate-number"
-						class:pass={passRate >= 80}
-						class:warn={passRate < 80 && passRate >= 50}
-						class:fail={passRate < 50}
-					>
-						{passRate}%
-					</span>
-					<span class="rate-label">passing</span>
-				</div>
-			{/if}
-		</div>
+		{#if reports.length > 0}
+			<div class="rate-display">
+				<span
+					class="rate-number"
+					class:pass={passRate >= 80}
+					class:warn={passRate < 80 && passRate >= 50}
+					class:fail={passRate < 50}
+				>
+					{passRate}%
+				</span>
+				<span class="rate-label">passing</span>
+			</div>
+		{/if}
 	</div>
 
 	{#if reports.length > 0}
@@ -193,7 +171,7 @@
 						class="trend-dot"
 						class:pass={r.status === 'PASS'}
 						class:fail={r.status !== 'PASS'}
-						style="animation-delay: {i * 35}ms"
+						style={stagger(i, 35)}
 						title="{r.status} · {r.tags} · {r.date}"
 					></span>
 				{/each}
@@ -204,7 +182,7 @@
 </div>
 
 {#if reports.length === 0}
-	<p class="empty">No reports yet. Run a test to generate one.</p>
+	<EmptyState message="No reports yet. Run a test to generate one." />
 {:else}
 	<div class="list-header">
 		<label class="select-all-wrap" title="Select all on this page">
@@ -216,21 +194,22 @@
 				on:change={toggleAll}
 			/>
 		</label>
+		{#if someSelected}
+			<button class="btn-delete-selected" on:click={() => openDeleteModal([...selected])}>
+				Delete ({selected.size})
+			</button>
+		{/if}
 	</div>
 
 	<div class="report-list">
 		{#each paginated as report, i}
-			<div
-				class="report-row"
-				class:is-selected={selected.has(report.fileName)}
-				style="animation-delay: {i * 45}ms"
-			>
+			<div class="report-row" class:is-selected={selected.has(report.id)} style={stagger(i)}>
 				<label class="row-check-wrap" title="Select">
 					<input
 						type="checkbox"
 						class="checkbox"
-						checked={selected.has(report.fileName)}
-						on:change={(e) => toggleSelect(report.fileName, e)}
+						checked={selected.has(report.id)}
+						on:change={(e) => toggleSelect(report.id, e)}
 					/>
 				</label>
 
@@ -238,7 +217,7 @@
 					class="report-item"
 					class:is-pass={report.status === 'PASS'}
 					class:is-fail={report.status !== 'PASS'}
-					href="/reports/{encodeURIComponent(report.fileName)}"
+					href={reportUrl(report.id)}
 				>
 					<div class="item-left">
 						<span
@@ -249,14 +228,16 @@
 							{report.status === 'PASS' ? '✓' : '✗'}
 						</span>
 						<div class="item-meta">
-							<span class="item-tags">{report.tags}</span>
+							<span class="item-tags"
+								>{isScheduled(report.triggerType) ? report.triggerType : report.tags}</span
+							>
 							<div class="item-badges">
 								<Badge variant={triggerVariant(report.triggerType)}>
 									{triggerLabel(report.triggerType)}
 								</Badge>
-								<Badge variant="neutral">
-									{report.runners} runner{report.runners !== 1 ? 's' : ''}
-								</Badge>
+								{#if report.browser && report.browser !== 'chromium'}
+									<Badge variant="neutral">{report.browser}</Badge>
+								{/if}
 							</div>
 						</div>
 					</div>
@@ -281,7 +262,7 @@
 				<button
 					class="row-delete-btn"
 					title="Delete report"
-					on:click={(e) => openSingleDelete(report.fileName, e)}
+					on:click={(e) => openSingleDelete(report.id, e)}
 				>
 					<svg
 						width="14"
@@ -337,33 +318,6 @@
 	.subtitle {
 		color: var(--text-muted);
 		font-size: 0.875rem;
-	}
-
-	.header-actions {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-	}
-
-	.btn-delete-selected {
-		height: 32px;
-		padding: 0 0.875rem;
-		font-size: 0.8125rem;
-		font-family: inherit;
-		font-weight: 500;
-		color: var(--fail);
-		background: var(--fail-soft, rgba(239, 68, 68, 0.08));
-		border: 1px solid var(--fail);
-		border-radius: var(--radius-sm);
-		cursor: pointer;
-		transition:
-			background var(--duration-fast),
-			opacity var(--duration-fast);
-	}
-
-	.btn-delete-selected:hover {
-		background: var(--fail);
-		color: #fff;
 	}
 
 	/* ── Pass rate ── */
@@ -422,6 +376,7 @@
 		display: flex;
 		gap: 1rem;
 	}
+
 	.legend-pass {
 		font-size: 0.75rem;
 		color: var(--pass);
@@ -479,10 +434,11 @@
 		opacity: 0.6;
 	}
 
-	/* ── Select all row ── */
+	/* ── Select-all row ── */
 	.list-header {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		padding: 0 0.5rem 0.375rem;
 	}
 
@@ -491,6 +447,27 @@
 		align-items: center;
 		cursor: pointer;
 		padding: 0.25rem;
+	}
+
+	.btn-delete-selected {
+		height: 30px;
+		padding: 0 0.75rem;
+		font-size: 0.78rem;
+		font-family: inherit;
+		font-weight: 500;
+		color: var(--fail);
+		background: var(--fail-soft, rgba(239, 68, 68, 0.08));
+		border: 1px solid var(--fail);
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+		transition:
+			background var(--duration-fast),
+			opacity var(--duration-fast);
+	}
+
+	.btn-delete-selected:hover {
+		background: var(--fail);
+		color: #fff;
 	}
 
 	/* ── Report rows ── */
@@ -654,68 +631,8 @@
 		background: var(--fail-soft, rgba(239, 68, 68, 0.08));
 	}
 
-	/* ── Modal ── */
-	.modal-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.5rem;
-	}
-
-	.modal-body {
-		font-size: 0.9rem;
-		color: var(--text-muted);
-		line-height: 1.6;
-		margin: 0;
-	}
-
-	.btn-cancel {
-		height: 34px;
-		padding: 0 1rem;
-		font-size: 0.8125rem;
-		font-family: inherit;
-		background: var(--bg-elevated);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		cursor: pointer;
-		color: var(--text);
-		transition: background var(--duration-fast);
-	}
-
-	.btn-cancel:hover {
-		background: var(--bg-subtle);
-	}
-
-	.btn-danger {
-		height: 34px;
-		padding: 0 1rem;
-		font-size: 0.8125rem;
-		font-family: inherit;
-		font-weight: 500;
-		background: var(--fail);
-		border: 1px solid var(--fail);
-		border-radius: var(--radius-sm);
-		cursor: pointer;
-		color: #fff;
-		transition: opacity var(--duration-fast);
-	}
-
-	.btn-danger:hover:not(:disabled) {
-		opacity: 0.85;
-	}
-	.btn-danger:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
 	/* ── Misc ── */
 	.pagination-wrap {
 		margin-top: 1.25rem;
-	}
-
-	.empty {
-		color: var(--text-muted);
-		font-size: 0.9375rem;
-		padding: 3rem 0;
-		text-align: center;
 	}
 </style>

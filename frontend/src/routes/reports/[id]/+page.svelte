@@ -19,11 +19,12 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { slide } from 'svelte/transition';
-	import { fetchReportDetail, parseReport } from '$lib/api/reports';
+	import { fetchReportDetail, screenshotUrl } from '$lib/api/reports';
+	import { isScheduled, triggerLabel, fmtDuration, stagger } from '$lib/utils/format';
 	import Badge from '$lib/components/ui/Badge.svelte';
+	import BrowserIcon from '$lib/components/icons/BrowserIcon.svelte';
 
-	const fileName = decodeURIComponent($page.params.slug);
-	const meta = parseReport(fileName);
+	const reportId = parseInt($page.params.id, 10);
 
 	let detail = null;
 	let error = null;
@@ -31,24 +32,16 @@
 
 	onMount(async () => {
 		try {
-			detail = await fetchReportDetail(fileName);
-		} catch (e) {
+			detail = await fetchReportDetail(reportId);
+		} catch {
 			error = 'Could not load report.';
 		}
 	});
 
 	function toggleScenario(id) {
-		if (expandedScenarios.has(id)) {
-			expandedScenarios.delete(id);
-		} else {
-			expandedScenarios.add(id);
-		}
+		if (expandedScenarios.has(id)) expandedScenarios.delete(id);
+		else expandedScenarios.add(id);
 		expandedScenarios = expandedScenarios;
-	}
-
-	function fmtDuration(ms) {
-		if (ms >= 1000) return (ms / 1000).toFixed(2) + 's';
-		return ms + 'ms';
 	}
 
 	function keywordClass(kw) {
@@ -66,7 +59,7 @@
 	function visibleTags(scenario) {
 		const testTag = scenarioTestTag(scenario);
 		if (testTag) return [testTag];
-		return scenario.tags.filter((tag) => tag !== meta?.tags && !tag.includes('suite'));
+		return scenario.tags.filter((tag) => !tag.includes('suite'));
 	}
 
 	function worstStatus(scenarios) {
@@ -80,11 +73,9 @@
 
 	function groupedScenarios(scenarios) {
 		const groups = new Map();
-
 		for (const scenario of scenarios) {
 			const testTag = scenarioTestTag(scenario);
 			const key = testTag || `${scenario.keyword}:${scenario.name}`;
-
 			if (!groups.has(key)) {
 				groups.set(key, {
 					key,
@@ -95,16 +86,15 @@
 					status: scenario.status
 				});
 			}
-
 			const group = groups.get(key);
 			group.scenarios.push(scenario);
 			group.duration += scenario.duration;
 			group.status = worstStatus(group.scenarios);
 		}
-
 		return Array.from(groups.values());
 	}
 
+	$: overallPass = detail?.status === 'PASS';
 	$: passed =
 		detail?.features.flatMap((f) => f.scenarios).filter((s) => s.status === 'passed').length ?? 0;
 	$: failed =
@@ -115,7 +105,6 @@
 			.filter((s) => s.status === 'skipped' || s.status === 'pending').length ?? 0;
 	$: totalDuration =
 		detail?.features.flatMap((f) => f.scenarios).reduce((s, sc) => s + sc.duration, 0) ?? 0;
-	$: overallPass = meta?.status === 'PASS';
 	$: groupedFeatures =
 		detail?.features.map((feature) => ({
 			...feature,
@@ -147,77 +136,237 @@
 	<div class="error-state">{error}</div>
 {:else if !detail}
 	<div class="loading-state">
-		<div class="loading-dots">
-			<span></span><span></span><span></span>
-		</div>
+		<div class="loading-dots"><span></span><span></span><span></span></div>
 	</div>
 {:else}
-	<!-- Header -->
 	<div class="report-header" class:pass={overallPass} class:fail={!overallPass}>
 		<div class="header-main">
 			<div class="header-status">
-				<span class="status-icon">{overallPass ? '✓' : '✗'}</span>
+				<div class="status-icon-wrap" class:pass-bg={overallPass} class:fail-bg={!overallPass}>
+					{#if overallPass}
+						<svg
+							width="26"
+							height="26"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<polyline points="20 6 9 17 4 12" />
+						</svg>
+					{:else}
+						<svg
+							width="26"
+							height="26"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+						</svg>
+					{/if}
+				</div>
+
 				<div>
-					<h1>{overallPass ? 'Passed' : 'Failed'}</h1>
-					{#if meta}
-						<p class="header-meta">
-							<span class="mono">{meta.tags}</span>
-							·
-							{#if meta.triggerType === 'manual-trigger'}Manual{:else if meta.triggerType === 'undefined'}CLI{:else}Scheduled{/if}
-							·
-							{meta.date}
+					{#if isScheduled(detail.triggerType)}
+						<p class="report-task-name">
+							<svg
+								width="11"
+								height="11"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<rect x="3" y="4" width="18" height="18" rx="2" />
+								<line x1="16" y1="2" x2="16" y2="6" />
+								<line x1="8" y1="2" x2="8" y2="6" />
+								<line x1="3" y1="10" x2="21" y2="10" />
+							</svg>
+							{detail.triggerType}
 						</p>
 					{/if}
+					<h1>{overallPass ? 'Passed' : 'Failed'}</h1>
+					<div class="header-meta">
+						<span class="mono">{detail.tags}</span>
+						<span class="meta-sep">·</span>
+						<span>{triggerLabel(detail.triggerType)}</span>
+						<span class="meta-sep">·</span>
+						<span>{new Date(detail.createdAt).toLocaleString()}</span>
+						<span class="meta-sep">·</span>
+						<span class="browser-pill">
+							<BrowserIcon browser={detail.browser ?? 'chromium'} />
+							{detail.browser ?? 'chromium'}
+						</span>
+						{#if detail.runnerName}
+							<span class="meta-sep">·</span>
+							<span class="runner-pill">
+								<svg
+									width="10"
+									height="10"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+								>
+									<rect x="2" y="3" width="20" height="14" rx="2" />
+									<path d="M8 21h8M12 17v4" />
+								</svg>
+								{detail.runnerName}
+							</span>
+						{/if}
+					</div>
 				</div>
 			</div>
 
 			<div class="header-stats">
 				<div class="stat">
 					<span class="stat-num pass-color">{passed}</span>
-					<span class="stat-label">passed</span>
+					<span class="stat-label">
+						<svg
+							width="10"
+							height="10"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<polyline points="20 6 9 17 4 12" />
+						</svg>
+						passed
+					</span>
 				</div>
 				{#if failed > 0}
 					<div class="stat">
 						<span class="stat-num fail-color">{failed}</span>
-						<span class="stat-label">failed</span>
+						<span class="stat-label">
+							<svg
+								width="10"
+								height="10"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+							</svg>
+							failed
+						</span>
 					</div>
 				{/if}
 				{#if skipped > 0}
 					<div class="stat">
 						<span class="stat-num muted-color">{skipped}</span>
-						<span class="stat-label">skipped</span>
+						<span class="stat-label">
+							<svg
+								width="10"
+								height="10"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+							>
+								<line x1="5" y1="12" x2="19" y2="12" />
+							</svg>
+							skipped
+						</span>
 					</div>
 				{/if}
 				<div class="stat">
 					<span class="stat-num">{fmtDuration(totalDuration)}</span>
-					<span class="stat-label">total</span>
+					<span class="stat-label">
+						<svg
+							width="10"
+							height="10"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+						</svg>
+						duration
+					</span>
 				</div>
-				{#if meta}
-					<div class="stat">
-						<span class="stat-num">{meta.runners}</span>
-						<span class="stat-label">runner{meta.runners !== 1 ? 's' : ''}</span>
-					</div>
-				{/if}
+				<div class="stat">
+					<span class="stat-num">{detail.runners}</span>
+					<span class="stat-label">
+						<svg
+							width="10"
+							height="10"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+						>
+							<rect x="2" y="3" width="20" height="14" rx="2" />
+							<path d="M8 21h8M12 17v4" />
+						</svg>
+						runner{detail.runners !== 1 ? 's' : ''}
+					</span>
+				</div>
 			</div>
 		</div>
 	</div>
 
-	<!-- Features -->
 	{#each groupedFeatures as feature, fi}
-		<div class="feature" style="animation-delay: {fi * 60}ms">
+		<div
+			class="feature"
+			class:feature-pass={feature.status === 'passed'}
+			class:feature-fail={feature.status !== 'passed'}
+			style={stagger(fi, 60)}
+		>
 			<div class="feature-header">
-				<Badge variant={feature.status === 'passed' ? 'pass' : 'fail'}>
-					{feature.status}
-				</Badge>
-				<h2 class="feature-name">{feature.name}</h2>
-				<span class="feature-file">{feature.uri}</span>
+				<h2 class="feature-name">
+					<svg
+						width="13"
+						height="13"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						class="feature-icon"
+					>
+						<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+						<polyline points="14 2 14 8 20 8" />
+					</svg>
+					{feature.name}
+				</h2>
+				<div class="feature-right">
+					<span class="feature-file">{feature.uri}</span>
+					<Badge variant={feature.status === 'passed' ? 'pass' : 'fail'}>
+						{feature.status}
+					</Badge>
+				</div>
 			</div>
 
 			<div class="scenarios">
 				{#each feature.scenarioGroups as group, si}
 					{@const scenId = `${fi}-${group.key}`}
 					{@const open = expandedScenarios.has(scenId)}
-					<div class="scenario" style="animation-delay: {(fi * 5 + si) * 40}ms">
+					<div
+						class="scenario"
+						class:scenario-fail={group.status === 'failed'}
+						style={stagger(fi * 5 + si, 40)}
+					>
 						<button class="scenario-header" on:click={() => toggleScenario(scenId)}>
 							<span
 								class="scenario-status-dot"
@@ -296,7 +445,7 @@
 													<summary class="screenshot-toggle">Screenshot</summary>
 													<img
 														class="screenshot"
-														src="data:image/png;base64,{step.screenshot}"
+														src={screenshotUrl(step.screenshot)}
 														alt="Failure screenshot"
 													/>
 												</details>
@@ -332,11 +481,10 @@
 		color: var(--text);
 	}
 
-	/* ── Header ── */
 	.report-header {
 		border-radius: var(--radius-lg);
 		border: 1px solid var(--border);
-		border-left-width: 4px;
+		border-top-width: 3px;
 		padding: 1.5rem;
 		margin-bottom: 2rem;
 		background: var(--bg-elevated);
@@ -344,10 +492,10 @@
 	}
 
 	.report-header.pass {
-		border-left-color: var(--pass);
+		border-top-color: var(--pass);
 	}
 	.report-header.fail {
-		border-left-color: var(--fail);
+		border-top-color: var(--fail);
 	}
 
 	.header-main {
@@ -364,17 +512,35 @@
 		gap: 1rem;
 	}
 
-	.status-icon {
-		font-size: 2rem;
-		line-height: 1;
-		font-weight: 600;
+	.status-icon-wrap {
+		width: 52px;
+		height: 52px;
+		border-radius: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
 	}
 
-	.report-header.pass .status-icon {
+	.status-icon-wrap.pass-bg {
+		background: var(--pass-soft);
 		color: var(--pass);
 	}
-	.report-header.fail .status-icon {
+	.status-icon-wrap.fail-bg {
+		background: var(--fail-soft);
 		color: var(--fail);
+	}
+
+	.report-task-name {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--warn);
+		margin-bottom: 0.35rem;
 	}
 
 	h1 {
@@ -387,12 +553,40 @@
 		color: var(--text-muted);
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+	}
+
+	.meta-sep {
+		opacity: 0.4;
 	}
 
 	.mono {
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.78rem;
+	}
+
+	.browser-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.68rem;
+		font-weight: 500;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: 100px;
+		padding: 0.1rem 0.45rem;
+	}
+
+	.runner-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.68rem;
+		font-weight: 500;
+		color: var(--text-muted);
 	}
 
 	.header-stats {
@@ -406,7 +600,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 0.1rem;
+		gap: 0.15rem;
 	}
 
 	.stat-num {
@@ -418,6 +612,9 @@
 	}
 
 	.stat-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 		font-size: 0.68rem;
 		color: var(--text-muted);
 		letter-spacing: 0.06em;
@@ -434,37 +631,67 @@
 		color: var(--text-muted);
 	}
 
-	/* ── Features ── */
 	.feature {
-		margin-bottom: 1.5rem;
+		margin-bottom: 1.25rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-top-width: 3px;
+		border-radius: var(--radius-lg);
+		overflow: hidden;
 		animation: fadeUp 0.35s var(--ease-out) both;
+	}
+
+	.feature-pass {
+		border-top-color: var(--pass);
+	}
+	.feature-fail {
+		border-top-color: var(--fail);
 	}
 
 	.feature-header {
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		margin-bottom: 0.75rem;
+		padding: 0.875rem 1.25rem;
+		border-bottom: 1px solid var(--border);
+		background: var(--bg-subtle);
+	}
+
+	.feature-icon {
+		flex-shrink: 0;
+		color: var(--text-muted);
+		opacity: 0.7;
 	}
 
 	.feature-name {
-		font-size: 1.1rem;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.9375rem;
 		font-family: var(--font-display);
 		font-weight: 400;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.feature-right {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-shrink: 0;
 	}
 
 	.feature-file {
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.72rem;
 		color: var(--text-muted);
-		margin-left: auto;
 	}
 
-	/* ── Scenarios ── */
 	.scenarios {
 		display: flex;
 		flex-direction: column;
-		gap: 0.375rem;
+		padding: 0.5rem;
+		gap: 0.25rem;
 	}
 
 	.scenario {
@@ -473,6 +700,11 @@
 		background: var(--bg-elevated);
 		overflow: hidden;
 		animation: fadeUp 0.3s var(--ease-out) both;
+	}
+
+	.scenario.scenario-fail {
+		border-left-width: 3px;
+		border-left-color: var(--fail);
 	}
 
 	.scenario-header {
@@ -567,7 +799,6 @@
 		transform: rotate(90deg);
 	}
 
-	/* ── Steps ── */
 	.steps {
 		border-top: 1px solid var(--border);
 		background: var(--bg-subtle);
@@ -598,11 +829,9 @@
 	.step {
 		padding: 0.375rem 1rem 0.375rem 1.25rem;
 	}
-
 	.step-fail {
 		background: color-mix(in srgb, var(--fail-soft) 40%, transparent);
 	}
-
 	.step-skip {
 		opacity: 0.5;
 	}
@@ -702,7 +931,6 @@
 		border: 1px solid var(--border);
 	}
 
-	/* ── Loading / error ── */
 	.loading-state {
 		display: flex;
 		justify-content: center;

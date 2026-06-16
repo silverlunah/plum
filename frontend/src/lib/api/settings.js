@@ -15,16 +15,16 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-const BASE = 'http://localhost:3001';
+import { API_BASE } from '$lib/constants';
 
 export async function fetchProject() {
-	const res = await fetch(`${BASE}/settings/project`);
+	const res = await fetch(`${API_BASE}/settings/project`);
 	if (!res.ok) return { name: '', logoUrl: '' };
 	return res.json();
 }
 
 export async function saveProject({ name, logoUrl }) {
-	const res = await fetch(`${BASE}/settings/project`, {
+	const res = await fetch(`${API_BASE}/settings/project`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ name, logoUrl })
@@ -33,13 +33,13 @@ export async function saveProject({ name, logoUrl }) {
 }
 
 export async function exportBackup() {
-	const res = await fetch(`${BASE}/backup/export`);
+	const res = await fetch(`${API_BASE}/backup/export`);
 	if (!res.ok) throw new Error('Export failed');
 	return res.json();
 }
 
 export async function importBackup(data) {
-	const res = await fetch(`${BASE}/backup/import`, {
+	const res = await fetch(`${API_BASE}/backup/import`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(data)

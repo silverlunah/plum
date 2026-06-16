@@ -20,6 +20,9 @@
 	import { slide } from 'svelte/transition';
 	import { fetchSuites } from '$lib/api/tests';
 	import { runnerConfig, triggerRun, testsVersion } from '$lib/stores/runner';
+	import { COPY_TIMEOUT_MS } from '$lib/constants';
+	import { stagger } from '$lib/utils/format';
+	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 
 	let suites = [];
 	let search = '';
@@ -36,8 +39,6 @@
 	}
 
 	onMount(loadSuites);
-
-	// Re-fetch when the backend notifies us that test files changed
 	$: if ($testsVersion) loadSuites();
 
 	function suiteIds(suite) {
@@ -53,11 +54,8 @@
 	}
 
 	function toggleSteps(id) {
-		if (expandedSteps.has(id)) {
-			expandedSteps.delete(id);
-		} else {
-			expandedSteps.add(id);
-		}
+		if (expandedSteps.has(id)) expandedSteps.delete(id);
+		else expandedSteps.add(id);
 		expandedSteps = expandedSteps;
 	}
 
@@ -67,15 +65,13 @@
 	}
 
 	function runSuite(suite) {
-		const id = suiteIds(suite)[0];
-		run(id);
+		run(suiteIds(suite)[0]);
 	}
 
 	async function copyId(id) {
 		await navigator.clipboard.writeText(id);
 		copiedIds.add(id);
 		copiedIds = copiedIds;
-
 		if (copyTimers.has(id)) clearTimeout(copyTimers.get(id));
 		copyTimers.set(
 			id,
@@ -83,7 +79,7 @@
 				copiedIds.delete(id);
 				copiedIds = copiedIds;
 				copyTimers.delete(id);
-			}, 1400)
+			}, COPY_TIMEOUT_MS)
 		);
 	}
 
@@ -166,13 +162,11 @@
 </div>
 
 {#if filtered.length === 0}
-	<p class="empty">
-		{q ? `No tests matching "${search}"` : 'No test suites found.'}
-	</p>
+	<EmptyState message={q ? `No tests matching "${search}"` : 'No test suites found.'} />
 {:else}
 	<div class="suites">
 		{#each filtered as suite, si}
-			<div class="suite" style="animation-delay: {si * 55}ms">
+			<div class="suite" style={stagger(si, 55)}>
 				<div class="suite-header">
 					<div class="suite-meta">
 						<div class="suite-badges">
@@ -205,7 +199,7 @@
 					{#each suite.tests as test, ti}
 						{@const pid = primaryId(test)}
 						{@const stepsOpen = expandedSteps.has(pid)}
-						<div class="test-row" style="animation-delay: {(si * 4 + ti) * 30}ms">
+						<div class="test-row" style={stagger(si * 4 + ti, 30)}>
 							<div class="test-main">
 								<button
 									class="run-icon-btn"
@@ -276,19 +270,15 @@
 											<div class="examples-table-wrap">
 												<table class="examples-table">
 													<thead>
-														<tr>
-															{#each test.examples.headers as h}
-																<th>{h}</th>
-															{/each}
-														</tr>
+														<tr
+															>{#each test.examples.headers as h}<th>{h}</th>{/each}</tr
+														>
 													</thead>
 													<tbody>
 														{#each test.examples.rows as row}
-															<tr>
-																{#each row as cell}
-																	<td>{cell}</td>
-																{/each}
-															</tr>
+															<tr
+																>{#each row as cell}<td>{cell}</td>{/each}</tr
+															>
 														{/each}
 													</tbody>
 												</table>
@@ -557,7 +547,6 @@
 	.id-pill:hover {
 		filter: brightness(0.92);
 	}
-
 	.id-pill.copied {
 		color: var(--pass);
 		background: var(--pass-soft);
@@ -632,7 +621,6 @@
 	.steps-toggle svg {
 		transition: transform var(--duration-fast) var(--ease-out);
 	}
-
 	.steps-toggle svg.rotated {
 		transform: rotate(90deg);
 	}
@@ -716,13 +704,6 @@
 
 	.examples-table tbody tr:last-child td {
 		border-bottom: none;
-	}
-
-	.empty {
-		color: var(--text-muted);
-		font-size: 0.9375rem;
-		padding: 3rem 0;
-		text-align: center;
 	}
 
 	@keyframes copiedPop {

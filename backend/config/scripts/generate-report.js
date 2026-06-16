@@ -17,83 +17,44 @@
 
 const fs = require('fs');
 const path = require('path');
-const reportsDir = 'reports';
-const screenshotsDir = path.join(reportsDir, 'screenshots');
+const { normaliseTrigger } = require('../../constants/triggers');
+const { REPORTS_DIR } = require('../../lib/reportFilename');
 
-if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
-if (!fs.existsSync(screenshotsDir)) fs.mkdirSync(screenshotsDir, { recursive: true });
+const jsonReportFile = path.join(REPORTS_DIR, 'cucumber_report.json');
 
-// Determine PASS/FAIL from cucumber JSON output
-const jsonReportFile = path.join(reportsDir, 'cucumber_report.json');
-let status = 'PASS';
+if (!fs.existsSync(jsonReportFile)) {
+	console.log('No cucumber_report.json found — skipping report save.');
+	process.exit(0);
+}
 
-if (fs.existsSync(jsonReportFile)) {
+// Remote runner nodes (PLUM_MODE=node) have no DB access.
+// The primary server reads cucumber_report.json via readCucumberReportFile()
+// and saves the combined report after all lanes finish.
+if (process.env.PLUM_MODE === 'node') process.exit(0);
+
+(async () => {
 	try {
-		const parsedData = JSON.parse(fs.readFileSync(jsonReportFile, 'utf8'));
-		const hasFailures = parsedData.some((feature) =>
-			feature.elements?.some((scenario) =>
-				scenario.steps?.some((step) => step.result?.status === 'failed')
-			)
+		const raw = JSON.parse(fs.readFileSync(jsonReportFile, 'utf8'));
+		const reportService = require('../../services/reportService');
+		const triggerType = normaliseTrigger(process.env.TRIGGER);
+		const rawTag = process.env.TAG || '@all-tests';
+		const nodeCount = Math.max(
+			1,
+			parseInt(process.env.REPORT_RUNNERS || process.env.PARALLEL || '1', 10) || 1
 		);
-		if (hasFailures) status = 'FAIL';
+
+		const saved = await reportService.saveReport({
+			rawCucumberJson: raw,
+			tags: rawTag,
+			triggerType,
+			nodeCount,
+			browser: process.env.BROWSER || 'chromium',
+			runnerName: process.env.RUNNER_NAME || null,
+			runnerId: process.env.RUNNER_ID || null
+		});
+
+		console.log(`Report saved to database (id: ${saved.id})`);
 	} catch (e) {
-		console.error('Could not parse cucumber_report.json:', e.message);
+		console.error('Could not save report to database:', e.message);
 	}
-} else {
-	console.log('No cucumber_report.json found.');
-}
-
-// Build filename with same convention as before, now .json
-let tag = process.env.TAG || '(@all-tests)';
-if (tag && !tag.startsWith('(')) tag = `(${tag})`;
-
-const timestamp = new Date().toISOString().replace(/[-:.]/g, '_');
-const runners = Number.parseInt(process.env.REPORT_RUNNERS || process.env.PARALLEL || '1', 10);
-const runnerCount = Number.isFinite(runners) && runners > 0 ? runners : 1;
-const reportFileName = `${status}_cucumber_report_${process.env.TRIGGER}_${tag}_runners_${runnerCount}_${timestamp}.json`;
-
-// Save a timestamped snapshot of the cucumber JSON
-if (fs.existsSync(jsonReportFile)) {
-	fs.copyFileSync(jsonReportFile, path.join(reportsDir, reportFileName));
-	console.log(`Report saved: ${reportFileName}`);
-
-	// Persist metadata to database
-	(async () => {
-		try {
-			const { PrismaClient } = require('@prisma/client');
-			const prisma = new PrismaClient();
-
-			const triggerType = process.env.TRIGGER || 'command-line-trigger';
-			const builtInTriggers = ['manual-trigger', 'command-line-trigger', 'undefined'];
-			let cronJobId = null;
-
-			if (!builtInTriggers.includes(triggerType)) {
-				const job = await prisma.cronJob.findUnique({ where: { taskName: triggerType } });
-				if (job) cronJobId = job.id;
-			}
-
-			const rawTag = process.env.TAG || '@all-tests';
-			const tags = rawTag.replace(/^\(|\)$/g, '');
-
-			await prisma.report.upsert({
-				where: { fileName: reportFileName },
-				create: {
-					fileName: reportFileName,
-					status,
-					tags,
-					triggerType,
-					runners: runnerCount,
-					cronJobId
-				},
-				update: {}
-			});
-
-			await prisma.$disconnect();
-			console.log('Report metadata saved to database.');
-		} catch (e) {
-			console.error('Could not save report metadata to DB:', e.message);
-		}
-	})();
-} else {
-	console.log('Skipping report save — no cucumber_report.json.');
-}
+})();

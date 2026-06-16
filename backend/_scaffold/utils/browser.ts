@@ -1,4 +1,4 @@
-import { chromium, Browser, BrowserContext, Page } from 'playwright';
+import { chromium, firefox, webkit, Browser, BrowserContext, Page } from 'playwright';
 
 let _browser: Browser;
 let _context: BrowserContext;
@@ -8,7 +8,10 @@ export const page = (): Page => _page;
 
 export async function setup(): Promise<void> {
 	const isHeadless = process.env.IS_HEADLESS?.toLowerCase() !== 'false';
-	_browser = await chromium.launch({ headless: isHeadless });
+	const browserName = (process.env.BROWSER || 'chromium').toLowerCase();
+	const browserType =
+		browserName === 'firefox' ? firefox : browserName === 'webkit' ? webkit : chromium;
+	_browser = await browserType.launch({ headless: isHeadless });
 	_context = await _browser.newContext();
 	_page = await _context.newPage();
 }

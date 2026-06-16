@@ -16,58 +16,143 @@
  -->
 
 <script>
-	import { onMount } from 'svelte';
-	import { slide, fly } from 'svelte/transition';
+	import { onMount, onDestroy } from 'svelte';
+	import { fly, slide } from 'svelte/transition';
+	import { goto } from '$app/navigation';
 	import { io } from 'socket.io-client';
 	import {
 		socket,
 		runnerState,
 		runnerConfig,
 		panelExpanded,
+		builtInEnabled,
 		triggerRun,
 		testsVersion,
 		reportsVersion,
 		activeCronJobs
 	} from '$lib/stores/runner';
-	import { fetchLatestReport, reportUrl } from '$lib/api/reports';
-	import Terminal from '$lib/components/ui/Terminal.svelte';
-	import Button from '$lib/components/ui/Button.svelte';
+	import { fetchLatestReportId, reportUrl } from '$lib/api/reports';
+	import { fetchRunners } from '$lib/api/runners';
+	import { API_BASE, BROWSERS } from '$lib/constants';
+	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 
-	const WORKER_OPTIONS = [1, 2, 4, 8];
+	let availableRunners = [];
+	let browserOpen = false;
+	let runnersOpen = false;
+	let runAllModalOpen = false;
+
+	function clickOutside(node) {
+		function handle(e) {
+			if (!node.contains(e.target)) node.dispatchEvent(new CustomEvent('clickoutside'));
+		}
+		document.addEventListener('click', handle, true);
+		return {
+			destroy() {
+				document.removeEventListener('click', handle, true);
+			}
+		};
+	}
+
+	let _unsubConfig, _unsubExpanded, _unsubBuiltIn, _socket;
 
 	onMount(() => {
-		const s = io('http://localhost:3001');
+		try {
+			const saved = localStorage.getItem('plum:runnerConfig');
+			if (saved) runnerConfig.update((c) => ({ ...c, ...JSON.parse(saved) }));
+		} catch {}
+		try {
+			const exp = localStorage.getItem('plum:panelExpanded');
+			if (exp !== null) panelExpanded.set(exp === 'true');
+		} catch {}
+		try {
+			const bi = localStorage.getItem('plum:builtInEnabled');
+			if (bi !== null) builtInEnabled.set(bi !== 'false');
+		} catch {}
+
+		fetchRunners()
+			.then((r) => {
+				availableRunners = r;
+			})
+			.catch(() => {});
+
+		_unsubConfig = runnerConfig.subscribe((v) => {
+			try {
+				localStorage.setItem('plum:runnerConfig', JSON.stringify(v));
+			} catch {}
+		});
+		_unsubExpanded = panelExpanded.subscribe((v) => {
+			try {
+				localStorage.setItem('plum:panelExpanded', String(v));
+			} catch {}
+		});
+		_unsubBuiltIn = builtInEnabled.subscribe((v) => {
+			try {
+				localStorage.setItem('plum:builtInEnabled', String(v));
+			} catch {}
+			runnerConfig.update((c) => {
+				if (!v && c.selectedRunners.includes('built-in')) {
+					const others = c.selectedRunners.filter((r) => r !== 'built-in');
+					return { ...c, selectedRunners: others.length > 0 ? others : c.selectedRunners };
+				}
+				return c;
+			});
+		});
+
+		const s = io(API_BASE);
+		_socket = s;
 		socket.set(s);
 
 		s.on('log', (data) => {
 			runnerState.update((r) => ({ ...r, output: r.output + data + '\n' }));
 		});
 
-		s.on('done', async (code) => {
-			const report = await fetchLatestReport().catch(() => null);
-			const passed = code === 0;
+		s.on('done', (code) => {
+			const passed = code === 0 || code === null;
+			const cancelled = code === 130;
+			fetchLatestReportId()
+				.catch(() => null)
+				.then((id) => {
+					runnerState.update((r) => ({
+						...r,
+						output:
+							r.output +
+							(cancelled ? '' : passed ? '\n✓ All tests passed\n' : '\n✗ Some tests failed\n'),
+						running: false,
+						testCompleted: !cancelled,
+						latestReportId: cancelled ? null : id,
+						status: cancelled ? 'idle' : passed ? 'pass' : 'fail',
+						currentRun: cancelled ? null : r.currentRun
+					}));
+				});
+		});
+
+		s.on('runner-lanes-init', (lanes) => {
 			runnerState.update((r) => ({
 				...r,
-				output: r.output + (passed ? '✓ All tests passed\n' : '✗ Some tests failed\n'),
-				running: false,
-				testCompleted: true,
-				latestReport: report,
-				status: passed ? 'pass' : 'fail'
+				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '' }))
 			}));
 		});
 
-		s.on('tests-changed', () => {
-			testsVersion.update((v) => v + 1);
+		s.on('runner-lane-log', ({ id, log }) => {
+			runnerState.update((r) => ({
+				...r,
+				lanes: r.lanes.map((l) => (l.id === id ? { ...l, logs: l.logs + log } : l))
+			}));
 		});
 
-		s.on('report-ready', () => {
-			reportsVersion.update((v) => v + 1);
+		s.on('runner-lane-status', ({ id, status }) => {
+			runnerState.update((r) => ({
+				...r,
+				lanes: r.lanes.map((l) => (l.id === id ? { ...l, status } : l))
+			}));
 		});
+
+		s.on('tests-changed', () => testsVersion.update((v) => v + 1));
+		s.on('report-ready', () => reportsVersion.update((v) => v + 1));
 
 		s.on('cron-start', ({ taskName }) => {
 			activeCronJobs.update((j) => ({ ...j, [taskName]: true }));
 		});
-
 		s.on('cron-done', ({ taskName }) => {
 			activeCronJobs.update((j) => {
 				const next = { ...j };
@@ -76,13 +161,17 @@
 			});
 			reportsVersion.update((v) => v + 1);
 		});
+	});
 
-		return () => s.disconnect();
+	onDestroy(() => {
+		_unsubConfig?.();
+		_unsubExpanded?.();
+		_unsubBuiltIn?.();
+		_socket?.disconnect();
 	});
 
 	$: state = $runnerState;
 	$: cfg = $runnerConfig;
-	$: dots = Array.from({ length: cfg.workers });
 	$: cronJobs = Object.keys($activeCronJobs);
 	$: anyCronRunning = cronJobs.length > 0;
 	$: anyRunning = state.running || anyCronRunning;
@@ -99,43 +188,295 @@
 						: 'var(--border)';
 
 	$: statusLabel = state.running
-		? 'running'
+		? 'Running'
 		: state.status === 'pass'
-			? 'passed'
+			? 'Passed'
 			: state.status === 'fail'
-				? 'failed'
+				? 'Failed'
 				: anyCronRunning
-					? 'scheduled'
-					: 'ready';
+					? 'Scheduled'
+					: 'Ready';
+
+	$: currentBrowser = BROWSERS.find((b) => b.id === cfg.browser) ?? BROWSERS[0];
+
+	$: runnerSummary =
+		cfg.selectedRunners.length === 1 && cfg.selectedRunners[0] === 'built-in'
+			? 'Built-in'
+			: cfg.selectedRunners.length === 1
+				? (availableRunners.find((r) => r.id === cfg.selectedRunners[0])?.name ?? '1 node')
+				: `${cfg.selectedRunners.length} nodes`;
+
+	function handleRunClick() {
+		if ($runnerConfig.testID.trim() === '') {
+			runAllModalOpen = true;
+		} else {
+			triggerRun();
+		}
+	}
 
 	function handleKeydown(e) {
-		if (e.key === 'Enter' && !state.running) triggerRun();
+		if (e.key === 'Enter' && !state.running) handleRunClick();
+	}
+
+	function adjustWorkers(delta) {
+		runnerConfig.update((c) => ({
+			...c,
+			workers: Math.max(1, Math.min(16, c.workers + delta))
+		}));
+	}
+
+	function toggleRunner(id) {
+		runnerConfig.update((c) => {
+			const current = c.selectedRunners;
+			if (current.includes(id) && current.length === 1) return c;
+			const next = current.includes(id) ? current.filter((r) => r !== id) : [...current, id];
+			return { ...c, selectedRunners: next };
+		});
+	}
+
+	function isRunnerSelected(id) {
+		return $runnerConfig.selectedRunners.includes(id);
 	}
 </script>
 
+<!-- Run all disclaimer -->
+<ConfirmModal
+	bind:open={runAllModalOpen}
+	title="Run all tests?"
+	confirmLabel="Run all tests"
+	on:confirm={() => {
+		runAllModalOpen = false;
+		triggerRun();
+	}}
+>
+	No tag or filter is set. This will run <strong>every test</strong> in the suite, which may take a while.
+</ConfirmModal>
+
 <div class="panel" class:expanded={$panelExpanded}>
-	<!-- Header bar — always visible -->
+	<div
+		class="scan-line"
+		class:scanning={state.running}
+		class:line-pass={state.status === 'pass' && !state.running}
+		class:line-fail={state.status === 'fail' && !state.running}
+	></div>
+
+	<!-- ── Control bar ── -->
 	<div class="bar">
+		<!-- Left: status + view report -->
 		<div class="bar-left">
-			<span class="status-dot" class:pulse={state.running} style="background: {statusColor}"></span>
-			<span class="status-label">{statusLabel}</span>
-			{#if state.lastRunId}
-				<span class="run-id">{state.lastRunId || '(all)'}</span>
+			<div class="bar-status">
+				<span class="status-dot" class:pulse={state.running} style="background:{statusColor}"
+				></span>
+				<span class="status-word" style="color:{statusColor}">{statusLabel}</span>
+				{#if state.lastRunId}
+					<span class="run-tag">{state.lastRunId || 'all tests'}</span>
+				{/if}
+			</div>
+			{#if state.testCompleted && state.latestReportId}
+				<a
+					href={reportUrl(state.latestReportId)}
+					class="view-report-btn"
+					transition:fly={{ x: -6, duration: 200 }}
+				>
+					View Report
+					<svg
+						width="11"
+						height="11"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+					</svg>
+				</a>
 			{/if}
 		</div>
 
-		<div class="bar-dots" title="{cfg.workers} worker{cfg.workers !== 1 ? 's' : ''}">
-			{#each dots as _, i}
-				<span
-					class="dot"
-					class:running={state.running}
-					class:pass={state.status === 'pass'}
-					class:fail={state.status === 'fail'}
-					style="animation-delay: {i * 180}ms"
-				></span>
-			{/each}
+		<span class="flex-gap"></span>
+
+		<!-- Middle: tag filter + browser + workers + runner dropdowns -->
+		<div class="bar-center">
+			<!-- Tag input -->
+			<div class="input-wrap">
+				<svg
+					class="input-icon"
+					width="12"
+					height="12"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+				</svg>
+				<input
+					type="text"
+					class="tag-input"
+					value={$runnerConfig.testID}
+					placeholder="@tag or leave blank for all tests"
+					on:input={(e) => runnerConfig.update((c) => ({ ...c, testID: e.currentTarget.value }))}
+					on:keydown={handleKeydown}
+					disabled={state.running}
+				/>
+			</div>
+
+			<div class="ctrl-divider"></div>
+
+			<!-- Workers stepper -->
+			<div class="ctrl-group">
+				<span class="ctrl-label">Workers</span>
+				<div class="stepper">
+					<button
+						class="step-btn"
+						on:click={() => adjustWorkers(-1)}
+						disabled={cfg.workers <= 1 || state.running}>−</button
+					>
+					<span class="step-val">{cfg.workers}</span>
+					<button
+						class="step-btn"
+						on:click={() => adjustWorkers(1)}
+						disabled={cfg.workers >= 16 || state.running}>+</button
+					>
+				</div>
+			</div>
+
+			<div class="ctrl-divider"></div>
+
+			<!-- Browser -->
+			<div class="ctrl-group">
+				<span class="ctrl-label">Browser</span>
+				<div class="dropdown-wrap" use:clickOutside on:clickoutside={() => (browserOpen = false)}>
+					<button
+						class="dropdown-trigger"
+						class:open={browserOpen}
+						on:click={() => {
+							if (!state.running) browserOpen = !browserOpen;
+						}}
+						disabled={state.running}
+					>
+						<span>{currentBrowser.label}</span>
+						<svg
+							width="10"
+							height="10"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							class="trigger-chevron"
+							class:open={browserOpen}
+						>
+							<polyline points="6 9 12 15 18 9" />
+						</svg>
+					</button>
+					{#if browserOpen}
+						<div class="dropdown-menu" transition:fly={{ y: 6, duration: 130 }}>
+							{#each BROWSERS as b}
+								<button
+									class="dropdown-item"
+									class:active={cfg.browser === b.id}
+									on:click={() => {
+										runnerConfig.update((c) => ({ ...c, browser: b.id }));
+										browserOpen = false;
+									}}
+								>
+									{b.label}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			</div>
+
+			<!-- Runners (only when external runners exist) -->
+			{#if availableRunners.length > 0}
+				<div class="ctrl-divider"></div>
+				<div class="ctrl-group">
+					<span class="ctrl-label">Runners</span>
+					<div class="dropdown-wrap" use:clickOutside on:clickoutside={() => (runnersOpen = false)}>
+						<button
+							class="dropdown-trigger"
+							class:open={runnersOpen}
+							class:has-remote={cfg.selectedRunners.some((r) => r !== 'built-in')}
+							on:click={() => {
+								if (!state.running) runnersOpen = !runnersOpen;
+							}}
+							disabled={state.running}
+						>
+							<span>{runnerSummary}</span>
+							<svg
+								width="10"
+								height="10"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								class="trigger-chevron"
+								class:open={runnersOpen}
+							>
+								<polyline points="6 9 12 15 18 9" />
+							</svg>
+						</button>
+						{#if runnersOpen}
+							<div class="dropdown-menu runners-menu" transition:fly={{ y: 6, duration: 130 }}>
+								{#if $builtInEnabled}
+									<label class="runner-option">
+										<input
+											type="checkbox"
+											checked={isRunnerSelected('built-in')}
+											on:change={() => toggleRunner('built-in')}
+										/>
+										<span class="runner-dot built-in"></span>
+										<span>Built-in</span>
+									</label>
+								{/if}
+								{#each availableRunners as r}
+									<label class="runner-option">
+										<input
+											type="checkbox"
+											checked={isRunnerSelected(r.id)}
+											on:change={() => toggleRunner(r.id)}
+										/>
+										<span class="runner-dot remote"></span>
+										<span>{r.name}</span>
+									</label>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
+
+			<div class="ctrl-divider"></div>
+
+			<!-- Run button -->
+			<button
+				class="run-btn"
+				class:is-running={state.running}
+				on:click={handleRunClick}
+				disabled={state.running}
+			>
+				{#if state.running}
+					<span class="run-spinner"></span>
+					Running
+				{:else}
+					<svg width="9" height="10" viewBox="0 0 10 12" fill="currentColor" stroke="none">
+						<polygon points="0,0 10,6 0,12" />
+					</svg>
+					Run
+				{/if}
+			</button>
 		</div>
 
+		<span class="flex-gap-sm"></span>
+
+		<!-- Right: expand toggle -->
 		<button
 			class="expand-btn"
 			on:click={() => panelExpanded.update((v) => !v)}
@@ -150,80 +491,89 @@
 				stroke-width="2"
 				stroke-linecap="round"
 				stroke-linejoin="round"
-				class:rotated={$panelExpanded}
+				class:flipped={$panelExpanded}
 			>
 				<polyline points="18 15 12 9 6 15" />
 			</svg>
 		</button>
 	</div>
 
-	<!-- Body — visible when expanded -->
+	<!-- ── Expanded: active runs only ── -->
 	{#if $panelExpanded}
-		<div class="body" transition:slide={{ duration: 220 }}>
-			<div class="controls">
-				<input
-					type="text"
-					class="field-input run-input"
-					bind:value={$runnerConfig.testID}
-					placeholder="@test-1 or @suite-login or blank for all"
-					on:keydown={handleKeydown}
-					disabled={state.running}
-				/>
-
-				<div class="workers-control">
-					{#each WORKER_OPTIONS as n}
-						<button
-							class="worker-btn"
-							class:active={cfg.workers === n}
-							on:click={() => runnerConfig.update((c) => ({ ...c, workers: n }))}
-						>
-							{n}
-						</button>
-					{/each}
-				</div>
-
-				<Button on:click={() => triggerRun()} disabled={state.running}>
-					{state.running ? 'Running…' : 'Run'}
-				</Button>
-			</div>
-
-			<div class="main-row">
-				<!-- Terminal column -->
-				<div class="terminal-col">
-					<Terminal output={state.output} />
-					{#if state.testCompleted && state.latestReport}
-						<div class="report-row" transition:fly={{ y: 6, duration: 200 }}>
-							<a href={reportUrl(state.latestReport)} target="_blank" rel="noopener noreferrer">
-								<Button variant="outline" size="sm">View Report →</Button>
-							</a>
-						</div>
-					{/if}
-				</div>
-
-				<!-- Sidebar: scheduled jobs -->
-				<div class="sidebar">
-					<div class="sidebar-section">
-						<span class="sidebar-label">Scheduled</span>
-						{#if cronJobs.length === 0}
-							<span class="sidebar-empty">none running</span>
-						{:else}
-							<ul class="cron-list">
-								{#each cronJobs as name}
-									<li class="cron-item" transition:fly={{ x: -6, duration: 180 }}>
-										<span class="cron-dot"></span>
-										<span class="cron-name">{name}</span>
-									</li>
-								{/each}
-							</ul>
+		<div class="body" transition:slide={{ duration: 200 }}>
+			{#if state.running}
+				<!-- Manual test running -->
+				<a href="/reports/live" class="run-card active-run">
+					<span class="run-card-dot pulse-accent"></span>
+					<div class="run-card-info">
+						<span class="run-card-label">Manual run</span>
+						{#if state.currentRun}
+							<span class="run-card-meta">
+								{state.currentRun.tag || 'all tests'}
+								<span class="meta-dot">·</span>
+								{state.currentRun.workers}w
+								<span class="meta-dot">·</span>
+								{state.currentRun.browser}
+								{#if state.currentRun.runners?.length > 1}
+									<span class="meta-dot">·</span>
+									{state.currentRun.runners.length} runners
+								{/if}
+							</span>
 						{/if}
 					</div>
+					<span class="run-card-badge">Live</span>
+					<svg
+						width="13"
+						height="13"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						class="run-card-arrow"
+					>
+						<line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+					</svg>
+				</a>
+			{/if}
+
+			{#each cronJobs as name}
+				<div class="run-card cron-run" transition:fly={{ x: -4, duration: 160 }}>
+					<span class="run-card-dot pulse-pass"></span>
+					<div class="run-card-info">
+						<span class="run-card-label">{name}</span>
+						<span class="run-card-meta">Scheduled run</span>
+					</div>
+					<span class="run-card-badge cron-badge">Scheduled</span>
 				</div>
-			</div>
+			{/each}
+
+			{#if !anyRunning}
+				<div class="empty-runs">
+					<svg
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						class="empty-icon"
+					>
+						<circle cx="12" cy="12" r="10" />
+						<line x1="10" y1="15" x2="10" y2="12" />
+						<line x1="10" y1="9" x2="10.01" y2="9" />
+					</svg>
+					No tests currently running
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>
 
 <style>
+	/* ── Panel shell ── */
 	.panel {
 		position: fixed;
 		bottom: 0;
@@ -232,286 +582,596 @@
 		z-index: 200;
 		background: var(--bg-elevated);
 		border-top: 1px solid var(--border);
-		box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.06);
-		transition: box-shadow var(--duration-base) var(--ease-out);
+		box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.07);
 	}
 
-	.panel.expanded {
-		box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.1);
-	}
-
-	/* ── Header bar ── */
-	.bar {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 0 1.5rem;
-		height: 48px;
-		cursor: default;
-	}
-
-	.bar-left {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		flex: 1;
-		min-width: 0;
-	}
-
-	.status-dot {
-		flex-shrink: 0;
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		transition: background var(--duration-base);
-	}
-
-	.status-dot.pulse {
-		animation: statusPulse 1.6s ease-in-out infinite;
-	}
-
-	@keyframes statusPulse {
-		0%,
-		100% {
-			opacity: 1;
-			transform: scale(1);
-		}
-		50% {
-			opacity: 0.5;
-			transform: scale(0.7);
-		}
-	}
-
-	.status-label {
-		font-size: 0.7rem;
-		font-weight: 500;
-		letter-spacing: 0.07em;
-		text-transform: uppercase;
-		color: var(--text-muted);
-		flex-shrink: 0;
-	}
-
-	.run-id {
-		font-size: 0.75rem;
-		color: var(--text-muted);
-		font-family: 'JetBrains Mono', monospace;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	/* ── Worker dots ── */
-	.bar-dots {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		flex-shrink: 0;
-	}
-
-	.dot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
+	/* ── Scan-line ── */
+	.scan-line {
+		height: 2px;
 		background: var(--border);
-		transition:
-			background var(--duration-base),
-			transform var(--duration-fast);
+		transition: background 0.5s ease;
+		overflow: hidden;
+		position: relative;
 	}
 
-	.dot.running {
+	.scan-line.scanning {
+		background: color-mix(in srgb, var(--accent) 30%, var(--border));
+	}
+
+	.scan-line.scanning::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		width: 35%;
+		background: linear-gradient(90deg, transparent, var(--accent), transparent);
+		animation: scan 1.8s ease-in-out infinite;
+	}
+
+	.scan-line.line-pass {
 		background: var(--pass);
-		animation: dotBeat 1.4s ease-in-out infinite;
 	}
-
-	.dot.pass {
-		background: var(--pass);
-	}
-
-	.dot.fail {
+	.scan-line.line-fail {
 		background: var(--fail);
 	}
 
-	@keyframes dotBeat {
+	@keyframes scan {
+		0% {
+			transform: translateX(-100%);
+		}
+		100% {
+			transform: translateX(400%);
+		}
+	}
+
+	/* ── Bar ── */
+	.bar {
+		display: flex;
+		align-items: center;
+		height: 52px;
+		padding: 0 1rem 0 1.25rem;
+		gap: 0.75rem;
+	}
+
+	.flex-gap {
+		flex: 1;
+	}
+	.flex-gap-sm {
+		width: 0.5rem;
+	}
+
+	/* ── Left: status ── */
+	.bar-left {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-shrink: 0;
+	}
+
+	.bar-status {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.status-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		flex-shrink: 0;
+		transition: background 0.4s ease;
+	}
+
+	.status-dot.pulse {
+		animation: dotPulse 1.6s ease-in-out infinite;
+	}
+
+	@keyframes dotPulse {
 		0%,
 		100% {
 			opacity: 1;
 			transform: scale(1);
 		}
 		50% {
-			opacity: 0.35;
+			opacity: 0.4;
 			transform: scale(0.65);
 		}
 	}
 
+	.status-word {
+		font-size: 0.72rem;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		transition: color 0.4s ease;
+		white-space: nowrap;
+	}
+
+	.run-tag {
+		font-size: 0.7rem;
+		font-family: 'JetBrains Mono', monospace;
+		color: var(--text-muted);
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: 100px;
+		padding: 0.1rem 0.45rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 160px;
+	}
+
+	.view-report-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--accent);
+		text-decoration: none;
+		white-space: nowrap;
+		border: 1px solid var(--accent);
+		border-radius: var(--radius-sm);
+		padding: 0.2rem 0.6rem;
+		background: var(--accent-soft);
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast);
+	}
+
+	.view-report-btn:hover {
+		background: var(--accent);
+		color: #fff;
+	}
+
+	/* ── Center: controls ── */
+	.bar-center {
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
+	}
+
+	/* Tag input */
+	.input-wrap {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.input-icon {
+		position: absolute;
+		left: 0.6rem;
+		color: var(--text-muted);
+		pointer-events: none;
+		opacity: 0.6;
+	}
+
+	.tag-input {
+		height: 28px;
+		padding: 0 0.75rem 0 2rem;
+		font-size: 0.8rem;
+		font-family: 'JetBrains Mono', monospace;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		color: var(--text);
+		outline: none;
+		transition: border-color var(--duration-fast);
+		width: 200px;
+	}
+
+	.tag-input:focus {
+		border-color: var(--accent);
+	}
+	.tag-input::placeholder {
+		color: var(--text-muted);
+		opacity: 0.45;
+	}
+	.tag-input:disabled {
+		opacity: 0.45;
+	}
+
+	.ctrl-divider {
+		width: 1px;
+		height: 24px;
+		background: var(--border);
+		flex-shrink: 0;
+	}
+
+	/* Workers stepper */
+	.ctrl-group {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.ctrl-label {
+		font-size: 0.555rem;
+		font-weight: 600;
+		letter-spacing: 0.09em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		opacity: 0.65;
+		line-height: 1;
+	}
+
+	.stepper {
+		display: flex;
+		align-items: center;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+	}
+
+	.step-btn {
+		width: 20px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-size: 0.875rem;
+		font-weight: 400;
+		line-height: 1;
+		transition:
+			color var(--duration-fast),
+			background var(--duration-fast);
+	}
+
+	.step-btn:hover:not(:disabled) {
+		color: var(--text);
+		background: var(--bg-elevated);
+	}
+	.step-btn:disabled {
+		opacity: 0.3;
+		cursor: default;
+	}
+
+	.step-val {
+		min-width: 20px;
+		text-align: center;
+		font-size: 0.78rem;
+		font-weight: 500;
+		color: var(--text);
+		font-family: 'JetBrains Mono', monospace;
+		line-height: 24px;
+		border-left: 1px solid var(--border);
+		border-right: 1px solid var(--border);
+	}
+
+	/* Dropdown */
+	.dropdown-wrap {
+		position: relative;
+	}
+
+	.dropdown-trigger {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		height: 24px;
+		padding: 0 0.5rem;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		font-family: var(--font-body);
+		font-size: 0.78rem;
+		color: var(--text);
+		cursor: pointer;
+		transition:
+			border-color var(--duration-fast),
+			background var(--duration-fast),
+			color var(--duration-fast);
+		white-space: nowrap;
+	}
+
+	.dropdown-trigger:hover:not(:disabled) {
+		border-color: color-mix(in srgb, var(--text-muted) 50%, var(--border));
+	}
+	.dropdown-trigger.open {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+	.dropdown-trigger.has-remote {
+		border-color: var(--accent);
+		color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.dropdown-trigger:disabled {
+		opacity: 0.45;
+		cursor: default;
+	}
+
+	.trigger-chevron {
+		transition: transform 0.18s var(--ease-out);
+		flex-shrink: 0;
+	}
+	.trigger-chevron.open {
+		transform: rotate(180deg);
+	}
+
+	.dropdown-menu {
+		position: absolute;
+		bottom: calc(100% + 8px);
+		left: 0;
+		min-width: 130px;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		box-shadow: 0 8px 28px rgba(0, 0, 0, 0.13);
+		padding: 0.3rem;
+		z-index: 300;
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+	}
+
+	.dropdown-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.35rem 0.5rem;
+		border: none;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		color: var(--text);
+		cursor: pointer;
+		text-align: left;
+		transition: background var(--duration-fast);
+	}
+
+	.dropdown-item:hover {
+		background: var(--bg-subtle);
+	}
+	.dropdown-item.active {
+		color: var(--accent);
+	}
+
+	.runners-menu {
+		min-width: 160px;
+	}
+
+	.runner-option {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.35rem 0.5rem;
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+		font-size: 0.8125rem;
+		color: var(--text);
+		transition: background var(--duration-fast);
+	}
+
+	.runner-option:hover {
+		background: var(--bg-subtle);
+	}
+	.runner-option input[type='checkbox'] {
+		accent-color: var(--accent);
+		width: 13px;
+		height: 13px;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+	.runner-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+	.runner-dot.built-in {
+		background: var(--accent);
+	}
+	.runner-dot.remote {
+		background: var(--pass);
+	}
+
+	/* Run button */
+	.run-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		height: 30px;
+		padding: 0 0.875rem;
+		background: var(--accent);
+		color: white;
+		border: none;
+		border-radius: var(--radius-sm);
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: opacity var(--duration-fast);
+		flex-shrink: 0;
+	}
+
+	.run-btn:hover:not(:disabled) {
+		opacity: 0.88;
+	}
+	.run-btn:disabled,
+	.run-btn.is-running {
+		opacity: 0.6;
+		cursor: default;
+	}
+
+	.run-spinner {
+		width: 10px;
+		height: 10px;
+		border: 1.5px solid rgba(255, 255, 255, 0.35);
+		border-top-color: white;
+		border-radius: 50%;
+		animation: spin 0.65s linear infinite;
+		flex-shrink: 0;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	/* Expand button */
 	.expand-btn {
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		width: 28px;
 		height: 28px;
+		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
-		border: none;
 		background: transparent;
 		color: var(--text-muted);
 		cursor: pointer;
-		flex-shrink: 0;
 		transition:
 			background var(--duration-fast),
-			color var(--duration-fast);
+			color var(--duration-fast),
+			border-color var(--duration-fast);
+		flex-shrink: 0;
 	}
 
 	.expand-btn:hover {
 		background: var(--bg-subtle);
 		color: var(--text);
+		border-color: var(--text-muted);
 	}
-
 	.expand-btn svg {
-		transition: transform var(--duration-base) var(--ease-out);
+		transition: transform 0.2s var(--ease-out);
 	}
-
-	.expand-btn svg.rotated {
+	.expand-btn svg.flipped {
 		transform: rotate(180deg);
 	}
 
-	/* ── Body ── */
+	/* ── Expanded body ── */
 	.body {
-		padding: 0.875rem 1.5rem 1.125rem;
 		border-top: 1px solid var(--border);
+		padding: 0.625rem 1.25rem;
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 0.375rem;
+		min-height: 72px;
 	}
 
-	.controls {
+	/* Active run card */
+	.run-card {
 		display: flex;
 		align-items: center;
-		gap: 0.625rem;
-	}
-
-	.run-input {
-		flex: 1;
-	}
-
-	.workers-control {
-		display: flex;
-		gap: 2px;
-		background: var(--bg-subtle);
+		gap: 0.75rem;
+		padding: 0.625rem 0.875rem;
 		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		padding: 2px;
-		flex-shrink: 0;
-	}
-
-	.worker-btn {
-		font-family: var(--font-body);
-		font-size: 0.75rem;
-		font-weight: 400;
-		min-width: 2rem;
-		padding: 0.2rem 0.5rem;
-		border: none;
-		border-radius: 4px;
-		background: transparent;
-		color: var(--text-muted);
-		cursor: pointer;
+		border-radius: var(--radius-md);
+		background: var(--bg-subtle);
+		text-decoration: none;
+		color: inherit;
 		transition:
 			background var(--duration-fast),
-			color var(--duration-fast);
+			border-color var(--duration-fast);
 	}
 
-	.worker-btn:hover:not(.active) {
+	a.run-card:hover {
 		background: var(--bg-elevated);
-		color: var(--text);
+		border-color: var(--accent);
 	}
 
-	.worker-btn.active {
-		background: var(--bg-elevated);
-		color: var(--accent);
-		font-weight: 500;
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+	.run-card.active-run {
+		border-left: 3px solid var(--accent);
+	}
+	.run-card.cron-run {
+		border-left: 3px solid var(--warn);
 	}
 
-	/* ── Main row: terminal + sidebar ── */
-	.main-row {
+	.run-card-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.pulse-accent {
+		background: var(--accent);
+		animation: dotPulse 1.6s ease-in-out infinite;
+	}
+
+	.pulse-pass {
+		background: var(--pass);
+		animation: dotPulse 1.6s ease-in-out infinite;
+	}
+
+	.run-card-info {
 		display: flex;
-		gap: 1rem;
-		align-items: flex-start;
-	}
-
-	.terminal-col {
+		flex-direction: column;
+		gap: 0.1rem;
 		flex: 1;
 		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		/* Constrain terminal height via the Terminal component's wrapper */
-		--terminal-max-height: 140px;
 	}
 
-	.report-row {
-		display: flex;
-	}
-
-	/* ── Sidebar ── */
-	.sidebar {
-		width: 260px;
-		flex-shrink: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		padding-left: 1.25rem;
-		border-left: 1px solid var(--border);
-	}
-
-	.sidebar-section {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.sidebar-label {
-		font-size: 0.65rem;
-		font-weight: 600;
-		letter-spacing: 0.09em;
-		text-transform: uppercase;
-		color: var(--text-muted);
-	}
-
-	.sidebar-empty {
-		font-size: 0.75rem;
-		color: var(--text-muted);
-		font-style: italic;
-	}
-
-	.cron-list {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.375rem;
-	}
-
-	.cron-item {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-	}
-
-	.cron-dot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-		background: var(--pass);
-		flex-shrink: 0;
-		animation: statusPulse 1.6s ease-in-out infinite;
-	}
-
-	.cron-name {
-		font-size: 0.75rem;
-		font-family: 'JetBrains Mono', monospace;
+	.run-card-label {
+		font-size: 0.8125rem;
+		font-weight: 500;
 		color: var(--text);
+	}
+
+	.run-card-meta {
+		font-size: 0.72rem;
+		font-family: 'JetBrains Mono', monospace;
+		color: var(--text-muted);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.meta-dot {
+		opacity: 0.4;
+		margin: 0 0.15rem;
+	}
+
+	.run-card-badge {
+		font-size: 0.62rem;
+		font-weight: 600;
+		letter-spacing: 0.07em;
+		text-transform: uppercase;
+		color: var(--accent);
+		background: var(--accent-soft);
+		padding: 0.1rem 0.4rem;
+		border-radius: 100px;
+		flex-shrink: 0;
+	}
+
+	.run-card-badge.cron-badge {
+		color: var(--warn);
+		background: var(--warn-soft);
+	}
+
+	.run-card-arrow {
+		color: var(--text-muted);
+		flex-shrink: 0;
+		transition:
+			transform var(--duration-fast) var(--ease-out),
+			color var(--duration-fast);
+	}
+
+	a.run-card:hover .run-card-arrow {
+		transform: translateX(3px);
+		color: var(--accent);
+	}
+
+	/* Empty state */
+	.empty-runs {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0;
+		color: var(--text-muted);
+		font-size: 0.8125rem;
+	}
+
+	.empty-icon {
+		opacity: 0.4;
 	}
 </style>

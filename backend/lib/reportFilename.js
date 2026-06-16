@@ -15,9 +15,23 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-export default {
-	plugins: {
-		tailwindcss: {},
-		autoprefixer: {}
+const path = require('path');
+const fs = require('fs');
+
+const REPORTS_DIR = path.resolve(process.cwd(), 'reports');
+const SCREENSHOTS_DIR = path.join(REPORTS_DIR, 'screenshots');
+
+/**
+ * Reads the transient cucumber_report.json written by the most recent local test run.
+ * Returns the raw JSON string, or null if the file is absent or unreadable.
+ */
+function readCucumberReportFile() {
+	try {
+		const p = path.join(REPORTS_DIR, 'cucumber_report.json');
+		return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;
+	} catch {
+		return null;
 	}
-};
+}
+
+module.exports = { REPORTS_DIR, SCREENSHOTS_DIR, readCucumberReportFile };

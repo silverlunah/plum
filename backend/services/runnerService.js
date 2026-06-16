@@ -1,0 +1,157 @@
+/*
+ * This file is part of Plum.
+ *
+ * Plum is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Plum is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Plum. If not, see https://www.gnu.org/licenses/.
+ */
+
+const prisma = require('./prisma');
+
+// ---------------------------------------------------------------------------
+// Runner CRUD
+// ---------------------------------------------------------------------------
+
+const getAll = () => prisma.runner.findMany({ orderBy: { createdAt: 'asc' } });
+
+const create = ({ name, url, token, browser = 'chromium' }) =>
+	prisma.runner.create({ data: { name, url, token, browser } });
+
+const remove = (id) => prisma.runner.delete({ where: { id } });
+
+const update = (id, data) => prisma.runner.update({ where: { id }, data });
+
+const getById = (id) => prisma.runner.findUnique({ where: { id } });
+
+// ---------------------------------------------------------------------------
+// Connectivity
+// ---------------------------------------------------------------------------
+
+async function probe({ url, token }) {
+	const start = Date.now();
+	try {
+		const res = await fetch(`${url}/api/ping`, {
+			method: 'GET',
+			headers: { Authorization: `Bearer ${token}` },
+			signal: AbortSignal.timeout(5000)
+		});
+		return { ok: res.ok, latency: Date.now() - start };
+	} catch (e) {
+		return { ok: false, error: e.message };
+	}
+}
+
+async function ping(id) {
+	const runner = await getById(id);
+	if (!runner) return { ok: false, error: 'Runner not found' };
+	return probe({ url: runner.url, token: runner.token });
+}
+
+// ---------------------------------------------------------------------------
+// Remote execution
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches the raw cucumber JSON content from a finished remote node job.
+ * Returns the content string, or null on failure.
+ */
+async function fetchReportContent(runner, jobId, onLog) {
+	try {
+		const res = await fetch(`${runner.url}/api/report/${jobId}`, {
+			headers: { Authorization: `Bearer ${runner.token}` },
+			signal: AbortSignal.timeout(15000)
+		});
+		if (!res.ok) {
+			onLog(`[WARN] Could not fetch report from "${runner.name}": HTTP ${res.status}\n`);
+			return null;
+		}
+		const { content } = await res.json();
+		return content ?? null;
+	} catch (e) {
+		onLog(`[WARN] Could not fetch report from "${runner.name}": ${e.message}\n`);
+		return null;
+	}
+}
+
+/**
+ * Dispatches a test job to a remote runner node and polls until it finishes.
+ *
+ * @param {string} runnerId
+ * @param {{ tags: string, browser: string, workers: number }} jobParams
+ * @param {(log: string) => void} onLog   Called with each new log chunk
+ * @param {(exitCode: number, reportContent: string|null) => void} onDone
+ */
+async function dispatchAndPoll(runnerId, { tags, browser, workers }, onLog, onDone) {
+	const runner = await getById(runnerId);
+	if (!runner) {
+		onLog(`[ERROR] Runner ${runnerId} not found\n`);
+		onDone(1, null);
+		return;
+	}
+
+	let jobId;
+	try {
+		const res = await fetch(`${runner.url}/api/execute`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${runner.token}`
+			},
+			body: JSON.stringify({ tags, browser, workers }),
+			signal: AbortSignal.timeout(10000)
+		});
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		jobId = (await res.json()).jobId;
+	} catch (e) {
+		onLog(`[ERROR] Could not reach runner "${runner.name}": ${e.message}\n`);
+		onDone(1, null);
+		return;
+	}
+
+	onLog(`Connected to runner "${runner.name}" — job ${jobId}\n`);
+
+	let logOffset = 0;
+	const poll = setInterval(async () => {
+		try {
+			const res = await fetch(`${runner.url}/api/execute/${jobId}?offset=${logOffset}`, {
+				headers: { Authorization: `Bearer ${runner.token}` },
+				signal: AbortSignal.timeout(8000)
+			});
+			if (!res.ok) return;
+			const body = await res.json();
+
+			if (body.logs) {
+				onLog(body.logs);
+				logOffset += body.logs.length;
+			}
+
+			if (body.status === 'done' || body.status === 'error') {
+				clearInterval(poll);
+				const content = await fetchReportContent(runner, jobId, onLog);
+				onDone(body.exitCode ?? (body.status === 'done' ? 0 : 1), content);
+			}
+		} catch {
+			// transient polling error — keep trying
+		}
+	}, 2500);
+}
+
+module.exports = {
+	getAll,
+	create,
+	remove,
+	update,
+	getById,
+	probe,
+	ping,
+	dispatchAndPoll
+};

@@ -29,19 +29,28 @@ const fs = require('fs');
 const testsDir = path.resolve(process.cwd(), 'tests');
 
 if (!fs.existsSync(testsDir)) {
-	console.error('❌ No tests folder found at /app/tests');
-	process.exit(1);
+	if (process.env.PLUM_MODE === 'node') {
+		console.warn('⚠️  No tests folder found — will be populated when a job is received');
+	} else {
+		console.error('❌ No tests folder found at /app/tests');
+		process.exit(1);
+	}
+} else {
+	console.log('📂 Loading tests from:', testsDir);
 }
 
-console.log('📂 Loading tests from:', testsDir);
+const isNodeMode = process.env.PLUM_MODE === 'node';
+const port = parseInt(process.env.PORT || '3001', 10);
 
 socketHandler(io);
-cronService.setSocketIO(io);
+if (!isNodeMode) cronService.setSocketIO(io);
 
 async function start() {
-	await cronService.init();
-	server.listen(3001, async () => {
-		console.log('Backend running on port 3001');
+	if (!isNodeMode) await cronService.init();
+
+	server.listen(port, async () => {
+		console.log(`Backend running on port ${port}${isNodeMode ? ' (node/runner mode)' : ''}`);
+		if (isNodeMode) return; // nodes don't watch files or schedule jobs
 
 		// chokidar v5+ is ESM-only — use dynamic import to stay compatible with CJS
 		let chokidar;

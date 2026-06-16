@@ -1,4 +1,4 @@
-/*
+<!--
  * This file is part of Plum.
  *
  * Plum is free software: you can redistribute it and/or modify
@@ -13,11 +13,30 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Plum. If not, see https://www.gnu.org/licenses/.
- */
+ -->
 
-/** @type {import('tailwindcss').Config} */
-export default {
-	content: ['./src/**/*.{html,js,svelte,ts}'],
-	theme: { extend: {} },
-	plugins: []
-};
+<script>
+	export let message = 'Nothing here yet.';
+	/** Optional extra padding class: 'sm' | 'md' (default) | 'lg' */
+	export let size = 'md';
+</script>
+
+<p class="empty {size}"><slot>{message}</slot></p>
+
+<style>
+	.empty {
+		color: var(--text-muted);
+		font-size: 0.9375rem;
+		text-align: center;
+	}
+
+	.sm {
+		padding: 1.5rem 0;
+	}
+	.md {
+		padding: 3rem 0;
+	}
+	.lg {
+		padding: 5rem 0;
+	}
+</style>
