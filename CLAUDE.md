@@ -154,3 +154,48 @@ The GPL license header at the top of every file is a legal requirement — do no
 - Rebuild after any backend dependency or schema change: `docker-compose up --build -d`
 - The backend container runs `prisma migrate deploy` on startup before starting Express.
 - Frontend dev server (`npm run dev`) runs outside Docker for fast HMR.
+
+---
+
+## Windows Compatibility
+
+Plum runs on Windows. Every script and service must work on Windows without modification.
+
+### `spawn` — always use `{ shell: true }` for npm/npx/docker
+
+On Windows, `npm`, `npx`, and `docker` are `.cmd` wrappers, not binaries. Without `shell: true`, `spawn` cannot find them.
+
+```js
+// Good
+spawn('npm', ['run', 'test'], { env, shell: true });
+
+// Bad — breaks on Windows
+spawn('npm', ['run', 'test'], { env });
+```
+
+`execSync` and `exec` use the system shell by default, so they are fine without `shell: true`.
+
+### Spawning Node.js — use `process.execPath`, not `'node'`
+
+```js
+// Good
+spawn(process.execPath, [scriptPath], { stdio: 'inherit' });
+
+// Bad — 'node' may not be in PATH or may resolve to the wrong version
+spawn('node', [scriptPath]);
+```
+
+### File paths — always use `path.join()` or `path.resolve()`
+
+Never build paths by concatenating strings with `/`. Use `path.join()` everywhere.
+
+When a path is written into a YAML or config file (e.g., docker-compose override), normalise Windows backslashes: `absPath.replace(/\\/g, '/')`.
+
+### Forbidden Unix-only APIs in Node.js scripts
+
+Never call these from `.js` scripts — they do not exist on Windows:
+
+- `chmod` / `chown` — use `fs` permissions APIs if needed
+- `which` — use `which` npm package or check `PATH` manually
+- `curl` / `wget` — use Node.js `fetch` or `https` module
+- Shell operators (`&&`, `||`, `$(cmd)`) inside strings passed to `execSync` — split into separate `execSync` calls instead
