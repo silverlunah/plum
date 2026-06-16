@@ -16,7 +16,7 @@
  -->
 
 <script>
-	/** @type {'pass' | 'fail' | 'tag' | 'schedule' | 'neutral'} */
+	/** @type {'pass' | 'fail' | 'tag' | 'schedule' | 'neutral' | 'node'} */
 	export let variant = 'neutral';
 </script>
 
@@ -59,5 +59,10 @@
 		background: var(--bg-subtle);
 		color: var(--text-muted);
 		border: 1px solid var(--border);
+	}
+
+	.node {
+		background: var(--node-soft);
+		color: var(--node);
 	}
 </style>

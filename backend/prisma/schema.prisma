@@ -23,12 +23,28 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Runner {
+  id        String    @id @default(cuid())
+  name      String
+  url       String
+  token     String
+  browser   String    @default("chromium")
+  createdAt DateTime  @default(now())
+  cronJobs  CronJob[]
+  reports   Report[]
+}
+
 model CronJob {
   id             Int      @id @default(autoincrement())
   taskName       String   @unique
   cronExpression String
   tags           String
   workers        Int      @default(1)
+  browser        String   @default("chromium")
+  enabled        Boolean  @default(true)
+  runnerId       String?
+  runnerIds      String   @default("built-in")
+  runner         Runner?  @relation(fields: [runnerId], references: [id], onDelete: SetNull)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   reports        Report[]
@@ -36,13 +52,17 @@ model CronJob {
 
 model Report {
   id          Int      @id @default(autoincrement())
-  fileName    String   @unique
   status      String
   tags        String
   triggerType String   @default("manual-trigger")
   runners     Int      @default(1)
+  browser     String   @default("chromium")
+  runnerName  String?
+  runnerId    String?
+  runner      Runner?  @relation(fields: [runnerId], references: [id], onDelete: SetNull)
   cronJobId   Int?
   cronJob     CronJob? @relation(fields: [cronJobId], references: [id], onDelete: SetNull)
+  content     Json
   createdAt   DateTime @default(now())
 }
 

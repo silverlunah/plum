@@ -1,0 +1,90 @@
+/*
+This file is part of Plum.
+
+Plum is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Plum is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Plum. If not, see https://www.gnu.org/licenses/.
+*/
+/*
+ * This file is part of Plum.
+ *
+ * Plum is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Plum is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Plum. If not, see https://www.gnu.org/licenses/.
+ */
+
+/* ── Design tokens (light) ─────────────────────────────────────────────── */
+
+:root {
+	--bg: #fdfcfb;
+	--bg-subtle: #f7f6f4;
+	--bg-elevated: #ffffff;
+	--border: #e9e5df;
+	--text: #18160f;
+	--text-muted: #9c9185;
+	--accent: #5c1b87;
+	--accent-soft: #f3eaff;
+	--pass: #16a34a;
+	--pass-soft: #dcfce7;
+	--fail: #dc2626;
+	--fail-soft: #fee2e2;
+	--warn: #d97706;
+	--warn-soft: #fef3c7;
+	--node: #0284c7;
+	--node-soft: #e0f2fe;
+	--terminal-bg: #0d0c08;
+	--terminal-text: #d6d0c8;
+
+	--font-display: 'Playfair Display', Georgia, serif;
+	--font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
+
+	--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+	--duration-fast: 140ms;
+	--duration-base: 240ms;
+	--duration-slow: 400ms;
+
+	--radius-sm: 6px;
+	--radius-md: 10px;
+	--radius-lg: 16px;
+}
+
+/* ── Design tokens (dark) ──────────────────────────────────────────────── */
+
+[data-theme='dark'] {
+	--bg: #101009;
+	--bg-subtle: #1a1910;
+	--bg-elevated: #201f14;
+	--border: #2e2c1e;
+	--text: #f0ede6;
+	--text-muted: #706a5e;
+	--accent: #d0a5f5;
+	--accent-soft: #1b0d30;
+	--pass: #22c55e;
+	--pass-soft: #0d2118;
+	--fail: #f87171;
+	--fail-soft: #2d1010;
+	--warn: #fbbf24;
+	--warn-soft: #2a1f06;
+	--node: #38bdf8;
+	--node-soft: #082032;
+	--terminal-bg: #080807;
+	--terminal-text: #cbc5bd;
+}

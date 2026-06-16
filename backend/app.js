@@ -15,12 +15,17 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
+const { SCREENSHOTS_DIR } = require('./lib/reportFilename');
 const app = express();
 
 app.use(cors({ origin: '*' }));
 app.use(express.json());
+
+// Serve screenshot files written during report processing
+app.use('/screenshots', express.static(SCREENSHOTS_DIR));
 
 // Routes
 const testRoutes = require('./routes/tests.routes');
@@ -28,12 +33,15 @@ const reportRoutes = require('./routes/reports.routes');
 const cronRoutes = require('./routes/cron.routes');
 const settingsRoutes = require('./routes/settings.routes');
 const backupRoutes = require('./routes/backup.routes');
+const runnerRoutes = require('./routes/runners.routes');
+const nodeRoutes = require('./routes/node.routes');
 
 app.use('/tests', testRoutes);
 app.use('/reports', reportRoutes);
 app.use('/cron-jobs', cronRoutes);
-app.use('/reports', express.static('reports'));
 app.use('/settings', settingsRoutes);
 app.use('/backup', backupRoutes);
+app.use('/runners', runnerRoutes);
+app.use('/api', nodeRoutes);
 
 module.exports = app;

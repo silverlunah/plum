@@ -62,6 +62,34 @@ router.put('/:taskName', async (req, res) => {
 	}
 });
 
+router.patch('/:taskName/toggle', async (req, res) => {
+	try {
+		const { taskName } = req.params;
+		const { enabled } = req.body;
+		if (typeof enabled !== 'boolean') {
+			return res.status(400).json({ error: 'enabled must be a boolean' });
+		}
+		const result = await cronService.toggleCronJob(taskName, enabled);
+		if (result.status === 404) return res.status(404).json({ error: result.message });
+		res.json({ taskName, enabled: result.enabled });
+	} catch (error) {
+		console.error('Error toggling cron job:', error);
+		res.status(500).json({ error: 'Failed to toggle cron job' });
+	}
+});
+
+router.post('/:taskName/run', async (req, res) => {
+	try {
+		const { taskName } = req.params;
+		const result = await cronService.runJobNow(taskName);
+		if (result.status === 404) return res.status(404).json({ error: result.message });
+		res.json({ message: `Cron job ${taskName} triggered` });
+	} catch (error) {
+		console.error('Error running cron job:', error);
+		res.status(500).json({ error: 'Failed to run cron job' });
+	}
+});
+
 router.delete('/:taskName', async (req, res) => {
 	try {
 		const { taskName } = req.params;

@@ -18,36 +18,23 @@
 const prisma = require('./prisma');
 
 const exportAll = async () => {
-	const [cronJobs, reports, project] = await Promise.all([
+	const [cronJobs, project] = await Promise.all([
 		prisma.cronJob.findMany({ orderBy: { createdAt: 'asc' } }),
-		prisma.report.findMany({
-			orderBy: { createdAt: 'asc' },
-			include: { cronJob: { select: { taskName: true } } }
-		}),
 		prisma.project.findUnique({ where: { id: 1 } })
 	]);
-
-	// Annotate each report with the cronJob's taskName for portable restoration
-	const portableReports = reports.map(({ cronJob, cronJobId, ...r }) => ({
-		...r,
-		cronJobTaskName: cronJob?.taskName ?? null
-	}));
 
 	return {
 		version: '1',
 		exportedAt: new Date().toISOString(),
 		cronJobs: cronJobs.map(({ id, createdAt, updatedAt, reports: _, ...r }) => r),
-		reports: portableReports.map(({ id, createdAt, ...r }) => r),
 		project: project ? { name: project.name, logoUrl: project.logoUrl } : null
 	};
 };
 
-const importAll = async ({ cronJobs = [], reports = [], project = null }, cronService) => {
+const importAll = async ({ cronJobs = [], project = null }, cronService) => {
 	await prisma.$transaction(async (tx) => {
-		// Upsert cron jobs and build taskName → id map
-		const taskNameToId = {};
 		for (const job of cronJobs) {
-			const upserted = await tx.cronJob.upsert({
+			await tx.cronJob.upsert({
 				where: { taskName: job.taskName },
 				create: {
 					taskName: job.taskName,
@@ -57,21 +44,8 @@ const importAll = async ({ cronJobs = [], reports = [], project = null }, cronSe
 				},
 				update: { cronExpression: job.cronExpression, tags: job.tags, workers: job.workers ?? 1 }
 			});
-			taskNameToId[job.taskName] = upserted.id;
 		}
 
-		// Upsert reports, resolving cronJobId from the taskName map
-		for (const report of reports) {
-			const { cronJobTaskName, ...data } = report;
-			const cronJobId = cronJobTaskName ? (taskNameToId[cronJobTaskName] ?? null) : null;
-			await tx.report.upsert({
-				where: { fileName: data.fileName },
-				create: { ...data, cronJobId },
-				update: { ...data, cronJobId }
-			});
-		}
-
-		// Restore project settings
 		if (project) {
 			await tx.project.upsert({
 				where: { id: 1 },
@@ -81,7 +55,6 @@ const importAll = async ({ cronJobs = [], reports = [], project = null }, cronSe
 		}
 	});
 
-	// Re-schedule cron jobs after import
 	if (cronService) await cronService.reload();
 };
 

@@ -17,12 +17,23 @@
 
 <script>
 	import { onMount } from 'svelte';
-	import { fly } from 'svelte/transition';
-	import { fetchCronJobs, saveCronJob, deleteCronJob } from '$lib/api/schedules';
+	import {
+		fetchCronJobs,
+		saveCronJob,
+		deleteCronJob,
+		runCronJobNow,
+		toggleCronJob
+	} from '$lib/api/schedules';
+	import { fetchRunners } from '$lib/api/runners';
 	import { activeCronJobs } from '$lib/stores/runner';
+	import { BROWSERS, WORKER_OPTIONS, TOAST_TIMEOUT_MS } from '$lib/constants';
+	import { stagger } from '$lib/utils/format';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
+	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
+	import Toast from '$lib/components/ui/Toast.svelte';
+	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 
 	const CRON_REGEX =
 		/^(\*|([0-5]?[0-9])|\*\/[0-9]+) (\*|([01]?[0-9]|2[0-3])) (\*|([01]?[0-9]|3[01])) (\*|([1-9]|1[0-2])) (\*|[0-6](-[0-6])?)$/;
@@ -38,6 +49,7 @@
 	];
 
 	let cronJobs = [];
+	let availableRunners = [];
 	let toast = null;
 
 	let modalOpen = false;
@@ -46,9 +58,14 @@
 	let editTaskName = '';
 	let taskToDelete = '';
 
-	const WORKER_OPTIONS = [1, 2, 4, 8];
-
-	let form = { taskName: '', cronExpression: '', tags: '', workers: 1 };
+	let form = {
+		taskName: '',
+		cronExpression: '',
+		tags: '',
+		workers: 1,
+		browser: 'chromium',
+		runnerIds: ['built-in']
+	};
 	let selectedSchedule = '';
 	let useCustomCron = false;
 	let formError = '';
@@ -58,7 +75,6 @@
 		const parts = expr.trim().split(/\s+/);
 		if (parts.length !== 5) return '';
 		const [min, hour, dom, month, dow] = parts;
-
 		const fmt = (h, m) => {
 			const ap = h >= 12 ? 'PM' : 'AM';
 			return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ap}`;
@@ -89,7 +105,7 @@
 
 	function showToast(type, message) {
 		toast = { type, message };
-		setTimeout(() => (toast = null), 4000);
+		setTimeout(() => (toast = null), TOAST_TIMEOUT_MS);
 	}
 
 	function handleScheduleChange(e) {
@@ -102,10 +118,23 @@
 		}
 	}
 
+	function toggleFormRunner(id) {
+		const current = form.runnerIds;
+		if (current.includes(id) && current.length === 1) return;
+		form.runnerIds = current.includes(id) ? current.filter((r) => r !== id) : [...current, id];
+	}
+
 	function openAddModal() {
 		isEditing = false;
 		editTaskName = '';
-		form = { taskName: '', cronExpression: '', tags: '', workers: 1 };
+		form = {
+			taskName: '',
+			cronExpression: '',
+			tags: '',
+			workers: 1,
+			browser: 'chromium',
+			runnerIds: ['built-in']
+		};
 		selectedSchedule = '';
 		useCustomCron = false;
 		formError = '';
@@ -115,22 +144,20 @@
 	function openEditModal(job) {
 		isEditing = true;
 		editTaskName = job.taskName;
+		const storedIds = job.runnerIds ? job.runnerIds.split(',').map((s) => s.trim()) : ['built-in'];
 		form = {
 			taskName: job.taskName,
 			cronExpression: job.cronExpression,
 			tags: job.tags,
-			workers: job.workers ?? 1
+			workers: job.workers ?? 1,
+			browser: job.browser ?? 'chromium',
+			runnerIds: storedIds
 		};
 		const isPreset = scheduleOptions.some((o) => o.value === job.cronExpression);
 		useCustomCron = !isPreset;
 		selectedSchedule = isPreset ? job.cronExpression : CUSTOM_SENTINEL;
 		formError = '';
 		modalOpen = true;
-	}
-
-	function openDeleteModal(taskName) {
-		taskToDelete = taskName;
-		deleteModalOpen = true;
 	}
 
 	async function handleSave() {
@@ -157,6 +184,26 @@
 		}
 	}
 
+	async function handleToggle(job) {
+		const next = !job.enabled;
+		cronJobs = cronJobs.map((j) => (j.taskName === job.taskName ? { ...j, enabled: next } : j));
+		try {
+			await toggleCronJob(job.taskName, next);
+		} catch {
+			cronJobs = cronJobs.map((j) => (j.taskName === job.taskName ? { ...j, enabled: !next } : j));
+			showToast('error', 'Could not update schedule.');
+		}
+	}
+
+	async function handleRunNow(taskName) {
+		try {
+			await runCronJobNow(taskName);
+			showToast('success', `Started: ${taskName}`);
+		} catch {
+			showToast('error', 'Could not trigger run.');
+		}
+	}
+
 	async function handleDelete() {
 		try {
 			const data = await deleteCronJob(taskToDelete);
@@ -179,6 +226,9 @@
 
 	onMount(async () => {
 		cronJobs = await fetchCronJobs();
+		try {
+			availableRunners = await fetchRunners();
+		} catch {}
 	});
 </script>
 
@@ -190,24 +240,19 @@
 		<div class="field">
 			<div class="field-label">
 				<span>Task Name</span>
-				<span class="field-hint">
-					{isEditing ? 'Name is the ID — cannot be changed' : 'Use a unique, meaningful name'}
-				</span>
+				<span class="field-hint">Use a unique, meaningful name</span>
 			</div>
 			<input
 				type="text"
 				class="field-input"
 				bind:value={form.taskName}
 				placeholder="nightly-login-suite"
-				disabled={isEditing}
 				required
 			/>
 		</div>
 
 		<div class="field">
-			<div class="field-label">
-				<span>Schedule</span>
-			</div>
+			<div class="field-label"><span>Schedule</span></div>
 			<select
 				class="field-input"
 				bind:value={selectedSchedule}
@@ -255,7 +300,7 @@
 
 		<div class="field">
 			<div class="field-label">
-				<span>Runners</span>
+				<span>Workers</span>
 				<span class="field-hint">Parallel workers for this job</span>
 			</div>
 			<div class="seg-control">
@@ -267,8 +312,55 @@
 						on:click={() => (form.workers = n)}
 					>
 						<span class="seg-num">{n}</span>
-						<span class="seg-label">{n === 1 ? 'runner' : 'runners'}</span>
+						<span class="seg-label">{n === 1 ? 'worker' : 'workers'}</span>
 					</button>
+				{/each}
+			</div>
+		</div>
+
+		<div class="field">
+			<div class="field-label"><span>Browser</span></div>
+			<div class="seg-control">
+				{#each BROWSERS as b}
+					<button
+						type="button"
+						class="seg-btn"
+						class:active={form.browser === b.id}
+						on:click={() => (form.browser = b.id)}
+					>
+						<span class="seg-num">{b.label}</span>
+					</button>
+				{/each}
+			</div>
+		</div>
+
+		<div class="field">
+			<div class="field-label">
+				<span>Runners</span>
+				<span class="field-hint">Select one or more nodes</span>
+			</div>
+			<div class="runner-checks">
+				<label class="runner-check-option">
+					<input
+						type="checkbox"
+						checked={form.runnerIds.includes('built-in')}
+						on:change={() => toggleFormRunner('built-in')}
+					/>
+					<span class="runner-check-dot built-in"></span>
+					<span>Built-in</span>
+					<span class="runner-check-hint">this server</span>
+				</label>
+				{#each availableRunners as r}
+					<label class="runner-check-option">
+						<input
+							type="checkbox"
+							checked={form.runnerIds.includes(r.id)}
+							on:change={() => toggleFormRunner(r.id)}
+						/>
+						<span class="runner-check-dot remote"></span>
+						<span>{r.name}</span>
+						<span class="runner-check-hint">{r.url}</span>
+					</label>
 				{/each}
 			</div>
 		</div>
@@ -277,24 +369,17 @@
 			<p class="form-error">{formError}</p>
 		{/if}
 
-		<Button type="submit" size="md">
-			{isEditing ? 'Save Changes' : 'Add Cron Job'}
-		</Button>
+		<Button type="submit" size="md">{isEditing ? 'Save Changes' : 'Add Cron Job'}</Button>
 	</form>
 </Modal>
 
-<!-- Delete confirmation modal -->
-<Modal bind:open={deleteModalOpen} title="Delete Cron Job">
-	<p class="confirm-text">
-		Are you sure you want to delete <strong>{taskToDelete}</strong>? This cannot be undone.
-	</p>
-	<div class="confirm-actions">
-		<Button variant="danger" on:click={handleDelete}>Delete</Button>
-		<Button variant="ghost" on:click={() => (deleteModalOpen = false)}>Cancel</Button>
-	</div>
-</Modal>
+<!-- Delete confirmation -->
+<ConfirmModal bind:open={deleteModalOpen} title="Delete Cron Job" on:confirm={handleDelete}>
+	Are you sure you want to delete <strong>{taskToDelete}</strong>? This cannot be undone.
+</ConfirmModal>
 
-<!-- Page -->
+<Toast {toast} />
+
 <div class="page-header">
 	<div class="header-row">
 		<div>
@@ -305,51 +390,86 @@
 	</div>
 </div>
 
-{#if toast}
-	<div class="toast alert alert-{toast.type}" transition:fly={{ y: -8, duration: 240 }}>
-		{toast.message}
-	</div>
-{/if}
-
 <div class="card" style="padding: 0; overflow: hidden;">
 	{#if cronJobs.length === 0}
-		<p class="empty">No scheduled tests yet. Create one to get started.</p>
+		<EmptyState message="No scheduled tests yet. Create one to get started." size="sm" />
 	{:else}
 		<div class="table-wrap">
 			<table class="data-table">
 				<thead>
 					<tr>
+						<th class="th-toggle"></th>
+						<th class="th-run"></th>
 						<th>Name</th>
 						<th>Schedule</th>
 						<th>Tags</th>
-						<th>Runners</th>
+						<th>Workers</th>
+						<th>Browser</th>
+						<th>Runner</th>
 						<th>Actions</th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each cronJobs as job, i}
-						<tr style="animation-delay: {i * 45}ms" class="job-row">
+						{@const ids = job.runnerIds
+							? job.runnerIds.split(',').map((s) => s.trim())
+							: ['built-in']}
+						<tr style={stagger(i)} class="job-row" class:disabled={!job.enabled}>
+							<td class="td-toggle">
+								<button
+									class="toggle-btn"
+									class:on={job.enabled}
+									on:click={() => handleToggle(job)}
+									title={job.enabled ? 'Disable schedule' : 'Enable schedule'}
+									aria-label={job.enabled ? 'Disable schedule' : 'Enable schedule'}
+									aria-pressed={job.enabled}
+								>
+									<span class="toggle-knob"></span>
+								</button>
+							</td>
+							<td class="td-run">
+								<button
+									class="run-icon-btn"
+									on:click={() => handleRunNow(job.taskName)}
+									title="Run {job.taskName} now"
+								>
+									<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+										<polygon points="5,3 19,12 5,21" />
+									</svg>
+								</button>
+							</td>
 							<td class="job-name">
 								{#if $activeCronJobs[job.taskName]}
 									<span class="running-dot" title="Running now"></span>
 								{/if}
 								{job.taskName}
 							</td>
+							<td><Badge variant="schedule">{cronLabel(job.cronExpression)}</Badge></td>
+							<td><span class="tag-text">{job.tags}</span></td>
 							<td>
-								<Badge variant="schedule">{cronLabel(job.cronExpression)}</Badge>
+								<span class="workers-badge" class:multi={job.workers > 1}>×{job.workers}</span>
 							</td>
+							<td><span class="browser-badge">{job.browser ?? 'chromium'}</span></td>
 							<td>
-								<span class="tag-text">{job.tags}</span>
-							</td>
-							<td>
-								<span class="workers-badge" class:multi={job.workers > 1}>
-									×{job.workers}
+								<span class="runner-badge" class:multi-node={ids.length > 1}>
+									{#if ids.length === 1 && ids[0] === 'built-in'}
+										built-in
+									{:else if ids.length === 1}
+										{availableRunners.find((r) => r.id === ids[0])?.name ?? ids[0]}
+									{:else}
+										{ids.length} nodes
+									{/if}
 								</span>
 							</td>
 							<td class="actions-cell">
 								<Button variant="ghost" size="sm" on:click={() => openEditModal(job)}>Edit</Button>
-								<Button variant="danger" size="sm" on:click={() => openDeleteModal(job.taskName)}
-									>Delete</Button
+								<Button
+									variant="danger"
+									size="sm"
+									on:click={() => {
+										taskToDelete = job.taskName;
+										deleteModalOpen = true;
+									}}>Delete</Button
 								>
 							</td>
 						</tr>
@@ -386,11 +506,6 @@
 
 	.job-row {
 		animation: fadeUp 0.32s var(--ease-out) both;
-	}
-
-	.toast {
-		margin-bottom: 1.25rem;
-		border-radius: var(--radius-md);
 	}
 
 	.table-wrap {
@@ -433,16 +548,90 @@
 		color: var(--text-muted);
 	}
 
+	.th-toggle,
+	.td-toggle {
+		width: 44px;
+		padding-right: 0;
+		text-align: center;
+		padding-top: 20px;
+	}
+
+	.th-run,
+	.td-run {
+		width: 36px;
+		padding-right: 0;
+		text-align: center;
+	}
+
+	/* Toggle switch */
+	.toggle-btn {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		width: 32px;
+		height: 18px;
+		border-radius: 9px;
+		border: none;
+		background: var(--border);
+		cursor: pointer;
+		transition: background var(--duration-fast);
+		flex-shrink: 0;
+		padding: 0;
+	}
+
+	.toggle-btn.on {
+		background: var(--pass);
+	}
+
+	.toggle-knob {
+		position: absolute;
+		left: 2px;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: #fff;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+		transition: left var(--duration-fast);
+	}
+
+	.toggle-btn.on .toggle-knob {
+		left: 16px;
+	}
+
+	.job-row.disabled {
+		opacity: 0.45;
+	}
+	.job-row.disabled .toggle-btn {
+		opacity: 1;
+	}
+
+	.run-icon-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		border: 1px solid var(--border);
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		flex-shrink: 0;
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast),
+			border-color var(--duration-fast);
+	}
+
+	.run-icon-btn:hover {
+		background: var(--accent);
+		color: #fff;
+		border-color: var(--accent);
+	}
+
 	.actions-cell {
 		display: flex;
 		gap: 0.375rem;
-	}
-
-	.empty {
-		padding: 3rem 1.5rem;
-		color: var(--text-muted);
-		font-size: 0.9375rem;
-		text-align: center;
 	}
 
 	/* Modal form */
@@ -457,24 +646,6 @@
 		color: var(--fail);
 	}
 
-	.confirm-text {
-		font-size: 0.9375rem;
-		color: var(--text-muted);
-		line-height: 1.6;
-	}
-
-	.confirm-text strong {
-		color: var(--text);
-		font-weight: 500;
-	}
-
-	.confirm-actions {
-		display: flex;
-		gap: 0.625rem;
-		padding-top: 0.25rem;
-	}
-
-	/* Custom cron input */
 	.cron-input {
 		margin-top: 0.5rem;
 		font-family: 'JetBrains Mono', monospace;
@@ -534,22 +705,19 @@
 	.seg-btn:last-child {
 		border-right: none;
 	}
-
 	.seg-btn:hover {
 		background: var(--bg-subtle);
 		color: var(--text);
 	}
-
 	.seg-btn.active {
 		background: var(--accent);
 		color: #fff;
 	}
-
 	.seg-btn.active .seg-label {
 		opacity: 0.85;
 	}
 
-	/* Workers badge in table */
+	/* Table badges */
 	.workers-badge {
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.75rem;
@@ -559,5 +727,77 @@
 	.workers-badge.multi {
 		color: var(--accent);
 		font-weight: 500;
+	}
+
+	.browser-badge,
+	.runner-badge {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.72rem;
+		color: var(--text-muted);
+	}
+
+	.runner-badge.multi-node {
+		color: var(--node);
+		font-weight: 500;
+	}
+
+	/* Runner checkboxes in modal */
+	.runner-checks {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.375rem 0.5rem;
+		background: var(--bg-subtle);
+	}
+
+	.runner-check-option {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.3rem 0.375rem;
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+		font-size: 0.8125rem;
+		color: var(--text);
+		transition: background var(--duration-fast);
+	}
+
+	.runner-check-option:hover {
+		background: var(--bg-elevated);
+	}
+
+	.runner-check-option input[type='checkbox'] {
+		accent-color: var(--accent);
+		width: 13px;
+		height: 13px;
+		flex-shrink: 0;
+		cursor: pointer;
+	}
+
+	.runner-check-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.runner-check-dot.built-in {
+		background: var(--accent);
+	}
+	.runner-check-dot.remote {
+		background: var(--node);
+	}
+
+	.runner-check-hint {
+		margin-left: auto;
+		font-size: 0.7rem;
+		font-family: 'JetBrains Mono', monospace;
+		color: var(--text-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 180px;
 	}
 </style>

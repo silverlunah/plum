@@ -23,11 +23,13 @@ const parallel =
 	process.env.PARALLEL || (parallelIdx !== -1 ? process.argv[parallelIdx + 1] : null);
 const runners = parallel || process.env.REPORT_RUNNERS || '1';
 const tag = process.env.TAG || process.argv.slice(2).find((a) => a.startsWith('@'));
+const browser = process.env.BROWSER || 'chromium';
 
 try {
 	const baseCommand = [
 		'npx',
 		'cross-env',
+		`BROWSER=${browser}`,
 		'TS_NODE_TRANSPILE_ONLY=true',
 		'cucumber-js',
 		'tests/features/**/*.feature',
