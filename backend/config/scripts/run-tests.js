@@ -16,6 +16,8 @@
  */
 
 const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const pc = require('picocolors');
 
 const parallelIdx = process.argv.indexOf('--parallel');
@@ -25,10 +27,22 @@ const runners = parallel || process.env.REPORT_RUNNERS || '1';
 const tag = process.env.TAG || process.argv.slice(2).find((a) => a.startsWith('@'));
 const browser = process.env.BROWSER || 'chromium';
 
+const reportFile = path.resolve(process.cwd(), 'reports', 'cucumber_report.json');
+
+// Wipe any previous report so a crashed/empty run can never return stale results.
+try {
+	fs.rmSync(reportFile, { force: true });
+} catch {}
+
 let testExitCode = 0;
 
 try {
 	const testsRoot = (process.env.TESTS_ROOT || 'tests').replace(/\\/g, '/');
+
+	// Dispatched tests run from an external dir (e.g. a temp dir on a node) that has
+	// no node_modules of its own — point Node at the backend's modules so imports
+	// like 'playwright' and '@cucumber/cucumber' resolve.
+	const nodeModulesPath = path.resolve(__dirname, '..', '..', 'node_modules');
 
 	const baseCommand = [
 		'npx',
@@ -56,7 +70,15 @@ try {
 	}
 
 	const cucumberCommand = baseCommand.join(' ');
-	execSync(cucumberCommand, { stdio: 'inherit' });
+	execSync(cucumberCommand, {
+		stdio: 'inherit',
+		env: {
+			...process.env,
+			NODE_PATH: process.env.NODE_PATH
+				? `${nodeModulesPath}${path.delimiter}${process.env.NODE_PATH}`
+				: nodeModulesPath
+		}
+	});
 } catch (error) {
 	// Cucumber exits non-zero when scenarios fail — preserve it so callers see the real result.
 	testExitCode = error.status ?? 1;
