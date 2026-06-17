@@ -18,7 +18,6 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { fly, slide } from 'svelte/transition';
-	import { goto } from '$app/navigation';
 	import { io } from 'socket.io-client';
 	import {
 		socket,
@@ -33,12 +32,17 @@
 	} from '$lib/stores/runner';
 	import { fetchLatestReportId, reportUrl } from '$lib/api/reports';
 	import { fetchRunners } from '$lib/api/runners';
+	import { fetchRuns, fetchRun } from '$lib/api/repository';
 	import { API_BASE, BROWSERS } from '$lib/constants';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 
 	let availableRunners = [];
+	let testRuns = [];
+	let selectedRun = null; // { id, title, tags: string[] | null }
+	let selectedRunLoading = false;
 	let browserOpen = false;
 	let runnersOpen = false;
+	let runPickOpen = false;
 	let runAllModalOpen = false;
 
 	function clickOutside(node) {
@@ -68,6 +72,10 @@
 			const bi = localStorage.getItem('plum:builtInEnabled');
 			if (bi !== null) builtInEnabled.set(bi !== 'false');
 		} catch {}
+
+		fetchRuns()
+			.then((r) => (testRuns = r))
+			.catch(() => {});
 
 		fetchRunners()
 			.then((r) => {
@@ -219,8 +227,33 @@
 				? (availableRunners.find((r) => r.id === cfg.selectedRunners[0])?.name ?? '1 node')
 				: `${cfg.selectedRunners.length} nodes`;
 
+	async function selectRun(run) {
+		runPickOpen = false;
+		selectedRun = { id: run.id, title: run.title, tags: null };
+		selectedRunLoading = true;
+		try {
+			const full = await fetchRun(run.id);
+			const tags = full.entries
+				.filter((e) => e.case?.isAutomated)
+				.map((e) => `@${e.case.displayId}`);
+			selectedRun = { id: run.id, title: run.title, tags };
+		} catch {
+			selectedRun = null;
+		} finally {
+			selectedRunLoading = false;
+		}
+	}
+
+	function clearSelectedRun() {
+		selectedRun = null;
+	}
+
 	function handleRunClick() {
-		if ($runnerConfig.testID.trim() === '') {
+		if (selectedRun) {
+			if (selectedRunLoading || !selectedRun.tags) return;
+			if (selectedRun.tags.length === 0) return;
+			triggerRun(selectedRun.tags.join(' or '));
+		} else if ($runnerConfig.testID.trim() === '') {
 			runAllModalOpen = true;
 		} else {
 			triggerRun();
@@ -228,7 +261,7 @@
 	}
 
 	function handleKeydown(e) {
-		if (e.key === 'Enter' && !state.running) handleRunClick();
+		if (e.key === 'Enter' && !state.running && !selectedRun) handleRunClick();
 	}
 
 	function adjustWorkers(delta) {
@@ -312,30 +345,115 @@
 
 		<!-- Middle: tag filter + browser + workers + runner dropdowns -->
 		<div class="bar-center">
-			<!-- Tag input -->
-			<div class="input-wrap">
-				<svg
-					class="input-icon"
-					width="12"
-					height="12"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-				</svg>
-				<input
-					type="text"
-					class="tag-input"
-					value={$runnerConfig.testID}
-					placeholder="@tag or leave blank for all tests"
-					on:input={(e) => runnerConfig.update((c) => ({ ...c, testID: e.currentTarget.value }))}
-					on:keydown={handleKeydown}
-					disabled={state.running}
-				/>
+			<!-- Test Run picker OR tag input -->
+			{#if selectedRun}
+				<div class="run-chip" class:loading={selectedRunLoading}>
+					<svg
+						width="9"
+						height="10"
+						viewBox="0 0 10 12"
+						fill="currentColor"
+						stroke="none"
+						style="opacity:0.6;flex-shrink:0"><polygon points="0,0 10,6 0,12" /></svg
+					>
+					<span class="run-chip-title">{selectedRun.title}</span>
+					{#if selectedRunLoading}
+						<span class="run-chip-spinner"></span>
+					{:else if selectedRun.tags !== null}
+						<span class="run-chip-count" class:none={selectedRun.tags.length === 0}>
+							{selectedRun.tags.length} automated
+						</span>
+					{/if}
+					<button class="run-chip-clear" on:click={clearSelectedRun} aria-label="Clear test run">
+						<svg width="9" height="9" viewBox="0 0 14 14" fill="none"
+							><path
+								d="M1 1l12 12M13 1L1 13"
+								stroke="currentColor"
+								stroke-width="1.5"
+								stroke-linecap="round"
+							/></svg
+						>
+					</button>
+				</div>
+			{:else}
+				<div class="input-wrap">
+					<svg
+						class="input-icon"
+						width="12"
+						height="12"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+					</svg>
+					<input
+						type="text"
+						class="tag-input"
+						value={$runnerConfig.testID}
+						placeholder="@tag or leave blank for all tests"
+						on:input={(e) => runnerConfig.update((c) => ({ ...c, testID: e.currentTarget.value }))}
+						on:keydown={handleKeydown}
+						disabled={state.running}
+					/>
+				</div>
+			{/if}
+
+			<!-- Test run dropdown -->
+			<div class="ctrl-group">
+				<span class="ctrl-label">Test Run</span>
+				<div class="dropdown-wrap" use:clickOutside on:clickoutside={() => (runPickOpen = false)}>
+					<button
+						class="dropdown-trigger"
+						class:open={runPickOpen}
+						class:has-remote={!!selectedRun}
+						on:click={() => {
+							if (!state.running) runPickOpen = !runPickOpen;
+						}}
+						disabled={state.running}
+					>
+						<span>{selectedRun ? selectedRun.title : 'None'}</span>
+						<svg
+							width="10"
+							height="10"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							class="trigger-chevron"
+							class:open={runPickOpen}
+						>
+							<polyline points="6 9 12 15 18 9" />
+						</svg>
+					</button>
+					{#if runPickOpen}
+						<div class="dropdown-menu run-pick-menu" transition:fly={{ y: 6, duration: 130 }}>
+							{#if selectedRun}
+								<button class="dropdown-item" on:click={clearSelectedRun}>
+									<span style="color:var(--text-muted)">✕</span> Clear
+								</button>
+								<div class="dropdown-divider"></div>
+							{/if}
+							{#if testRuns.length === 0}
+								<div class="dropdown-empty">No test runs</div>
+							{:else}
+								{#each testRuns as run}
+									<button
+										class="dropdown-item"
+										class:active={selectedRun?.id === run.id}
+										on:click={() => selectRun(run)}
+									>
+										{run.title}
+									</button>
+								{/each}
+							{/if}
+						</div>
+					{/if}
+				</div>
 			</div>
 
 			<div class="ctrl-divider"></div>
@@ -473,7 +591,12 @@
 				class="run-btn"
 				class:is-running={state.running}
 				on:click={handleRunClick}
-				disabled={state.running}
+				disabled={state.running ||
+					selectedRunLoading ||
+					(selectedRun && selectedRun.tags?.length === 0)}
+				title={selectedRun && selectedRun.tags?.length === 0
+					? 'No automated cases in this run'
+					: undefined}
 			>
 				{#if state.running}
 					<span class="run-spinner"></span>
@@ -1186,5 +1309,94 @@
 
 	.empty-icon {
 		opacity: 0.4;
+	}
+
+	/* ── Run chip (selected test run display) ── */
+	.run-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		height: 28px;
+		padding: 0 0.5rem 0 0.625rem;
+		background: var(--accent-soft);
+		border: 1px solid var(--accent);
+		border-radius: var(--radius-sm);
+		color: var(--accent);
+		font-size: 0.78rem;
+		white-space: nowrap;
+		max-width: 200px;
+	}
+
+	.run-chip-title {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.run-chip-count {
+		font-size: 0.65rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		opacity: 0.75;
+		white-space: nowrap;
+		flex-shrink: 0;
+	}
+
+	.run-chip-count.none {
+		color: var(--fail);
+		opacity: 1;
+	}
+
+	.run-chip-spinner {
+		width: 9px;
+		height: 9px;
+		border: 1.5px solid color-mix(in srgb, var(--accent) 35%, transparent);
+		border-top-color: var(--accent);
+		border-radius: 50%;
+		animation: spin 0.65s linear infinite;
+		flex-shrink: 0;
+	}
+
+	.run-chip-clear {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 16px;
+		height: 16px;
+		border: none;
+		background: transparent;
+		color: var(--accent);
+		cursor: pointer;
+		border-radius: 2px;
+		opacity: 0.7;
+		padding: 0;
+		flex-shrink: 0;
+		transition: opacity var(--duration-fast);
+	}
+
+	.run-chip-clear:hover {
+		opacity: 1;
+	}
+
+	.run-pick-menu {
+		min-width: 180px;
+		max-height: 240px;
+		overflow-y: auto;
+	}
+
+	.dropdown-divider {
+		height: 1px;
+		background: var(--border);
+		margin: 0.25rem 0;
+	}
+
+	.dropdown-empty {
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		padding: 0.35rem 0.5rem;
+		text-align: center;
+		opacity: 0.7;
 	}
 </style>
