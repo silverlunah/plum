@@ -103,10 +103,10 @@ function statusBadge(r) {
  * npm/playwright progress is visible. A failure is surfaced but non-fatal — the
  * operator can retry or fix it manually.
  */
-function prepareNodeEnv(browser) {
-	clack.log.step(`Preparing node environment (deps + ${browser ?? 'browser'})...`);
+function prepareNodeEnv() {
+	clack.log.step('Preparing node environment (deps + browsers)...');
 	try {
-		prepareEnv(browser);
+		prepareEnv();
 		clack.log.success(pc.green('Environment ready.'));
 		return true;
 	} catch (e) {
@@ -152,7 +152,7 @@ async function runAction(r) {
 	const port = parsePort(r.url);
 
 	if (action === 'start') {
-		prepareNodeEnv(r.browser);
+		prepareNodeEnv();
 		const entry = startNode({ id: r.id, port, token: r.token });
 		clack.log.success(pc.green(`Started "${r.name}" on port ${port} (pid ${entry.pid})`));
 	} else if (action === 'stop') {
@@ -204,17 +204,6 @@ async function addRunner() {
 	});
 	if (cancelled(port)) return;
 
-	const browser = await clack.select({
-		message: 'Default browser',
-		options: [
-			{ value: 'chromium', label: 'Chrome' },
-			{ value: 'firefox', label: 'Firefox' },
-			{ value: 'webkit', label: 'WebKit' }
-		],
-		initialValue: 'chromium'
-	});
-	if (cancelled(browser)) return;
-
 	const defToken = process.env.NODE_TOKEN || generateToken();
 	const token = await clack.text({ message: 'Auth token', placeholder: defToken, defaultValue: defToken });
 	if (cancelled(token)) return;
@@ -227,7 +216,7 @@ async function addRunner() {
 	s.start(`Registering "${name}" with the primary...`);
 	let id;
 	try {
-		const res = await registerWithPrimary({ primary: API_URL, name, url, token, browser });
+		const res = await registerWithPrimary({ primary: API_URL, name, url, token, browser: 'chromium' });
 		id = res.id;
 		s.stop(res.reused ? pc.green(`Reusing existing runner "${name}"`) : pc.green(`Registered "${name}" (id ${id})`));
 	} catch (e) {
@@ -235,7 +224,7 @@ async function addRunner() {
 		return;
 	}
 
-	prepareNodeEnv(browser);
+	prepareNodeEnv();
 
 	const startNow = await clack.confirm({ message: 'Start this runner now?' });
 	if (!cancelled(startNow) && startNow) {

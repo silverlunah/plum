@@ -109,13 +109,12 @@ function statusOf(id, registry = loadRegistry()) {
  * an interactive prompt running in the same terminal (the caller's menu would
  * wedge after the install finishes).
  */
-function prepareEnv(browser) {
+function prepareEnv() {
 	const stdio = ['ignore', 'inherit', 'inherit'];
 	if (!fs.existsSync(path.join(BACKEND_DIR, 'node_modules'))) {
 		execSync('npm install', { cwd: BACKEND_DIR, stdio, shell: true });
 	}
-	const target = browser && browser !== 'all' ? ` ${browser}` : '';
-	execSync(`npx playwright install${target}`, { cwd: BACKEND_DIR, stdio, shell: true });
+	execSync('npx playwright install chromium firefox', { cwd: BACKEND_DIR, stdio, shell: true });
 }
 
 /**

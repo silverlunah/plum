@@ -118,8 +118,26 @@ async function runDistributed(io, socket, activeProcs, tag, workers, browser, ru
 	const allIds = getTestIdsForTag(tag);
 	const chunks = chunkTests(allIds, runnerIds.length);
 
+	// Surplus runners beyond the number of non-empty chunks would fall back to
+	// running the full tag expression, producing duplicate scenarios in the report.
+	const activeRunnerIds = runnerIds.slice(0, chunks.length);
+
+	if (activeRunnerIds.length === 0) {
+		socket.emit('log', '\nNo tests found matching the selected tag.\n');
+		socket.emit('done', 0);
+		return;
+	}
+
+	if (activeRunnerIds.length < runnerIds.length) {
+		const skipped = runnerIds.length - activeRunnerIds.length;
+		socket.emit(
+			'log',
+			`[INFO] ${skipped} runner(s) not used — fewer tests than runners selected.\n`
+		);
+	}
+
 	const laneInfos = await Promise.all(
-		runnerIds.map(async (id) => {
+		activeRunnerIds.map(async (id) => {
 			if (id === BUILT_IN_RUNNER_ID) return { id, name: 'Built-in', dbId: null };
 			const r = await runnerService.getById(id);
 			return { id, name: r?.name ?? id, dbId: r?.id ?? null };
@@ -128,10 +146,10 @@ async function runDistributed(io, socket, activeProcs, tag, workers, browser, ru
 
 	socket.emit(
 		'runner-lanes-init',
-		laneInfos.map((l, i) => ({ id: l.id, name: l.name, testCount: (chunks[i] || []).length }))
+		laneInfos.map((l, i) => ({ id: l.id, name: l.name, testCount: chunks[i].length }))
 	);
 
-	const total = runnerIds.length;
+	const total = activeRunnerIds.length;
 	const collectedReports = new Array(total).fill(null);
 	let doneCount = 0;
 	let overallCode = 0;
@@ -168,9 +186,9 @@ async function runDistributed(io, socket, activeProcs, tag, workers, browser, ru
 		}
 	}
 
-	for (let i = 0; i < runnerIds.length; i++) {
+	for (let i = 0; i < activeRunnerIds.length; i++) {
 		const lane = laneInfos[i];
-		const chunkTag = chunks[i]?.length > 0 ? buildTagExpression(chunks[i]) : tag;
+		const chunkTag = buildTagExpression(chunks[i]);
 
 		if (lane.id === BUILT_IN_RUNNER_ID) {
 			const env = {

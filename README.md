@@ -282,11 +282,11 @@ plum run-test --parallel 4 @suite-login  # run a suite in parallel
 plum run-test --browser firefox          # run in a specific browser
 ```
 
-| Flag               | Description                                  |
-| ------------------ | -------------------------------------------- |
-| `@tag`             | Run only tests matching the tag              |
-| `--parallel <n>`   | Run across `n` parallel workers              |
-| `--browser <name>` | `chromium` (default), `firefox`, or `webkit` |
+| Flag               | Description                       |
+| ------------------ | --------------------------------- |
+| `@tag`             | Run only tests matching the tag   |
+| `--parallel <n>`   | Run across `n` parallel workers   |
+| `--browser <name>` | `chromium` (default) or `firefox` |
 
 > `plum run-test` syncs your tests, installs dependencies, and runs Cucumber. No Docker needed.
 
@@ -296,6 +296,8 @@ plum run-test --browser firefox          # run in a specific browser
 
 Runners are additional machines that execute tests in parallel alongside the primary server, letting you distribute a large suite across many nodes. A node runs as a plain Node process — **no Docker required**.
 
+Each node automatically installs **Chromium and Firefox** — no browser selection needed. When triggering a test run from the UI, you choose which browser to use at run time.
+
 ### Start a runner node
 
 On the machine that will act as a runner, navigate to your Plum project and run:
@@ -304,7 +306,7 @@ On the machine that will act as a runner, navigate to your Plum project and run:
 plum node start
 ```
 
-Plum asks a few questions and then **registers the node with your server automatically** — you don't need to add anything in the UI by hand:
+Plum asks a few questions, **registers the node with your server automatically**, starts it in the background, then opens the runner management menu:
 
 | Prompt             | Default                   | What it sets                                                         |
 | ------------------ | ------------------------- | -------------------------------------------------------------------- |
@@ -312,10 +314,11 @@ Plum asks a few questions and then **registers the node with your server automat
 | **Local port**     | `3001`                    | The port this node process listens on                                |
 | **Advertised URL** | `http://<your-ip>:<port>` | The address the **server** uses to reach this node                   |
 | **Runner name**    | `node-<random>`           | The name shown in the UI                                             |
-| **Browser**        | `chromium`                | Default browser for this node                                        |
 | **Auth token**     | auto-generated            | Shared secret; press Enter to keep the generated one                 |
 
-When it registers, Plum prints a details card with the assigned **id**, **token**, and **url**, then boots the node (Ctrl+C to stop). Settings are saved to `.plum-node.json`, so re-running reuses them and never creates a duplicate.
+The node starts as a **background daemon** — your terminal is free immediately. Logs go to `backend/logs/runner-<id>.log`. Settings are saved to `.plum-node.json`, so re-running reuses them and never creates a duplicate.
+
+After setup, the **runner management menu** opens automatically. From there you can start, stop, restart, and ping any runner registered on the primary. Exit the menu any time — the node keeps running.
 
 **Skip the prompts** with flags (handy for CI or scripted nodes):
 
@@ -330,7 +333,6 @@ plum node start --primary http://192.168.1.5:3001 --port 3001 --name ci-node-1
 | `--port <n>`       | Local HTTP port the node listens on (default `3001`).                                    |
 | `--token <secret>` | Auth token. Auto-generated and saved if omitted.                                         |
 | `--name <name>`    | Runner name shown in the UI.                                                             |
-| `--browser <name>` | `chromium` (default), `firefox`, or `webkit`.                                            |
 
 #### Nodes behind a domain or reverse proxy
 
@@ -341,6 +343,20 @@ plum node start --primary https://plum.example.com --url https://node1.example.c
 ```
 
 The server reaches the node at `https://node1.example.com`; the proxy forwards to the node on port `3001`. The advertised `--url` must be reachable from the server.
+
+### Manage runners
+
+```bash
+plum manage-runners
+```
+
+Opens the interactive runner management menu at any time (reads the primary URL from your saved node config). You can also pass a different server:
+
+```bash
+plum manage-runners --primary http://192.168.1.5:3001
+```
+
+> In development, the equivalent command is `npm run manage-runners` from the `backend/` directory.
 
 ### Change settings later
 
@@ -364,26 +380,27 @@ If you run `plum node start` without a reachable `--primary`, Plum prints the no
 plum node stop
 ```
 
-Stops the node started from the current folder.
+Stops the node started from the current folder. You can also stop individual runners from the `plum manage-runners` menu.
 
 ---
 
 ## Command Reference
 
-| Command                       | Description                                                             |
-| ----------------------------- | ----------------------------------------------------------------------- |
-| `plum init`                   | Initialize a new project in the current folder                          |
-| `plum server start`           | Start the full UI stack via Docker, interactively (alias: `plum start`) |
-| `plum server reconfig`        | Re-enter server settings (URL, ports) without starting                  |
-| `plum server stop`            | Stop the server and preserve data (alias: `plum stop`)                  |
-| `plum run-test`               | Run all tests locally without Docker                                    |
-| `plum run-test @tag`          | Run tests matching a tag                                                |
-| `plum run-test --parallel N`  | Run tests across N parallel workers                                     |
-| `plum run-test --browser <b>` | Run in a specific browser (chromium/firefox/webkit)                     |
-| `plum create-step`            | Interactively scaffold a new step definition                            |
-| `plum node start`             | Start a runner node (interactive) and auto-register it with the server  |
-| `plum node reconfig`          | Re-enter node settings + re-register, without starting                  |
-| `plum node stop`              | Stop the runner node started from this folder                           |
+| Command                       | Description                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| `plum init`                   | Initialize a new project in the current folder                                 |
+| `plum server start`           | Start the full UI stack via Docker, interactively (alias: `plum start`)        |
+| `plum server reconfig`        | Re-enter server settings (URL, ports) without starting                         |
+| `plum server stop`            | Stop the server and preserve data (alias: `plum stop`)                         |
+| `plum run-test`               | Run all tests locally without Docker                                           |
+| `plum run-test @tag`          | Run tests matching a tag                                                       |
+| `plum run-test --parallel N`  | Run tests across N parallel workers                                            |
+| `plum run-test --browser <b>` | Run in a specific browser (`chromium` or `firefox`)                            |
+| `plum create-step`            | Interactively scaffold a new step definition                                   |
+| `plum node start`             | Configure, register, and start a runner node; opens the runner management menu |
+| `plum node reconfig`          | Re-enter node settings + re-register, without starting                         |
+| `plum node stop`              | Stop the runner node started from this folder                                  |
+| `plum manage-runners`         | Open the interactive runner management menu                                    |
 
 ---
 

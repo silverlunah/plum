@@ -19,10 +19,11 @@
 import { execSync, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import readline from 'readline';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import fse from 'fs-extra';
+import * as clack from '@clack/prompts';
+import pc from 'picocolors';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,28 +43,25 @@ const backendEnvPath = path.join(plumRoot, 'backend', '.env');
 function createEnvFile() {
 	const envFilePath = path.join(process.cwd(), '.env');
 
-	// Check if .env file already exists
 	if (fs.existsSync(envFilePath)) {
 		copyEnvFile();
-		console.log('⚠️ .env file already exists. Syncing .env file...\n');
-		return; // Exit if file exists
+		clack.log.warn('.env already exists — synced to backend.');
+		return;
 	}
 
-	// Default content for .env file
 	const envContent = `BASE_URL=https://www.saucedemo.com/v1/
 IS_HEADLESS=false
 `;
 
-	// Write the content to the .env file
 	fs.writeFileSync(envFilePath, envContent, 'utf8');
-	console.log('✅ .env file created with default values.\n');
+	clack.log.success('.env created with default values.');
 }
 
 // Scaffold plum.plugins.json if it doesn't exist yet
 function scaffoldPluginsFile() {
 	const pluginsPath = path.join(process.cwd(), 'plum.plugins.json');
 	if (fs.existsSync(pluginsPath)) {
-		console.log('⚠️  plum.plugins.json already exists. Skipping.\n');
+		clack.log.warn('plum.plugins.json already exists — skipping.');
 		return;
 	}
 	const content = {
@@ -73,7 +71,7 @@ function scaffoldPluginsFile() {
 		dependencies: {}
 	};
 	fs.writeFileSync(pluginsPath, JSON.stringify(content, null, 2) + '\n', 'utf8');
-	console.log('✅ plum.plugins.json created. Add npm packages here to extend your tests.\n');
+	clack.log.success('plum.plugins.json created.');
 }
 
 // Install user plugins listed in plum.plugins.json into the backend
@@ -108,19 +106,19 @@ function ensureGitignore() {
 
 	if (!fs.existsSync(gitignorePath)) {
 		fs.writeFileSync(gitignorePath, plumBlock.trimStart(), 'utf8');
-		console.log('✅ .gitignore created with Plum entries.\n');
+		clack.log.success('.gitignore created with Plum entries.');
 		return;
 	}
 
 	const existing = fs.readFileSync(gitignorePath, 'utf8');
 	const missing = plumEntries.filter((e) => !existing.includes(e));
 	if (missing.length === 0) {
-		console.log('⚠️  .gitignore already contains Plum entries. Skipping.\n');
+		clack.log.warn('.gitignore already contains Plum entries — skipping.');
 		return;
 	}
 
 	fs.appendFileSync(gitignorePath, `\n# Plum (auto-generated)\n${missing.join('\n')}\n`);
-	console.log('✅ .gitignore updated with Plum entries.\n');
+	clack.log.success('.gitignore updated with Plum entries.');
 }
 
 // Function to copy .env file from root to backend
@@ -128,18 +126,18 @@ function copyEnvFile() {
 	try {
 		if (fs.existsSync(rootEnvPath)) {
 			fse.copySync(rootEnvPath, backendEnvPath);
-			console.log('📦 .env file copied to the backend folder.\n');
 		} else {
-			console.log('⚠️ .env file not found in the root directory.\n');
+			clack.log.warn('.env not found in project root — skipping backend sync.');
 		}
 	} catch (err) {
-		console.error('Error copying .env file:', err);
+		clack.log.error(`Error copying .env: ${err.message}`);
 	}
 }
 
 const backendLib = path.join(plumRoot, 'backend', 'lib');
 const serverConfigLib = () => require(path.join(backendLib, 'serverConfig.js'));
 const nodeRegisterLib = () => require(path.join(backendLib, 'nodeRegister.js'));
+const runnerProcessLib = () => require(path.join(backendLib, 'runnerProcess.js'));
 
 /* -----------------------------------------------------
  *                 Interactive prompts
@@ -152,64 +150,12 @@ const getFlag = (args, name) => {
 };
 const anyFlags = (args, names) => names.some((n) => args.includes(n));
 
-/**
- * A line-buffered prompter that works for both an interactive TTY and piped
- * stdin. Non-TTY input emits every line then closes immediately, so we queue
- * lines as they arrive and hand them out one question at a time.
- */
-function createPrompter() {
-	const rl = readline.createInterface({ input: process.stdin });
-	const queue = [];
-	let waiting = null;
-	let closed = false;
-	rl.on('line', (line) => {
-		if (waiting) {
-			const r = waiting;
-			waiting = null;
-			r(line);
-		} else queue.push(line);
-	});
-	rl.on('close', () => {
-		closed = true;
-		if (waiting) {
-			const r = waiting;
-			waiting = null;
-			r(null);
-		}
-	});
-	const nextLine = () =>
-		new Promise((resolve) => {
-			if (queue.length) resolve(queue.shift());
-			else if (closed) resolve(null);
-			else waiting = resolve;
-		});
-
-	const ask = async (q, def) => {
-		process.stdout.write(`  ${q}${def ? ` (${def})` : ''}: `);
-		const line = await nextLine();
-		const a = (line ?? '').trim();
-		return a || def || '';
-	};
-	const askYesNo = async (q, def) => {
-		process.stdout.write(`  ${q} (${def ? 'Y/n' : 'y/N'}): `);
-		const a = (((await nextLine()) ?? '') + '').trim().toLowerCase();
-		if (!a) return def;
-		return a === 'y' || a === 'yes';
-	};
-	const askChoice = async (q, opts, def) => {
-		console.log(`  ${q}`);
-		opts.forEach((o, i) => console.log(`    ${i + 1}) ${o}${o === def ? ' (default)' : ''}`));
-		process.stdout.write('  > ');
-		const a = (((await nextLine()) ?? '') + '').trim();
-		if (!a) return def;
-		const n = Number(a);
-		if (Number.isInteger(n) && n >= 1 && n <= opts.length) return opts[n - 1];
-		return opts.includes(a) ? a : def;
-	};
-	return { ask, askYesNo, askChoice, close: () => rl.close() };
+function cancelAndExit() {
+	clack.cancel('Cancelled.');
+	process.exit(0);
 }
 
-const VALID_BROWSERS = ['chromium', 'firefox', 'webkit'];
+const VALID_BROWSERS = ['chromium', 'firefox'];
 
 /* -----------------------------------------------------
  *                 Server flow
@@ -226,10 +172,10 @@ function mergeUserPlugins() {
 		if (Object.keys(pluginDeps).length > 0) {
 			backendPkg.dependencies = { ...backendPkg.dependencies, ...pluginDeps };
 			fs.writeFileSync(backendPkgPath, JSON.stringify(backendPkg, null, '\t') + '\n', 'utf8');
-			console.log(`📦 Merged plugins into backend: ${Object.keys(pluginDeps).join(', ')}\n`);
+			clack.log.info(`Merged plugins into backend: ${Object.keys(pluginDeps).join(', ')}`);
 		}
 	} catch {
-		console.log('⚠️  Could not read plum.plugins.json. Skipping plugin merge.\n');
+		clack.log.warn('Could not read plum.plugins.json. Skipping plugin merge.');
 	}
 }
 
@@ -262,19 +208,44 @@ async function configureServer({ force }) {
 	const interactive = force || (interactiveAllowed() && !hasFlags);
 
 	if (interactive) {
-		const p = createPrompter();
-		try {
-			cfg.baseUrl = await p.ask('App URL to test (BASE_URL)', cfg.baseUrl);
-			cfg.headless = await p.askYesNo('Run browsers headless?', cfg.headless);
-			cfg.backendPort = await p.ask('Backend port', cfg.backendPort);
-			cfg.frontendPort = await p.ask('Frontend (UI) port', cfg.frontendPort);
-			cfg.primaryPublicUrl = await p.ask(
-				'Primary public URL (share with node operators)',
-				cfg.primaryPublicUrl
-			);
-		} finally {
-			p.close();
-		}
+		const baseUrl = await clack.text({
+			message: 'App URL to test (BASE_URL)',
+			placeholder: cfg.baseUrl,
+			defaultValue: cfg.baseUrl
+		});
+		if (clack.isCancel(baseUrl)) cancelAndExit();
+		cfg.baseUrl = baseUrl || cfg.baseUrl;
+
+		const headless = await clack.confirm({
+			message: 'Run browsers headless?',
+			initialValue: cfg.headless
+		});
+		if (clack.isCancel(headless)) cancelAndExit();
+		cfg.headless = headless;
+
+		const backendPort = await clack.text({
+			message: 'Backend port',
+			placeholder: String(cfg.backendPort),
+			defaultValue: String(cfg.backendPort)
+		});
+		if (clack.isCancel(backendPort)) cancelAndExit();
+		cfg.backendPort = backendPort || cfg.backendPort;
+
+		const frontendPort = await clack.text({
+			message: 'Frontend (UI) port',
+			placeholder: String(cfg.frontendPort),
+			defaultValue: String(cfg.frontendPort)
+		});
+		if (clack.isCancel(frontendPort)) cancelAndExit();
+		cfg.frontendPort = frontendPort || cfg.frontendPort;
+
+		const primaryPublicUrl = await clack.text({
+			message: 'Primary public URL (share with node operators)',
+			placeholder: cfg.primaryPublicUrl,
+			defaultValue: cfg.primaryPublicUrl
+		});
+		if (clack.isCancel(primaryPublicUrl)) cancelAndExit();
+		cfg.primaryPublicUrl = primaryPublicUrl || cfg.primaryPublicUrl;
 	}
 
 	saveServerConfig(cwd, cfg);
@@ -299,29 +270,27 @@ function applyServerConfig(cfg) {
 		}),
 		'utf8'
 	);
-	console.log('✅ docker-compose.override.yml written');
+	clack.log.success('docker-compose.override.yml written');
 }
 
 async function serverStart() {
-	console.log('--------------------------------------\n');
-	console.log('🚀 Starting Plum...\n');
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Server  ')));
 	const cfg = await configureServer({ force: false });
 	applyServerConfig(cfg);
-	console.log(`\n🟣 UI:     http://localhost:${cfg.frontendPort}`);
-	console.log(`   Nodes register against:  ${cfg.primaryPublicUrl}\n`);
+	clack.log.info(`UI:                    ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
+	clack.log.info(`Nodes register against: ${pc.dim(cfg.primaryPublicUrl)}`);
 	execSync('docker compose up --build', { cwd: plumRoot, stdio: 'inherit' });
-	console.log('--------------------------------------\n');
+	clack.outro(pc.dim('Plum server stopped.'));
 }
 
 async function serverReconfig() {
-	console.log('--------------------------------------\n');
-	console.log('⚙️  Reconfiguring Plum server...\n');
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Reconfigure Server  ')));
 	const cfg = await configureServer({ force: true });
 	applyServerConfig(cfg);
-	console.log('\n✅ Saved. Run `plum server start` to apply.');
-	console.log(`   UI will be:               http://localhost:${cfg.frontendPort}`);
-	console.log(`   Nodes register against:   ${cfg.primaryPublicUrl}`);
-	console.log('--------------------------------------\n');
+	clack.log.success("Saved. Run 'plum server start' to apply.");
+	clack.outro(
+		`UI: ${pc.cyan(`http://localhost:${cfg.frontendPort}`)} · Nodes: ${pc.dim(cfg.primaryPublicUrl)}`
+	);
 }
 
 /* -----------------------------------------------------
@@ -353,27 +322,52 @@ async function configureNode({ force }) {
 	const interactive = force || (interactiveAllowed() && !hasFlags);
 
 	if (interactive) {
-		const p = createPrompter();
-		try {
-			primary = await p.ask('Primary server URL', primary);
-			port = await p.ask('Local port this node listens on', port);
-			url = await p.ask(
-				'URL the primary calls back (advertised)',
-				url || `http://${detectLanIp()}:${port}`
-			);
-			name = await p.ask('Runner name', name);
-			browser = await p.askChoice('Default browser', VALID_BROWSERS, browser);
-			const newTok = await p.ask('Auth token (Enter to keep)', token);
-			token = newTok || token;
-		} finally {
-			p.close();
-		}
+		const primaryVal = await clack.text({
+			message: 'Primary server URL',
+			placeholder: primary || 'http://localhost:3001',
+			defaultValue: primary
+		});
+		if (clack.isCancel(primaryVal)) cancelAndExit();
+		primary = primaryVal || primary;
+
+		const portVal = await clack.text({
+			message: 'Local port this node listens on',
+			placeholder: port,
+			defaultValue: port
+		});
+		if (clack.isCancel(portVal)) cancelAndExit();
+		port = portVal || port;
+
+		const defaultUrl = url || `http://${detectLanIp()}:${port}`;
+		const urlVal = await clack.text({
+			message: 'URL the primary calls back (advertised)',
+			placeholder: defaultUrl,
+			defaultValue: defaultUrl
+		});
+		if (clack.isCancel(urlVal)) cancelAndExit();
+		url = urlVal || defaultUrl;
+
+		const nameVal = await clack.text({
+			message: 'Runner name',
+			placeholder: name,
+			defaultValue: name
+		});
+		if (clack.isCancel(nameVal)) cancelAndExit();
+		name = nameVal || name;
+
+		const tokenVal = await clack.text({
+			message: 'Auth token (Enter to keep)',
+			placeholder: token,
+			defaultValue: token
+		});
+		if (clack.isCancel(tokenVal)) cancelAndExit();
+		token = tokenVal || token;
 	}
 
 	if (!url) url = `http://${detectLanIp()}:${port}`;
 
 	if (!VALID_BROWSERS.includes(browser)) {
-		console.error(`✗ Invalid browser "${browser}". Choose one of: ${VALID_BROWSERS.join(', ')}`);
+		clack.log.error(`Invalid browser "${browser}". Choose one of: ${VALID_BROWSERS.join(', ')}`);
 		process.exit(1);
 	}
 
@@ -393,36 +387,36 @@ async function configureNode({ force }) {
 async function registerNode({ primary, name, url, token, browser, port }) {
 	const { registerWithPrimary, loadNodeConfig, saveNodeConfig } = nodeRegisterLib();
 	let registeredId = null;
+
 	if (primary) {
-		console.log(`🔗 Registering with primary at ${primary}...`);
+		const s = clack.spinner();
+		s.start(`Registering with primary at ${primary}...`);
 		try {
 			const { id, reused } = await registerWithPrimary({ primary, name, url, token, browser });
 			registeredId = id;
-			console.log(reused ? '✓ Reusing existing runner on primary\n' : '✓ Registered on primary\n');
+			s.stop(pc.green(reused ? '✓ Reusing existing runner on primary' : '✓ Registered on primary'));
 		} catch (e) {
-			console.log(`⚠️  Could not register with primary: ${e.message}`);
-			console.log('   Add it manually using the details below.\n');
+			s.stop(pc.yellow(`Could not register with primary: ${e.message}`));
+			clack.log.warn('Add this runner manually using the details below.');
 		}
 	} else {
-		console.log('ℹ️  No primary set — add this runner manually on your Plum server.\n');
+		clack.log.info('No primary set — add this runner manually on your Plum server.');
 	}
 
-	const card = [
-		'  ┌─ Runner details ───────────────────────────',
-		registeredId
-			? `  │  id:      ${registeredId}`
-			: '  │  id:      (assigned when added on the server)',
-		`  │  name:    ${name}`,
-		`  │  url:     ${url}`,
-		`  │  token:   ${token}`,
-		`  │  browser: ${browser}`,
-		'  └────────────────────────────────────────────'
-	].join('\n');
-	console.log(card + '\n');
-	console.log(
-		`ℹ️  The url above must be reachable from the primary. The local port (${port}) is only`
+	clack.note(
+		[
+			registeredId ? `id:      ${registeredId}` : 'id:      (assigned when added on the server)',
+			`name:    ${name}`,
+			`url:     ${url}`,
+			`token:   ${token}`,
+			`browser: ${browser}`
+		].join('\n'),
+		'Runner details'
 	);
-	console.log('   what this node listens on — forward your proxy/domain to it.\n');
+
+	clack.log.info(
+		`The url above must be reachable from the primary. The local port (${port}) is only what this node listens on — forward your proxy/domain to it.`
+	);
 
 	const cwd = process.cwd();
 	saveNodeConfig(cwd, {
@@ -440,45 +434,56 @@ async function registerNode({ primary, name, url, token, browser, port }) {
 
 async function nodeStart({ reconfig }) {
 	const backendDir = path.join(plumRoot, 'backend');
-	console.log('--------------------------------------\n');
-	console.log('🚀 Setting up Plum node (runner mode)...\n');
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Runner  ')));
 
 	const cfg = await configureNode({ force: reconfig });
-	await registerNode(cfg);
+	const registeredId = await registerNode(cfg);
 
-	// backend/node_modules is not published — install deps before launching.
-	console.log('Running `npm install`...');
-	execSync('npm install', { cwd: backendDir, stdio: 'inherit', shell: true });
-	console.log('Running `npx playwright install`...');
-	execSync('npx playwright install', { cwd: backendDir, stdio: 'inherit', shell: true });
+	const { prepareEnv, startNode: startNodeProc } = runnerProcessLib();
 
-	console.log('\n--------------------------------------');
-	console.log(`🟣 Node "${cfg.name}" running on port ${cfg.port} (Ctrl+C to stop)\n`);
+	clack.log.step('Preparing environment (deps + browsers)...');
+	try {
+		prepareEnv();
+		clack.log.success('Environment ready.');
+	} catch (e) {
+		clack.log.warn(`Environment prep failed: ${e.message}`);
+	}
 
-	const { loadNodeConfig, saveNodeConfig } = nodeRegisterLib();
-	const serverPath = path.join(backendDir, 'server.js');
-	const child = spawn(process.execPath, [serverPath], {
-		cwd: backendDir,
-		env: { ...process.env, PLUM_MODE: 'node', NODE_TOKEN: cfg.token, PORT: String(cfg.port) },
-		stdio: 'inherit'
-	});
+	if (registeredId) {
+		try {
+			const entry = startNodeProc({ id: String(registeredId), port: cfg.port, token: cfg.token });
+			clack.log.success(
+				pc.green(
+					`Node "${cfg.name}" running in background (pid ${entry.pid}) — logs at backend/logs/runner-${registeredId}.log`
+				)
+			);
+		} catch (e) {
+			clack.log.warn(`Could not start runner process: ${e.message}`);
+		}
+	} else {
+		clack.log.info('Runner not registered on primary — use the menu below to add and start it.');
+	}
 
-	saveNodeConfig(process.cwd(), { ...loadNodeConfig(process.cwd()), pid: child.pid });
-
-	child.on('exit', (code) => {
-		const c = loadNodeConfig(process.cwd());
-		saveNodeConfig(process.cwd(), { ...c, pid: null });
-		process.exit(code ?? 0);
-	});
+	await openManageRunnersMenu(cfg.primary);
+	clack.outro(`Manage runners anytime: ${pc.cyan('plum manage-runners')}`);
 }
 
 async function nodeReconfig() {
-	console.log('--------------------------------------\n');
-	console.log('⚙️  Reconfiguring Plum node...\n');
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Reconfigure Node  ')));
 	const cfg = await configureNode({ force: true });
 	await registerNode(cfg);
-	console.log('✅ Saved. Run `plum node start` to launch this node.');
-	console.log('--------------------------------------\n');
+	clack.log.success("Saved. Run 'plum node start' to launch this node.");
+	clack.outro(pc.dim('Done.'));
+}
+
+async function openManageRunnersMenu(primaryUrl) {
+	const manageScript = path.join(plumRoot, 'backend', 'scripts', 'manage-runners.mjs');
+	const apiUrl = primaryUrl || 'http://localhost:3001';
+	const menu = spawn(process.execPath, [manageScript], {
+		stdio: 'inherit',
+		env: { ...process.env, PLUM_API_URL: apiUrl }
+	});
+	await new Promise((resolve) => menu.on('exit', resolve));
 }
 
 /* -----------------------------------------------------
@@ -488,28 +493,22 @@ async function nodeReconfig() {
  * 		"plum <command>" to run the desired command.
  * ------------------------------------------------------ */
 switch (command) {
-	case 'init':
-		console.log('--------------------------------------\n');
-		console.log('🟣  Preparing Plum...\n');
+	case 'init': {
+		clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Init  ')));
 
+		// Test scaffold
 		if (fs.existsSync(userTestsPath)) {
-			console.log('⚠️  A `tests/` folder already exists.\n');
+			clack.log.warn('`tests/` already exists — skipping scaffold.');
 		} else {
-			console.log('📦 Creating test scaffold...\n');
 			fse.copySync(scaffoldTestsPath, userTestsPath);
-			console.log('✅ `tests/` initialized with example files.\n');
+			clack.log.success('`tests/` created with example files.');
 		}
 
-		// Create .env file with default values
 		createEnvFile();
-
-		// Create or update .gitignore with Plum-generated paths
 		ensureGitignore();
-
-		// Scaffold plum.plugins.json for user-managed dependencies
 		scaffoldPluginsFile();
 
-		// Always create .vscode/settings.json for Cucumber extension config
+		// .vscode/settings.json
 		{
 			const vscodeSettingsPath = path.join(process.cwd(), '.vscode', 'settings.json');
 			if (!fs.existsSync(vscodeSettingsPath)) {
@@ -526,30 +525,30 @@ switch (command) {
 					) + '\n',
 					'utf8'
 				);
-				console.log('✅ .vscode/settings.json created for Cucumber extension.\n');
+				clack.log.success('.vscode/settings.json created for Cucumber extension.');
 			} else {
-				console.log('⚠️  .vscode/settings.json already exists. Skipping.\n');
+				clack.log.warn('.vscode/settings.json already exists — skipping.');
 			}
 
-			// Install extension via CLI only when the code command is available
+			// VS Code Cucumber extension
 			try {
 				execSync('code --version', { stdio: 'ignore' });
 				try {
-					execSync('code --install-extension cucumberopen.cucumber-official', { stdio: 'inherit' });
-					console.log('✅ Cucumber VS Code extension installed.\n');
+					execSync('code --install-extension cucumberopen.cucumber-official', {
+						stdio: 'ignore'
+					});
+					clack.log.success('Cucumber VS Code extension installed.');
 				} catch {
-					console.log(
-						'⚠️  Could not install VS Code extension automatically. Install manually: cucumberopen.cucumber-official\n'
+					clack.log.warn(
+						'Could not install VS Code extension automatically.\n  Install manually: cucumberopen.cucumber-official'
 					);
 				}
 			} catch {
-				console.log(
-					'ℹ️  Install the Cucumber VS Code extension manually: cucumberopen.cucumber-official\n'
-				);
+				clack.log.info('Install the Cucumber extension manually: cucumberopen.cucumber-official');
 			}
 		}
 
-		// Scaffold tsconfig.json so VS Code resolves Plum's types without a local node_modules
+		// tsconfig.json
 		{
 			const tsconfigPath = path.join(process.cwd(), 'tsconfig.json');
 			if (!fs.existsSync(tsconfigPath)) {
@@ -576,13 +575,13 @@ switch (command) {
 					include: ['tests/**/*.ts']
 				};
 				fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2) + '\n', 'utf8');
-				console.log('✅ tsconfig.json created for IDE type resolution.\n');
+				clack.log.success('tsconfig.json created for IDE type resolution.');
 			} else {
-				console.log('⚠️  tsconfig.json already exists. Skipping.\n');
+				clack.log.warn('tsconfig.json already exists — skipping.');
 			}
 		}
 
-		// Create README.md in user's project if one doesn't exist
+		// README.md
 		{
 			const userReadmePath = path.join(process.cwd(), 'README.md');
 			if (!fs.existsSync(userReadmePath)) {
@@ -619,7 +618,7 @@ switch (command) {
 					'| `plum run-test` | Run all tests locally |',
 					'| `plum run-test @tag` | Run tests matching a tag |',
 					'| `plum run-test --parallel N` | Run tests across N parallel workers |',
-					'| `plum run-test --browser firefox` | Run in a specific browser (chromium/firefox/webkit) |',
+					'| `plum run-test --browser firefox` | Run in a specific browser (chromium/firefox) |',
 					'| `plum start` | Start the full UI via Docker (interactive setup) |',
 					'| `plum server reconfig` | Change server URL/ports without starting |',
 					'| `plum stop` | Stop the server |',
@@ -678,25 +677,37 @@ switch (command) {
 					'- [Plum documentation](https://github.com/silverlunah/plum) — Full README and reference'
 				].join('\n');
 				fs.writeFileSync(userReadmePath, readmeContent + '\n', 'utf8');
-				console.log('✅ README.md created with quick-start guide.\n');
+				clack.log.success('README.md created.');
 			} else {
-				console.log('⚠️  README.md already exists. Skipping.\n');
+				clack.log.warn('README.md already exists — skipping.');
 			}
 		}
 
-		// Initialize project
-		console.log('--------------------------------------\n');
-		console.log('🚀 Initializing Plum...');
-		execSync('npm run init', {
-			cwd: plumRoot,
-			stdio: 'inherit'
-		});
+		// Install dependencies
+		clack.log.step('Installing dependencies (npm run init)...');
+		execSync('npm run init', { cwd: plumRoot, stdio: 'inherit' });
 
-		console.log(
-			'🟣  Plum is now ready!\n\n Scaffold test cases are in `tests/`.\n Add extra npm packages to `plum.plugins.json`.\n\n - Run tests locally:\n   `plum run-test` or `plum run-test @tag`\n\n - Start the full UI (requires Docker):\n   `plum start`\n\n - Generate a step:\n   `plum create-step`'
+		clack.note(
+			[
+				`Tests scaffold  ${pc.dim('→')}  ${pc.cyan('tests/')}`,
+				`Extra packages  ${pc.dim('→')}  ${pc.cyan('plum.plugins.json')}`,
+				`App URL config  ${pc.dim('→')}  ${pc.cyan('.env')}`,
+				'',
+				`${pc.bold('Run tests locally')}`,
+				`  ${pc.cyan('plum run-test')}            run all tests`,
+				`  ${pc.cyan('plum run-test @tag')}       run by tag`,
+				'',
+				`${pc.bold('Start the full UI')}  ${pc.dim('(requires Docker)')}`,
+				`  ${pc.cyan('plum server start')}`,
+				'',
+				`${pc.bold('Generate a step definition')}`,
+				`  ${pc.cyan('plum create-step')}`
+			].join('\n'),
+			'Next steps'
 		);
-		console.log('--------------------------------------\n');
+		clack.outro(pc.magenta('Plum is ready.'));
 		break;
+	}
 
 	case 'server':
 		if (subcommand === 'stop') {
@@ -734,10 +745,9 @@ switch (command) {
 		const userTestsPath = path.resolve(process.cwd(), 'tests');
 		const backendTestsPath = path.join(plumRoot, 'backend', 'tests');
 
-		const validBrowsers = ['chromium', 'firefox', 'webkit'];
-		if (browserArg && !validBrowsers.includes(browserArg)) {
+		if (browserArg && !VALID_BROWSERS.includes(browserArg)) {
 			console.error(
-				`✗ Invalid browser "${browserArg}". Choose one of: ${validBrowsers.join(', ')}`
+				`✗ Invalid browser "${browserArg}". Choose one of: ${VALID_BROWSERS.join(', ')}`
 			);
 			process.exit(1);
 		}
@@ -762,9 +772,9 @@ switch (command) {
 		// Install user-defined plugins from plum.plugins.json
 		installPlugins();
 
-		console.log('Running `npx playwright install`...');
+		console.log('Running `npx playwright install chromium firefox`...');
 
-		execSync('npx playwright install', {
+		execSync('npx playwright install chromium firefox', {
 			cwd: path.join(plumRoot, 'backend'),
 			stdio: 'inherit'
 		});
@@ -805,23 +815,39 @@ switch (command) {
 
 	case 'node': {
 		if (subcommand === 'stop') {
+			clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Runner  ')));
 			const { loadNodeConfig, saveNodeConfig } = nodeRegisterLib();
-			console.log('--------------------------------------\n');
-			console.log('🛑 Stopping Plum node...');
+			const { stopNode } = runnerProcessLib();
 			const cfg = loadNodeConfig(process.cwd());
-			if (cfg.pid) {
+
+			if (cfg.id) {
+				const stopped = stopNode(String(cfg.id));
+				if (stopped) {
+					clack.log.success(`Stopped runner "${cfg.name ?? cfg.id}".`);
+				} else if (cfg.pid) {
+					try {
+						process.kill(cfg.pid, 'SIGTERM');
+						clack.log.success(`Stopped node process (pid ${cfg.pid}).`);
+						saveNodeConfig(process.cwd(), { ...cfg, pid: null });
+					} catch {
+						clack.log.info('No running process found — it may already be stopped.');
+					}
+				} else {
+					clack.log.info('No running process found — it may already be stopped.');
+				}
+			} else if (cfg.pid) {
 				try {
 					process.kill(cfg.pid, 'SIGTERM');
-					console.log(`✅ Stopped node process (pid ${cfg.pid}).\n`);
+					clack.log.success(`Stopped node process (pid ${cfg.pid}).`);
+					saveNodeConfig(process.cwd(), { ...cfg, pid: null });
 				} catch {
-					console.log('ℹ️  No running node process found (it may already be stopped).\n');
+					clack.log.info('No running process found — it may already be stopped.');
 				}
-				saveNodeConfig(process.cwd(), { ...cfg, pid: null });
 			} else {
-				console.log('ℹ️  No node started from this folder. If it runs in the foreground,');
-				console.log('   press Ctrl+C in its terminal to stop it.\n');
+				clack.log.info('No node started from this folder.');
+				clack.log.info(`Use ${pc.cyan('plum manage-runners')} to stop running nodes.`);
 			}
-			console.log('--------------------------------------\n');
+			clack.outro(pc.dim('Done.'));
 			break;
 		}
 
@@ -831,6 +857,18 @@ switch (command) {
 		}
 
 		await nodeStart({ reconfig: false });
+		break;
+	}
+
+	case 'manage-runners': {
+		const { loadNodeConfig } = nodeRegisterLib();
+		const saved = loadNodeConfig(process.cwd());
+		const primaryUrl =
+			getFlag(process.argv.slice(3), '--primary') ??
+			process.env.PLUM_API_URL ??
+			saved.primary ??
+			'http://localhost:3001';
+		await openManageRunnersMenu(primaryUrl);
 		break;
 	}
 
@@ -859,8 +897,8 @@ switch (command) {
 		console.log('    --primary-url <url> Public URL node operators point --primary at');
 		console.log('  server reconfig      Re-enter server settings without starting');
 		console.log('  server stop          Stop the server  (alias: plum stop)');
-		console.log('  node start           Start a runner node (interactive) and register it');
-		console.log('    --primary <url>    Primary Plum server to auto-register with (prints the id)');
+		console.log('  node start           Start a runner node (interactive), then open runner menu');
+		console.log('    --primary <url>    Primary Plum server to auto-register with');
 		console.log('    --url <url>        Address the primary calls back (default: <lan-ip>:<port>;');
 		console.log(
 			'                       pass a domain like https://node1.example behind a TLS proxy)'
@@ -868,13 +906,17 @@ switch (command) {
 		console.log('    --port <n>         Local HTTP port the node listens on (default: 3001)');
 		console.log('    --token <secret>   Auth token (auto-generated + saved if omitted)');
 		console.log('    --name <name>      Runner name shown on the primary (default: node-<rand>)');
-		console.log('    --browser <name>   chromium | firefox | webkit (default: chromium)');
+		console.log('    --browser <name>   chromium | firefox (default: chromium)');
 		console.log('  node reconfig        Re-enter node settings + re-register, without starting');
 		console.log('  node stop            Stop the runner node started from this folder');
+		console.log('  manage-runners       Open the runner management menu');
+		console.log(
+			'    --primary <url>    Primary server URL (default: saved config or localhost:3001)'
+		);
 		console.log('  run-test             Run tests locally without Docker');
 		console.log('    @tag               Run only tests matching a tag');
 		console.log('    --parallel <n>     Run across n parallel workers');
-		console.log('    --browser <name>   chromium | firefox | webkit (default: chromium)');
+		console.log('    --browser <name>   chromium | firefox (default: chromium)');
 		console.log('  create-step          Interactively scaffold a new step definition');
 		console.log('\n--------------------------------------\n');
 }
