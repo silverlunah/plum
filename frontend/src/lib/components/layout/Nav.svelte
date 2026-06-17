@@ -18,13 +18,16 @@
 <script>
 	import { page } from '$app/stores';
 	import { slide } from 'svelte/transition';
+	import { auth } from '$lib/stores/auth';
+	import { goto } from '$app/navigation';
 
 	let menuOpen = false;
 
 	const links = [
-		{ href: '/', label: 'Run Tests' },
+		{ href: '/', label: 'Automated Tests' },
 		{ href: '/reports', label: 'Reports' },
-		{ href: '/scheduled-tests', label: 'Scheduled' }
+		{ href: '/scheduled-tests', label: 'Scheduled' },
+		{ href: '/test-repository', label: 'Test Repository' }
 	];
 
 	function closeMenu() {
@@ -40,13 +43,22 @@
 
 		<div class="links">
 			{#each links as link}
-				<a href={link.href} class="link" class:active={$page.url.pathname === link.href}>
+				<a
+					href={link.href}
+					class="link"
+					class:active={link.href === '/'
+						? $page.url.pathname === '/'
+						: $page.url.pathname.startsWith(link.href)}
+				>
 					{link.label}
 				</a>
 			{/each}
 		</div>
 
 		<div class="actions">
+			{#if $auth.user}
+				<span class="nav-user">{$auth.user.name}</span>
+			{/if}
 			<a
 				href="/settings"
 				class="settings-btn"
@@ -90,7 +102,9 @@
 				<a
 					href={link.href}
 					class="mobile-link"
-					class:active={$page.url.pathname === link.href}
+					class:active={link.href === '/'
+						? $page.url.pathname === '/'
+						: $page.url.pathname.startsWith(link.href)}
 					on:click={closeMenu}
 				>
 					{link.label}
@@ -185,6 +199,21 @@
 		align-items: center;
 		gap: 0.5rem;
 		margin-left: auto;
+	}
+
+	.nav-user {
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		max-width: 120px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	@media (max-width: 640px) {
+		.nav-user {
+			display: none;
+		}
 	}
 
 	/* Settings gear icon */

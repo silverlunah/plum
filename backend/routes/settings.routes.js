@@ -18,25 +18,61 @@
 const express = require('express');
 const router = express.Router();
 const settingsService = require('../services/settingsService');
+const testSuiteService = require('../services/testSuiteService');
+const testCaseService = require('../services/testCaseService');
+const { jwtAuth } = require('../middleware/jwtAuth');
 
-router.get('/project', async (req, res) => {
+router.get('/project', async (req, res, next) => {
 	try {
 		const project = await settingsService.getProject();
 		res.json(project);
-	} catch (error) {
-		console.error('Error fetching project settings:', error);
-		res.status(500).json({ error: 'Failed to fetch project settings' });
+	} catch (e) {
+		next(e);
 	}
 });
 
-router.post('/project', async (req, res) => {
+router.post('/project', async (req, res, next) => {
 	try {
 		const { name, logoUrl } = req.body;
 		const project = await settingsService.updateProject({ name, logoUrl });
 		res.json(project);
-	} catch (error) {
-		console.error('Error updating project settings:', error);
-		res.status(500).json({ error: 'Failed to update project settings' });
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/test-prefixes', jwtAuth, async (req, res, next) => {
+	try {
+		const prefixes = await settingsService.getTestPrefixes();
+		res.json(prefixes);
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/test-prefixes', jwtAuth, async (req, res, next) => {
+	try {
+		const { testCasePrefix, testSuitePrefix } = req.body;
+		const project = await settingsService.updateTestPrefixes({ testCasePrefix, testSuitePrefix });
+		res.json(project);
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/test-prefixes/migrate', jwtAuth, async (req, res, next) => {
+	try {
+		const { testCasePrefix, testSuitePrefix } = req.body;
+		const results = {};
+		if (testCasePrefix) {
+			results.cases = await testCaseService.migratePrefix(testCasePrefix);
+		}
+		if (testSuitePrefix) {
+			results.suites = await testSuiteService.migratePrefix(testSuitePrefix);
+		}
+		res.json({ ok: true, ...results });
+	} catch (e) {
+		next(e);
 	}
 });
 

@@ -18,6 +18,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
+	import { goto } from '$app/navigation';
 	import { fetchProject, saveProject, exportBackup, importBackup } from '$lib/api/settings';
 	import {
 		fetchRunners,
@@ -27,18 +28,30 @@
 		pingRunner,
 		probeRunner
 	} from '$lib/api/runners';
+	import { fetchPrefixes, savePrefixes, migratePrefixes } from '$lib/api/repository';
+	import { changePassword } from '$lib/api/auth';
 	import { builtInEnabled } from '$lib/stores/runner';
+	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { BROWSERS, TOAST_TIMEOUT_MS } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
 
-	/** @type {'project' | 'runners' | 'backup'} */
+	/** @type {'project' | 'runners' | 'repository' | 'account' | 'backup'} */
 	let section = 'project';
 
 	let project = { name: '', logoUrl: '' };
 	let projectSaving = false;
 	let toast = null;
+
+	let prefixes = { testCasePrefix: 'TC', testSuitePrefix: 'TS' };
+	let prefixesSaving = false;
+	let migrateForm = { testCasePrefix: '', testSuitePrefix: '' };
+	let migrating = false;
+
+	let pwForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
+	let pwSaving = false;
+	let pwError = '';
 
 	let importFile = null;
 	let importing = false;
@@ -74,6 +87,13 @@
 		try {
 			runners = await fetchRunners();
 			runnersLoaded = true;
+		} catch {}
+		try {
+			prefixes = await fetchPrefixes();
+			migrateForm = {
+				testCasePrefix: prefixes.testCasePrefix,
+				testSuitePrefix: prefixes.testSuitePrefix
+			};
 		} catch {}
 	});
 
@@ -235,9 +255,67 @@
 		importFile = e.target.files[0] ?? null;
 	}
 
+	async function handleSavePrefixes() {
+		prefixesSaving = true;
+		try {
+			prefixes = await savePrefixes(prefixes);
+			showToast('success', 'Prefixes saved.');
+		} catch {
+			showToast('error', 'Failed to save prefixes.');
+		} finally {
+			prefixesSaving = false;
+		}
+	}
+
+	async function handleMigratePrefixes() {
+		migrating = true;
+		try {
+			await migratePrefixes(migrateForm);
+			prefixes = { ...prefixes, ...migrateForm };
+			showToast('success', 'Prefix migration complete. All IDs updated.');
+		} catch {
+			showToast('error', 'Migration failed.');
+		} finally {
+			migrating = false;
+		}
+	}
+
+	async function handleChangePassword() {
+		pwError = '';
+		if (pwForm.newPassword !== pwForm.confirmPassword) {
+			pwError = 'Passwords do not match.';
+			return;
+		}
+		if (pwForm.newPassword.length < 8) {
+			pwError = 'Password must be at least 8 characters.';
+			return;
+		}
+		pwSaving = true;
+		try {
+			await changePassword({
+				token: $auth.token,
+				currentPassword: pwForm.currentPassword,
+				newPassword: pwForm.newPassword
+			});
+			pwForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
+			showToast('success', 'Password changed.');
+		} catch (e) {
+			pwError = e.message;
+		} finally {
+			pwSaving = false;
+		}
+	}
+
+	function handleLogout() {
+		auth.logout();
+		goto('/login');
+	}
+
 	const navItems = [
 		{ id: 'project', label: 'Project' },
 		{ id: 'runners', label: 'Runners' },
+		{ id: 'repository', label: 'Repository' },
+		{ id: 'account', label: 'Account' },
 		{ id: 'backup', label: 'Backup' }
 	];
 </script>
@@ -560,6 +638,159 @@
 							<Button variant="ghost" on:click={() => (runnerFormOpen = true)}>+ Add Runner</Button>
 						</div>
 					{/if}
+				</div>
+			</div>
+
+			<!-- REPOSITORY -->
+		{:else if section === 'repository'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<div class="content-header">
+					<h2>Test Repository</h2>
+					<p class="content-desc">Configure ID prefixes for test suites and cases.</p>
+				</div>
+
+				<div class="card settings-card">
+					<div class="field-row">
+						<div class="field">
+							<label class="field-label" for="tc-prefix">Test Case prefix</label>
+							<input
+								id="tc-prefix"
+								type="text"
+								class="field-input mono"
+								bind:value={prefixes.testCasePrefix}
+								placeholder="TC"
+								maxlength="10"
+							/>
+						</div>
+						<div class="field">
+							<label class="field-label" for="ts-prefix">Test Suite prefix</label>
+							<input
+								id="ts-prefix"
+								type="text"
+								class="field-input mono"
+								bind:value={prefixes.testSuitePrefix}
+								placeholder="TS"
+								maxlength="10"
+							/>
+						</div>
+					</div>
+					<p class="content-desc">
+						Examples: <code class="code-sample">{prefixes.testCasePrefix || 'TC'}-001</code>,
+						<code class="code-sample">{prefixes.testSuitePrefix || 'TS'}-001</code>
+					</p>
+					<div class="card-footer">
+						<Button on:click={handleSavePrefixes} disabled={prefixesSaving}>
+							{prefixesSaving ? 'Saving…' : 'Save Prefixes'}
+						</Button>
+					</div>
+				</div>
+
+				<div class="content-header" style="margin-top: 1rem">
+					<h2>Migrate IDs</h2>
+					<p class="content-desc">
+						Rename all existing test IDs to use a new prefix. Cucumber tags in code are <strong
+							>not</strong
+						> affected — you manage those separately.
+					</p>
+				</div>
+
+				<div class="card settings-card">
+					<div class="field-row">
+						<div class="field">
+							<label class="field-label" for="mig-tc">New case prefix</label>
+							<input
+								id="mig-tc"
+								type="text"
+								class="field-input mono"
+								bind:value={migrateForm.testCasePrefix}
+								placeholder={prefixes.testCasePrefix}
+								maxlength="10"
+							/>
+						</div>
+						<div class="field">
+							<label class="field-label" for="mig-ts">New suite prefix</label>
+							<input
+								id="mig-ts"
+								type="text"
+								class="field-input mono"
+								bind:value={migrateForm.testSuitePrefix}
+								placeholder={prefixes.testSuitePrefix}
+								maxlength="10"
+							/>
+						</div>
+					</div>
+					<div class="card-footer">
+						<Button variant="ghost" on:click={handleMigratePrefixes} disabled={migrating}>
+							{migrating ? 'Migrating…' : 'Run Migration'}
+						</Button>
+					</div>
+				</div>
+			</div>
+
+			<!-- ACCOUNT -->
+		{:else if section === 'account'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<div class="content-header">
+					<h2>Account</h2>
+					<p class="content-desc">Manage your credentials and session.</p>
+				</div>
+
+				{#if $auth.user}
+					<div class="card settings-card">
+						<div class="account-info">
+							<p class="account-name">{$auth.user.name}</p>
+							<p class="account-email">{$auth.user.email}</p>
+						</div>
+					</div>
+				{/if}
+
+				<div class="card settings-card">
+					<p class="card-title">Change password</p>
+					<div class="field">
+						<label class="field-label" for="pw-current">Current password</label>
+						<input
+							id="pw-current"
+							type="password"
+							class="field-input"
+							bind:value={pwForm.currentPassword}
+							autocomplete="current-password"
+						/>
+					</div>
+					<div class="field">
+						<label class="field-label" for="pw-new">New password</label>
+						<input
+							id="pw-new"
+							type="password"
+							class="field-input"
+							bind:value={pwForm.newPassword}
+							autocomplete="new-password"
+						/>
+					</div>
+					<div class="field">
+						<label class="field-label" for="pw-confirm">Confirm new password</label>
+						<input
+							id="pw-confirm"
+							type="password"
+							class="field-input"
+							bind:value={pwForm.confirmPassword}
+							autocomplete="new-password"
+						/>
+					</div>
+					{#if pwError}<p class="form-error">{pwError}</p>{/if}
+					<div class="card-footer">
+						<Button
+							on:click={handleChangePassword}
+							disabled={pwSaving || !pwForm.currentPassword || !pwForm.newPassword}
+						>
+							{pwSaving ? 'Saving…' : 'Change Password'}
+						</Button>
+					</div>
+				</div>
+
+				<div class="card settings-card">
+					<div class="card-footer">
+						<Button variant="danger" size="sm" on:click={handleLogout}>Sign out</Button>
+					</div>
 				</div>
 			</div>
 
@@ -1025,6 +1256,48 @@
 		background: var(--bg-subtle);
 	}
 
+	/* ── Field row (two columns) ── */
+	.field-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.75rem;
+	}
+
+	.mono {
+		font-family: 'JetBrains Mono', monospace !important;
+		font-size: 0.8125rem !important;
+	}
+
+	.code-sample {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.78rem;
+		background: var(--bg-subtle);
+		padding: 0.1em 0.3em;
+		border-radius: 3px;
+	}
+
+	.account-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+
+	.account-name {
+		font-size: 0.9375rem;
+		font-weight: 500;
+		color: var(--text);
+	}
+
+	.account-email {
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+	}
+
+	.form-error {
+		font-size: 0.8125rem;
+		color: var(--fail);
+	}
+
 	/* ── Responsive ── */
 	@media (max-width: 640px) {
 		.settings-layout {
@@ -1050,7 +1323,8 @@
 			height: 1px;
 		}
 
-		.runner-form-fields {
+		.runner-form-fields,
+		.field-row {
 			grid-template-columns: 1fr;
 		}
 	}

@@ -39,6 +39,11 @@ if (process.env.PLUM_MODE !== 'node') {
 	app.use('/settings', require('./routes/settings.routes'));
 	app.use('/backup', require('./routes/backup.routes'));
 	app.use('/runners', require('./routes/runners.routes'));
+	app.use('/auth', require('./routes/auth.routes'));
+	app.use('/users', require('./routes/users.routes'));
+	app.use('/test-suites', require('./routes/test-suites.routes'));
+	app.use('/test-cases', require('./routes/test-cases.routes'));
+	app.use('/test-runs', require('./routes/test-runs.routes'));
 }
 
 module.exports = app;

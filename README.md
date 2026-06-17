@@ -8,7 +8,7 @@
 
 <p align="center">
   A ready-to-use E2E test automation environment built on <a href="https://playwright.dev">Playwright</a> + <a href="https://cucumber.io">Cucumber</a>.<br/>
-  Write tests in Gherkin, run them from the CLI or UI, and view reports — all in one place.
+  Write tests in Gherkin, run them from the CLI or UI, view reports, and manage your entire test case repository — all in one place.
 </p>
 
 ---
@@ -113,7 +113,23 @@ The first time you run it, Plum asks a few questions (press Enter to accept the 
 | **Frontend (UI) port** | `5173`                    | Host port for the web UI                                                |
 | **Primary public URL** | `http://<your-ip>:<port>` | The address you give runner nodes (see [Runner Setup](#4-runner-setup)) |
 
-Your answers are saved to `.plum-server.json`, so the next `plum server start` reuses them without asking. When it finishes, open the UI at the frontend port it prints (default **http://localhost:5173**).
+Your answers are saved to `.plum-server.json`, so the next `plum server start` reuses them without asking.
+
+### First-user setup
+
+On the very first start, Plum detects that no user accounts exist and prompts you to create one:
+
+```
+No users found — create your first account to get started.
+✔ Your name … Jane Smith
+✔ Email address … jane@example.com
+✔ Password …
+✓ Account created for jane@example.com. You can now log in.
+```
+
+After that, open the UI at the frontend port it prints (default **http://localhost:5173**) and sign in. Additional users can be invited from **Settings → Account** or the **Settings → Users** page.
+
+> If you skip the CLI prompt, visit `http://localhost:5173/setup` in your browser to create the first account.
 
 > Docker must be running before you use this command. Plum builds and starts the backend, database, and UI automatically.
 
@@ -292,7 +308,49 @@ plum run-test --browser firefox          # run in a specific browser
 
 ---
 
-## 4. Runner Setup
+## 4. Test Repository
+
+Plum includes a built-in test case management system accessible from the **Test Repository** tab in the UI.
+
+### Test Suites and Cases
+
+Organise test cases into **suites**. Each suite and case gets an auto-assigned ID (e.g. `TS-001`, `TC-001`). The prefix is configurable in **Settings → Repository**.
+
+Each test case has:
+
+- **Title** and **Description**
+- **Priority** — Critical, High, Medium, or Low
+- **Test Steps** — an ordered table with columns: Action, Test Data, Expected Output
+- **Automated tag** — a Cucumber `@tag` name that links this case to an automated scenario (e.g. `test-login-1`)
+- **History** — a timeline of every result, from manual test runs and automated builds
+
+### Linking automated tests
+
+Set the **Automated tag** on a test case to match a Cucumber `@tag` in your feature files. After every automated run, Plum scans the results and:
+
+1. Marks matching cases as **automated**
+2. Records a pass/fail entry in the case's history
+
+```gherkin
+@test-login-1
+Scenario: User can log in with valid credentials
+```
+
+If `TC-042` has `automatedTag = test-login-1`, it will be marked automated and updated after each build — no manual linking required.
+
+### Test Runs
+
+Create a **Test Run** (e.g. "Sprint 12 regression") and drag test cases from the suite browser into the run. Then switch to **Execute** mode to step through each case and mark it pass / fail / blocked / skip.
+
+Results are recorded in the case's history and the run's progress bar updates in real time.
+
+### Migrating IDs
+
+If you change the test ID prefix (e.g. from `TC` to `CASE`), use **Settings → Repository → Run Migration** to rename all existing IDs at once. Cucumber tags in your code are intentionally left unchanged — update those separately.
+
+---
+
+## 5. Runner Setup
 
 Runners are additional machines that execute tests in parallel alongside the primary server, letting you distribute a large suite across many nodes. A node runs as a plain Node process — **no Docker required**.
 
