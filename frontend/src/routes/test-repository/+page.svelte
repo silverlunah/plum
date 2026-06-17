@@ -316,11 +316,11 @@
 						<div class="suite-card-header">
 							<span class="id-chip">{suite.displayId}</span>
 							<span class="priority-badge {priorityClass(suite.priority)}">{suite.priority}</span>
-							<div class="suite-card-actions" on:click|stopPropagation>
+							<div class="suite-card-actions">
 								<button
 									class="icon-btn danger"
 									title="Delete suite"
-									on:click={() => {
+									on:click|stopPropagation={() => {
 										confirmDelete = { type: 'suite', id: suite.id, name: suite.name };
 										confirmDeleteOpen = true;
 									}}
@@ -397,11 +397,11 @@
 							<span class="meta-sep">·</span>
 							<span>{new Date(run.createdAt).toLocaleDateString()}</span>
 						</div>
-						<div class="run-row-actions" on:click|stopPropagation>
+						<div class="run-row-actions">
 							<button
 								class="icon-btn danger"
 								title="Delete run"
-								on:click={() => {
+								on:click|stopPropagation={() => {
 									confirmDelete = { type: 'run', id: run.id, name: run.title };
 									confirmDeleteOpen = true;
 								}}
