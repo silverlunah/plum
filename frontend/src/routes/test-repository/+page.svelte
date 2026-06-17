@@ -19,7 +19,7 @@
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { fetchSuites, createSuite, deleteSuite } from '$lib/api/repository';
-	import { fetchRuns, createRun, deleteRun } from '$lib/api/repository';
+	import { fetchRuns, createRun, duplicateRun, deleteRun } from '$lib/api/repository';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
@@ -124,6 +124,16 @@
 			runFormError = e.message;
 		} finally {
 			runFormSaving = false;
+		}
+	}
+
+	async function handleDuplicateRun(run) {
+		try {
+			const copy = await duplicateRun(run.id);
+			runs = [copy, ...runs];
+			showToast('success', `Duplicated as "${copy.title}".`);
+		} catch {
+			showToast('error', 'Failed to duplicate run.');
 		}
 	}
 
@@ -398,6 +408,26 @@
 							<span>{new Date(run.createdAt).toLocaleDateString()}</span>
 						</div>
 						<div class="run-row-actions">
+							<button
+								class="icon-btn"
+								title="Duplicate run"
+								on:click|stopPropagation={() => handleDuplicateRun(run)}
+							>
+								<svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<rect x="9" y="9" width="13" height="13" rx="2" /><path
+										d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+									/>
+								</svg>
+							</button>
 							<button
 								class="icon-btn danger"
 								title="Delete run"

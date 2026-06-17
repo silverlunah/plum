@@ -98,6 +98,25 @@ async function update(id, { title, status, caseIds }) {
 	return prisma.testRun.update({ where: { id }, data, select: runListSelect });
 }
 
+async function duplicate(id, { createdById }) {
+	const original = await prisma.testRun.findUnique({
+		where: { id },
+		select: {
+			title: true,
+			entries: { select: { caseId: true, order: true }, orderBy: { order: 'asc' } }
+		}
+	});
+	if (!original) return null;
+	return prisma.testRun.create({
+		data: {
+			title: `Copy of ${original.title}`,
+			createdById,
+			entries: { create: original.entries.map((e, i) => ({ caseId: e.caseId, order: i })) }
+		},
+		select: runListSelect
+	});
+}
+
 async function remove(id) {
 	return prisma.testRun.delete({ where: { id } });
 }
@@ -145,4 +164,13 @@ async function reorderEntries(runId, orderedEntryIds) {
 	);
 }
 
-module.exports = { getAll, getById, create, update, remove, updateEntry, reorderEntries };
+module.exports = {
+	getAll,
+	getById,
+	create,
+	update,
+	duplicate,
+	remove,
+	updateEntry,
+	reorderEntries
+};

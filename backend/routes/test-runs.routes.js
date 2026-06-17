@@ -60,6 +60,16 @@ router.put('/:id', jwtAuth, async (req, res, next) => {
 	}
 });
 
+router.post('/:id/duplicate', jwtAuth, async (req, res, next) => {
+	try {
+		const run = await testRunService.duplicate(req.params.id, { createdById: req.user.userId });
+		if (!run) return res.status(404).json({ error: 'Test run not found' });
+		res.status(201).json({ run });
+	} catch (e) {
+		next(e);
+	}
+});
+
 router.delete('/:id', jwtAuth, async (req, res, next) => {
 	try {
 		await testRunService.remove(req.params.id);

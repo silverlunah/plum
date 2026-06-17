@@ -145,6 +145,19 @@
 		}
 	}
 
+	async function handleReopenRun() {
+		try {
+			await updateRun(runId, { status: 'draft' });
+			run = { ...run, status: 'draft' };
+			mode = 'build';
+			showToast('success', 'Run reopened.');
+		} catch (e) {
+			showToast('error', e.message);
+		}
+	}
+
+	$: isLocked = run?.status === 'complete';
+
 	function onDragStart(e, entryId) {
 		dragEntryId = entryId;
 		e.dataTransfer.effectAllowed = 'move';
@@ -205,18 +218,18 @@
 			<span class="run-status-badge {run.status}">{run.status}</span>
 		</div>
 		<div class="run-header-actions">
-			{#if mode === 'build'}
+			{#if isLocked}
+				<Button variant="ghost" on:click={handleReopenRun}>Reopen</Button>
+			{:else if mode === 'build'}
 				<Button variant="ghost" on:click={handleSaveRun} disabled={saving}>
 					{saving ? 'Saving…' : 'Save'}
 				</Button>
-				{#if run.entries.length > 0 && run.status !== 'complete'}
+				{#if run.entries.length > 0}
 					<Button on:click={handleStartExecution}>Start Execution</Button>
 				{/if}
 			{:else}
 				<Button variant="ghost" on:click={() => (mode = 'build')}>← Edit Run</Button>
-				{#if run.status !== 'complete'}
-					<Button on:click={handleCompleteRun}>Mark Complete</Button>
-				{/if}
+				<Button on:click={handleCompleteRun}>Mark Complete</Button>
 			{/if}
 		</div>
 	</div>
@@ -235,48 +248,51 @@
 	</div>
 
 	{#if mode === 'build'}
-		<div class="builder-workspace" transition:fly={{ y: 4, duration: 150 }}>
+		<div
+			class="builder-workspace"
+			class:locked-workspace={isLocked}
+			transition:fly={{ y: 4, duration: 150 }}
+		>
 			<!-- Left: run entries -->
 			<div class="builder-panel left-panel">
 				<div class="builder-panel-head">
 					<h2 class="builder-panel-title">In this run</h2>
 					<span class="count-chip">{run.entries.length}</span>
+					{#if isLocked}
+						<span class="locked-badge">locked</span>
+					{/if}
 				</div>
 
 				{#if run.entries.length === 0}
-					<div class="drop-hint">
-						Drag cases here from the suite browser, or click a case to add it.
-					</div>
+					<div class="drop-hint">No cases in this run.</div>
 				{:else}
-					<div
-						class="entry-list"
-						role="list"
-						on:dragover={(e) => e.preventDefault()}
-						on:drop={(e) => onDrop(e, null)}
-					>
+					<div class="entry-list" role="list">
 						{#each run.entries as entry (entry.id)}
 							<div
 								class="entry-row"
+								class:entry-locked={isLocked}
+								role="listitem"
+								draggable={!isLocked}
+								on:dragstart={isLocked ? null : (e) => onDragStart(e, entry.id)}
+								on:dragover={isLocked ? null : (e) => onDragOver(e, entry.id)}
+								on:dragleave={isLocked ? null : () => (dragOverEntryId = null)}
+								on:drop={isLocked ? null : (e) => onDrop(e, entry.id)}
 								class:dragging={dragEntryId === entry.id}
 								class:drag-over={dragOverEntryId === entry.id}
-								role="listitem"
-								draggable="true"
-								on:dragstart={(e) => onDragStart(e, entry.id)}
-								on:dragover={(e) => onDragOver(e, entry.id)}
-								on:dragleave={() => (dragOverEntryId = null)}
-								on:drop={(e) => onDrop(e, entry.id)}
 							>
-								<svg
-									class="drag-handle"
-									width="12"
-									height="12"
-									viewBox="0 0 24 24"
-									fill="currentColor"
-								>
-									<circle cx="9" cy="5" r="1.5" /><circle cx="15" cy="5" r="1.5" />
-									<circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
-									<circle cx="9" cy="19" r="1.5" /><circle cx="15" cy="19" r="1.5" />
-								</svg>
+								{#if !isLocked}
+									<svg
+										class="drag-handle"
+										width="12"
+										height="12"
+										viewBox="0 0 24 24"
+										fill="currentColor"
+									>
+										<circle cx="9" cy="5" r="1.5" /><circle cx="15" cy="5" r="1.5" />
+										<circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
+										<circle cx="9" cy="19" r="1.5" /><circle cx="15" cy="19" r="1.5" />
+									</svg>
+								{/if}
 								<div class="entry-info">
 									<div class="entry-badges">
 										<span class="id-chip">{entry.case.displayId}</span>
@@ -287,76 +303,85 @@
 									<p class="entry-title">{entry.case.title}</p>
 									<span class="entry-suite">{entry.case.suite?.name ?? ''}</span>
 								</div>
-								<button class="icon-btn danger" on:click={() => removeEntry(entry.id)}>
-									<svg width="11" height="11" viewBox="0 0 14 14" fill="none"
-										><path
-											d="M1 1l12 12M13 1L1 13"
-											stroke="currentColor"
-											stroke-width="1.5"
-											stroke-linecap="round"
-										/></svg
-									>
-								</button>
+								{#if !isLocked}
+									<button class="icon-btn danger" on:click={() => removeEntry(entry.id)}>
+										<svg width="11" height="11" viewBox="0 0 14 14" fill="none"
+											><path
+												d="M1 1l12 12M13 1L1 13"
+												stroke="currentColor"
+												stroke-width="1.5"
+												stroke-linecap="round"
+											/></svg
+										>
+									</button>
+								{/if}
 							</div>
 						{/each}
 					</div>
 				{/if}
 			</div>
 
-			<!-- Right: suite browser -->
-			<div class="builder-panel right-panel">
-				<div class="builder-panel-head">
-					<h2 class="builder-panel-title">Suite browser</h2>
-					<input type="text" class="search-input" bind:value={search} placeholder="Search cases…" />
-				</div>
+			<!-- Right: suite browser (hidden when locked) -->
+			{#if !isLocked}
+				<div class="builder-panel right-panel">
+					<div class="builder-panel-head">
+						<h2 class="builder-panel-title">Suite browser</h2>
+						<input
+							type="text"
+							class="search-input"
+							bind:value={search}
+							placeholder="Search cases…"
+						/>
+					</div>
 
-				<div class="suite-browser">
-					{#each filteredSuites as suite (suite.id)}
-						<div class="browser-suite">
-							<button
-								class="browser-suite-header"
-								on:click={() => {
-									if (expandedSuites.has(suite.id)) expandedSuites.delete(suite.id);
-									else expandedSuites.add(suite.id);
-									expandedSuites = new Set(expandedSuites);
-								}}
-							>
-								<svg
-									class="chevron"
-									class:open={expandedSuites.has(suite.id)}
-									width="12"
-									height="12"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"><polyline points="9 18 15 12 9 6" /></svg
+					<div class="suite-browser">
+						{#each filteredSuites as suite (suite.id)}
+							<div class="browser-suite">
+								<button
+									class="browser-suite-header"
+									on:click={() => {
+										if (expandedSuites.has(suite.id)) expandedSuites.delete(suite.id);
+										else expandedSuites.add(suite.id);
+										expandedSuites = new Set(expandedSuites);
+									}}
 								>
-								<span class="browser-suite-name">{suite.name}</span>
-								<span class="browser-suite-count">{suite.cases?.length ?? 0}</span>
-							</button>
-							{#if expandedSuites.has(suite.id) && suite.cases?.length > 0}
-								<div class="browser-cases" transition:fly={{ y: -4, duration: 120 }}>
-									{#each suite.cases as tc (tc.id)}
-										<button class="browser-case" on:click={() => addCase(tc)}>
-											<span class="id-chip small">{tc.displayId}</span>
-											<span class="browser-case-title">{tc.title}</span>
-											<span class="priority-badge small {priorityClass(tc.priority)}"
-												>{tc.priority}</span
-											>
-										</button>
-									{/each}
-								</div>
-							{:else if expandedSuites.has(suite.id)}
-								<p class="browser-empty">{search ? 'No matching cases' : 'All cases added'}</p>
-							{/if}
-						</div>
-					{/each}
-					{#if filteredSuites.length === 0}
-						<p class="browser-empty">No suites available.</p>
-					{/if}
+									<svg
+										class="chevron"
+										class:open={expandedSuites.has(suite.id)}
+										width="12"
+										height="12"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"><polyline points="9 18 15 12 9 6" /></svg
+									>
+									<span class="browser-suite-name">{suite.name}</span>
+									<span class="browser-suite-count">{suite.cases?.length ?? 0}</span>
+								</button>
+								{#if expandedSuites.has(suite.id) && suite.cases?.length > 0}
+									<div class="browser-cases" transition:fly={{ y: -4, duration: 120 }}>
+										{#each suite.cases as tc (tc.id)}
+											<button class="browser-case" on:click={() => addCase(tc)}>
+												<span class="id-chip small">{tc.displayId}</span>
+												<span class="browser-case-title">{tc.title}</span>
+												<span class="priority-badge small {priorityClass(tc.priority)}"
+													>{tc.priority}</span
+												>
+											</button>
+										{/each}
+									</div>
+								{:else if expandedSuites.has(suite.id)}
+									<p class="browser-empty">{search ? 'No matching cases' : 'All cases added'}</p>
+								{/if}
+							</div>
+						{/each}
+						{#if filteredSuites.length === 0}
+							<p class="browser-empty">No suites available.</p>
+						{/if}
+					</div>
 				</div>
-			</div>
+			{/if}
 		</div>
 	{:else}
 		<div class="execute-workspace" transition:fly={{ y: 4, duration: 150 }}>
@@ -387,7 +412,9 @@
 								</div>
 							</div>
 							<div class="exec-actions">
-								{#if entry.status === 'pending'}
+								{#if isLocked}
+									<span class="result-chip {statusClass(entry.status)}">{entry.status}</span>
+								{:else if entry.status === 'pending'}
 									<button
 										class="exec-btn pass"
 										on:click={() => handleMarkEntry(entry, 'pass')}
@@ -510,6 +537,30 @@
 		background: var(--pass-soft);
 		color: var(--pass);
 		border-color: var(--pass);
+	}
+
+	.locked-badge {
+		font-size: 0.62rem;
+		font-weight: 600;
+		letter-spacing: 0.07em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: 100px;
+		padding: 0.1rem 0.45rem;
+		margin-left: auto;
+	}
+
+	.locked-workspace {
+		grid-template-columns: 1fr;
+	}
+
+	.entry-row.entry-locked {
+		cursor: default;
+	}
+	.entry-row.entry-locked:hover {
+		border-color: var(--border);
 	}
 	.run-status-badge.in-progress {
 		background: var(--warn-soft);

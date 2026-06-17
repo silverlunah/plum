@@ -161,6 +161,16 @@ export async function updateRun(id, { title, status, caseIds }) {
 	return data.run;
 }
 
+export async function duplicateRun(id) {
+	const res = await fetch(`${API_BASE}/test-runs/${id}/duplicate`, {
+		method: 'POST',
+		headers: authHeaders()
+	});
+	const data = await res.json();
+	if (!res.ok) throw new Error(data.error ?? 'Failed to duplicate run');
+	return data.run;
+}
+
 export async function deleteRun(id) {
 	const res = await fetch(`${API_BASE}/test-runs/${id}`, {
 		method: 'DELETE',
