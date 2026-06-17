@@ -61,6 +61,17 @@
 			)
 		: suites;
 	$: filteredRuns = q ? runs.filter((r) => r.title.toLowerCase().includes(q)) : runs;
+	$: allCases = suites.flatMap((s) =>
+		(s.cases ?? []).map((c) => ({
+			...c,
+			suite: { id: s.id, name: s.name, displayId: s.displayId }
+		}))
+	);
+	$: filteredCases = q
+		? allCases.filter(
+				(c) => c.displayId.toLowerCase().includes(q) || c.title.toLowerCase().includes(q)
+			)
+		: [];
 
 	const PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
 
@@ -71,7 +82,7 @@
 
 	onMount(async () => {
 		try {
-			[suites, runs] = await Promise.all([fetchSuites(), fetchRuns()]);
+			[suites, runs] = await Promise.all([fetchSuites({ withCases: true }), fetchRuns()]);
 		} catch (e) {
 			showToast('error', 'Failed to load data');
 		} finally {
@@ -335,7 +346,185 @@
 	{/if}
 </div>
 
-{#if tab === 'suites'}
+{#if q}
+	<!-- ── Global search results ── -->
+	<div transition:fly={{ y: 4, duration: 160 }}>
+		{#if loading}
+			<div class="loading-row">Loading…</div>
+		{:else if filteredCases.length === 0 && filteredSuites.length === 0 && filteredRuns.length === 0}
+			<EmptyState title="No results" description="Nothing matches &ldquo;{search}&rdquo;." />
+		{:else}
+			{#if filteredCases.length > 0}
+				<div class="search-section">
+					<h2 class="search-section-title">
+						Cases <span class="tab-count">{filteredCases.length}</span>
+					</h2>
+					<div class="case-results">
+						{#each filteredCases as tc (tc.id)}
+							<a href="/test-repository/suites/{tc.suite.id}" class="case-result-row">
+								<span class="id-chip small">{tc.displayId}</span>
+								<span class="case-result-title">{tc.title}</span>
+								{#if tc.isAutomated}<span class="auto-badge">automated</span>{/if}
+								<span class="priority-badge small {priorityClass(tc.priority)}">{tc.priority}</span>
+								<span class="case-result-suite">{tc.suite.displayId} · {tc.suite.name}</span>
+							</a>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			{#if filteredSuites.length > 0}
+				<div class="search-section">
+					<h2 class="search-section-title">
+						Suites <span class="tab-count">{filteredSuites.length}</span>
+					</h2>
+					<div class="suite-grid">
+						{#each filteredSuites as suite (suite.id)}
+							<div class="suite-card">
+								<a
+									href="/test-repository/suites/{suite.id}"
+									class="card-link"
+									aria-label={suite.name}
+								></a>
+								<div class="suite-card-header">
+									<span class="id-chip">{suite.displayId}</span>
+									<span class="priority-badge {priorityClass(suite.priority)}"
+										>{suite.priority}</span
+									>
+									<div class="suite-card-actions">
+										<button
+											class="icon-btn danger"
+											title="Delete suite"
+											on:click={() => {
+												confirmDelete = {
+													type: 'suite',
+													id: suite.id,
+													name: suite.name
+												};
+												confirmDeleteOpen = true;
+											}}
+										>
+											<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<polyline points="3 6 5 6 21 6" /><path
+													d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+												/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+											</svg>
+										</button>
+									</div>
+								</div>
+								<h3 class="suite-name">{suite.name}</h3>
+								{#if suite.description}
+									<p class="suite-desc">{suite.description}</p>
+								{/if}
+								<div class="suite-meta">
+									<span class="meta-item">
+										<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											><path
+												d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"
+											/></svg
+										>
+										{suite._count.cases} case{suite._count.cases !== 1 ? 's' : ''}
+									</span>
+									<span class="meta-item">by {suite.createdBy.name}</span>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			{#if filteredRuns.length > 0}
+				<div class="search-section">
+					<h2 class="search-section-title">
+						Runs <span class="tab-count">{filteredRuns.length}</span>
+					</h2>
+					<div class="runs-list">
+						{#each filteredRuns as run (run.id)}
+							<div class="run-row">
+								<a href="/test-repository/runs/{run.id}" class="card-link" aria-label={run.title}
+								></a>
+								<div class="run-row-main">
+									<span class="run-status-dot {runStatusClass(run.status)}"></span>
+									<span class="run-title">{run.title}</span>
+									<span class="run-count"
+										>{run._count.entries} case{run._count.entries !== 1 ? 's' : ''}</span
+									>
+								</div>
+								<div class="run-meta">
+									<span class="run-status-label">{run.status}</span>
+									<span class="meta-sep">·</span>
+									<span>by {run.createdBy.name}</span>
+									<span class="meta-sep">·</span>
+									<span>{new Date(run.createdAt).toLocaleDateString()}</span>
+								</div>
+								<div class="run-row-actions">
+									<button
+										class="icon-btn"
+										title="Duplicate run"
+										on:click={() => handleDuplicateRun(run)}
+									>
+										<svg
+											width="13"
+											height="13"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<rect x="9" y="9" width="13" height="13" rx="2" /><path
+												d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+											/>
+										</svg>
+									</button>
+									<button
+										class="icon-btn danger"
+										title="Delete run"
+										on:click={() => {
+											confirmDelete = { type: 'run', id: run.id, name: run.title };
+											confirmDeleteOpen = true;
+										}}
+									>
+										<svg
+											width="13"
+											height="13"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<polyline points="3 6 5 6 21 6" /><path
+												d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+											/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+										</svg>
+									</button>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		{/if}
+	</div>
+{:else if tab === 'suites'}
 	<div transition:fly={{ y: 4, duration: 160 }}>
 		{#if loading}
 			<div class="loading-row">Loading…</div>
@@ -344,11 +533,9 @@
 				title="No test suites yet"
 				description="Create your first suite to start organising test cases."
 			/>
-		{:else if filteredSuites.length === 0}
-			<EmptyState title="No results" description="No suites match &ldquo;{search}&rdquo;." />
 		{:else}
 			<div class="suite-grid">
-				{#each filteredSuites as suite (suite.id)}
+				{#each suites as suite (suite.id)}
 					<div class="suite-card">
 						<a href="/test-repository/suites/{suite.id}" class="card-link" aria-label={suite.name}
 						></a>
@@ -416,11 +603,9 @@
 				title="No test runs yet"
 				description="Create a test run to start executing and tracking manual tests."
 			/>
-		{:else if filteredRuns.length === 0}
-			<EmptyState title="No results" description="No runs match &ldquo;{search}&rdquo;." />
 		{:else}
 			<div class="runs-list">
-				{#each filteredRuns as run (run.id)}
+				{#each runs as run (run.id)}
 					<div class="run-row">
 						<a href="/test-repository/runs/{run.id}" class="card-link" aria-label={run.title}></a>
 						<div class="run-row-main">
@@ -627,6 +812,64 @@
 		color: var(--text);
 	}
 
+	/* ── Search results ── */
+	.search-section {
+		margin-bottom: 2rem;
+	}
+
+	.search-section-title {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-muted);
+		margin-bottom: 0.75rem;
+	}
+
+	.case-results {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.case-result-row {
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
+		padding: 0.6rem 0.875rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		text-decoration: none;
+		color: inherit;
+		transition: border-color var(--duration-fast);
+	}
+
+	.case-result-row:hover {
+		border-color: var(--accent);
+	}
+
+	.case-result-title {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--text);
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.case-result-suite {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		flex-shrink: 0;
+		white-space: nowrap;
+	}
+
 	/* ── Suite grid ── */
 	.suite-grid {
 		display: grid;
@@ -724,6 +967,22 @@
 		flex-shrink: 0;
 	}
 
+	.id-chip.small {
+		font-size: 0.65rem;
+	}
+
+	.auto-badge {
+		font-size: 0.62rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--pass);
+		background: var(--pass-soft);
+		border-radius: 100px;
+		padding: 0.1rem 0.4rem;
+		flex-shrink: 0;
+	}
+
 	/* ── Priority badges ── */
 	.priority-badge {
 		font-size: 0.68rem;
@@ -731,6 +990,11 @@
 		border-radius: 100px;
 		padding: 0.15rem 0.5rem;
 		flex-shrink: 0;
+	}
+
+	.priority-badge.small {
+		font-size: 0.62rem;
+		padding: 0.1rem 0.4rem;
 	}
 
 	.priority-badge.critical {
