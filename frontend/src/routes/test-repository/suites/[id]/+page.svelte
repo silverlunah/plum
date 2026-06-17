@@ -382,10 +382,13 @@
 			{:else}
 				<div class="case-list">
 					{#each suite.cases as tc (tc.id)}
-						<button
+						<div
 							class="case-row"
 							class:selected={selectedCase?.id === tc.id}
+							role="button"
+							tabindex="0"
 							on:click={() => selectCase(tc)}
+							on:keydown={(e) => e.key === 'Enter' && selectCase(tc)}
 						>
 							<div class="case-row-top">
 								<span class="id-chip small">{tc.displayId}</span>
@@ -422,7 +425,7 @@
 							<span class="case-steps"
 								>{tc._count.steps} step{tc._count.steps !== 1 ? 's' : ''}</span
 							>
-						</button>
+						</div>
 					{/each}
 				</div>
 			{/if}

@@ -22,7 +22,7 @@ const testCaseService = require('../services/testCaseService');
 
 router.get('/:id', jwtAuth, async (req, res, next) => {
 	try {
-		const tc = await testCaseService.getById(req.params.id);
+		const tc = await testCaseService.getById(Number(req.params.id));
 		if (!tc) return res.status(404).json({ error: 'Test case not found' });
 		res.json({ testCase: tc });
 	} catch (e) {
@@ -52,7 +52,7 @@ router.post('/', jwtAuth, async (req, res, next) => {
 router.put('/:id', jwtAuth, async (req, res, next) => {
 	try {
 		const { title, description, priority, automatedTag } = req.body;
-		const testCase = await testCaseService.update(req.params.id, {
+		const testCase = await testCaseService.update(Number(req.params.id), {
 			title,
 			description,
 			priority,
@@ -67,7 +67,7 @@ router.put('/:id', jwtAuth, async (req, res, next) => {
 router.put('/:id/steps', jwtAuth, async (req, res, next) => {
 	try {
 		const { steps } = req.body;
-		const saved = await testCaseService.upsertSteps(req.params.id, steps);
+		const saved = await testCaseService.upsertSteps(Number(req.params.id), steps);
 		res.json({ steps: saved });
 	} catch (e) {
 		next(e);
@@ -76,7 +76,7 @@ router.put('/:id/steps', jwtAuth, async (req, res, next) => {
 
 router.delete('/:id', jwtAuth, async (req, res, next) => {
 	try {
-		await testCaseService.remove(req.params.id);
+		await testCaseService.remove(Number(req.params.id));
 		res.json({ ok: true });
 	} catch (e) {
 		next(e);
