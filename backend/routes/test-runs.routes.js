@@ -31,7 +31,7 @@ router.get('/', jwtAuth, async (req, res, next) => {
 
 router.get('/:id', jwtAuth, async (req, res, next) => {
 	try {
-		const run = await testRunService.getById(Number(req.params.id));
+		const run = await testRunService.getById(req.params.id);
 		if (!run) return res.status(404).json({ error: 'Test run not found' });
 		res.json({ run });
 	} catch (e) {
@@ -53,7 +53,7 @@ router.post('/', jwtAuth, async (req, res, next) => {
 router.put('/:id', jwtAuth, async (req, res, next) => {
 	try {
 		const { title, status, caseIds } = req.body;
-		const run = await testRunService.update(Number(req.params.id), { title, status, caseIds });
+		const run = await testRunService.update(req.params.id, { title, status, caseIds });
 		res.json({ run });
 	} catch (e) {
 		next(e);
@@ -62,7 +62,7 @@ router.put('/:id', jwtAuth, async (req, res, next) => {
 
 router.delete('/:id', jwtAuth, async (req, res, next) => {
 	try {
-		await testRunService.remove(Number(req.params.id));
+		await testRunService.remove(req.params.id);
 		res.json({ ok: true });
 	} catch (e) {
 		next(e);
@@ -73,7 +73,7 @@ router.post('/entries/:entryId/result', jwtAuth, async (req, res, next) => {
 	try {
 		const { status, notes } = req.body;
 		if (!status) return res.status(400).json({ error: 'status is required' });
-		const entry = await testRunService.updateEntry(Number(req.params.entryId), {
+		const entry = await testRunService.updateEntry(req.params.entryId, {
 			status,
 			notes,
 			executedById: req.user.userId
@@ -89,7 +89,7 @@ router.post('/:id/reorder', jwtAuth, async (req, res, next) => {
 		const { entryIds } = req.body;
 		if (!Array.isArray(entryIds))
 			return res.status(400).json({ error: 'entryIds must be an array' });
-		await testRunService.reorderEntries(Number(req.params.id), entryIds);
+		await testRunService.reorderEntries(req.params.id, entryIds);
 		res.json({ ok: true });
 	} catch (e) {
 		next(e);

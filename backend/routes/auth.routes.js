@@ -36,7 +36,7 @@ router.post('/setup', async (req, res, next) => {
 		const { name, email, password } = req.body;
 		if (!name || !email || !password)
 			return res.status(400).json({ error: 'name, email and password are required' });
-		const user = await userService.createUser({ name, email, password });
+		const user = await userService.createUser({ name, email, password, role: 'admin' });
 		res.status(201).json({ user });
 	} catch (e) {
 		next(e);
@@ -77,6 +77,17 @@ router.post('/change-password', jwtAuth, async (req, res, next) => {
 		});
 		if (!result.ok) return res.status(400).json({ error: result.error });
 		res.json({ ok: true });
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.put('/update-profile', jwtAuth, async (req, res, next) => {
+	try {
+		const { name, email } = req.body;
+		const result = await userService.updateProfile(req.user.userId, { name, email });
+		if (!result.ok) return res.status(400).json({ error: result.error });
+		res.json({ user: result.user });
 	} catch (e) {
 		next(e);
 	}

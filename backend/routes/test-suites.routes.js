@@ -34,7 +34,7 @@ router.get('/', jwtAuth, async (req, res, next) => {
 
 router.get('/:id', jwtAuth, async (req, res, next) => {
 	try {
-		const suite = await testSuiteService.getById(Number(req.params.id));
+		const suite = await testSuiteService.getById(req.params.id);
 		if (!suite) return res.status(404).json({ error: 'Suite not found' });
 		res.json({ suite });
 	} catch (e) {
@@ -61,7 +61,7 @@ router.post('/', jwtAuth, async (req, res, next) => {
 router.put('/:id', jwtAuth, async (req, res, next) => {
 	try {
 		const { name, description, priority } = req.body;
-		const suite = await testSuiteService.update(Number(req.params.id), {
+		const suite = await testSuiteService.update(req.params.id, {
 			name,
 			description,
 			priority
@@ -74,7 +74,7 @@ router.put('/:id', jwtAuth, async (req, res, next) => {
 
 router.delete('/:id', jwtAuth, async (req, res, next) => {
 	try {
-		await testSuiteService.remove(Number(req.params.id));
+		await testSuiteService.remove(req.params.id);
 		res.json({ ok: true });
 	} catch (e) {
 		next(e);

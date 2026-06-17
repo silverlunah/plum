@@ -29,15 +29,21 @@
 		probeRunner
 	} from '$lib/api/runners';
 	import { fetchPrefixes, savePrefixes, migratePrefixes } from '$lib/api/repository';
-	import { changePassword } from '$lib/api/auth';
+	import { updateProfile, changePassword } from '$lib/api/auth';
+	import {
+		fetchUsers,
+		createUser as createUserApi,
+		deleteUser as deleteUserApi
+	} from '$lib/api/users';
 	import { builtInEnabled } from '$lib/stores/runner';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { BROWSERS, TOAST_TIMEOUT_MS } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
+	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 
-	/** @type {'project' | 'runners' | 'repository' | 'account' | 'backup'} */
+	/** @type {'project' | 'runners' | 'repository' | 'account' | 'users' | 'backup'} */
 	let section = 'project';
 
 	let project = { name: '', logoUrl: '' };
@@ -48,6 +54,17 @@
 	let prefixesSaving = false;
 	let migrateForm = { testCasePrefix: '', testSuitePrefix: '' };
 	let migrating = false;
+
+	let profileForm = { name: '', email: '' };
+	let profileSaving = false;
+	let profileError = '';
+
+	let allUsers = [];
+	let userForm = { name: '', email: '', password: '', role: 'user' };
+	let userFormSaving = false;
+	let userFormError = '';
+	let confirmDeleteUser = null;
+	let confirmDeleteUserOpen = false;
 
 	let pwForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
 	let pwSaving = false;
@@ -95,6 +112,14 @@
 				testSuitePrefix: prefixes.testSuitePrefix
 			};
 		} catch {}
+		if ($auth.user) {
+			profileForm = { name: $auth.user.name, email: $auth.user.email };
+		}
+		if ($auth.user?.role === 'admin') {
+			try {
+				allUsers = await fetchUsers();
+			} catch {}
+		}
 	});
 
 	$: if (section === 'runners' && runnersLoaded) pingAll();
@@ -280,6 +305,55 @@
 		}
 	}
 
+	async function handleUpdateProfile() {
+		profileError = '';
+		profileSaving = true;
+		try {
+			const { user } = await updateProfile({
+				token: $auth.token,
+				name: profileForm.name,
+				email: profileForm.email
+			});
+			auth.login($auth.token, { ...$auth.user, ...user });
+			showToast('success', 'Profile updated.');
+		} catch (e) {
+			profileError = e.message;
+		} finally {
+			profileSaving = false;
+		}
+	}
+
+	async function handleCreateUser() {
+		userFormError = '';
+		if (!userForm.name || !userForm.email || !userForm.password) {
+			userFormError = 'Name, email and password are required.';
+			return;
+		}
+		userFormSaving = true;
+		try {
+			const user = await createUserApi(userForm);
+			allUsers = [...allUsers, user];
+			userForm = { name: '', email: '', password: '', role: 'user' };
+			showToast('success', `User "${user.name}" added.`);
+		} catch (e) {
+			userFormError = e.message;
+		} finally {
+			userFormSaving = false;
+		}
+	}
+
+	async function handleDeleteUser(id, name) {
+		try {
+			await deleteUserApi(id);
+			allUsers = allUsers.filter((u) => u.id !== id);
+			showToast('success', `User "${name}" removed.`);
+		} catch (e) {
+			showToast('error', e.message);
+		}
+		confirmDeleteUser = null;
+		confirmDeleteUserOpen = false;
+	}
+
 	async function handleChangePassword() {
 		pwError = '';
 		if (pwForm.newPassword !== pwForm.confirmPassword) {
@@ -311,11 +385,12 @@
 		goto('/login');
 	}
 
-	const navItems = [
+	$: navItems = [
 		{ id: 'project', label: 'Project' },
 		{ id: 'runners', label: 'Runners' },
 		{ id: 'repository', label: 'Repository' },
 		{ id: 'account', label: 'Account' },
+		...($auth.user?.role === 'admin' ? [{ id: 'users', label: 'Users' }] : []),
 		{ id: 'backup', label: 'Backup' }
 	];
 </script>
@@ -732,17 +807,39 @@
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<div class="content-header">
 					<h2>Account</h2>
-					<p class="content-desc">Manage your credentials and session.</p>
+					<p class="content-desc">Manage your profile, credentials and session.</p>
 				</div>
 
-				{#if $auth.user}
-					<div class="card settings-card">
-						<div class="account-info">
-							<p class="account-name">{$auth.user.name}</p>
-							<p class="account-email">{$auth.user.email}</p>
-						</div>
+				<div class="card settings-card">
+					<p class="card-title">Profile</p>
+					<div class="field">
+						<label class="field-label" for="profile-name">Name</label>
+						<input
+							id="profile-name"
+							type="text"
+							class="field-input"
+							bind:value={profileForm.name}
+						/>
 					</div>
-				{/if}
+					<div class="field">
+						<label class="field-label" for="profile-email">Email</label>
+						<input
+							id="profile-email"
+							type="email"
+							class="field-input"
+							bind:value={profileForm.email}
+						/>
+					</div>
+					{#if profileError}<p class="form-error">{profileError}</p>{/if}
+					<div class="card-footer">
+						<Button
+							on:click={handleUpdateProfile}
+							disabled={profileSaving || !profileForm.name || !profileForm.email}
+						>
+							{profileSaving ? 'Saving…' : 'Save Profile'}
+						</Button>
+					</div>
+				</div>
 
 				<div class="card settings-card">
 					<p class="card-title">Change password</p>
@@ -792,6 +889,118 @@
 						<Button variant="danger" size="sm" on:click={handleLogout}>Sign out</Button>
 					</div>
 				</div>
+			</div>
+
+			<!-- USERS (admin only) -->
+		{:else if section === 'users'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<div class="content-header">
+					<h2>Users</h2>
+					<p class="content-desc">Add and manage who can access Plum.</p>
+				</div>
+
+				<ConfirmModal
+					bind:open={confirmDeleteUserOpen}
+					title="Remove User"
+					confirmLabel="Remove"
+					on:confirm={() => handleDeleteUser(confirmDeleteUser?.id, confirmDeleteUser?.name)}
+				>
+					{#if confirmDeleteUser}
+						Remove <strong>{confirmDeleteUser.name}</strong>? They will lose access immediately.
+					{/if}
+				</ConfirmModal>
+
+				<div class="card settings-card">
+					<p class="card-title">Add User</p>
+					<div class="field-row">
+						<div class="field">
+							<label class="field-label" for="u-name">Name</label>
+							<input
+								id="u-name"
+								type="text"
+								class="field-input"
+								bind:value={userForm.name}
+								placeholder="Jane Smith"
+							/>
+						</div>
+						<div class="field">
+							<label class="field-label" for="u-email">Email</label>
+							<input
+								id="u-email"
+								type="email"
+								class="field-input"
+								bind:value={userForm.email}
+								placeholder="jane@example.com"
+							/>
+						</div>
+					</div>
+					<div class="field-row">
+						<div class="field">
+							<label class="field-label" for="u-pw">Password</label>
+							<input
+								id="u-pw"
+								type="password"
+								class="field-input"
+								bind:value={userForm.password}
+								autocomplete="new-password"
+							/>
+						</div>
+						<div class="field">
+							<label class="field-label" for="u-role">Role</label>
+							<select id="u-role" class="field-input" bind:value={userForm.role}>
+								<option value="user">User</option>
+								<option value="admin">Admin</option>
+							</select>
+						</div>
+					</div>
+					{#if userFormError}<p class="form-error">{userFormError}</p>{/if}
+					<div class="card-footer">
+						<Button on:click={handleCreateUser} disabled={userFormSaving}>
+							{userFormSaving ? 'Adding…' : 'Add User'}
+						</Button>
+					</div>
+				</div>
+
+				{#if allUsers.length > 0}
+					<div class="users-table">
+						{#each allUsers as u (u.id)}
+							<div class="user-row">
+								<div class="user-info">
+									<span class="user-name">{u.name}</span>
+									<span class="user-email">{u.email}</span>
+								</div>
+								<span class="role-chip {u.role}">{u.role}</span>
+								{#if u.id !== $auth.user?.id}
+									<button
+										class="icon-btn danger"
+										title="Remove user"
+										on:click={() => {
+											confirmDeleteUser = { id: u.id, name: u.name };
+											confirmDeleteUserOpen = true;
+										}}
+									>
+										<svg
+											width="13"
+											height="13"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<polyline points="3 6 5 6 21 6" /><path
+												d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+											/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+										</svg>
+									</button>
+								{:else}
+									<span class="you-chip">you</span>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
 			</div>
 
 			<!-- BACKUP -->
@@ -1327,5 +1536,94 @@
 		.field-row {
 			grid-template-columns: 1fr;
 		}
+	}
+
+	/* ── Users table ── */
+	.users-table {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-top: 1rem;
+	}
+
+	.user-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		padding: 0.75rem 1rem;
+	}
+
+	.user-info {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+
+	.user-name {
+		font-size: 0.9rem;
+		font-weight: 500;
+		color: var(--text);
+	}
+
+	.user-email {
+		font-size: 0.8rem;
+		color: var(--text-muted);
+	}
+
+	.role-chip {
+		font-size: 0.7rem;
+		font-weight: 500;
+		border-radius: 100px;
+		padding: 0.15rem 0.55rem;
+		flex-shrink: 0;
+	}
+
+	.role-chip.admin {
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+
+	.role-chip.user {
+		background: var(--bg-subtle);
+		color: var(--text-muted);
+		border: 1px solid var(--border);
+	}
+
+	.you-chip {
+		font-size: 0.7rem;
+		color: var(--text-muted);
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: 100px;
+		padding: 0.15rem 0.55rem;
+		flex-shrink: 0;
+	}
+
+	/* reuse icon-btn from other pages */
+	.icon-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border: none;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		cursor: pointer;
+		color: var(--text-muted);
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast);
+		flex-shrink: 0;
+	}
+
+	.icon-btn.danger:hover {
+		background: var(--fail-soft);
+		color: var(--fail);
 	}
 </style>
