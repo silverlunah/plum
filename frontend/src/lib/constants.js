@@ -27,8 +27,6 @@ export const TRIGGER_TYPES = Object.freeze({
 	CLI: 'command-line-trigger'
 });
 
-export const WORKER_OPTIONS = [1, 2, 4, 8];
-
 export const REPORTS_PER_PAGE = 15;
 
 export const COPY_TIMEOUT_MS = 1400;

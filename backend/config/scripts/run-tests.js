@@ -27,7 +27,9 @@ const runners = parallel || process.env.REPORT_RUNNERS || '1';
 const tag = process.env.TAG || process.argv.slice(2).find((a) => a.startsWith('@'));
 const browser = process.env.BROWSER || 'chromium';
 
-const reportFile = path.resolve(process.cwd(), 'reports', 'cucumber_report.json');
+const reportFile =
+	process.env.CUCUMBER_REPORT_FILE ||
+	path.resolve(process.cwd(), 'reports', 'cucumber_report.json');
 
 // Wipe any previous report so a crashed/empty run can never return stale results.
 try {
@@ -87,7 +89,7 @@ try {
 		);
 	}
 
-	baseCommand.push('--format', 'json:reports/cucumber_report.json');
+	baseCommand.push('--format', `json:${reportFile.replace(/\\/g, '/')}`);
 
 	if (tag) {
 		baseCommand.push('--tags', `"${tag}"`);
