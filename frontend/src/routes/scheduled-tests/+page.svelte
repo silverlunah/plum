@@ -148,14 +148,16 @@
 	function openEditModal(job) {
 		isEditing = true;
 		editTaskName = job.taskName;
+		const validIds = new Set(['built-in', ...availableRunners.map((r) => r.id)]);
 		const storedIds = job.runnerIds ? job.runnerIds.split(',').map((s) => s.trim()) : ['built-in'];
+		const prunedIds = storedIds.filter((id) => validIds.has(id));
 		form = {
 			taskName: job.taskName,
 			cronExpression: job.cronExpression,
 			tags: job.tags,
 			workers: job.workers ?? 1,
 			browser: job.browser ?? 'chromium',
-			runnerIds: storedIds
+			runnerIds: prunedIds.length > 0 ? prunedIds : ['built-in']
 		};
 		const isPreset = scheduleOptions.some((o) => o.value === job.cronExpression);
 		useCustomCron = !isPreset;
