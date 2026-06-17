@@ -27,6 +27,15 @@
 # Logs
 *.log
 
+# Local node-runner PID registry (managed by scripts/manage-runners.mjs)
+.runners.local.json
+
+# Node operator identity + auth token (written by `plum node start`)
+.plum-node.json
+
+# Server config (written by `plum server start` / reconfig)
+.plum-server.json
+
 # Temporary files
 *.tmp
 *.swp

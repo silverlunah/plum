@@ -28,20 +28,17 @@ app.use(express.json());
 app.use('/screenshots', express.static(SCREENSHOTS_DIR));
 
 // Routes
-const testRoutes = require('./routes/tests.routes');
-const reportRoutes = require('./routes/reports.routes');
-const cronRoutes = require('./routes/cron.routes');
-const settingsRoutes = require('./routes/settings.routes');
-const backupRoutes = require('./routes/backup.routes');
-const runnerRoutes = require('./routes/runners.routes');
 const nodeRoutes = require('./routes/node.routes');
-
-app.use('/tests', testRoutes);
-app.use('/reports', reportRoutes);
-app.use('/cron-jobs', cronRoutes);
-app.use('/settings', settingsRoutes);
-app.use('/backup', backupRoutes);
-app.use('/runners', runnerRoutes);
 app.use('/api', nodeRoutes);
+
+// Primary-mode routes — skipped when running as a runner node (no DB available)
+if (process.env.PLUM_MODE !== 'node') {
+	app.use('/tests', require('./routes/tests.routes'));
+	app.use('/reports', require('./routes/reports.routes'));
+	app.use('/cron-jobs', require('./routes/cron.routes'));
+	app.use('/settings', require('./routes/settings.routes'));
+	app.use('/backup', require('./routes/backup.routes'));
+	app.use('/runners', require('./routes/runners.routes'));
+}
 
 module.exports = app;

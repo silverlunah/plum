@@ -20,7 +20,7 @@
 	import { onMount } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { fetchReportDetail, screenshotUrl } from '$lib/api/reports';
-	import { isScheduled, triggerLabel, fmtDuration, stagger } from '$lib/utils/format';
+	import { isScheduled, triggerLabel, fmtDuration, stagger, featureFile } from '$lib/utils/format';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import BrowserIcon from '$lib/components/icons/BrowserIcon.svelte';
 
@@ -213,24 +213,6 @@
 							<BrowserIcon browser={detail.browser ?? 'chromium'} />
 							{detail.browser ?? 'chromium'}
 						</span>
-						{#if detail.runnerName}
-							<span class="meta-sep">·</span>
-							<span class="runner-pill">
-								<svg
-									width="10"
-									height="10"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-								>
-									<rect x="2" y="3" width="20" height="14" rx="2" />
-									<path d="M8 21h8M12 17v4" />
-								</svg>
-								{detail.runnerName}
-							</span>
-						{/if}
 					</div>
 				</div>
 			</div>
@@ -362,7 +344,7 @@
 					{/if}
 				</h2>
 				<div class="feature-right">
-					<span class="feature-file">{feature.uri}</span>
+					<span class="feature-file" title={feature.uri}>{featureFile(feature.uri)}</span>
 					<Badge variant={feature.status === 'passed' ? 'pass' : 'fail'}>
 						{feature.status}
 					</Badge>
@@ -588,16 +570,6 @@
 		border: 1px solid var(--border);
 		border-radius: 100px;
 		padding: 0.1rem 0.45rem;
-	}
-
-	.runner-pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.68rem;
-		font-weight: 500;
-		color: var(--text-muted);
 	}
 
 	.header-stats {

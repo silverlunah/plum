@@ -48,6 +48,18 @@ function collectScreenshotFiles(content) {
 	return files;
 }
 
+/**
+ * Stable identity for a Cucumber feature across distributed lanes. Dispatched
+ * runs report an absolute temp uri (…/plum-job-<uuid>/features/Login.feature)
+ * that differs per runner; the suffix from `features/` onward is stable.
+ */
+function featureMergeKey(feature) {
+	const uri = (feature.uri ?? '').replace(/\\/g, '/');
+	const idx = uri.lastIndexOf('/features/');
+	if (idx !== -1) return uri.slice(idx + 1);
+	return uri || feature.id || feature.name;
+}
+
 function deleteScreenshotFiles(content) {
 	for (const file of collectScreenshotFiles(content)) {
 		const p = path.join(SCREENSHOTS_DIR, file);
@@ -249,7 +261,11 @@ const saveCombinedReport = async ({ reports, runners, overallCode, tag, triggerT
 			continue;
 		}
 		for (const feature of parsed) {
-			const key = feature.uri ?? feature.id ?? feature.name;
+			// Each lane runs from its own temp dir, so the same feature reports a
+			// different absolute uri per runner. Key on the path from `features/`
+			// onward (falling back to name) so one feature's scenarios from every
+			// lane merge into a single entry instead of one duplicate per runner.
+			const key = featureMergeKey(feature);
 			if (featureMap.has(key)) {
 				featureMap.get(key).elements.push(...(feature.elements ?? []));
 			} else {

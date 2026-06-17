@@ -18,8 +18,6 @@
 const http = require('http');
 const { Server } = require('socket.io');
 const app = require('./app');
-const socketHandler = require('./websockets/socketHandler.js');
-const cronService = require('./services/cronService');
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 const path = require('path');
@@ -42,11 +40,16 @@ if (!fs.existsSync(testsDir)) {
 const isNodeMode = process.env.PLUM_MODE === 'node';
 const port = parseInt(process.env.PORT || '3001', 10);
 
-socketHandler(io);
-if (!isNodeMode) cronService.setSocketIO(io);
+let cronService = null;
+if (!isNodeMode) {
+	const socketHandler = require('./websockets/socketHandler.js');
+	cronService = require('./services/cronService');
+	socketHandler(io);
+	cronService.setSocketIO(io);
+}
 
 async function start() {
-	if (!isNodeMode) await cronService.init();
+	if (cronService) await cronService.init();
 
 	server.listen(port, async () => {
 		console.log(`Backend running on port ${port}${isNodeMode ? ' (node/runner mode)' : ''}`);

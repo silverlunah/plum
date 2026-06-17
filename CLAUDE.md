@@ -5,7 +5,7 @@
 - **Frontend**: SvelteKit 5, port 5173. ESM, no TypeScript.
 - **Backend**: Express + Socket.io, port 3001. CommonJS (`require`/`module.exports`).
 - **Database**: PostgreSQL via Prisma ORM (`backend/services/prisma.js`).
-- **Infrastructure**: Docker Compose. `docker-compose.yml` (standard), `docker-compose.node.yml` (multi-node).
+- **Infrastructure**: Docker Compose (`docker-compose.yml`) for the server stack. Runner nodes run as a bare `PLUM_MODE=node` Node process (started by `plum node start` / the dev `manage-runners` script), not via Docker.
 
 ---
 
