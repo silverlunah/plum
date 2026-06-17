@@ -2,7 +2,7 @@
 	"license": "./resources/gpl-3.0-license.txt",
 	"ignoreDefaultIgnores": false,
 	"licenseFormats": {
-		"js|ts": {
+		"js|ts|mjs": {
 			"prepend": "/*",
 			"append": " */\n",
 			"eachLine": {
