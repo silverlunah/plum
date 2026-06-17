@@ -514,7 +514,6 @@ switch (command) {
 		}
 
 		// Build override for node mode
-		const userTestsAbs = path.resolve(process.cwd(), 'tests').replace(/\\/g, '/');
 		const userReportsAbs = path.resolve(process.cwd(), 'reports').replace(/\\/g, '/');
 		const nodeOverridePath = path.join(plumRoot, 'docker-compose.node-override.yml');
 
@@ -523,7 +522,6 @@ switch (command) {
 			'  backend:',
 			'    volumes:',
 			`      - "${userReportsAbs}:/app/reports"`,
-			`      - "${userTestsAbs}:/app/tests"`,
 			'    environment:',
 			`      NODE_TOKEN: "${nodeToken}"`,
 			`      PRIMARY_URL: "${primaryUrl}"`,

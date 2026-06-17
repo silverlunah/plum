@@ -26,19 +26,21 @@ const tag = process.env.TAG || process.argv.slice(2).find((a) => a.startsWith('@
 const browser = process.env.BROWSER || 'chromium';
 
 try {
+	const testsRoot = (process.env.TESTS_ROOT || 'tests').replace(/\\/g, '/');
+
 	const baseCommand = [
 		'npx',
 		'cross-env',
 		`BROWSER=${browser}`,
 		'TS_NODE_TRANSPILE_ONLY=true',
 		'cucumber-js',
-		'tests/features/**/*.feature',
+		`${testsRoot}/features/**/*.feature`,
 		'--require-module',
 		'ts-node/register',
 		'--require',
-		'tests/utils/hooks.ts',
+		`${testsRoot}/utils/hooks.ts`,
 		'--require',
-		'tests/step_definitions/**/*.ts',
+		`${testsRoot}/step_definitions/**/*.ts`,
 		'--format',
 		'json:reports/cucumber_report.json'
 	];
