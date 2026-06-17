@@ -7,7 +7,7 @@
 		"create-step": "node config/scripts/create-step.mjs",
 		"create-env": "node services/envService.js",
 		"test": "node config/scripts/run-tests.js",
-		"add-local-runner": "node scripts/add-local-runner.js",
+		"manage-runners": "node scripts/manage-runners.mjs",
 		"create-test": "node scripts/create-test.js"
 	},
 	"keywords": [],

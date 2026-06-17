@@ -50,16 +50,44 @@ try {
 		`BROWSER=${browser}`,
 		'TS_NODE_TRANSPILE_ONLY=true',
 		'cucumber-js',
-		`${testsRoot}/features/**/*.feature`,
-		'--require-module',
-		'ts-node/register',
-		'--require',
-		`${testsRoot}/utils/hooks.ts`,
-		'--require',
-		`${testsRoot}/step_definitions/**/*.ts`,
-		'--format',
-		'json:reports/cucumber_report.json'
+		`${testsRoot}/features/**/*.feature`
 	];
+
+	// A dispatched run executes test files in a temp dir on a runner node. The node's
+	// own working directory ships a cucumber.json whose `require` globs point at the
+	// node's *local* tests/ — and cucumber merges config-file `require` additively with
+	// the CLI ones, so every step would match two definitions (local + dispatched) and
+	// run as "ambiguous": never executing, reporting zero duration. Point cucumber at a
+	// self-contained config inside the dispatched dir so the node's own cucumber.json is
+	// skipped entirely (an explicit --config disables auto-discovery of the cwd file).
+	if (process.env.TESTS_ROOT) {
+		const testsRootAbs = path.resolve(testsRoot);
+		const configPath = path.join(testsRootAbs, 'cucumber.json');
+		fs.writeFileSync(
+			configPath,
+			JSON.stringify({
+				default: {
+					requireModule: ['ts-node/register'],
+					require: [
+						`${testsRootAbs}/utils/hooks.ts`.replace(/\\/g, '/'),
+						`${testsRootAbs}/step_definitions/**/*.ts`.replace(/\\/g, '/')
+					]
+				}
+			})
+		);
+		baseCommand.push('--config', path.relative(process.cwd(), configPath).replace(/\\/g, '/'));
+	} else {
+		baseCommand.push(
+			'--require-module',
+			'ts-node/register',
+			'--require',
+			`${testsRoot}/utils/hooks.ts`,
+			'--require',
+			`${testsRoot}/step_definitions/**/*.ts`
+		);
+	}
+
+	baseCommand.push('--format', 'json:reports/cucumber_report.json');
 
 	if (tag) {
 		baseCommand.push('--tags', `"${tag}"`);

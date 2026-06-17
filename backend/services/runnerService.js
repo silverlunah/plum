@@ -113,10 +113,20 @@ async function fetchReportContent(runner, jobId, onLog) {
  * @param {(exitCode: number, reportContent: string|null) => void} onDone
  */
 async function dispatchAndPoll(runnerId, { tags, browser, workers }, onLog, onDone) {
+	// The async poll callback can overlap if a tick takes longer than the interval;
+	// guard so the run resolves exactly once and can't be finalised while a lane
+	// is still in flight.
+	let settled = false;
+	const finish = (code, content) => {
+		if (settled) return;
+		settled = true;
+		onDone(code, content);
+	};
+
 	const runner = await getById(runnerId);
 	if (!runner) {
 		onLog(`[ERROR] Runner ${runnerId} not found\n`);
-		onDone(1, null);
+		finish(1, null);
 		return;
 	}
 
@@ -135,14 +145,17 @@ async function dispatchAndPoll(runnerId, { tags, browser, workers }, onLog, onDo
 		jobId = (await res.json()).jobId;
 	} catch (e) {
 		onLog(`[ERROR] Could not reach runner "${runner.name}": ${e.message}\n`);
-		onDone(1, null);
+		finish(1, null);
 		return;
 	}
 
 	onLog(`Connected to runner "${runner.name}" — job ${jobId}\n`);
 
 	let logOffset = 0;
+	let polling = false;
 	const poll = setInterval(async () => {
+		if (polling) return;
+		polling = true;
 		try {
 			const res = await fetch(`${runner.url}/api/execute/${jobId}?offset=${logOffset}`, {
 				headers: { Authorization: `Bearer ${runner.token}` },
@@ -159,10 +172,12 @@ async function dispatchAndPoll(runnerId, { tags, browser, workers }, onLog, onDo
 			if (body.status === 'done' || body.status === 'error') {
 				clearInterval(poll);
 				const content = await fetchReportContent(runner, jobId, onLog);
-				onDone(body.exitCode ?? (body.status === 'done' ? 0 : 1), content);
+				finish(body.exitCode ?? (body.status === 'done' ? 0 : 1), content);
 			}
 		} catch {
 			// transient polling error — keep trying
+		} finally {
+			polling = false;
 		}
 	}, 2500);
 }

@@ -44,3 +44,16 @@ export function fmtDuration(ms) {
 	if (ms >= 1000) return (ms / 1000).toFixed(2) + 's';
 	return ms + 'ms';
 }
+
+/**
+ * Trims a Cucumber feature URI to a readable suffix. Dispatched runs report an
+ * absolute temp path on the node (…/plum-job-<uuid>/features/Login.feature); show
+ * only the part from `features/` onward so the column stays short.
+ */
+export function featureFile(uri) {
+	if (!uri) return '';
+	const normalized = uri.replace(/\\/g, '/');
+	const idx = normalized.lastIndexOf('/features/');
+	if (idx !== -1) return normalized.slice(idx + 1);
+	return normalized.split('/').pop();
+}

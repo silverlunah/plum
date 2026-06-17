@@ -113,24 +113,30 @@
 			runnerState.update((r) => ({ ...r, output: r.output + data + '\n' }));
 		});
 
-		s.on('done', (code) => {
+		s.on('done', (payload) => {
+			// Distributed runs send { code, reportId }; the built-in path sends a bare code.
+			const code = typeof payload === 'object' && payload !== null ? payload.code : payload;
+			const providedId =
+				typeof payload === 'object' && payload !== null ? payload.reportId : undefined;
 			const passed = code === 0 || code === null;
 			const cancelled = code === 130;
-			fetchLatestReportId()
-				.catch(() => null)
-				.then((id) => {
-					runnerState.update((r) => ({
-						...r,
-						output:
-							r.output +
-							(cancelled ? '' : passed ? '\n✓ All tests passed\n' : '\n✗ Some tests failed\n'),
-						running: false,
-						testCompleted: !cancelled,
-						latestReportId: cancelled ? null : id,
-						status: cancelled ? 'idle' : passed ? 'pass' : 'fail',
-						currentRun: cancelled ? null : r.currentRun
-					}));
-				});
+			const resolveId =
+				providedId !== undefined && providedId !== null
+					? Promise.resolve(providedId)
+					: fetchLatestReportId().catch(() => null);
+			resolveId.then((id) => {
+				runnerState.update((r) => ({
+					...r,
+					output:
+						r.output +
+						(cancelled ? '' : passed ? '\n✓ All tests passed\n' : '\n✗ Some tests failed\n'),
+					running: false,
+					testCompleted: !cancelled,
+					latestReportId: cancelled ? null : id,
+					status: cancelled ? 'idle' : passed ? 'pass' : 'fail',
+					currentRun: cancelled ? null : r.currentRun
+				}));
+			});
 		});
 
 		s.on('runner-lanes-init', (lanes) => {

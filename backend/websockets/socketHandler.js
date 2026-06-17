@@ -144,7 +144,6 @@ async function runDistributed(io, socket, activeProcs, tag, workers, browser, ru
 
 		if (doneCount === total) {
 			socket.emit('log', `\nAll runners finished (exit ${overallCode})`);
-			socket.emit('done', overallCode);
 
 			reportService
 				.saveCombinedReport({
@@ -155,8 +154,17 @@ async function runDistributed(io, socket, activeProcs, tag, workers, browser, ru
 					triggerType: TRIGGER_TYPE.MANUAL,
 					browser
 				})
-				.then(() => io.emit('report-ready'))
-				.catch((e) => console.error('[runner] Failed to save combined report:', e.message));
+				.then((saved) => {
+					// Result is authoritative from the merged report, not the exit code —
+					// a node's non-test failure (e.g. a failed report fetch) must not flip
+					// a passing run to "fail" in the live UI.
+					socket.emit('done', { code: saved.status === 'PASS' ? 0 : 1, reportId: saved.id });
+					io.emit('report-ready');
+				})
+				.catch((e) => {
+					console.error('[runner] Failed to save combined report:', e.message);
+					socket.emit('done', { code: overallCode, reportId: null });
+				});
 		}
 	}
 

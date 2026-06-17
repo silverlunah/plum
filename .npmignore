@@ -13,6 +13,9 @@ resources/comments-format.text
 
 # Local runtime artifacts
 .plum/
+.plum-node.json
+.plum-server.json
+.runners.local.json
 docker-compose.override.yml
 backend/reports/
 backend/tests/

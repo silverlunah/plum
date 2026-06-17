@@ -8,7 +8,7 @@
 	"description": "A detached test automation environment that combines Playwright and Cucumber with a Svelte frontend and an Express backend. It allows users to trigger tests, monitor reports, and schedule test runs through an intuitive UI.",
 	"main": "index.js",
 	"scripts": {
-		"init": "npm install && npm --prefix backend install && npm --prefix backend run init && npm --prefix frontend install",
+		"init": "npm install && npm --prefix backend install && npm --prefix backend run init && npm --prefix frontend install && node bin/scaffold-tests.js",
 		"format": "prettier --write .",
 		"add-license": "npx license-check-and-add add -f license-config.json",
 		"prepare": "husky",

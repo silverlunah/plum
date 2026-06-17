@@ -16,14 +16,17 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import readline from 'readline';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 import fse from 'fs-extra';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 const command = process.argv[2];
 const subcommand = process.argv[3];
 const plumRoot = path.resolve(__dirname, '..');
@@ -132,6 +135,350 @@ function copyEnvFile() {
 	} catch (err) {
 		console.error('Error copying .env file:', err);
 	}
+}
+
+const backendLib = path.join(plumRoot, 'backend', 'lib');
+const serverConfigLib = () => require(path.join(backendLib, 'serverConfig.js'));
+const nodeRegisterLib = () => require(path.join(backendLib, 'nodeRegister.js'));
+
+/* -----------------------------------------------------
+ *                 Interactive prompts
+ * ------------------------------------------------------ */
+
+const interactiveAllowed = () => Boolean(process.stdin.isTTY);
+const getFlag = (args, name) => {
+	const i = args.indexOf(name);
+	return i !== -1 ? args[i + 1] : undefined;
+};
+const anyFlags = (args, names) => names.some((n) => args.includes(n));
+
+/**
+ * A line-buffered prompter that works for both an interactive TTY and piped
+ * stdin. Non-TTY input emits every line then closes immediately, so we queue
+ * lines as they arrive and hand them out one question at a time.
+ */
+function createPrompter() {
+	const rl = readline.createInterface({ input: process.stdin });
+	const queue = [];
+	let waiting = null;
+	let closed = false;
+	rl.on('line', (line) => {
+		if (waiting) {
+			const r = waiting;
+			waiting = null;
+			r(line);
+		} else queue.push(line);
+	});
+	rl.on('close', () => {
+		closed = true;
+		if (waiting) {
+			const r = waiting;
+			waiting = null;
+			r(null);
+		}
+	});
+	const nextLine = () =>
+		new Promise((resolve) => {
+			if (queue.length) resolve(queue.shift());
+			else if (closed) resolve(null);
+			else waiting = resolve;
+		});
+
+	const ask = async (q, def) => {
+		process.stdout.write(`  ${q}${def ? ` (${def})` : ''}: `);
+		const line = await nextLine();
+		const a = (line ?? '').trim();
+		return a || def || '';
+	};
+	const askYesNo = async (q, def) => {
+		process.stdout.write(`  ${q} (${def ? 'Y/n' : 'y/N'}): `);
+		const a = (((await nextLine()) ?? '') + '').trim().toLowerCase();
+		if (!a) return def;
+		return a === 'y' || a === 'yes';
+	};
+	const askChoice = async (q, opts, def) => {
+		console.log(`  ${q}`);
+		opts.forEach((o, i) => console.log(`    ${i + 1}) ${o}${o === def ? ' (default)' : ''}`));
+		process.stdout.write('  > ');
+		const a = (((await nextLine()) ?? '') + '').trim();
+		if (!a) return def;
+		const n = Number(a);
+		if (Number.isInteger(n) && n >= 1 && n <= opts.length) return opts[n - 1];
+		return opts.includes(a) ? a : def;
+	};
+	return { ask, askYesNo, askChoice, close: () => rl.close() };
+}
+
+const VALID_BROWSERS = ['chromium', 'firefox', 'webkit'];
+
+/* -----------------------------------------------------
+ *                 Server flow
+ * ------------------------------------------------------ */
+
+function mergeUserPlugins() {
+	const userPluginsPath = path.join(process.cwd(), 'plum.plugins.json');
+	if (!fs.existsSync(userPluginsPath)) return;
+	try {
+		const userPlugins = JSON.parse(fs.readFileSync(userPluginsPath, 'utf8'));
+		const backendPkgPath = path.join(plumRoot, 'backend', 'package.json');
+		const backendPkg = JSON.parse(fs.readFileSync(backendPkgPath, 'utf8'));
+		const pluginDeps = userPlugins.dependencies ?? {};
+		if (Object.keys(pluginDeps).length > 0) {
+			backendPkg.dependencies = { ...backendPkg.dependencies, ...pluginDeps };
+			fs.writeFileSync(backendPkgPath, JSON.stringify(backendPkg, null, '\t') + '\n', 'utf8');
+			console.log(`📦 Merged plugins into backend: ${Object.keys(pluginDeps).join(', ')}\n`);
+		}
+	} catch {
+		console.log('⚠️  Could not read plum.plugins.json. Skipping plugin merge.\n');
+	}
+}
+
+async function configureServer({ force }) {
+	const { loadServerConfig, saveServerConfig } = serverConfigLib();
+	const cwd = process.cwd();
+	const args = process.argv.slice(3);
+	const cfg = loadServerConfig(cwd);
+
+	const overrides = {
+		baseUrl: getFlag(args, '--base-url'),
+		headless: getFlag(args, '--headless'),
+		backendPort: getFlag(args, '--backend-port'),
+		frontendPort: getFlag(args, '--frontend-port'),
+		primaryPublicUrl: getFlag(args, '--primary-url')
+	};
+	if (overrides.baseUrl !== undefined) cfg.baseUrl = overrides.baseUrl;
+	if (overrides.headless !== undefined) cfg.headless = overrides.headless === 'true';
+	if (overrides.backendPort !== undefined) cfg.backendPort = overrides.backendPort;
+	if (overrides.frontendPort !== undefined) cfg.frontendPort = overrides.frontendPort;
+	if (overrides.primaryPublicUrl !== undefined) cfg.primaryPublicUrl = overrides.primaryPublicUrl;
+
+	const hasFlags = anyFlags(args, [
+		'--base-url',
+		'--headless',
+		'--backend-port',
+		'--frontend-port',
+		'--primary-url'
+	]);
+	const interactive = force || (interactiveAllowed() && !hasFlags);
+
+	if (interactive) {
+		const p = createPrompter();
+		try {
+			cfg.baseUrl = await p.ask('App URL to test (BASE_URL)', cfg.baseUrl);
+			cfg.headless = await p.askYesNo('Run browsers headless?', cfg.headless);
+			cfg.backendPort = await p.ask('Backend port', cfg.backendPort);
+			cfg.frontendPort = await p.ask('Frontend (UI) port', cfg.frontendPort);
+			cfg.primaryPublicUrl = await p.ask(
+				'Primary public URL (share with node operators)',
+				cfg.primaryPublicUrl
+			);
+		} finally {
+			p.close();
+		}
+	}
+
+	saveServerConfig(cwd, cfg);
+	return cfg;
+}
+
+function applyServerConfig(cfg) {
+	const { writeEnvFile, buildOverrideYaml } = serverConfigLib();
+	const cwd = process.cwd();
+	writeEnvFile(cwd, cfg);
+	copyEnvFile();
+	mergeUserPlugins();
+	const testsAbs = path.resolve(cwd, 'tests').replace(/\\/g, '/');
+	const reportsAbs = path.resolve(cwd, 'reports').replace(/\\/g, '/');
+	fs.writeFileSync(
+		overrideFilePath,
+		buildOverrideYaml({
+			testsAbs,
+			reportsAbs,
+			backendPort: cfg.backendPort,
+			frontendPort: cfg.frontendPort
+		}),
+		'utf8'
+	);
+	console.log('✅ docker-compose.override.yml written');
+}
+
+async function serverStart() {
+	console.log('--------------------------------------\n');
+	console.log('🚀 Starting Plum...\n');
+	const cfg = await configureServer({ force: false });
+	applyServerConfig(cfg);
+	console.log(`\n🟣 UI:     http://localhost:${cfg.frontendPort}`);
+	console.log(`   Nodes register against:  ${cfg.primaryPublicUrl}\n`);
+	execSync('docker compose up --build', { cwd: plumRoot, stdio: 'inherit' });
+	console.log('--------------------------------------\n');
+}
+
+async function serverReconfig() {
+	console.log('--------------------------------------\n');
+	console.log('⚙️  Reconfiguring Plum server...\n');
+	const cfg = await configureServer({ force: true });
+	applyServerConfig(cfg);
+	console.log('\n✅ Saved. Run `plum server start` to apply.');
+	console.log(`   UI will be:               http://localhost:${cfg.frontendPort}`);
+	console.log(`   Nodes register against:   ${cfg.primaryPublicUrl}`);
+	console.log('--------------------------------------\n');
+}
+
+/* -----------------------------------------------------
+ *                 Node flow
+ * ------------------------------------------------------ */
+
+async function configureNode({ force }) {
+	const { generateToken, detectLanIp, loadNodeConfig, saveNodeConfig } = nodeRegisterLib();
+	const cwd = process.cwd();
+	const args = process.argv.slice(3);
+	const saved = loadNodeConfig(cwd);
+
+	let primary = getFlag(args, '--primary') ?? process.env.PRIMARY_URL ?? saved.primary ?? '';
+	let port = getFlag(args, '--port') ?? saved.port ?? '3001';
+	let browser = getFlag(args, '--browser') ?? saved.browser ?? 'chromium';
+	let token = getFlag(args, '--token') ?? process.env.NODE_TOKEN ?? saved.token ?? generateToken();
+	let name = getFlag(args, '--name') ?? saved.name ?? `node-${token.slice(0, 6)}`;
+	// A provided --url is advertised verbatim; otherwise fall back to host:port.
+	let url = getFlag(args, '--url') ?? saved.url ?? '';
+
+	const hasFlags = anyFlags(args, [
+		'--primary',
+		'--url',
+		'--port',
+		'--token',
+		'--name',
+		'--browser'
+	]);
+	const interactive = force || (interactiveAllowed() && !hasFlags);
+
+	if (interactive) {
+		const p = createPrompter();
+		try {
+			primary = await p.ask('Primary server URL', primary);
+			port = await p.ask('Local port this node listens on', port);
+			url = await p.ask(
+				'URL the primary calls back (advertised)',
+				url || `http://${detectLanIp()}:${port}`
+			);
+			name = await p.ask('Runner name', name);
+			browser = await p.askChoice('Default browser', VALID_BROWSERS, browser);
+			const newTok = await p.ask('Auth token (Enter to keep)', token);
+			token = newTok || token;
+		} finally {
+			p.close();
+		}
+	}
+
+	if (!url) url = `http://${detectLanIp()}:${port}`;
+
+	if (!VALID_BROWSERS.includes(browser)) {
+		console.error(`✗ Invalid browser "${browser}". Choose one of: ${VALID_BROWSERS.join(', ')}`);
+		process.exit(1);
+	}
+
+	saveNodeConfig(cwd, {
+		id: saved.id ?? null,
+		name,
+		url,
+		token,
+		primary,
+		browser,
+		port,
+		pid: saved.pid ?? null
+	});
+	return { primary, port, browser, token, name, url };
+}
+
+async function registerNode({ primary, name, url, token, browser, port }) {
+	const { registerWithPrimary, loadNodeConfig, saveNodeConfig } = nodeRegisterLib();
+	let registeredId = null;
+	if (primary) {
+		console.log(`🔗 Registering with primary at ${primary}...`);
+		try {
+			const { id, reused } = await registerWithPrimary({ primary, name, url, token, browser });
+			registeredId = id;
+			console.log(reused ? '✓ Reusing existing runner on primary\n' : '✓ Registered on primary\n');
+		} catch (e) {
+			console.log(`⚠️  Could not register with primary: ${e.message}`);
+			console.log('   Add it manually using the details below.\n');
+		}
+	} else {
+		console.log('ℹ️  No primary set — add this runner manually on your Plum server.\n');
+	}
+
+	const card = [
+		'  ┌─ Runner details ───────────────────────────',
+		registeredId
+			? `  │  id:      ${registeredId}`
+			: '  │  id:      (assigned when added on the server)',
+		`  │  name:    ${name}`,
+		`  │  url:     ${url}`,
+		`  │  token:   ${token}`,
+		`  │  browser: ${browser}`,
+		'  └────────────────────────────────────────────'
+	].join('\n');
+	console.log(card + '\n');
+	console.log(
+		`ℹ️  The url above must be reachable from the primary. The local port (${port}) is only`
+	);
+	console.log('   what this node listens on — forward your proxy/domain to it.\n');
+
+	const cwd = process.cwd();
+	saveNodeConfig(cwd, {
+		...loadNodeConfig(cwd),
+		id: registeredId,
+		name,
+		url,
+		token,
+		primary,
+		browser,
+		port
+	});
+	return registeredId;
+}
+
+async function nodeStart({ reconfig }) {
+	const backendDir = path.join(plumRoot, 'backend');
+	console.log('--------------------------------------\n');
+	console.log('🚀 Setting up Plum node (runner mode)...\n');
+
+	const cfg = await configureNode({ force: reconfig });
+	await registerNode(cfg);
+
+	// backend/node_modules is not published — install deps before launching.
+	console.log('Running `npm install`...');
+	execSync('npm install', { cwd: backendDir, stdio: 'inherit', shell: true });
+	console.log('Running `npx playwright install`...');
+	execSync('npx playwright install', { cwd: backendDir, stdio: 'inherit', shell: true });
+
+	console.log('\n--------------------------------------');
+	console.log(`🟣 Node "${cfg.name}" running on port ${cfg.port} (Ctrl+C to stop)\n`);
+
+	const { loadNodeConfig, saveNodeConfig } = nodeRegisterLib();
+	const serverPath = path.join(backendDir, 'server.js');
+	const child = spawn(process.execPath, [serverPath], {
+		cwd: backendDir,
+		env: { ...process.env, PLUM_MODE: 'node', NODE_TOKEN: cfg.token, PORT: String(cfg.port) },
+		stdio: 'inherit'
+	});
+
+	saveNodeConfig(process.cwd(), { ...loadNodeConfig(process.cwd()), pid: child.pid });
+
+	child.on('exit', (code) => {
+		const c = loadNodeConfig(process.cwd());
+		saveNodeConfig(process.cwd(), { ...c, pid: null });
+		process.exit(code ?? 0);
+	});
+}
+
+async function nodeReconfig() {
+	console.log('--------------------------------------\n');
+	console.log('⚙️  Reconfiguring Plum node...\n');
+	const cfg = await configureNode({ force: true });
+	await registerNode(cfg);
+	console.log('✅ Saved. Run `plum node start` to launch this node.');
+	console.log('--------------------------------------\n');
 }
 
 /* -----------------------------------------------------
@@ -273,9 +620,12 @@ switch (command) {
 					'| `plum run-test @tag` | Run tests matching a tag |',
 					'| `plum run-test --parallel N` | Run tests across N parallel workers |',
 					'| `plum run-test --browser firefox` | Run in a specific browser (chromium/firefox/webkit) |',
-					'| `plum start` | Start the full UI via Docker |',
+					'| `plum start` | Start the full UI via Docker (interactive setup) |',
+					'| `plum server reconfig` | Change server URL/ports without starting |',
 					'| `plum stop` | Stop the server |',
 					'| `plum create-step` | Interactively generate a new step definition |',
+					'| `plum node start` | Start a runner node and auto-register it with the server |',
+					'| `plum node stop` | Stop the runner node started from this folder |',
 					'',
 					'---',
 					'',
@@ -357,60 +707,15 @@ switch (command) {
 			console.log('--------------------------------------\n');
 			break;
 		}
+		if (subcommand === 'reconfig') {
+			await serverReconfig();
+			break;
+		}
 	// fall through to start for 'plum server start' or 'plum server'
 	// intentional fall-through
 
 	case 'start':
-		console.log('--------------------------------------\n');
-
-		console.log('🚀 Running Plum via Docker Compose...');
-
-		// Copy .env file from root to backend
-		copyEnvFile();
-
-		// Merge user plugins into backend/package.json before Docker build
-		{
-			const userPluginsPath = path.join(process.cwd(), 'plum.plugins.json');
-			if (fs.existsSync(userPluginsPath)) {
-				try {
-					const userPlugins = JSON.parse(fs.readFileSync(userPluginsPath, 'utf8'));
-					const backendPkgPath = path.join(plumRoot, 'backend', 'package.json');
-					const backendPkg = JSON.parse(fs.readFileSync(backendPkgPath, 'utf8'));
-					const pluginDeps = userPlugins.dependencies ?? {};
-					if (Object.keys(pluginDeps).length > 0) {
-						backendPkg.dependencies = { ...backendPkg.dependencies, ...pluginDeps };
-						fs.writeFileSync(backendPkgPath, JSON.stringify(backendPkg, null, '\t') + '\n', 'utf8');
-						console.log(`📦 Merged plugins into backend: ${Object.keys(pluginDeps).join(', ')}\n`);
-					}
-				} catch {
-					console.log('⚠️  Could not read plum.plugins.json. Skipping plugin merge.\n');
-				}
-			}
-		}
-
-		// Convert Windows paths to safe format
-		const userTestsAbs = path.resolve(process.cwd(), 'tests').replace(/\\/g, '/');
-		const userReportsAbs = path.resolve(process.cwd(), 'reports').replace(/\\/g, '/');
-
-		// Generate docker-compose.override.yml
-		// Config is served from the plum installation's backend/config directly via docker-compose.yml
-		const overrideYAML = [
-			'services:',
-			'  backend:',
-			'    volumes:',
-			`      - "${userReportsAbs}:/app/reports"`,
-			`      - "${userTestsAbs}:/app/tests"`
-		].join('\n');
-
-		fs.writeFileSync(overrideFilePath, overrideYAML + '\n', 'utf8');
-		console.log('✅ docker-compose.override.yml written');
-
-		// Run docker compose (--build picks up any plugin or config changes)
-		execSync('docker compose up --build', {
-			cwd: plumRoot,
-			stdio: 'inherit'
-		});
-		console.log('--------------------------------------\n');
+		await serverStart();
 		break;
 
 	case 'run-test': {
@@ -500,59 +805,32 @@ switch (command) {
 
 	case 'node': {
 		if (subcommand === 'stop') {
+			const { loadNodeConfig, saveNodeConfig } = nodeRegisterLib();
 			console.log('--------------------------------------\n');
 			console.log('🛑 Stopping Plum node...');
-			execSync('docker compose -f docker-compose.node.yml down', {
-				cwd: plumRoot,
-				stdio: 'inherit'
-			});
-			console.log('✅ Plum node stopped.\n');
+			const cfg = loadNodeConfig(process.cwd());
+			if (cfg.pid) {
+				try {
+					process.kill(cfg.pid, 'SIGTERM');
+					console.log(`✅ Stopped node process (pid ${cfg.pid}).\n`);
+				} catch {
+					console.log('ℹ️  No running node process found (it may already be stopped).\n');
+				}
+				saveNodeConfig(process.cwd(), { ...cfg, pid: null });
+			} else {
+				console.log('ℹ️  No node started from this folder. If it runs in the foreground,');
+				console.log('   press Ctrl+C in its terminal to stop it.\n');
+			}
 			console.log('--------------------------------------\n');
 			break;
 		}
 
-		// 'plum node start' — parse --token and --primary flags
-		const nodeArgs = process.argv.slice(3);
-		const tokenIdx = nodeArgs.indexOf('--token');
-		const nodeToken = tokenIdx !== -1 ? nodeArgs[tokenIdx + 1] : process.env.NODE_TOKEN || '';
-		const primaryIdx = nodeArgs.indexOf('--primary');
-		const primaryUrl = primaryIdx !== -1 ? nodeArgs[primaryIdx + 1] : process.env.PRIMARY_URL || '';
-
-		console.log('--------------------------------------\n');
-		console.log('🚀 Starting Plum node (runner mode)...');
-		if (!nodeToken) {
-			console.log(
-				'⚠️  No --token provided. The node will accept requests without authentication.\n'
-			);
+		if (subcommand === 'reconfig') {
+			await nodeReconfig();
+			break;
 		}
 
-		// Build override for node mode
-		const userReportsAbs = path.resolve(process.cwd(), 'reports').replace(/\\/g, '/');
-		const nodeOverridePath = path.join(plumRoot, 'docker-compose.node-override.yml');
-
-		const nodeOverride = [
-			'services:',
-			'  backend:',
-			'    volumes:',
-			`      - "${userReportsAbs}:/app/reports"`,
-			'    environment:',
-			`      NODE_TOKEN: "${nodeToken}"`,
-			`      PRIMARY_URL: "${primaryUrl}"`,
-			'      PLUM_MODE: "node"'
-		].join('\n');
-
-		fs.writeFileSync(nodeOverridePath, nodeOverride + '\n', 'utf8');
-
-		copyEnvFile();
-
-		execSync(
-			'docker compose -f docker-compose.node.yml -f docker-compose.node-override.yml up --build',
-			{
-				cwd: plumRoot,
-				stdio: 'inherit'
-			}
-		);
-		console.log('--------------------------------------\n');
+		await nodeStart({ reconfig: false });
 		break;
 	}
 
@@ -573,12 +851,26 @@ switch (command) {
 		console.log('--------------------------------------\n');
 		console.log('Usage: plum <command>\n');
 		console.log('  init                 Set up a new Plum project');
-		console.log('  server start         Start the full UI stack via Docker  (alias: plum start)');
+		console.log('  server start         Start the full UI stack (interactive; alias: plum start)');
+		console.log('    --base-url <url>   App URL to test (skips the prompt)');
+		console.log('    --headless <bool>  Run browsers headless (true/false)');
+		console.log('    --backend-port <n> Host port for the backend/API (default: 3001)');
+		console.log('    --frontend-port <n> Host port for the UI (default: 5173)');
+		console.log('    --primary-url <url> Public URL node operators point --primary at');
+		console.log('  server reconfig      Re-enter server settings without starting');
 		console.log('  server stop          Stop the server  (alias: plum stop)');
-		console.log('  node start           Start a runner node (no UI, receives remote jobs)');
-		console.log('    --token <secret>   Auth token the primary must send');
-		console.log('    --primary <url>    URL of the primary Plum server');
-		console.log('  node stop            Stop the runner node');
+		console.log('  node start           Start a runner node (interactive) and register it');
+		console.log('    --primary <url>    Primary Plum server to auto-register with (prints the id)');
+		console.log('    --url <url>        Address the primary calls back (default: <lan-ip>:<port>;');
+		console.log(
+			'                       pass a domain like https://node1.example behind a TLS proxy)'
+		);
+		console.log('    --port <n>         Local HTTP port the node listens on (default: 3001)');
+		console.log('    --token <secret>   Auth token (auto-generated + saved if omitted)');
+		console.log('    --name <name>      Runner name shown on the primary (default: node-<rand>)');
+		console.log('    --browser <name>   chromium | firefox | webkit (default: chromium)');
+		console.log('  node reconfig        Re-enter node settings + re-register, without starting');
+		console.log('  node stop            Stop the runner node started from this folder');
 		console.log('  run-test             Run tests locally without Docker');
 		console.log('    @tag               Run only tests matching a tag');
 		console.log('    --parallel <n>     Run across n parallel workers');

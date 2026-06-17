@@ -16,7 +16,7 @@
 ## Requirements
 
 - [Node.js](https://nodejs.org) v18 or higher
-- [Docker](https://www.docker.com) — required for `plum server start` and `plum node start`
+- [Docker](https://www.docker.com) — required for `plum server start` (the web UI stack). Runner nodes (`plum node start`) run as a plain Node process and **do not need Docker**.
 
 ---
 
@@ -103,9 +103,33 @@ or the shorthand:
 plum start
 ```
 
-Once running, open **http://localhost:5173** in your browser.
+The first time you run it, Plum asks a few questions (press Enter to accept the default shown in parentheses):
+
+| Prompt                 | Default                   | What it sets                                                            |
+| ---------------------- | ------------------------- | ----------------------------------------------------------------------- |
+| **App URL (BASE_URL)** | from your `.env`          | The URL Playwright opens at the start of every test                     |
+| **Headless?**          | `No`                      | Whether browsers run hidden                                             |
+| **Backend port**       | `3001`                    | Host port for the API                                                   |
+| **Frontend (UI) port** | `5173`                    | Host port for the web UI                                                |
+| **Primary public URL** | `http://<your-ip>:<port>` | The address you give runner nodes (see [Runner Setup](#4-runner-setup)) |
+
+Your answers are saved to `.plum-server.json`, so the next `plum server start` reuses them without asking. When it finishes, open the UI at the frontend port it prints (default **http://localhost:5173**).
 
 > Docker must be running before you use this command. Plum builds and starts the backend, database, and UI automatically.
+
+**Skip the prompts** by passing flags (handy for CI):
+
+```bash
+plum server start --base-url https://your-app.com --headless true --backend-port 3001 --frontend-port 5173
+```
+
+### Change settings later
+
+```bash
+plum server reconfig
+```
+
+Re-asks every question and saves your answers **without** starting the stack. Run `plum server start` afterwards to apply them.
 
 ### Stop
 
@@ -270,31 +294,69 @@ plum run-test --browser firefox          # run in a specific browser
 
 ## 4. Runner Setup
 
-Runners are additional machines that can execute tests in parallel alongside the primary server. This lets you distribute a large test suite across multiple nodes.
+Runners are additional machines that execute tests in parallel alongside the primary server, letting you distribute a large suite across many nodes. A node runs as a plain Node process — **no Docker required**.
 
-### Add a local runner node
+### Start a runner node
 
 On the machine that will act as a runner, navigate to your Plum project and run:
 
 ```bash
-plum node start --token your-secret-token
+plum node start
 ```
 
-| Flag      | Description                                                                     |
-| --------- | ------------------------------------------------------------------------------- |
-| `--token` | A secret token the primary server must send to authenticate. Keep this private. |
+Plum asks a few questions and then **registers the node with your server automatically** — you don't need to add anything in the UI by hand:
 
-> The runner starts a Docker container on port `3001` by default. Make sure Docker is running.
+| Prompt             | Default                   | What it sets                                                         |
+| ------------------ | ------------------------- | -------------------------------------------------------------------- |
+| **Primary URL**    | last used                 | The server this node registers with (e.g. `http://192.168.1.5:3001`) |
+| **Local port**     | `3001`                    | The port this node process listens on                                |
+| **Advertised URL** | `http://<your-ip>:<port>` | The address the **server** uses to reach this node                   |
+| **Runner name**    | `node-<random>`           | The name shown in the UI                                             |
+| **Browser**        | `chromium`                | Default browser for this node                                        |
+| **Auth token**     | auto-generated            | Shared secret; press Enter to keep the generated one                 |
 
-### Register the runner in the UI
+When it registers, Plum prints a details card with the assigned **id**, **token**, and **url**, then boots the node (Ctrl+C to stop). Settings are saved to `.plum-node.json`, so re-running reuses them and never creates a duplicate.
 
-Once the node is running:
+**Skip the prompts** with flags (handy for CI or scripted nodes):
+
+```bash
+plum node start --primary http://192.168.1.5:3001 --port 3001 --name ci-node-1
+```
+
+| Flag               | Description                                                                              |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| `--primary <url>`  | Server to auto-register with. Omit to only print the details for manual entry.           |
+| `--url <url>`      | Address the server calls back. Defaults to `<lan-ip>:<port>`; pass a domain to override. |
+| `--port <n>`       | Local HTTP port the node listens on (default `3001`).                                    |
+| `--token <secret>` | Auth token. Auto-generated and saved if omitted.                                         |
+| `--name <name>`    | Runner name shown in the UI.                                                             |
+| `--browser <name>` | `chromium` (default), `firefox`, or `webkit`.                                            |
+
+#### Nodes behind a domain or reverse proxy
+
+`--url` is the address the **server** calls back and is used exactly as given, while `--port` is the local port the node listens on. So a node behind an HTTPS reverse proxy is:
+
+```bash
+plum node start --primary https://plum.example.com --url https://node1.example.com --port 3001
+```
+
+The server reaches the node at `https://node1.example.com`; the proxy forwards to the node on port `3001`. The advertised `--url` must be reachable from the server.
+
+### Change settings later
+
+```bash
+plum node reconfig
+```
+
+Re-asks every question, re-registers with the primary, and prints the updated card — **without** starting the node. Run `plum node start` afterwards to launch it.
+
+### Register manually (fallback)
+
+If you run `plum node start` without a reachable `--primary`, Plum prints the node's **name, url, and token** instead. Add it by hand:
 
 1. Open the Plum UI at **http://localhost:5173**
 2. Go to **Settings → Runners**
-3. Click **Add Runner** and enter the node's URL, token, and a name
-
-The runner will appear in the UI and can be selected when triggering tests.
+3. Click **Add Runner** and paste the node's URL, token, and name
 
 ### Stop a runner node
 
@@ -302,22 +364,26 @@ The runner will appear in the UI and can be selected when triggering tests.
 plum node stop
 ```
 
+Stops the node started from the current folder.
+
 ---
 
 ## Command Reference
 
-| Command                       | Description                                              |
-| ----------------------------- | -------------------------------------------------------- |
-| `plum init`                   | Initialize a new project in the current folder           |
-| `plum server start`           | Start the full UI stack via Docker (alias: `plum start`) |
-| `plum server stop`            | Stop the server and preserve data (alias: `plum stop`)   |
-| `plum run-test`               | Run all tests locally without Docker                     |
-| `plum run-test @tag`          | Run tests matching a tag                                 |
-| `plum run-test --parallel N`  | Run tests across N parallel workers                      |
-| `plum run-test --browser <b>` | Run in a specific browser (chromium/firefox/webkit)      |
-| `plum create-step`            | Interactively scaffold a new step definition             |
-| `plum node start --token <t>` | Start a runner node on this machine                      |
-| `plum node stop`              | Stop the runner node                                     |
+| Command                       | Description                                                             |
+| ----------------------------- | ----------------------------------------------------------------------- |
+| `plum init`                   | Initialize a new project in the current folder                          |
+| `plum server start`           | Start the full UI stack via Docker, interactively (alias: `plum start`) |
+| `plum server reconfig`        | Re-enter server settings (URL, ports) without starting                  |
+| `plum server stop`            | Stop the server and preserve data (alias: `plum stop`)                  |
+| `plum run-test`               | Run all tests locally without Docker                                    |
+| `plum run-test @tag`          | Run tests matching a tag                                                |
+| `plum run-test --parallel N`  | Run tests across N parallel workers                                     |
+| `plum run-test --browser <b>` | Run in a specific browser (chromium/firefox/webkit)                     |
+| `plum create-step`            | Interactively scaffold a new step definition                            |
+| `plum node start`             | Start a runner node (interactive) and auto-register it with the server  |
+| `plum node reconfig`          | Re-enter node settings + re-register, without starting                  |
+| `plum node stop`              | Stop the runner node started from this folder                           |
 
 ---
 
@@ -378,6 +444,14 @@ npm run create-test
 ```
 
 Interactive prompt that creates a new `.feature` file, page object, and step definition file from a template — ready for you to implement.
+
+**Manage runner nodes:**
+
+```bash
+npm run manage-runners
+```
+
+One interactive menu to **add** a new runner (registers it with the primary and optionally starts it), and to **start / stop / restart / ping** the local node processes it manages. In dev the primary runs in Docker and nodes run as bare host processes, reached via `host.docker.internal`. PIDs are tracked in `.runners.local.json` and logs go to `backend/logs/` so you can manage nodes across terminal sessions.
 
 ### Test file locations
 
