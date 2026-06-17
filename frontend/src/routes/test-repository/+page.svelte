@@ -48,6 +48,9 @@
 	let confirmDelete = null;
 	let confirmDeleteOpen = false;
 
+	let confirmDuplicate = null;
+	let confirmDuplicateOpen = false;
+
 	let search = '';
 
 	$: q = search.trim().toLowerCase();
@@ -128,6 +131,15 @@
 	}
 
 	async function handleDuplicateRun(run) {
+		confirmDuplicate = run;
+		confirmDuplicateOpen = true;
+	}
+
+	async function executeDuplicate() {
+		if (!confirmDuplicate) return;
+		const run = confirmDuplicate;
+		confirmDuplicate = null;
+		confirmDuplicateOpen = false;
 		try {
 			const copy = await duplicateRun(run.id);
 			runs = [copy, ...runs];
@@ -173,6 +185,18 @@
 >
 	{#if confirmDelete}
 		Delete <strong>"{confirmDelete.name}"</strong>? This cannot be undone.
+	{/if}
+</ConfirmModal>
+
+<ConfirmModal
+	bind:open={confirmDuplicateOpen}
+	title="Duplicate Run"
+	confirmLabel="Duplicate"
+	on:confirm={executeDuplicate}
+>
+	{#if confirmDuplicate}
+		Duplicate <strong>"{confirmDuplicate.title}"</strong>? A copy will be added at the top of the
+		list.
 	{/if}
 </ConfirmModal>
 
@@ -322,7 +346,9 @@
 		{:else}
 			<div class="suite-grid">
 				{#each filteredSuites as suite (suite.id)}
-					<a href="/test-repository/suites/{suite.id}" class="suite-card">
+					<div class="suite-card">
+						<a href="/test-repository/suites/{suite.id}" class="card-link" aria-label={suite.name}
+						></a>
 						<div class="suite-card-header">
 							<span class="id-chip">{suite.displayId}</span>
 							<span class="priority-badge {priorityClass(suite.priority)}">{suite.priority}</span>
@@ -330,7 +356,7 @@
 								<button
 									class="icon-btn danger"
 									title="Delete suite"
-									on:click|stopPropagation={() => {
+									on:click={() => {
 										confirmDelete = { type: 'suite', id: suite.id, name: suite.name };
 										confirmDeleteOpen = true;
 									}}
@@ -373,7 +399,7 @@
 							</span>
 							<span class="meta-item">by {suite.createdBy.name}</span>
 						</div>
-					</a>
+					</div>
 				{/each}
 			</div>
 		{/if}
@@ -392,7 +418,8 @@
 		{:else}
 			<div class="runs-list">
 				{#each filteredRuns as run (run.id)}
-					<a href="/test-repository/runs/{run.id}" class="run-row">
+					<div class="run-row">
+						<a href="/test-repository/runs/{run.id}" class="card-link" aria-label={run.title}></a>
 						<div class="run-row-main">
 							<span class="run-status-dot {runStatusClass(run.status)}"></span>
 							<span class="run-title">{run.title}</span>
@@ -411,7 +438,7 @@
 							<button
 								class="icon-btn"
 								title="Duplicate run"
-								on:click|stopPropagation={() => handleDuplicateRun(run)}
+								on:click={() => handleDuplicateRun(run)}
 							>
 								<svg
 									width="13"
@@ -431,7 +458,7 @@
 							<button
 								class="icon-btn danger"
 								title="Delete run"
-								on:click|stopPropagation={() => {
+								on:click={() => {
 									confirmDelete = { type: 'run', id: run.id, name: run.title };
 									confirmDeleteOpen = true;
 								}}
@@ -452,7 +479,7 @@
 								</svg>
 							</button>
 						</div>
-					</a>
+					</div>
 				{/each}
 			</div>
 		{/if}
@@ -604,7 +631,15 @@
 		gap: 0.875rem;
 	}
 
+	.card-link {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		z-index: 0;
+	}
+
 	.suite-card {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
@@ -613,7 +648,6 @@
 		border-top: 3px solid var(--accent);
 		border-radius: var(--radius-md);
 		padding: 1rem;
-		text-decoration: none;
 		color: inherit;
 		transition:
 			border-color var(--duration-fast),
@@ -632,6 +666,8 @@
 	}
 
 	.suite-card-actions {
+		position: relative;
+		z-index: 1;
 		margin-left: auto;
 		opacity: 0;
 		transition: opacity var(--duration-fast);
@@ -741,6 +777,7 @@
 	}
 
 	.run-row {
+		position: relative;
 		display: flex;
 		align-items: center;
 		gap: 1rem;
@@ -748,7 +785,6 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
 		padding: 0.875rem 1rem;
-		text-decoration: none;
 		color: inherit;
 		transition: border-color var(--duration-fast);
 	}
@@ -823,6 +859,8 @@
 	}
 
 	.run-row-actions {
+		position: relative;
+		z-index: 1;
 		opacity: 0;
 		transition: opacity var(--duration-fast);
 	}

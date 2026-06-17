@@ -47,7 +47,7 @@ export const reportsVersion = writable(0);
 // Map of taskName → true for every cron job currently executing
 export const activeCronJobs = writable({});
 
-export function triggerRun(id) {
+export function triggerRun(id, testRunId) {
 	const s = get(socket);
 	if (!s) return;
 
@@ -66,7 +66,13 @@ export function triggerRun(id) {
 	});
 	panelExpanded.set(true);
 
-	s.emit('run-test', { tag: runId, workers, browser, runners: selectedRunners });
+	s.emit('run-test', {
+		tag: runId,
+		workers,
+		browser,
+		runners: selectedRunners,
+		testRunId: testRunId ?? null
+	});
 }
 
 export function cancelRun() {

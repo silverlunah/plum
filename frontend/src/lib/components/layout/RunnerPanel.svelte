@@ -252,7 +252,7 @@
 		if (selectedRun) {
 			if (selectedRunLoading || !selectedRun.tags) return;
 			if (selectedRun.tags.length === 0) return;
-			triggerRun(selectedRun.tags.join(' or '));
+			triggerRun(selectedRun.tags.join(' or '), selectedRun.id);
 		} else if ($runnerConfig.testID.trim() === '') {
 			runAllModalOpen = true;
 		} else {
@@ -438,10 +438,10 @@
 								</button>
 								<div class="dropdown-divider"></div>
 							{/if}
-							{#if testRuns.length === 0}
-								<div class="dropdown-empty">No test runs</div>
+							{#if testRuns.filter((r) => r.status !== 'complete').length === 0}
+								<div class="dropdown-empty">No active test runs</div>
 							{:else}
-								{#each testRuns as run}
+								{#each testRuns.filter((r) => r.status !== 'complete') as run}
 									<button
 										class="dropdown-item"
 										class:active={selectedRun?.id === run.id}
