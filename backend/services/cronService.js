@@ -88,9 +88,20 @@ function runSingleBuiltIn({ taskName, tags, workers, browser }) {
 async function runDistributed({ taskName, tags, workers, browser, runnerIds }) {
 	const allIds = getTestIdsForTag(tags);
 	const chunks = chunkTests(allIds, runnerIds.length);
-	const laneInfos = await resolveLaneInfos(runnerIds);
 
-	const collectedReports = new Array(runnerIds.length).fill(null);
+	// Surplus runners beyond the number of non-empty chunks would fall back to
+	// running the full tag expression, producing duplicate scenarios in the report.
+	const activeRunnerIds = runnerIds.slice(0, chunks.length);
+
+	if (activeRunnerIds.length === 0) {
+		console.log(`Task "${taskName}" — no tests found, skipping.`);
+		if (_io) _io.emit('cron-done', { taskName, code: 0 });
+		return;
+	}
+
+	const laneInfos = await resolveLaneInfos(activeRunnerIds);
+
+	const collectedReports = new Array(activeRunnerIds.length).fill(null);
 	let doneCount = 0;
 	let overallCode = 0;
 
@@ -99,7 +110,7 @@ async function runDistributed({ taskName, tags, workers, browser, runnerIds }) {
 		collectedReports[idx] = reportContent;
 		doneCount++;
 
-		if (doneCount === runnerIds.length) {
+		if (doneCount === activeRunnerIds.length) {
 			console.log(`Task "${taskName}" — all runners done (exit ${overallCode})`);
 			if (_io) _io.emit('cron-done', { taskName, code: overallCode });
 
@@ -116,9 +127,9 @@ async function runDistributed({ taskName, tags, workers, browser, runnerIds }) {
 		}
 	}
 
-	for (let i = 0; i < runnerIds.length; i++) {
+	for (let i = 0; i < activeRunnerIds.length; i++) {
 		const lane = laneInfos[i];
-		const chunkTag = chunks[i]?.length > 0 ? buildTagExpression(chunks[i]) : tags;
+		const chunkTag = buildTagExpression(chunks[i]);
 
 		if (lane.id === BUILT_IN_RUNNER_ID) {
 			const env = {
