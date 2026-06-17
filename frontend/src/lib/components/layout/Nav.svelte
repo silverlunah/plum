@@ -27,7 +27,7 @@
 		{ href: '/', label: 'Automated Tests' },
 		{ href: '/reports', label: 'Reports' },
 		{ href: '/scheduled-tests', label: 'Scheduled' },
-		{ href: '/test-repository', label: 'Test Repository' }
+		{ href: '/test-repository', label: 'Test Repository', sep: true }
 	];
 
 	function closeMenu() {
@@ -43,9 +43,13 @@
 
 		<div class="links">
 			{#each links as link}
+				{#if link.sep}
+					<span class="nav-sep" aria-hidden="true"></span>
+				{/if}
 				<a
 					href={link.href}
 					class="link"
+					class:repo={link.sep}
 					class:active={link.href === '/'
 						? $page.url.pathname === '/'
 						: $page.url.pathname.startsWith(link.href)}
@@ -99,6 +103,9 @@
 	{#if menuOpen}
 		<div class="mobile-menu" transition:slide={{ duration: 200 }}>
 			{#each links as link}
+				{#if link.sep}
+					<hr class="mobile-sep" />
+				{/if}
 				<a
 					href={link.href}
 					class="mobile-link"
@@ -191,6 +198,29 @@
 	.link.active {
 		color: var(--accent);
 		background: var(--accent-soft);
+	}
+
+	.nav-sep {
+		display: block;
+		width: 1px;
+		height: 18px;
+		background: var(--border);
+		margin: 0 0.375rem;
+		flex-shrink: 0;
+		align-self: center;
+	}
+
+	.link.repo {
+		border: 1px solid var(--border);
+		padding: 0.3rem 0.75rem;
+	}
+
+	.link.repo:hover {
+		border-color: var(--text-muted);
+	}
+
+	.link.repo.active {
+		border-color: var(--accent);
 	}
 
 	/* Actions */
@@ -315,6 +345,12 @@
 	.mobile-link.active {
 		color: var(--accent);
 		background: var(--accent-soft);
+	}
+
+	.mobile-sep {
+		border: none;
+		border-top: 1px solid var(--border);
+		margin: 0.375rem 0.75rem;
 	}
 
 	@media (max-width: 640px) {
