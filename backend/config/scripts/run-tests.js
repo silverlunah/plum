@@ -25,20 +25,24 @@ const runners = parallel || process.env.REPORT_RUNNERS || '1';
 const tag = process.env.TAG || process.argv.slice(2).find((a) => a.startsWith('@'));
 const browser = process.env.BROWSER || 'chromium';
 
+let testExitCode = 0;
+
 try {
+	const testsRoot = (process.env.TESTS_ROOT || 'tests').replace(/\\/g, '/');
+
 	const baseCommand = [
 		'npx',
 		'cross-env',
 		`BROWSER=${browser}`,
 		'TS_NODE_TRANSPILE_ONLY=true',
 		'cucumber-js',
-		'tests/features/**/*.feature',
+		`${testsRoot}/features/**/*.feature`,
 		'--require-module',
 		'ts-node/register',
 		'--require',
-		'tests/utils/hooks.ts',
+		`${testsRoot}/utils/hooks.ts`,
 		'--require',
-		'tests/step_definitions/**/*.ts',
+		`${testsRoot}/step_definitions/**/*.ts`,
 		'--format',
 		'json:reports/cucumber_report.json'
 	];
@@ -54,6 +58,8 @@ try {
 	const cucumberCommand = baseCommand.join(' ');
 	execSync(cucumberCommand, { stdio: 'inherit' });
 } catch (error) {
+	// Cucumber exits non-zero when scenarios fail — preserve it so callers see the real result.
+	testExitCode = error.status ?? 1;
 	console.error(pc.red('✗') + ' Tests failed: ' + error.message);
 } finally {
 	try {
@@ -65,3 +71,5 @@ try {
 		console.error(pc.red('✗') + ' Report generation failed: ' + error.message);
 	}
 }
+
+process.exit(testExitCode);

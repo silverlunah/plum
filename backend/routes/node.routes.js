@@ -20,6 +20,7 @@ const router = express.Router();
 const { spawn } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { authGuard } = require('../middleware/auth');
 const { TRIGGER_REMOTE } = require('../constants/triggers');
@@ -35,15 +36,27 @@ router.get('/ping', authGuard, (req, res) => {
 
 // Start a remote test job
 router.post('/execute', authGuard, (req, res) => {
-	const { tags, browser = 'chromium', workers = 1 } = req.body;
+	const { tags, browser = 'chromium', workers = 1, tests = null } = req.body;
 	const jobId = crypto.randomUUID();
+
+	// Write test files sent by the primary into a per-job temp dir
+	let tempTestsDir = null;
+	if (tests && Object.keys(tests).length > 0) {
+		tempTestsDir = path.join(os.tmpdir(), `plum-job-${jobId}`);
+		for (const [rel, content] of Object.entries(tests)) {
+			const dest = path.join(tempTestsDir, rel);
+			fs.mkdirSync(path.dirname(dest), { recursive: true });
+			fs.writeFileSync(dest, content, 'utf8');
+		}
+	}
 
 	jobs[jobId] = {
 		status: 'running',
 		logs: '',
 		exitCode: null,
 		startedAt: Date.now(),
-		meta: { tags: tags || '', browser, workers }
+		meta: { tags: tags || '', browser, workers },
+		tempTestsDir
 	};
 
 	const env = {
@@ -51,7 +64,8 @@ router.post('/execute', authGuard, (req, res) => {
 		TAG: tags || '',
 		TRIGGER: TRIGGER_REMOTE,
 		BROWSER: browser,
-		REPORT_RUNNERS: String(workers)
+		REPORT_RUNNERS: String(workers),
+		...(tempTestsDir ? { TESTS_ROOT: tempTestsDir } : {})
 	};
 	if (workers > 1) env.PARALLEL = String(workers);
 
@@ -72,6 +86,10 @@ router.post('/execute', authGuard, (req, res) => {
 				jobs[jobId].reportContent = fs.readFileSync(reportPath, 'utf8');
 			}
 		} catch {}
+
+		if (jobs[jobId].tempTestsDir) {
+			fs.rm(jobs[jobId].tempTestsDir, { recursive: true, force: true }, () => {});
+		}
 
 		setTimeout(() => delete jobs[jobId], 600_000);
 	});

@@ -15,6 +15,8 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
+const fs = require('fs');
+const path = require('path');
 const prisma = require('./prisma');
 
 // ---------------------------------------------------------------------------
@@ -59,6 +61,26 @@ async function ping(id) {
 // ---------------------------------------------------------------------------
 // Remote execution
 // ---------------------------------------------------------------------------
+
+function collectTestFiles() {
+	const testsDir = path.resolve(process.cwd(), 'tests');
+	const files = {};
+
+	function walk(dir, rel) {
+		for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+			const fullPath = path.join(dir, entry.name);
+			const relPath = rel ? `${rel}/${entry.name}` : entry.name;
+			if (entry.isDirectory()) {
+				walk(fullPath, relPath);
+			} else {
+				files[relPath] = fs.readFileSync(fullPath, 'utf8');
+			}
+		}
+	}
+
+	if (fs.existsSync(testsDir)) walk(testsDir, '');
+	return files;
+}
 
 /**
  * Fetches the raw cucumber JSON content from a finished remote node job.
@@ -106,7 +128,7 @@ async function dispatchAndPoll(runnerId, { tags, browser, workers }, onLog, onDo
 				'Content-Type': 'application/json',
 				Authorization: `Bearer ${runner.token}`
 			},
-			body: JSON.stringify({ tags, browser, workers }),
+			body: JSON.stringify({ tags, browser, workers, tests: collectTestFiles() }),
 			signal: AbortSignal.timeout(10000)
 		});
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
