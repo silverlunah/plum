@@ -28,7 +28,22 @@ const getAll = () => prisma.runner.findMany({ orderBy: { createdAt: 'asc' } });
 const create = ({ name, url, token, browser = 'chromium' }) =>
 	prisma.runner.create({ data: { name, url, token, browser } });
 
-const remove = (id) => prisma.runner.delete({ where: { id } });
+async function remove(id) {
+	// Scrub the deleted runner from any cron job's runnerIds string before
+	// deleting, since that field has no relational constraint.
+	const jobs = await prisma.cronJob.findMany({ select: { id: true, runnerIds: true } });
+	for (const job of jobs) {
+		const ids = job.runnerIds
+			.split(',')
+			.map((s) => s.trim())
+			.filter((s) => s && s !== id);
+		await prisma.cronJob.update({
+			where: { id: job.id },
+			data: { runnerIds: ids.length > 0 ? ids.join(',') : 'built-in' }
+		});
+	}
+	return prisma.runner.delete({ where: { id } });
+}
 
 const update = (id, data) => prisma.runner.update({ where: { id }, data });
 
