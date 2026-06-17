@@ -36,17 +36,14 @@ async function getAll() {
 async function getAllWithCases() {
 	return prisma.testSuite.findMany({
 		select: {
-			id: true,
-			displayId: true,
-			name: true,
+			...suiteSelect,
 			cases: {
 				select: {
 					id: true,
 					displayId: true,
 					title: true,
 					priority: true,
-					isAutomated: true,
-					suite: { select: { id: true, name: true, displayId: true } }
+					isAutomated: true
 				},
 				orderBy: { createdAt: 'asc' }
 			}
