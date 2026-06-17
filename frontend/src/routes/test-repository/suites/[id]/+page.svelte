@@ -62,6 +62,16 @@
 
 	let confirmDeleteCase = null;
 	let confirmDeleteCaseOpen = false;
+
+	let caseSearch = '';
+	$: caseQ = caseSearch.trim().toLowerCase();
+	$: filteredCases = suite?.cases
+		? caseQ
+			? suite.cases.filter(
+					(c) => c.displayId.toLowerCase().includes(caseQ) || c.title.toLowerCase().includes(caseQ)
+				)
+			: suite.cases
+		: [];
 	let editSuiteOpen = false;
 	let editSuiteForm = {};
 	let editSuiteSaving = false;
@@ -377,11 +387,50 @@
 				<Button size="sm" on:click={() => (caseModalOpen = true)}>+ Add Case</Button>
 			</div>
 
+			{#if suite.cases.length > 0}
+				<div class="case-search">
+					<svg
+						class="case-search-icon"
+						width="12"
+						height="12"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+					</svg>
+					<input
+						type="search"
+						class="case-search-input"
+						placeholder="Filter by ID or name…"
+						bind:value={caseSearch}
+					/>
+					{#if caseSearch}
+						<button class="case-search-clear" on:click={() => (caseSearch = '')} aria-label="Clear">
+							<svg
+								width="10"
+								height="10"
+								viewBox="0 0 14 14"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								stroke-linecap="round"><path d="M1 1l12 12M13 1L1 13" /></svg
+							>
+						</button>
+					{/if}
+				</div>
+			{/if}
+
 			{#if suite.cases.length === 0}
 				<EmptyState title="No cases yet" description="Add your first test case to this suite." />
+			{:else if filteredCases.length === 0}
+				<div class="case-no-results">No cases match "<strong>{caseSearch}</strong>"</div>
 			{:else}
 				<div class="case-list">
-					{#each suite.cases as tc (tc.id)}
+					{#each filteredCases as tc (tc.id)}
 						<div
 							class="case-row"
 							class:selected={selectedCase?.id === tc.id}
@@ -778,6 +827,70 @@
 		font-size: 0.9375rem;
 		font-weight: 500;
 		color: var(--text);
+	}
+
+	/* ── Case search ── */
+	.case-search {
+		position: relative;
+		display: flex;
+		align-items: center;
+		margin-bottom: 0.625rem;
+	}
+
+	.case-search-icon {
+		position: absolute;
+		left: 0.6rem;
+		color: var(--text-muted);
+		pointer-events: none;
+	}
+
+	.case-search-input {
+		width: 100%;
+		height: 30px;
+		padding: 0 1.75rem 0 2rem;
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		color: var(--text);
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		outline: none;
+		transition: border-color var(--duration-fast);
+	}
+
+	.case-search-input::placeholder {
+		color: var(--text-muted);
+	}
+	.case-search-input:focus {
+		border-color: var(--accent);
+	}
+	.case-search-input::-webkit-search-cancel-button {
+		display: none;
+	}
+
+	.case-search-clear {
+		position: absolute;
+		right: 0.5rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		background: none;
+		border: none;
+		cursor: pointer;
+		color: var(--text-muted);
+		padding: 0;
+	}
+
+	.case-search-clear:hover {
+		color: var(--text);
+	}
+
+	.case-no-results {
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		padding: 1rem 0.25rem;
 	}
 
 	.case-list {

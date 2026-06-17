@@ -48,6 +48,16 @@
 	let confirmDelete = null;
 	let confirmDeleteOpen = false;
 
+	let search = '';
+
+	$: q = search.trim().toLowerCase();
+	$: filteredSuites = q
+		? suites.filter(
+				(s) => s.displayId.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)
+			)
+		: suites;
+	$: filteredRuns = q ? runs.filter((r) => r.title.toLowerCase().includes(q)) : runs;
+
 	const PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
 
 	function showToast(type, message) {
@@ -245,12 +255,47 @@
 <div class="tabs">
 	<button class="tab" class:active={tab === 'suites'} on:click={() => (tab = 'suites')}>
 		Suites
-		<span class="tab-count">{suites.length}</span>
+		<span class="tab-count">{q ? filteredSuites.length + '/' : ''}{suites.length}</span>
 	</button>
 	<button class="tab" class:active={tab === 'runs'} on:click={() => (tab = 'runs')}>
 		Test Runs
-		<span class="tab-count">{runs.length}</span>
+		<span class="tab-count">{q ? filteredRuns.length + '/' : ''}{runs.length}</span>
 	</button>
+</div>
+
+<div class="search-bar">
+	<svg
+		class="search-icon"
+		width="14"
+		height="14"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+	</svg>
+	<input
+		type="search"
+		class="search-input"
+		placeholder="Search by ID or name…"
+		bind:value={search}
+	/>
+	{#if search}
+		<button class="search-clear" on:click={() => (search = '')} aria-label="Clear search">
+			<svg
+				width="12"
+				height="12"
+				viewBox="0 0 14 14"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.5"
+				stroke-linecap="round"><path d="M1 1l12 12M13 1L1 13" /></svg
+			>
+		</button>
+	{/if}
 </div>
 
 {#if tab === 'suites'}
@@ -262,9 +307,11 @@
 				title="No test suites yet"
 				description="Create your first suite to start organising test cases."
 			/>
+		{:else if filteredSuites.length === 0}
+			<EmptyState title="No results" description="No suites match &ldquo;{search}&rdquo;." />
 		{:else}
 			<div class="suite-grid">
-				{#each suites as suite (suite.id)}
+				{#each filteredSuites as suite (suite.id)}
 					<a href="/test-repository/suites/{suite.id}" class="suite-card">
 						<div class="suite-card-header">
 							<span class="id-chip">{suite.displayId}</span>
@@ -330,9 +377,11 @@
 				title="No test runs yet"
 				description="Create a test run to start executing and tracking manual tests."
 			/>
+		{:else if filteredRuns.length === 0}
+			<EmptyState title="No results" description="No runs match &ldquo;{search}&rdquo;." />
 		{:else}
 			<div class="runs-list">
-				{#each runs as run (run.id)}
+				{#each filteredRuns as run (run.id)}
 					<a href="/test-repository/runs/{run.id}" class="run-row">
 						<div class="run-row-main">
 							<span class="run-status-dot {runStatusClass(run.status)}"></span>
@@ -456,6 +505,66 @@
 		font-size: 0.875rem;
 		color: var(--text-muted);
 		padding: 2rem 0;
+	}
+
+	/* ── Search ── */
+	.search-bar {
+		position: relative;
+		display: flex;
+		align-items: center;
+		margin-bottom: 1.25rem;
+	}
+
+	.search-icon {
+		position: absolute;
+		left: 0.75rem;
+		color: var(--text-muted);
+		pointer-events: none;
+		flex-shrink: 0;
+	}
+
+	.search-input {
+		width: 100%;
+		max-width: 360px;
+		height: 34px;
+		padding: 0 2rem 0 2.25rem;
+		font-family: var(--font-body);
+		font-size: 0.875rem;
+		color: var(--text);
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		outline: none;
+		transition: border-color var(--duration-fast);
+	}
+
+	.search-input::placeholder {
+		color: var(--text-muted);
+	}
+	.search-input:focus {
+		border-color: var(--accent);
+	}
+	.search-input::-webkit-search-cancel-button {
+		display: none;
+	}
+
+	.search-clear {
+		position: absolute;
+		left: calc(360px - 1.75rem);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		background: none;
+		border: none;
+		cursor: pointer;
+		color: var(--text-muted);
+		padding: 0;
+	}
+
+	.search-clear:hover {
+		color: var(--text);
 	}
 
 	/* ── Suite grid ── */
