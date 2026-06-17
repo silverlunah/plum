@@ -17,7 +17,6 @@
 
 <script>
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { setup, checkNeedsSetup } from '$lib/api/auth';
 	import { auth } from '$lib/stores/auth';
 	import { login as apiLogin } from '$lib/api/auth';
@@ -53,7 +52,7 @@
 			await setup({ name, email, password });
 			const { token, user } = await apiLogin({ email, password });
 			auth.login(token, user);
-			goto('/');
+			window.location.href = '/';
 		} catch (e) {
 			error = e.message || 'Setup failed';
 		} finally {

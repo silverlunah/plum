@@ -16,7 +16,6 @@
  -->
 
 <script>
-	import { goto } from '$app/navigation';
 	import { auth } from '$lib/stores/auth';
 	import { login } from '$lib/api/auth';
 	import { theme } from '$lib/stores/theme';
@@ -32,7 +31,7 @@
 		try {
 			const { token, user } = await login({ email, password });
 			auth.login(token, user);
-			goto('/');
+			window.location.href = '/';
 		} catch (e) {
 			error = e.message || 'Login failed';
 		} finally {

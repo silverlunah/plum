@@ -105,7 +105,7 @@
 			});
 		});
 
-		const s = io(API_BASE);
+		const s = io(API_BASE, { transports: ['websocket'] });
 		_socket = s;
 		socket.set(s);
 
