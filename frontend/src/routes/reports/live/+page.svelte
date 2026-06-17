@@ -29,7 +29,7 @@
 	let countdownInterval = null;
 
 	$: state = $runnerState;
-	$: isMulti = state.lanes.length > 1;
+	$: isMulti = state.lanes.length > 0;
 
 	// Auto-scroll terminals
 	afterUpdate(() => {
@@ -173,7 +173,7 @@
 					>
 					<span class="run-sep">·</span>
 					<span class="run-detail">{state.currentRun.browser}</span>
-					{#if isMulti}
+					{#if state.lanes.length > 1}
 						<span class="run-sep">·</span>
 						<span class="run-detail">{state.lanes.length} runners</span>
 					{/if}
