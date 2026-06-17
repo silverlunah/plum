@@ -26,7 +26,7 @@
 	} from '$lib/api/schedules';
 	import { fetchRunners } from '$lib/api/runners';
 	import { activeCronJobs } from '$lib/stores/runner';
-	import { BROWSERS, WORKER_OPTIONS, TOAST_TIMEOUT_MS } from '$lib/constants';
+	import { BROWSERS, TOAST_TIMEOUT_MS } from '$lib/constants';
 	import { stagger } from '$lib/utils/format';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
@@ -122,6 +122,10 @@
 		const current = form.runnerIds;
 		if (current.includes(id) && current.length === 1) return;
 		form.runnerIds = current.includes(id) ? current.filter((r) => r !== id) : [...current, id];
+	}
+
+	function adjustFormWorkers(delta) {
+		form.workers = Math.max(1, Math.min(10, (form.workers || 1) + delta));
 	}
 
 	function openAddModal() {
@@ -303,18 +307,20 @@
 				<span>Workers</span>
 				<span class="field-hint">Parallel workers for this job</span>
 			</div>
-			<div class="seg-control">
-				{#each WORKER_OPTIONS as n}
-					<button
-						type="button"
-						class="seg-btn"
-						class:active={form.workers === n}
-						on:click={() => (form.workers = n)}
-					>
-						<span class="seg-num">{n}</span>
-						<span class="seg-label">{n === 1 ? 'worker' : 'workers'}</span>
-					</button>
-				{/each}
+			<div class="stepper">
+				<button
+					type="button"
+					class="step-btn"
+					on:click={() => adjustFormWorkers(-1)}
+					disabled={form.workers <= 1}>−</button
+				>
+				<span class="step-val">{form.workers}</span>
+				<button
+					type="button"
+					class="step-btn"
+					on:click={() => adjustFormWorkers(1)}
+					disabled={form.workers >= 10}>+</button
+				>
 			</div>
 		</div>
 
@@ -661,6 +667,57 @@
 
 	.cron-desc.cron-invalid {
 		color: var(--fail);
+	}
+
+	/* Workers stepper */
+	.stepper {
+		display: flex;
+		align-items: center;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+		width: fit-content;
+	}
+
+	.step-btn {
+		width: 28px;
+		height: 30px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-size: 0.875rem;
+		font-weight: 400;
+		line-height: 1;
+		transition:
+			color var(--duration-fast),
+			background var(--duration-fast);
+	}
+
+	.step-btn:hover:not(:disabled) {
+		color: var(--text);
+		background: var(--bg-elevated);
+	}
+
+	.step-btn:disabled {
+		opacity: 0.3;
+		cursor: default;
+	}
+
+	.step-val {
+		min-width: 28px;
+		text-align: center;
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--text);
+		font-family: 'JetBrains Mono', monospace;
+		line-height: 30px;
+		border-left: 1px solid var(--border);
+		border-right: 1px solid var(--border);
 	}
 
 	/* Segmented control */

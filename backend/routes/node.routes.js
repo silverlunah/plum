@@ -50,13 +50,18 @@ router.post('/execute', authGuard, (req, res) => {
 		}
 	}
 
+	// Each job writes to its own temp file so concurrent jobs on the same node
+	// cannot clobber each other's reports (shared cucumber_report.json race condition).
+	const reportFile = path.join(os.tmpdir(), `plum-report-${jobId}.json`);
+
 	jobs[jobId] = {
 		status: 'running',
 		logs: '',
 		exitCode: null,
 		startedAt: Date.now(),
 		meta: { tags: tags || '', browser, workers },
-		tempTestsDir
+		tempTestsDir,
+		reportFile
 	};
 
 	const env = {
@@ -65,6 +70,7 @@ router.post('/execute', authGuard, (req, res) => {
 		TRIGGER: TRIGGER_REMOTE,
 		BROWSER: browser,
 		REPORT_RUNNERS: String(workers),
+		CUCUMBER_REPORT_FILE: reportFile,
 		...(tempTestsDir ? { TESTS_ROOT: tempTestsDir } : {})
 	};
 	if (workers > 1) env.PARALLEL = String(workers);
@@ -81,9 +87,8 @@ router.post('/execute', authGuard, (req, res) => {
 		jobs[jobId].exitCode = code;
 
 		try {
-			const reportPath = path.resolve(process.cwd(), 'reports', 'cucumber_report.json');
-			if (fs.existsSync(reportPath)) {
-				jobs[jobId].reportContent = fs.readFileSync(reportPath, 'utf8');
+			if (fs.existsSync(reportFile)) {
+				jobs[jobId].reportContent = fs.readFileSync(reportFile, 'utf8');
 			}
 		} catch {}
 
@@ -91,7 +96,12 @@ router.post('/execute', authGuard, (req, res) => {
 			fs.rm(jobs[jobId].tempTestsDir, { recursive: true, force: true }, () => {});
 		}
 
-		setTimeout(() => delete jobs[jobId], 600_000);
+		setTimeout(() => {
+			try {
+				fs.unlinkSync(reportFile);
+			} catch {}
+			delete jobs[jobId];
+		}, 600_000);
 	});
 
 	res.json({ jobId, status: 'started' });

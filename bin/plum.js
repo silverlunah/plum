@@ -323,7 +323,7 @@ async function configureNode({ force }) {
 
 	if (interactive) {
 		const primaryVal = await clack.text({
-			message: 'Primary server URL',
+			message: 'Your Plum server backend URL',
 			placeholder: primary || 'http://localhost:3001',
 			defaultValue: primary
 		});
@@ -331,7 +331,7 @@ async function configureNode({ force }) {
 		primary = primaryVal || primary;
 
 		const portVal = await clack.text({
-			message: 'Local port this node listens on',
+			message: 'Local port this Plum node listens on',
 			placeholder: port,
 			defaultValue: port
 		});
@@ -340,7 +340,7 @@ async function configureNode({ force }) {
 
 		const defaultUrl = url || `http://${detectLanIp()}:${port}`;
 		const urlVal = await clack.text({
-			message: 'URL the primary calls back (advertised)',
+			message: 'The URL your Plum server calls to communicate with this node',
 			placeholder: defaultUrl,
 			defaultValue: defaultUrl
 		});

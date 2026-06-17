@@ -234,7 +234,7 @@
 	function adjustWorkers(delta) {
 		runnerConfig.update((c) => ({
 			...c,
-			workers: Math.max(1, Math.min(16, c.workers + delta))
+			workers: Math.max(1, Math.min(10, c.workers + delta))
 		}));
 	}
 
@@ -353,7 +353,7 @@
 					<button
 						class="step-btn"
 						on:click={() => adjustWorkers(1)}
-						disabled={cfg.workers >= 16 || state.running}>+</button
+						disabled={cfg.workers >= 10 || state.running}>+</button
 					>
 				</div>
 			</div>
