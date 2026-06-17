@@ -28,6 +28,7 @@
 		triggerRun,
 		testsVersion,
 		reportsVersion,
+		runsVersion,
 		activeCronJobs
 	} from '$lib/stores/runner';
 	import { fetchLatestReportId, reportUrl } from '$lib/api/reports';
@@ -72,10 +73,6 @@
 			const bi = localStorage.getItem('plum:builtInEnabled');
 			if (bi !== null) builtInEnabled.set(bi !== 'false');
 		} catch {}
-
-		fetchRuns()
-			.then((r) => (testRuns = r))
-			.catch(() => {});
 
 		fetchRunners()
 			.then((r) => {
@@ -196,6 +193,11 @@
 	$: cronJobs = Object.keys($activeCronJobs);
 	$: anyCronRunning = cronJobs.length > 0;
 	$: anyRunning = state.running || anyCronRunning;
+
+	$: if ($runsVersion >= 0)
+		fetchRuns()
+			.then((r) => (testRuns = r))
+			.catch(() => {});
 
 	$: statusColor =
 		state.status === 'pass'

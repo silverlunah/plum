@@ -20,6 +20,7 @@
 	import { fly } from 'svelte/transition';
 	import { fetchSuites, createSuite, deleteSuite } from '$lib/api/repository';
 	import { fetchRuns, createRun, duplicateRun, deleteRun } from '$lib/api/repository';
+	import { runsVersion } from '$lib/stores/runner';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
@@ -143,6 +144,7 @@
 		try {
 			const copy = await duplicateRun(run.id);
 			runs = [copy, ...runs];
+			runsVersion.update((v) => v + 1);
 			showToast('success', `Duplicated as "${copy.title}".`);
 		} catch {
 			showToast('error', 'Failed to duplicate run.');
@@ -153,6 +155,7 @@
 		try {
 			await deleteRun(id);
 			runs = runs.filter((r) => r.id !== id);
+			runsVersion.update((v) => v + 1);
 			showToast('success', `Run "${title}" deleted.`);
 		} catch {
 			showToast('error', 'Failed to delete run.');

@@ -20,6 +20,7 @@
 	import { page } from '$app/stores';
 	import { fly } from 'svelte/transition';
 	import { fetchRun, updateRun, fetchSuites, recordEntryResult } from '$lib/api/repository';
+	import { runsVersion } from '$lib/stores/runner';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import { TOAST_TIMEOUT_MS } from '$lib/constants';
@@ -139,6 +140,7 @@
 		try {
 			await updateRun(runId, { status: 'complete' });
 			run = { ...run, status: 'complete' };
+			runsVersion.update((v) => v + 1);
 			showToast('success', 'Run marked as complete.');
 		} catch (e) {
 			showToast('error', e.message);
@@ -150,6 +152,7 @@
 			await updateRun(runId, { status: 'draft' });
 			run = { ...run, status: 'draft' };
 			mode = 'build';
+			runsVersion.update((v) => v + 1);
 			showToast('success', 'Run reopened.');
 		} catch (e) {
 			showToast('error', e.message);

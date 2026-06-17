@@ -43,6 +43,7 @@ export const builtInEnabled = writable(true);
 
 export const testsVersion = writable(0);
 export const reportsVersion = writable(0);
+export const runsVersion = writable(0);
 
 // Map of taskName → true for every cron job currently executing
 export const activeCronJobs = writable({});
