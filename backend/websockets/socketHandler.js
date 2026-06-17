@@ -46,6 +46,18 @@ const socketHandler = (io) => {
 						: [BUILT_IN_RUNNER_ID];
 			}
 
+			// Drop runner ids that no longer exist (e.g. a deleted runner still
+			// referenced by a stale client selection) so they can't wedge the run.
+			const validatedRunners = [];
+			for (const id of runners) {
+				if (id === BUILT_IN_RUNNER_ID || (await runnerService.getById(id))) {
+					validatedRunners.push(id);
+				} else {
+					socket.emit('log', `[WARN] Runner ${id} no longer exists — skipping.\n`);
+				}
+			}
+			runners = validatedRunners.length > 0 ? validatedRunners : [BUILT_IN_RUNNER_ID];
+
 			const isSingleBuiltIn = runners.length === 1 && runners[0] === BUILT_IN_RUNNER_ID;
 
 			if (isSingleBuiltIn) {
