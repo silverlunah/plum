@@ -1,6 +1,6 @@
 {
 	"name": "plum-backend",
-	"version": "1.3.2",
+	"version": "1.3.3",
 	"main": "index.js",
 	"scripts": {
 		"init": "node services/envService.js",
