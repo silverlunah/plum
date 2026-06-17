@@ -44,7 +44,7 @@
 	let toast = null;
 
 	let caseModalOpen = false;
-	let caseForm = { title: '', description: '', priority: 'Medium', automatedTag: '' };
+	let caseForm = { title: '', description: '', priority: 'Medium' };
 	let caseFormSaving = false;
 	let caseFormError = '';
 
@@ -102,7 +102,7 @@
 			const tc = await createTestCase({ suiteId, ...caseForm });
 			suite = { ...suite, cases: [...suite.cases, tc], _count: { cases: suite._count.cases + 1 } };
 			caseModalOpen = false;
-			caseForm = { title: '', description: '', priority: 'Medium', automatedTag: '' };
+			caseForm = { title: '', description: '', priority: 'Medium' };
 			showToast('success', `${tc.displayId} created.`);
 		} catch (e) {
 			caseFormError = e.message;
@@ -131,8 +131,7 @@
 		editCaseForm = {
 			title: selectedCase.title,
 			description: selectedCase.description,
-			priority: selectedCase.priority,
-			automatedTag: selectedCase.automatedTag ?? ''
+			priority: selectedCase.priority
 		};
 		editingCase = true;
 	}
@@ -261,26 +260,11 @@
 				rows="2"
 			></textarea>
 		</div>
-		<div class="field-row">
-			<div class="field">
-				<label class="field-label" for="tc-prio">Priority</label>
-				<select id="tc-prio" class="field-input" bind:value={caseForm.priority}>
-					{#each PRIORITIES as p}<option value={p}>{p}</option>{/each}
-				</select>
-			</div>
-			<div class="field">
-				<label class="field-label" for="tc-tag">
-					Automated tag
-					<span class="field-hint">Cucumber @tag</span>
-				</label>
-				<input
-					id="tc-tag"
-					type="text"
-					class="field-input mono"
-					bind:value={caseForm.automatedTag}
-					placeholder="test-123"
-				/>
-			</div>
+		<div class="field">
+			<label class="field-label" for="tc-prio">Priority</label>
+			<select id="tc-prio" class="field-input" bind:value={caseForm.priority}>
+				{#each PRIORITIES as p}<option value={p}>{p}</option>{/each}
+			</select>
 		</div>
 		{#if caseFormError}<p class="form-error">{caseFormError}</p>{/if}
 		<div class="modal-actions">
@@ -495,9 +479,6 @@
 							{#if selectedCase.isAutomated}
 								<span class="auto-badge">automated</span>
 							{/if}
-							{#if selectedCase.automatedTag}
-								<span class="tag-chip">@{selectedCase.automatedTag}</span>
-							{/if}
 							<div class="detail-header-actions">
 								{#if !editingCase}
 									<button class="icon-btn" title="Edit case" on:click={startEditCase}>
@@ -556,23 +537,11 @@
 										rows="2"
 									></textarea>
 								</div>
-								<div class="field-row">
-									<div class="field">
-										<label class="field-label" for="edit-prio">Priority</label>
-										<select id="edit-prio" class="field-input" bind:value={editCaseForm.priority}>
-											{#each PRIORITIES as p}<option value={p}>{p}</option>{/each}
-										</select>
-									</div>
-									<div class="field">
-										<label class="field-label" for="edit-tag">Automated tag</label>
-										<input
-											id="edit-tag"
-											type="text"
-											class="field-input mono"
-											bind:value={editCaseForm.automatedTag}
-											placeholder="test-123"
-										/>
-									</div>
+								<div class="field">
+									<label class="field-label" for="edit-prio">Priority</label>
+									<select id="edit-prio" class="field-input" bind:value={editCaseForm.priority}>
+										{#each PRIORITIES as p}<option value={p}>{p}</option>{/each}
+									</select>
 								</div>
 								<div class="modal-actions">
 									<Button size="sm" on:click={handleUpdateCase} disabled={editCaseSaving}>

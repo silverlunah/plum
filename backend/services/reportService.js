@@ -39,8 +39,8 @@ async function syncAutomatedTags(reportId, features) {
 		if (tagSet.size === 0) return;
 
 		const matchingCases = await prisma.testCase.findMany({
-			where: { automatedTag: { in: [...tagSet] } },
-			select: { id: true, automatedTag: true }
+			where: { displayId: { in: [...tagSet] } },
+			select: { id: true, displayId: true }
 		});
 		if (matchingCases.length === 0) return;
 
@@ -66,7 +66,7 @@ async function syncAutomatedTags(reportId, features) {
 					data: {
 						caseId: tc.id,
 						reportId,
-						result: tagToResult.get(tc.automatedTag) ?? 'pass',
+						result: tagToResult.get(tc.displayId) ?? 'pass',
 						source: 'automated'
 					}
 				})

@@ -67,7 +67,6 @@ async function getById(id) {
 					title: true,
 					priority: true,
 					isAutomated: true,
-					automatedTag: true,
 					createdAt: true,
 					createdBy: { select: { id: true, name: true } },
 					_count: { select: { steps: true } }

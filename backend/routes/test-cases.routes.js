@@ -32,7 +32,7 @@ router.get('/:id', jwtAuth, async (req, res, next) => {
 
 router.post('/', jwtAuth, async (req, res, next) => {
 	try {
-		const { suiteId, title, description, priority, automatedTag } = req.body;
+		const { suiteId, title, description, priority } = req.body;
 		if (!suiteId || !title)
 			return res.status(400).json({ error: 'suiteId and title are required' });
 		const testCase = await testCaseService.create({
@@ -40,7 +40,6 @@ router.post('/', jwtAuth, async (req, res, next) => {
 			title,
 			description,
 			priority,
-			automatedTag,
 			createdById: req.user.userId
 		});
 		res.status(201).json({ testCase });
@@ -51,13 +50,8 @@ router.post('/', jwtAuth, async (req, res, next) => {
 
 router.put('/:id', jwtAuth, async (req, res, next) => {
 	try {
-		const { title, description, priority, automatedTag } = req.body;
-		const testCase = await testCaseService.update(req.params.id, {
-			title,
-			description,
-			priority,
-			automatedTag
-		});
+		const { title, description, priority } = req.body;
+		const testCase = await testCaseService.update(req.params.id, { title, description, priority });
 		res.json({ testCase });
 	} catch (e) {
 		next(e);

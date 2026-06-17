@@ -112,7 +112,6 @@ model TestCase {
   title        String
   description  String            @default("")
   priority     String            @default("Medium")
-  automatedTag String?
   isAutomated  Boolean           @default(false)
   suiteId      String
   suite        TestSuite         @relation(fields: [suiteId], references: [id], onDelete: Cascade)

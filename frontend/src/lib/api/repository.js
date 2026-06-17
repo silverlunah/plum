@@ -82,22 +82,22 @@ export async function fetchTestCase(id) {
 	return data.testCase;
 }
 
-export async function createTestCase({ suiteId, title, description, priority, automatedTag }) {
+export async function createTestCase({ suiteId, title, description, priority }) {
 	const res = await fetch(`${API_BASE}/test-cases`, {
 		method: 'POST',
 		headers: authHeaders(),
-		body: JSON.stringify({ suiteId, title, description, priority, automatedTag })
+		body: JSON.stringify({ suiteId, title, description, priority })
 	});
 	const data = await res.json();
 	if (!res.ok) throw new Error(data.error ?? 'Failed to create test case');
 	return data.testCase;
 }
 
-export async function updateTestCase(id, { title, description, priority, automatedTag }) {
+export async function updateTestCase(id, { title, description, priority }) {
 	const res = await fetch(`${API_BASE}/test-cases/${id}`, {
 		method: 'PUT',
 		headers: authHeaders(),
-		body: JSON.stringify({ title, description, priority, automatedTag })
+		body: JSON.stringify({ title, description, priority })
 	});
 	const data = await res.json();
 	if (!res.ok) throw new Error(data.error ?? 'Failed to update test case');

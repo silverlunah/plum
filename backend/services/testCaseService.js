@@ -23,7 +23,6 @@ const caseSelect = {
 	title: true,
 	description: true,
 	priority: true,
-	automatedTag: true,
 	isAutomated: true,
 	suiteId: true,
 	createdAt: true,
@@ -58,7 +57,7 @@ async function getById(id) {
 	});
 }
 
-async function create({ suiteId, title, description, priority, automatedTag, createdById }) {
+async function create({ suiteId, title, description, priority, createdById }) {
 	const project = await prisma.project.upsert({
 		where: { id: 1 },
 		create: { id: 1, caseSeqNext: 1 },
@@ -75,21 +74,19 @@ async function create({ suiteId, title, description, priority, automatedTag, cre
 			title,
 			description: description ?? '',
 			priority: priority ?? 'Medium',
-			automatedTag: automatedTag || null,
 			createdById
 		},
 		select: caseSelect
 	});
 }
 
-async function update(id, { title, description, priority, automatedTag }) {
+async function update(id, { title, description, priority }) {
 	return prisma.testCase.update({
 		where: { id },
 		data: {
 			...(title !== undefined && { title }),
 			...(description !== undefined && { description }),
-			...(priority !== undefined && { priority }),
-			...(automatedTag !== undefined && { automatedTag: automatedTag || null })
+			...(priority !== undefined && { priority })
 		},
 		select: caseSelect
 	});
