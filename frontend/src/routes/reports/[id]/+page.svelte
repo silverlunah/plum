@@ -56,6 +56,14 @@
 		return scenario.tags.find((tag) => /^@test[\w-]*/i.test(tag));
 	}
 
+	function featureSuiteTag(feature) {
+		for (const scenario of feature.scenarios) {
+			const suiteTag = scenario.tags.find((tag) => /suite/i.test(tag));
+			if (suiteTag) return suiteTag;
+		}
+		return null;
+	}
+
 	function visibleTags(scenario) {
 		const testTag = scenarioTestTag(scenario);
 		if (testTag) return [testTag];
@@ -349,6 +357,9 @@
 						<polyline points="14 2 14 8 20 8" />
 					</svg>
 					{feature.name}
+					{#if featureSuiteTag(feature)}
+						<span class="suite-tag">{featureSuiteTag(feature)}</span>
+					{/if}
 				</h2>
 				<div class="feature-right">
 					<span class="feature-file">{feature.uri}</span>
@@ -685,6 +696,16 @@
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.72rem;
 		color: var(--text-muted);
+	}
+
+	.suite-tag {
+		font-size: 0.65rem;
+		font-family: 'JetBrains Mono', monospace;
+		background: var(--accent-soft);
+		color: var(--accent);
+		padding: 0.1rem 0.4rem;
+		border-radius: 100px;
+		font-weight: 500;
 	}
 
 	.scenarios {

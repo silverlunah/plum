@@ -50,7 +50,7 @@ my-tests/
 │   ├── pages/             — Page Object Models
 │   └── utils/             — Browser setup, hooks, shared helpers
 ├── .env                   — Base URL and browser settings
-├── .gitignore             — Pre-configured to exclude reports/
+├── .gitignore             — Pre-configured to exclude .env and reports/
 ├── plum.plugins.json      — Add extra npm packages for your tests
 └── tsconfig.json          — IDE type resolution (no local install needed)
 ```
@@ -247,17 +247,24 @@ Follow the prompts — Plum writes the boilerplate, you fill in the implementati
 
 ### Run Tests Locally
 
-Use `plum dev` to run tests directly on your machine without Docker:
+Use `plum run-test` to run tests directly on your machine without Docker:
 
 ```bash
-plum dev                         # run all tests
-plum dev @test-login-1           # run a single scenario
-plum dev @suite-login            # run an entire suite
-plum dev --parallel 4            # run all tests across 4 workers
-plum dev --parallel 4 @suite-login  # run a suite in parallel
+plum run-test                            # run all tests
+plum run-test @test-login-1              # run a single scenario
+plum run-test @suite-login               # run an entire suite
+plum run-test --parallel 4               # run all tests across 4 workers
+plum run-test --parallel 4 @suite-login  # run a suite in parallel
+plum run-test --browser firefox          # run in a specific browser
 ```
 
-> `plum dev` syncs your tests, installs dependencies, and runs Cucumber. No Docker needed.
+| Flag               | Description                                  |
+| ------------------ | -------------------------------------------- |
+| `@tag`             | Run only tests matching the tag              |
+| `--parallel <n>`   | Run across `n` parallel workers              |
+| `--browser <name>` | `chromium` (default), `firefox`, or `webkit` |
+
+> `plum run-test` syncs your tests, installs dependencies, and runs Cucumber. No Docker needed.
 
 ---
 
@@ -304,9 +311,10 @@ plum node stop
 | `plum init`                   | Initialize a new project in the current folder           |
 | `plum server start`           | Start the full UI stack via Docker (alias: `plum start`) |
 | `plum server stop`            | Stop the server and preserve data (alias: `plum stop`)   |
-| `plum dev`                    | Run all tests locally without Docker                     |
-| `plum dev @tag`               | Run tests matching a tag                                 |
-| `plum dev --parallel N`       | Run tests across N parallel workers                      |
+| `plum run-test`               | Run all tests locally without Docker                     |
+| `plum run-test @tag`          | Run tests matching a tag                                 |
+| `plum run-test --parallel N`  | Run tests across N parallel workers                      |
+| `plum run-test --browser <b>` | Run in a specific browser (chromium/firefox/webkit)      |
 | `plum create-step`            | Interactively scaffold a new step definition             |
 | `plum node start --token <t>` | Start a runner node on this machine                      |
 | `plum node stop`              | Stop the runner node                                     |

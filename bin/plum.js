@@ -100,7 +100,7 @@ function installPlugins() {
 // Ensure user's .gitignore contains Plum-generated entries
 function ensureGitignore() {
 	const gitignorePath = path.join(process.cwd(), '.gitignore');
-	const plumEntries = ['reports/'];
+	const plumEntries = ['.env', 'reports/'];
 	const plumBlock = `\n# Plum (auto-generated)\n${plumEntries.join('\n')}\n`;
 
 	if (!fs.existsSync(gitignorePath)) {
@@ -251,7 +251,7 @@ switch (command) {
 					"1. **Open `.env`** and set `BASE_URL` to your application's URL.",
 					'2. **Run the example tests** to confirm everything works:',
 					'   ```bash',
-					'   plum dev',
+					'   plum run-test',
 					'   ```',
 					'3. **Write your first test** — edit a file in `tests/features/` or generate a step:',
 					'   ```bash',
@@ -269,9 +269,10 @@ switch (command) {
 					'',
 					'| Command | Description |',
 					'| --- | --- |',
-					'| `plum dev` | Run all tests locally |',
-					'| `plum dev @tag` | Run tests matching a tag |',
-					'| `plum dev --parallel N` | Run tests across N parallel workers |',
+					'| `plum run-test` | Run all tests locally |',
+					'| `plum run-test @tag` | Run tests matching a tag |',
+					'| `plum run-test --parallel N` | Run tests across N parallel workers |',
+					'| `plum run-test --browser firefox` | Run in a specific browser (chromium/firefox/webkit) |',
 					'| `plum start` | Start the full UI via Docker |',
 					'| `plum stop` | Stop the server |',
 					'| `plum create-step` | Interactively generate a new step definition |',
@@ -311,8 +312,8 @@ switch (command) {
 					'```',
 					'',
 					'```bash',
-					'plum dev @test-login-1   # run a single scenario',
-					'plum dev @suite-login    # run the whole suite',
+					'plum run-test @test-login-1   # run a single scenario',
+					'plum run-test @suite-login    # run the whole suite',
 					'```',
 					'',
 					'---',
@@ -342,7 +343,7 @@ switch (command) {
 		});
 
 		console.log(
-			'🟣  Plum is now ready!\n\n Scaffold test cases are in `tests/`.\n Add extra npm packages to `plum.plugins.json`.\n\n - Run tests locally:\n   `plum dev` or `plum dev @tag`\n\n - Start the full UI (requires Docker):\n   `plum start`\n\n - Generate a step:\n   `plum create-step`'
+			'🟣  Plum is now ready!\n\n Scaffold test cases are in `tests/`.\n Add extra npm packages to `plum.plugins.json`.\n\n - Run tests locally:\n   `plum run-test` or `plum run-test @tag`\n\n - Start the full UI (requires Docker):\n   `plum start`\n\n - Generate a step:\n   `plum create-step`'
 		);
 		console.log('--------------------------------------\n');
 		break;
@@ -412,19 +413,29 @@ switch (command) {
 		console.log('--------------------------------------\n');
 		break;
 
-	case 'dev': {
+	case 'run-test': {
 		console.log('--------------------------------------\n');
-		console.log('🚀 Running Plum in Development Mode...');
+		console.log('🚀 Running tests locally...');
 
 		// Copy .env file from root to backend
 		copyEnvFile();
 
-		const devArgs = process.argv.slice(3);
-		const parallelIdx = devArgs.indexOf('--parallel');
-		const parallelArg = parallelIdx !== -1 ? devArgs[parallelIdx + 1] : null;
-		const tagArg = devArgs.find((a) => a.startsWith('@')) ?? null;
+		const runArgs = process.argv.slice(3);
+		const parallelIdx = runArgs.indexOf('--parallel');
+		const parallelArg = parallelIdx !== -1 ? runArgs[parallelIdx + 1] : null;
+		const browserIdx = runArgs.indexOf('--browser');
+		const browserArg = browserIdx !== -1 ? runArgs[browserIdx + 1] : null;
+		const tagArg = runArgs.find((a) => a.startsWith('@')) ?? null;
 		const userTestsPath = path.resolve(process.cwd(), 'tests');
 		const backendTestsPath = path.join(plumRoot, 'backend', 'tests');
+
+		const validBrowsers = ['chromium', 'firefox', 'webkit'];
+		if (browserArg && !validBrowsers.includes(browserArg)) {
+			console.error(
+				`✗ Invalid browser "${browserArg}". Choose one of: ${validBrowsers.join(', ')}`
+			);
+			process.exit(1);
+		}
 
 		// Copy user tests into backend
 		if (fs.existsSync(userTestsPath)) {
@@ -458,6 +469,7 @@ switch (command) {
 		console.log('Running `npm run test` with:');
 		console.log('TAG =', tagArg ?? '');
 		console.log('PARALLEL =', parallelArg ?? 'off');
+		console.log('BROWSER =', browserArg ?? 'chromium');
 		console.log('TRIGGER =', 'command-line-trigger');
 
 		execSync('npm run test', {
@@ -467,7 +479,8 @@ switch (command) {
 				...process.env,
 				TAG: tagArg ?? '',
 				TRIGGER: 'command-line-trigger',
-				...(parallelArg ? { PARALLEL: parallelArg } : {})
+				...(parallelArg ? { PARALLEL: parallelArg } : {}),
+				...(browserArg ? { BROWSER: browserArg } : {})
 			}
 		});
 		console.log('--------------------------------------\n');
@@ -566,7 +579,10 @@ switch (command) {
 		console.log('    --token <secret>   Auth token the primary must send');
 		console.log('    --primary <url>    URL of the primary Plum server');
 		console.log('  node stop            Stop the runner node');
-		console.log('  dev                  Run tests locally without Docker');
+		console.log('  run-test             Run tests locally without Docker');
+		console.log('    @tag               Run only tests matching a tag');
+		console.log('    --parallel <n>     Run across n parallel workers');
+		console.log('    --browser <name>   chromium | firefox | webkit (default: chromium)');
 		console.log('  create-step          Interactively scaffold a new step definition');
 		console.log('\n--------------------------------------\n');
 }

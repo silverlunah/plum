@@ -25,6 +25,8 @@ const runners = parallel || process.env.REPORT_RUNNERS || '1';
 const tag = process.env.TAG || process.argv.slice(2).find((a) => a.startsWith('@'));
 const browser = process.env.BROWSER || 'chromium';
 
+let testExitCode = 0;
+
 try {
 	const testsRoot = (process.env.TESTS_ROOT || 'tests').replace(/\\/g, '/');
 
@@ -56,6 +58,8 @@ try {
 	const cucumberCommand = baseCommand.join(' ');
 	execSync(cucumberCommand, { stdio: 'inherit' });
 } catch (error) {
+	// Cucumber exits non-zero when scenarios fail — preserve it so callers see the real result.
+	testExitCode = error.status ?? 1;
 	console.error(pc.red('✗') + ' Tests failed: ' + error.message);
 } finally {
 	try {
@@ -67,3 +71,5 @@ try {
 		console.error(pc.red('✗') + ' Report generation failed: ' + error.message);
 	}
 }
+
+process.exit(testExitCode);
