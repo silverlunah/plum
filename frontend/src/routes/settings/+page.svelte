@@ -18,6 +18,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
+	import { goto } from '$app/navigation';
 	import { fetchProject, saveProject, exportBackup, importBackup } from '$lib/api/settings';
 	import {
 		fetchRunners,
@@ -27,18 +28,47 @@
 		pingRunner,
 		probeRunner
 	} from '$lib/api/runners';
+	import { fetchPrefixes, savePrefixes, migratePrefixes } from '$lib/api/repository';
+	import { updateProfile, changePassword } from '$lib/api/auth';
+	import {
+		fetchUsers,
+		createUser as createUserApi,
+		deleteUser as deleteUserApi
+	} from '$lib/api/users';
 	import { builtInEnabled } from '$lib/stores/runner';
+	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { BROWSERS, TOAST_TIMEOUT_MS } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
+	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 
-	/** @type {'project' | 'runners' | 'backup'} */
+	/** @type {'project' | 'runners' | 'repository' | 'account' | 'users' | 'backup'} */
 	let section = 'project';
 
 	let project = { name: '', logoUrl: '' };
 	let projectSaving = false;
 	let toast = null;
+
+	let prefixes = { testCasePrefix: 'TC', testSuitePrefix: 'TS' };
+	let prefixesSaving = false;
+	let migrateForm = { testCasePrefix: '', testSuitePrefix: '' };
+	let migrating = false;
+
+	let profileForm = { name: '', email: '' };
+	let profileSaving = false;
+	let profileError = '';
+
+	let allUsers = [];
+	let userForm = { name: '', email: '', password: '', role: 'user' };
+	let userFormSaving = false;
+	let userFormError = '';
+	let confirmDeleteUser = null;
+	let confirmDeleteUserOpen = false;
+
+	let pwForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
+	let pwSaving = false;
+	let pwError = '';
 
 	let importFile = null;
 	let importing = false;
@@ -75,6 +105,21 @@
 			runners = await fetchRunners();
 			runnersLoaded = true;
 		} catch {}
+		try {
+			prefixes = await fetchPrefixes();
+			migrateForm = {
+				testCasePrefix: prefixes.testCasePrefix,
+				testSuitePrefix: prefixes.testSuitePrefix
+			};
+		} catch {}
+		if ($auth.user) {
+			profileForm = { name: $auth.user.name, email: $auth.user.email };
+		}
+		if ($auth.user?.role === 'admin') {
+			try {
+				allUsers = await fetchUsers();
+			} catch {}
+		}
 	});
 
 	$: if (section === 'runners' && runnersLoaded) pingAll();
@@ -235,9 +280,117 @@
 		importFile = e.target.files[0] ?? null;
 	}
 
-	const navItems = [
+	async function handleSavePrefixes() {
+		prefixesSaving = true;
+		try {
+			prefixes = await savePrefixes(prefixes);
+			showToast('success', 'Prefixes saved.');
+		} catch {
+			showToast('error', 'Failed to save prefixes.');
+		} finally {
+			prefixesSaving = false;
+		}
+	}
+
+	async function handleMigratePrefixes() {
+		migrating = true;
+		try {
+			await migratePrefixes(migrateForm);
+			prefixes = { ...prefixes, ...migrateForm };
+			showToast('success', 'Prefix migration complete. All IDs updated.');
+		} catch {
+			showToast('error', 'Migration failed.');
+		} finally {
+			migrating = false;
+		}
+	}
+
+	async function handleUpdateProfile() {
+		profileError = '';
+		profileSaving = true;
+		try {
+			const { user } = await updateProfile({
+				token: $auth.token,
+				name: profileForm.name,
+				email: profileForm.email
+			});
+			auth.login($auth.token, { ...$auth.user, ...user });
+			showToast('success', 'Profile updated.');
+		} catch (e) {
+			profileError = e.message;
+		} finally {
+			profileSaving = false;
+		}
+	}
+
+	async function handleCreateUser() {
+		userFormError = '';
+		if (!userForm.name || !userForm.email || !userForm.password) {
+			userFormError = 'Name, email and password are required.';
+			return;
+		}
+		userFormSaving = true;
+		try {
+			const user = await createUserApi(userForm);
+			allUsers = [...allUsers, user];
+			userForm = { name: '', email: '', password: '', role: 'user' };
+			showToast('success', `User "${user.name}" added.`);
+		} catch (e) {
+			userFormError = e.message;
+		} finally {
+			userFormSaving = false;
+		}
+	}
+
+	async function handleDeleteUser(id, name) {
+		try {
+			await deleteUserApi(id);
+			allUsers = allUsers.filter((u) => u.id !== id);
+			showToast('success', `User "${name}" removed.`);
+		} catch (e) {
+			showToast('error', e.message);
+		}
+		confirmDeleteUser = null;
+		confirmDeleteUserOpen = false;
+	}
+
+	async function handleChangePassword() {
+		pwError = '';
+		if (pwForm.newPassword !== pwForm.confirmPassword) {
+			pwError = 'Passwords do not match.';
+			return;
+		}
+		if (pwForm.newPassword.length < 8) {
+			pwError = 'Password must be at least 8 characters.';
+			return;
+		}
+		pwSaving = true;
+		try {
+			await changePassword({
+				token: $auth.token,
+				currentPassword: pwForm.currentPassword,
+				newPassword: pwForm.newPassword
+			});
+			pwForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
+			showToast('success', 'Password changed.');
+		} catch (e) {
+			pwError = e.message;
+		} finally {
+			pwSaving = false;
+		}
+	}
+
+	function handleLogout() {
+		auth.logout();
+		goto('/login');
+	}
+
+	$: navItems = [
 		{ id: 'project', label: 'Project' },
 		{ id: 'runners', label: 'Runners' },
+		{ id: 'repository', label: 'Repository' },
+		{ id: 'account', label: 'Account' },
+		...($auth.user?.role === 'admin' ? [{ id: 'users', label: 'Users' }] : []),
 		{ id: 'backup', label: 'Backup' }
 	];
 </script>
@@ -561,6 +714,293 @@
 						</div>
 					{/if}
 				</div>
+			</div>
+
+			<!-- REPOSITORY -->
+		{:else if section === 'repository'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<div class="content-header">
+					<h2>Test Repository</h2>
+					<p class="content-desc">Configure ID prefixes for test suites and cases.</p>
+				</div>
+
+				<div class="card settings-card">
+					<div class="field-row">
+						<div class="field">
+							<label class="field-label" for="tc-prefix">Test Case prefix</label>
+							<input
+								id="tc-prefix"
+								type="text"
+								class="field-input mono"
+								bind:value={prefixes.testCasePrefix}
+								placeholder="TC"
+								maxlength="10"
+							/>
+						</div>
+						<div class="field">
+							<label class="field-label" for="ts-prefix">Test Suite prefix</label>
+							<input
+								id="ts-prefix"
+								type="text"
+								class="field-input mono"
+								bind:value={prefixes.testSuitePrefix}
+								placeholder="TS"
+								maxlength="10"
+							/>
+						</div>
+					</div>
+					<p class="content-desc">
+						Examples: <code class="code-sample">{prefixes.testCasePrefix || 'TC'}-001</code>,
+						<code class="code-sample">{prefixes.testSuitePrefix || 'TS'}-001</code>
+					</p>
+					<div class="card-footer">
+						<Button on:click={handleSavePrefixes} disabled={prefixesSaving}>
+							{prefixesSaving ? 'Saving…' : 'Save Prefixes'}
+						</Button>
+					</div>
+				</div>
+
+				<div class="content-header" style="margin-top: 1rem">
+					<h2>Migrate IDs</h2>
+					<p class="content-desc">
+						Rename all existing test IDs to use a new prefix. Cucumber tags in code are <strong
+							>not</strong
+						> affected — you manage those separately.
+					</p>
+				</div>
+
+				<div class="card settings-card">
+					<div class="field-row">
+						<div class="field">
+							<label class="field-label" for="mig-tc">New case prefix</label>
+							<input
+								id="mig-tc"
+								type="text"
+								class="field-input mono"
+								bind:value={migrateForm.testCasePrefix}
+								placeholder={prefixes.testCasePrefix}
+								maxlength="10"
+							/>
+						</div>
+						<div class="field">
+							<label class="field-label" for="mig-ts">New suite prefix</label>
+							<input
+								id="mig-ts"
+								type="text"
+								class="field-input mono"
+								bind:value={migrateForm.testSuitePrefix}
+								placeholder={prefixes.testSuitePrefix}
+								maxlength="10"
+							/>
+						</div>
+					</div>
+					<div class="card-footer">
+						<Button variant="ghost" on:click={handleMigratePrefixes} disabled={migrating}>
+							{migrating ? 'Migrating…' : 'Run Migration'}
+						</Button>
+					</div>
+				</div>
+			</div>
+
+			<!-- ACCOUNT -->
+		{:else if section === 'account'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<div class="content-header">
+					<h2>Account</h2>
+					<p class="content-desc">Manage your profile, credentials and session.</p>
+				</div>
+
+				<div class="card settings-card">
+					<p class="card-title">Profile</p>
+					<div class="field">
+						<label class="field-label" for="profile-name">Name</label>
+						<input
+							id="profile-name"
+							type="text"
+							class="field-input"
+							bind:value={profileForm.name}
+						/>
+					</div>
+					<div class="field">
+						<label class="field-label" for="profile-email">Email</label>
+						<input
+							id="profile-email"
+							type="email"
+							class="field-input"
+							bind:value={profileForm.email}
+						/>
+					</div>
+					{#if profileError}<p class="form-error">{profileError}</p>{/if}
+					<div class="card-footer">
+						<Button
+							on:click={handleUpdateProfile}
+							disabled={profileSaving || !profileForm.name || !profileForm.email}
+						>
+							{profileSaving ? 'Saving…' : 'Save Profile'}
+						</Button>
+					</div>
+				</div>
+
+				<div class="card settings-card">
+					<p class="card-title">Change password</p>
+					<div class="field">
+						<label class="field-label" for="pw-current">Current password</label>
+						<input
+							id="pw-current"
+							type="password"
+							class="field-input"
+							bind:value={pwForm.currentPassword}
+							autocomplete="current-password"
+						/>
+					</div>
+					<div class="field">
+						<label class="field-label" for="pw-new">New password</label>
+						<input
+							id="pw-new"
+							type="password"
+							class="field-input"
+							bind:value={pwForm.newPassword}
+							autocomplete="new-password"
+						/>
+					</div>
+					<div class="field">
+						<label class="field-label" for="pw-confirm">Confirm new password</label>
+						<input
+							id="pw-confirm"
+							type="password"
+							class="field-input"
+							bind:value={pwForm.confirmPassword}
+							autocomplete="new-password"
+						/>
+					</div>
+					{#if pwError}<p class="form-error">{pwError}</p>{/if}
+					<div class="card-footer">
+						<Button
+							on:click={handleChangePassword}
+							disabled={pwSaving || !pwForm.currentPassword || !pwForm.newPassword}
+						>
+							{pwSaving ? 'Saving…' : 'Change Password'}
+						</Button>
+					</div>
+				</div>
+
+				<div class="card settings-card">
+					<div class="card-footer">
+						<Button variant="danger" size="sm" on:click={handleLogout}>Sign out</Button>
+					</div>
+				</div>
+			</div>
+
+			<!-- USERS (admin only) -->
+		{:else if section === 'users'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<div class="content-header">
+					<h2>Users</h2>
+					<p class="content-desc">Add and manage who can access Plum.</p>
+				</div>
+
+				<ConfirmModal
+					bind:open={confirmDeleteUserOpen}
+					title="Remove User"
+					confirmLabel="Remove"
+					on:confirm={() => handleDeleteUser(confirmDeleteUser?.id, confirmDeleteUser?.name)}
+				>
+					{#if confirmDeleteUser}
+						Remove <strong>{confirmDeleteUser.name}</strong>? They will lose access immediately.
+					{/if}
+				</ConfirmModal>
+
+				<div class="card settings-card">
+					<p class="card-title">Add User</p>
+					<div class="field-row">
+						<div class="field">
+							<label class="field-label" for="u-name">Name</label>
+							<input
+								id="u-name"
+								type="text"
+								class="field-input"
+								bind:value={userForm.name}
+								placeholder="Jane Smith"
+							/>
+						</div>
+						<div class="field">
+							<label class="field-label" for="u-email">Email</label>
+							<input
+								id="u-email"
+								type="email"
+								class="field-input"
+								bind:value={userForm.email}
+								placeholder="jane@example.com"
+							/>
+						</div>
+					</div>
+					<div class="field-row">
+						<div class="field">
+							<label class="field-label" for="u-pw">Password</label>
+							<input
+								id="u-pw"
+								type="password"
+								class="field-input"
+								bind:value={userForm.password}
+								autocomplete="new-password"
+							/>
+						</div>
+						<div class="field">
+							<label class="field-label" for="u-role">Role</label>
+							<select id="u-role" class="field-input" bind:value={userForm.role}>
+								<option value="user">User</option>
+								<option value="admin">Admin</option>
+							</select>
+						</div>
+					</div>
+					{#if userFormError}<p class="form-error">{userFormError}</p>{/if}
+					<div class="card-footer">
+						<Button on:click={handleCreateUser} disabled={userFormSaving}>
+							{userFormSaving ? 'Adding…' : 'Add User'}
+						</Button>
+					</div>
+				</div>
+
+				{#if allUsers.length > 0}
+					<div class="users-table">
+						{#each allUsers as u (u.id)}
+							<div class="user-row">
+								<div class="user-info">
+									<span class="user-name">{u.name}</span>
+									<span class="user-email">{u.email}</span>
+								</div>
+								<span class="role-chip {u.role}">{u.role}</span>
+								{#if u.id !== $auth.user?.id}
+									<button
+										class="icon-btn danger"
+										title="Remove user"
+										on:click={() => {
+											confirmDeleteUser = { id: u.id, name: u.name };
+											confirmDeleteUserOpen = true;
+										}}
+									>
+										<svg
+											width="13"
+											height="13"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<polyline points="3 6 5 6 21 6" /><path
+												d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+											/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+										</svg>
+									</button>
+								{:else}
+									<span class="you-chip">you</span>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
 			</div>
 
 			<!-- BACKUP -->
@@ -1025,6 +1465,48 @@
 		background: var(--bg-subtle);
 	}
 
+	/* ── Field row (two columns) ── */
+	.field-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.75rem;
+	}
+
+	.mono {
+		font-family: 'JetBrains Mono', monospace !important;
+		font-size: 0.8125rem !important;
+	}
+
+	.code-sample {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.78rem;
+		background: var(--bg-subtle);
+		padding: 0.1em 0.3em;
+		border-radius: 3px;
+	}
+
+	.account-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+
+	.account-name {
+		font-size: 0.9375rem;
+		font-weight: 500;
+		color: var(--text);
+	}
+
+	.account-email {
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+	}
+
+	.form-error {
+		font-size: 0.8125rem;
+		color: var(--fail);
+	}
+
 	/* ── Responsive ── */
 	@media (max-width: 640px) {
 		.settings-layout {
@@ -1050,8 +1532,98 @@
 			height: 1px;
 		}
 
-		.runner-form-fields {
+		.runner-form-fields,
+		.field-row {
 			grid-template-columns: 1fr;
 		}
+	}
+
+	/* ── Users table ── */
+	.users-table {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-top: 1rem;
+	}
+
+	.user-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		padding: 0.75rem 1rem;
+	}
+
+	.user-info {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+
+	.user-name {
+		font-size: 0.9rem;
+		font-weight: 500;
+		color: var(--text);
+	}
+
+	.user-email {
+		font-size: 0.8rem;
+		color: var(--text-muted);
+	}
+
+	.role-chip {
+		font-size: 0.7rem;
+		font-weight: 500;
+		border-radius: 100px;
+		padding: 0.15rem 0.55rem;
+		flex-shrink: 0;
+	}
+
+	.role-chip.admin {
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+
+	.role-chip.user {
+		background: var(--bg-subtle);
+		color: var(--text-muted);
+		border: 1px solid var(--border);
+	}
+
+	.you-chip {
+		font-size: 0.7rem;
+		color: var(--text-muted);
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: 100px;
+		padding: 0.15rem 0.55rem;
+		flex-shrink: 0;
+	}
+
+	/* reuse icon-btn from other pages */
+	.icon-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border: none;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		cursor: pointer;
+		color: var(--text-muted);
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast);
+		flex-shrink: 0;
+	}
+
+	.icon-btn.danger:hover {
+		background: var(--fail-soft);
+		color: var(--fail);
 	}
 </style>

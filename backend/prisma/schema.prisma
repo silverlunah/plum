@@ -51,23 +51,128 @@ model CronJob {
 }
 
 model Report {
-  id          Int      @id @default(autoincrement())
+  id          Int               @id @default(autoincrement())
   status      String
   tags        String
-  triggerType String   @default("manual-trigger")
-  runners     Int      @default(1)
-  browser     String   @default("chromium")
+  triggerType String            @default("manual-trigger")
+  runners     Int               @default(1)
+  browser     String            @default("chromium")
   runnerName  String?
   runnerId    String?
-  runner      Runner?  @relation(fields: [runnerId], references: [id], onDelete: SetNull)
+  runner      Runner?           @relation(fields: [runnerId], references: [id], onDelete: SetNull)
   cronJobId   Int?
-  cronJob     CronJob? @relation(fields: [cronJobId], references: [id], onDelete: SetNull)
+  cronJob     CronJob?          @relation(fields: [cronJobId], references: [id], onDelete: SetNull)
   content     Json
-  createdAt   DateTime @default(now())
+  createdAt   DateTime          @default(now())
+  testHistory TestCaseHistory[]
 }
 
 model Project {
-  id      Int    @id @default(autoincrement())
-  name    String @default("")
-  logoUrl String @default("")
+  id              Int    @id @default(autoincrement())
+  name            String @default("")
+  logoUrl         String @default("")
+  testCasePrefix  String @default("TC")
+  testSuitePrefix String @default("TS")
+  caseSeqNext     Int    @default(0)
+  suiteSeqNext    Int    @default(0)
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  suites        TestSuite[]
+  cases         TestCase[]
+  runs          TestRun[]
+  runEntries    TestRunEntry[]
+  caseHistories TestCaseHistory[]
+}
+
+model TestSuite {
+  id          String     @id @default(cuid())
+  displayId   String     @unique
+  name        String
+  description String     @default("")
+  priority    String     @default("Medium")
+  createdById String
+  createdBy   User       @relation(fields: [createdById], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  cases       TestCase[]
+}
+
+model TestCase {
+  id           String            @id @default(cuid())
+  displayId    String            @unique
+  title        String
+  description  String            @default("")
+  priority     String            @default("Medium")
+  isAutomated  Boolean           @default(false)
+  suiteId      String
+  suite        TestSuite         @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+  createdById  String
+  createdBy    User              @relation(fields: [createdById], references: [id])
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  steps        TestStep[]
+  runEntries   TestRunEntry[]
+  history      TestCaseHistory[]
+}
+
+model TestStep {
+  id             String   @id @default(cuid())
+  caseId         String
+  case           TestCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  action         String
+  testData       String   @default("")
+  expectedOutput String   @default("")
+  order          Int
+  createdAt      DateTime @default(now())
+}
+
+model TestRun {
+  id          String         @id @default(cuid())
+  title       String
+  status      String         @default("draft")
+  createdById String
+  createdBy   User           @relation(fields: [createdById], references: [id])
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  entries     TestRunEntry[]
+  history     TestCaseHistory[]
+}
+
+model TestRunEntry {
+  id           String    @id @default(cuid())
+  runId        String
+  run          TestRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  caseId       String
+  case         TestCase  @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  status       String    @default("pending")
+  notes        String    @default("")
+  order        Int       @default(0)
+  executedById String?
+  executedBy   User?     @relation(fields: [executedById], references: [id])
+  executedAt   DateTime?
+}
+
+model TestCaseHistory {
+  id           String    @id @default(cuid())
+  caseId       String
+  case         TestCase  @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  runId        String?
+  run          TestRun?  @relation(fields: [runId], references: [id], onDelete: SetNull)
+  reportId     Int?
+  report       Report?   @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  result       String
+  source       String    @default("manual")
+  notes        String    @default("")
+  executedById String?
+  executedBy   User?     @relation(fields: [executedById], references: [id])
+  executedAt   DateTime  @default(now())
 }

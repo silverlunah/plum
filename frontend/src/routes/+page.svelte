@@ -106,7 +106,7 @@
 	$: visibleTests = filtered.reduce((n, s) => n + s.tests.length, 0);
 </script>
 
-<svelte:head><title>Run Tests — Plum</title></svelte:head>
+<svelte:head><title>Automated Tests — Plum</title></svelte:head>
 
 <div class="page-header">
 	<div class="header-top">

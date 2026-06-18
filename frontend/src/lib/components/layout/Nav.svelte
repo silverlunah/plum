@@ -18,13 +18,16 @@
 <script>
 	import { page } from '$app/stores';
 	import { slide } from 'svelte/transition';
+	import { auth } from '$lib/stores/auth';
+	import { goto } from '$app/navigation';
 
 	let menuOpen = false;
 
 	const links = [
-		{ href: '/', label: 'Run Tests' },
+		{ href: '/', label: 'Automated Tests' },
 		{ href: '/reports', label: 'Reports' },
-		{ href: '/scheduled-tests', label: 'Scheduled' }
+		{ href: '/scheduled-tests', label: 'Scheduled' },
+		{ href: '/test-repository', label: 'Test Repository', sep: true }
 	];
 
 	function closeMenu() {
@@ -40,13 +43,26 @@
 
 		<div class="links">
 			{#each links as link}
-				<a href={link.href} class="link" class:active={$page.url.pathname === link.href}>
+				{#if link.sep}
+					<span class="nav-sep" aria-hidden="true"></span>
+				{/if}
+				<a
+					href={link.href}
+					class="link"
+					class:repo={link.sep}
+					class:active={link.href === '/'
+						? $page.url.pathname === '/'
+						: $page.url.pathname.startsWith(link.href)}
+				>
 					{link.label}
 				</a>
 			{/each}
 		</div>
 
 		<div class="actions">
+			{#if $auth.user}
+				<span class="nav-user">{$auth.user.name}</span>
+			{/if}
 			<a
 				href="/settings"
 				class="settings-btn"
@@ -87,10 +103,15 @@
 	{#if menuOpen}
 		<div class="mobile-menu" transition:slide={{ duration: 200 }}>
 			{#each links as link}
+				{#if link.sep}
+					<hr class="mobile-sep" />
+				{/if}
 				<a
 					href={link.href}
 					class="mobile-link"
-					class:active={$page.url.pathname === link.href}
+					class:active={link.href === '/'
+						? $page.url.pathname === '/'
+						: $page.url.pathname.startsWith(link.href)}
 					on:click={closeMenu}
 				>
 					{link.label}
@@ -179,12 +200,50 @@
 		background: var(--accent-soft);
 	}
 
+	.nav-sep {
+		display: block;
+		width: 1px;
+		height: 18px;
+		background: var(--border);
+		margin: 0 0.375rem;
+		flex-shrink: 0;
+		align-self: center;
+	}
+
+	.link.repo {
+		border: 1px solid var(--border);
+		padding: 0.3rem 0.75rem;
+	}
+
+	.link.repo:hover {
+		border-color: var(--text-muted);
+	}
+
+	.link.repo.active {
+		border-color: var(--accent);
+	}
+
 	/* Actions */
 	.actions {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
 		margin-left: auto;
+	}
+
+	.nav-user {
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		max-width: 120px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	@media (max-width: 640px) {
+		.nav-user {
+			display: none;
+		}
 	}
 
 	/* Settings gear icon */
@@ -286,6 +345,12 @@
 	.mobile-link.active {
 		color: var(--accent);
 		background: var(--accent-soft);
+	}
+
+	.mobile-sep {
+		border: none;
+		border-top: 1px solid var(--border);
+		margin: 0.375rem 0.75rem;
 	}
 
 	@media (max-width: 640px) {

@@ -20,7 +20,7 @@ const prisma = require('./prisma');
 const getProject = async () => {
 	let project = await prisma.project.findUnique({ where: { id: 1 } });
 	if (!project) {
-		project = await prisma.project.create({ data: { id: 1, name: '', logoUrl: '' } });
+		project = await prisma.project.create({ data: { id: 1 } });
 	}
 	return project;
 };
@@ -33,4 +33,20 @@ const updateProject = async ({ name, logoUrl }) => {
 	});
 };
 
-module.exports = { getProject, updateProject };
+const getTestPrefixes = async () => {
+	const project = await getProject();
+	return { testCasePrefix: project.testCasePrefix, testSuitePrefix: project.testSuitePrefix };
+};
+
+const updateTestPrefixes = async ({ testCasePrefix, testSuitePrefix }) => {
+	return prisma.project.upsert({
+		where: { id: 1 },
+		create: { id: 1 },
+		update: {
+			...(testCasePrefix !== undefined && { testCasePrefix }),
+			...(testSuitePrefix !== undefined && { testSuitePrefix })
+		}
+	});
+};
+
+module.exports = { getProject, updateProject, getTestPrefixes, updateTestPrefixes };

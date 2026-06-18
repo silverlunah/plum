@@ -279,8 +279,75 @@ async function serverStart() {
 	applyServerConfig(cfg);
 	clack.log.info(`UI:                    ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
 	clack.log.info(`Nodes register against: ${pc.dim(cfg.primaryPublicUrl)}`);
-	execSync('docker compose up --build', { cwd: plumRoot, stdio: 'inherit' });
-	clack.outro(pc.dim('Plum server stopped.'));
+
+	execSync('docker compose up --build -d', { cwd: plumRoot, stdio: 'inherit' });
+
+	const apiBase = `http://localhost:${cfg.backendPort}`;
+	const s = clack.spinner();
+	s.start('Waiting for server to be ready…');
+	let ready = false;
+	for (let i = 0; i < 40; i++) {
+		await new Promise((r) => setTimeout(r, 1500));
+		try {
+			const res = await fetch(`${apiBase}/auth/needs-setup`);
+			if (res.ok) {
+				ready = true;
+				break;
+			}
+		} catch {}
+	}
+	s.stop(ready ? pc.green('✓ Server is ready') : pc.yellow('Server may still be starting'));
+
+	if (ready) {
+		let needsSetup = false;
+		try {
+			const res = await fetch(`${apiBase}/auth/needs-setup`);
+			const data = await res.json();
+			needsSetup = data.needsSetup;
+		} catch {}
+
+		if (needsSetup) {
+			clack.log.info('No users found — create your first account to get started.');
+
+			const name = await clack.text({ message: 'Your name', placeholder: 'Jane Smith' });
+			if (clack.isCancel(name)) {
+				clack.log.warn('Skipped. Create a user at /setup in the UI.');
+			} else {
+				const email = await clack.text({
+					message: 'Email address',
+					placeholder: 'jane@example.com'
+				});
+				if (clack.isCancel(email)) {
+					clack.log.warn('Skipped. Create a user at /setup in the UI.');
+				} else {
+					const password = await clack.password({ message: 'Password (min 8 characters)' });
+					if (clack.isCancel(password)) {
+						clack.log.warn('Skipped. Create a user at /setup in the UI.');
+					} else {
+						try {
+							const res = await fetch(`${apiBase}/auth/setup`, {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({ name, email, password })
+							});
+							if (res.ok) {
+								clack.log.success(`Account created for ${email}. You can now log in.`);
+							} else {
+								const err = await res.json();
+								clack.log.error(`Failed to create account: ${err.error ?? 'unknown error'}`);
+							}
+						} catch (e) {
+							clack.log.error(`Failed to create account: ${e.message}`);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	clack.log.info(pc.dim('Streaming logs (Ctrl+C to detach — server keeps running):'));
+	execSync('docker compose logs -f', { cwd: plumRoot, stdio: 'inherit' });
+	clack.outro(pc.dim('Detached from logs. Run "docker compose down" to stop.'));
 }
 
 async function serverReconfig() {
@@ -588,7 +655,7 @@ switch (command) {
 				const readmeContent = [
 					'# My Tests',
 					'',
-					'Powered by [Plum](https://github.com/silverlunah/plum) — Playwright + Cucumber.',
+					'Powered by [Plum](https://github.com/silverlunah/plum) — Playwright + Cucumber + Test Repository.',
 					'',
 					'## Getting Started',
 					'',
@@ -603,11 +670,11 @@ switch (command) {
 					'   ```bash',
 					'   plum create-step',
 					'   ```',
-					'4. **Start the full UI** (requires Docker) to trigger tests and view reports in the browser:',
+					'4. **Start the full UI** (requires Docker) to trigger tests, view reports, and manage your test repository:',
 					'   ```bash',
 					'   plum start',
 					'   ```',
-					'   Then open **http://localhost:5173**.',
+					'   On first run, Plum asks you to create an admin account. Then open **http://localhost:5173** and sign in.',
 					'',
 					'---',
 					'',
@@ -664,6 +731,19 @@ switch (command) {
 					'plum run-test @test-login-1   # run a single scenario',
 					'plum run-test @suite-login    # run the whole suite',
 					'```',
+					'',
+					'---',
+					'',
+					'## Test Repository',
+					'',
+					'Plum includes a built-in test case management system. Access it from the **Test Repository** tab in the UI.',
+					'',
+					'- **Test Suites** — Group related test cases. Each suite gets an auto-assigned ID (e.g. `TS-001`).',
+					'- **Test Cases** — Document steps (Action / Test Data / Expected Output), set priority, and assign a Cucumber `@tag` to link automation.',
+					'- **Test Runs** — Build a run from any combination of cases, execute them one by one (pass/fail/blocked/skip), and track history.',
+					'- **Auto-linking** — When a build completes, Plum matches Cucumber scenario tags against `automatedTag` values on your test cases and marks them as automated.',
+					'',
+					'To link a test case to automation, set its **Automated tag** (e.g. `test-login-1`) to match the `@tag` on the Cucumber scenario.',
 					'',
 					'---',
 					'',

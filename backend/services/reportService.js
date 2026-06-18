@@ -23,6 +23,61 @@ const { isScheduledTrigger, normaliseTrigger } = require('../constants/triggers'
 const { SCREENSHOTS_DIR } = require('../lib/reportFilename');
 
 // ---------------------------------------------------------------------------
+// Auto-sync: mark test cases as automated and record history from Cucumber tags
+// ---------------------------------------------------------------------------
+
+async function syncAutomatedTags(reportId, features) {
+	try {
+		const tagSet = new Set();
+		for (const feature of features) {
+			for (const scenario of feature.scenarios ?? []) {
+				for (const tag of scenario.tags ?? []) {
+					tagSet.add(tag.replace(/^@/, ''));
+				}
+			}
+		}
+		if (tagSet.size === 0) return;
+
+		const matchingCases = await prisma.testCase.findMany({
+			where: { displayId: { in: [...tagSet] } },
+			select: { id: true, displayId: true }
+		});
+		if (matchingCases.length === 0) return;
+
+		const tagToResult = new Map();
+		for (const feature of features) {
+			for (const scenario of feature.scenarios ?? []) {
+				for (const tag of scenario.tags ?? []) {
+					const t = tag.replace(/^@/, '');
+					const result = scenario.status === 'passed' ? 'pass' : 'fail';
+					if (!tagToResult.has(t) || result === 'fail') {
+						tagToResult.set(t, result);
+					}
+				}
+			}
+		}
+
+		await prisma.$transaction([
+			...matchingCases.map((tc) =>
+				prisma.testCase.update({ where: { id: tc.id }, data: { isAutomated: true } })
+			),
+			...matchingCases.map((tc) =>
+				prisma.testCaseHistory.create({
+					data: {
+						caseId: tc.id,
+						reportId,
+						result: tagToResult.get(tc.displayId) ?? 'pass',
+						source: 'automated'
+					}
+				})
+			)
+		]);
+	} catch (e) {
+		console.error('[sync] Failed to sync automated tags:', e.message);
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
@@ -222,7 +277,7 @@ const saveReport = async ({
 	const { features, status } = processCucumberJson(rawCucumberJson);
 	const cronJobId = await resolveCronJobId(normTrigger);
 
-	return prisma.report.create({
+	const report = await prisma.report.create({
 		data: {
 			status,
 			tags: (tags ?? '').replace(/^\(|\)$/g, '') || '@all-tests',
@@ -235,6 +290,8 @@ const saveReport = async ({
 			content: { features }
 		}
 	});
+	syncAutomatedTags(report.id, features);
+	return report;
 };
 
 /**

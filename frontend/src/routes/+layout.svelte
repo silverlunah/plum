@@ -17,13 +17,41 @@
 
 <script>
 	import '../app.css';
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import Nav from '$lib/components/layout/Nav.svelte';
 	import PageShell from '$lib/components/layout/PageShell.svelte';
 	import RunnerPanel from '$lib/components/layout/RunnerPanel.svelte';
+	import { auth } from '$lib/stores/auth';
+	import { checkNeedsSetup } from '$lib/api/auth';
+
+	const PUBLIC_ROUTES = ['/login', '/setup'];
+
+	let ready = true;
+
+	onMount(async () => {
+		const pathname = $page.url.pathname;
+		if (PUBLIC_ROUTES.includes(pathname)) return;
+
+		const token = $auth.token;
+		if (!token) {
+			try {
+				const needsSetup = await checkNeedsSetup();
+				goto(needsSetup ? '/setup' : '/login');
+			} catch {
+				goto('/login');
+			}
+		}
+	});
 </script>
 
-<Nav />
-<PageShell>
+{#if $page.url.pathname === '/login' || $page.url.pathname === '/setup'}
 	<slot />
-</PageShell>
-<RunnerPanel />
+{:else}
+	<Nav />
+	<PageShell>
+		<slot />
+	</PageShell>
+	<RunnerPanel />
+{/if}
