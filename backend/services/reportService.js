@@ -26,7 +26,7 @@ const { SCREENSHOTS_DIR } = require('../lib/reportFilename');
 // Auto-sync: mark test cases as automated and record history from Cucumber tags
 // ---------------------------------------------------------------------------
 
-async function syncAutomatedTags(reportId, features) {
+async function syncAutomatedTags(reportId, features, testRunId = null) {
 	try {
 		const tagSet = new Set();
 		for (const feature of features) {
@@ -72,6 +72,30 @@ async function syncAutomatedTags(reportId, features) {
 				})
 			)
 		]);
+
+		if (testRunId) {
+			const entries = await prisma.testRunEntry.findMany({
+				where: { runId: testRunId, case: { displayId: { in: [...tagToResult.keys()] } } },
+				select: { id: true, case: { select: { displayId: true } } }
+			});
+			if (entries.length > 0) {
+				await prisma.$transaction([
+					...entries.map((e) =>
+						prisma.testRunEntry.update({
+							where: { id: e.id },
+							data: {
+								status: tagToResult.get(e.case.displayId) ?? 'pass',
+								executedAt: new Date()
+							}
+						})
+					),
+					prisma.testRun.updateMany({
+						where: { id: testRunId, status: { in: ['backlog', 'draft'] } },
+						data: { status: 'in-progress' }
+					})
+				]);
+			}
+		}
 	} catch (e) {
 		console.error('[sync] Failed to sync automated tags:', e.message);
 	}
@@ -262,6 +286,7 @@ const getReportDetail = async (id) => {
  *   browser?: string,
  *   runnerName?: string,
  *   runnerId?: string,
+ *   testRunId?: string,
  * }} opts
  */
 const saveReport = async ({
@@ -271,7 +296,8 @@ const saveReport = async ({
 	nodeCount,
 	browser,
 	runnerName,
-	runnerId
+	runnerId,
+	testRunId
 }) => {
 	const normTrigger = normaliseTrigger(triggerType);
 	const { features, status } = processCucumberJson(rawCucumberJson);
@@ -290,7 +316,7 @@ const saveReport = async ({
 			content: { features }
 		}
 	});
-	syncAutomatedTags(report.id, features);
+	syncAutomatedTags(report.id, features, testRunId ?? null);
 	return report;
 };
 
@@ -307,7 +333,15 @@ const saveReport = async ({
  *   browser: string,
  * }} opts
  */
-const saveCombinedReport = async ({ reports, runners, overallCode, tag, triggerType, browser }) => {
+const saveCombinedReport = async ({
+	reports,
+	runners,
+	overallCode,
+	tag,
+	triggerType,
+	browser,
+	testRunId
+}) => {
 	const featureMap = new Map();
 	for (const content of reports) {
 		if (!content) continue;
@@ -339,7 +373,8 @@ const saveCombinedReport = async ({ reports, runners, overallCode, tag, triggerT
 		nodeCount: runners.length,
 		browser,
 		runnerName: runners.map((r) => r.name).join(', '),
-		runnerId: null
+		runnerId: null,
+		testRunId: testRunId ?? null
 	});
 };
 

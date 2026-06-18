@@ -27,8 +27,23 @@ const runListSelect = {
 	_count: { select: { entries: true } }
 };
 
-async function getAll() {
-	return prisma.testRun.findMany({ select: runListSelect, orderBy: { createdAt: 'desc' } });
+function runOrderBy(sortBy, sortOrder) {
+	const dir = sortOrder === 'desc' ? 'desc' : 'asc';
+	if (sortBy === 'title') return { title: dir };
+	if (sortBy === 'status') return { status: dir };
+	if (sortBy === 'updatedAt') return { updatedAt: dir };
+	return { createdAt: dir };
+}
+
+async function getAll({ page = 1, limit = 20, q, sortBy = 'createdAt', sortOrder = 'desc' } = {}) {
+	const skip = (page - 1) * limit;
+	const where = q ? { title: { contains: q, mode: 'insensitive' } } : {};
+	const orderBy = runOrderBy(sortBy, sortOrder);
+	const [runs, total] = await Promise.all([
+		prisma.testRun.findMany({ where, select: runListSelect, orderBy, skip, take: limit }),
+		prisma.testRun.count({ where })
+	]);
+	return { runs, total };
 }
 
 async function getById(id) {
@@ -49,6 +64,8 @@ async function getById(id) {
 					notes: true,
 					executedAt: true,
 					executedBy: { select: { id: true, name: true } },
+					assignedToId: true,
+					assignedTo: { select: { id: true, name: true } },
 					case: {
 						select: {
 							id: true,
@@ -71,6 +88,7 @@ async function create({ title, caseIds, createdById }) {
 	const run = await prisma.testRun.create({
 		data: {
 			title,
+			status: 'backlog',
 			createdById,
 			entries: {
 				create: (caseIds ?? []).map((caseId, i) => ({ caseId, order: i }))
@@ -96,6 +114,25 @@ async function update(id, { title, status, caseIds }) {
 	}
 
 	return prisma.testRun.update({ where: { id }, data, select: runListSelect });
+}
+
+async function duplicate(id, { createdById }) {
+	const original = await prisma.testRun.findUnique({
+		where: { id },
+		select: {
+			title: true,
+			entries: { select: { caseId: true, order: true }, orderBy: { order: 'asc' } }
+		}
+	});
+	if (!original) return null;
+	return prisma.testRun.create({
+		data: {
+			title: `Copy of ${original.title}`,
+			createdById,
+			entries: { create: original.entries.map((e, i) => ({ caseId: e.caseId, order: i })) }
+		},
+		select: runListSelect
+	});
 }
 
 async function remove(id) {
@@ -137,6 +174,14 @@ async function updateEntry(entryId, { status, notes, executedById }) {
 	return entry;
 }
 
+async function assignEntry(entryId, { userId }) {
+	return prisma.testRunEntry.update({
+		where: { id: entryId },
+		data: { assignedToId: userId ?? null },
+		select: { id: true, assignedToId: true, assignedTo: { select: { id: true, name: true } } }
+	});
+}
+
 async function reorderEntries(runId, orderedEntryIds) {
 	await prisma.$transaction(
 		orderedEntryIds.map((entryId, i) =>
@@ -145,4 +190,14 @@ async function reorderEntries(runId, orderedEntryIds) {
 	);
 }
 
-module.exports = { getAll, getById, create, update, remove, updateEntry, reorderEntries };
+module.exports = {
+	getAll,
+	getById,
+	create,
+	update,
+	duplicate,
+	remove,
+	updateEntry,
+	assignEntry,
+	reorderEntries
+};

@@ -50,7 +50,8 @@ if (process.env.PLUM_MODE === 'node') process.exit(0);
 			nodeCount,
 			browser: process.env.BROWSER || 'chromium',
 			runnerName: process.env.RUNNER_NAME || null,
-			runnerId: process.env.RUNNER_ID || null
+			runnerId: process.env.RUNNER_ID || null,
+			testRunId: process.env.TEST_RUN_ID || null
 		});
 
 		console.log(`Report saved to database (id: ${saved.id})`);

@@ -28,7 +28,8 @@ const caseSelect = {
 	createdAt: true,
 	updatedAt: true,
 	createdBy: { select: { id: true, name: true } },
-	suite: { select: { id: true, displayId: true, name: true } }
+	suite: { select: { id: true, displayId: true, name: true } },
+	_count: { select: { steps: true } }
 };
 
 async function getById(id) {

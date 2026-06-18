@@ -21,6 +21,15 @@ const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireAdmin } = require('../middleware/requireAdmin');
 const userService = require('../services/userService');
 
+router.get('/members', jwtAuth, async (req, res, next) => {
+	try {
+		const users = await userService.getMembers();
+		res.json({ users });
+	} catch (e) {
+		next(e);
+	}
+});
+
 router.get('/', jwtAuth, requireAdmin, async (req, res, next) => {
 	try {
 		const users = await userService.getAll();

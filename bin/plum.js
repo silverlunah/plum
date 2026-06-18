@@ -666,9 +666,10 @@ switch (command) {
 					'   ```bash',
 					'   plum run-test',
 					'   ```',
-					'3. **Write your first test** — edit a file in `tests/features/` or generate a step:',
+					'3. **Write your first test** — scaffold a full feature or generate a single step:',
 					'   ```bash',
-					'   plum create-step',
+					'   plum create-test   # scaffold .feature + Page.ts + Steps.ts',
+					'   plum create-step   # add a single step to an existing file',
 					'   ```',
 					'4. **Start the full UI** (requires Docker) to trigger tests, view reports, and manage your test repository:',
 					'   ```bash',
@@ -780,8 +781,9 @@ switch (command) {
 				`${pc.bold('Start the full UI')}  ${pc.dim('(requires Docker)')}`,
 				`  ${pc.cyan('plum server start')}`,
 				'',
-				`${pc.bold('Generate a step definition')}`,
-				`  ${pc.cyan('plum create-step')}`
+				`${pc.bold('Generate tests')}`,
+				`  ${pc.cyan('plum create-test')}         scaffold a new feature`,
+				`  ${pc.cyan('plum create-step')}         add a step definition`
 			].join('\n'),
 			'Next steps'
 		);
@@ -965,6 +967,19 @@ switch (command) {
 		break;
 	}
 
+	case 'create-test': {
+		const createTestScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-test.mjs');
+		execSync(`node "${createTestScript}"`, {
+			cwd: process.cwd(),
+			stdio: 'inherit',
+			env: {
+				...process.env,
+				TESTS_ROOT: userTestsPath
+			}
+		});
+		break;
+	}
+
 	default:
 		console.log('--------------------------------------\n');
 		console.log('Usage: plum <command>\n');
@@ -998,5 +1013,6 @@ switch (command) {
 		console.log('    --parallel <n>     Run across n parallel workers');
 		console.log('    --browser <name>   chromium | firefox (default: chromium)');
 		console.log('  create-step          Interactively scaffold a new step definition');
+		console.log('  create-test          Scaffold a new .feature + Page.ts + Steps.ts');
 		console.log('\n--------------------------------------\n');
 }

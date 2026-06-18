@@ -16,10 +16,19 @@
  -->
 
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { fly } from 'svelte/transition';
-	import { fetchRun, updateRun, fetchSuites, recordEntryResult } from '$lib/api/repository';
+	import {
+		fetchRun,
+		updateRun,
+		fetchAllSuitesWithCases,
+		recordEntryResult,
+		assignEntry,
+		fetchMembers
+	} from '$lib/api/repository';
+	import { runsVersion } from '$lib/stores/runner';
+	import { auth } from '$lib/stores/auth';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import { TOAST_TIMEOUT_MS } from '$lib/constants';
@@ -31,13 +40,58 @@
 
 	let run = null;
 	let suites = [];
+	let members = [];
 	let loading = true;
 	let toast = null;
 	let saving = false;
 	let executing = false;
+	let assigning = null;
+
+	$: currentUserId = $auth?.user?.id ?? null;
 
 	let search = '';
 	let expandedSuites = new Set();
+
+	const PRIORITY_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+
+	let entriesSort = (() => {
+		try {
+			const v = sessionStorage.getItem('plum:run:entries:sort');
+			if (v) return JSON.parse(v);
+		} catch {}
+		return { by: 'order', order: 'asc' };
+	})();
+
+	$: sortedEntries = (() => {
+		if (!run) return [];
+		const list = [...run.entries];
+		const dir = entriesSort.order === 'asc' ? 1 : -1;
+		if (entriesSort.by === 'name')
+			return list.sort((a, b) => dir * a.case.title.localeCompare(b.case.title));
+		if (entriesSort.by === 'priority')
+			return list.sort(
+				(a, b) =>
+					dir * ((PRIORITY_ORDER[a.case.priority] ?? 99) - (PRIORITY_ORDER[b.case.priority] ?? 99))
+			);
+		if (entriesSort.by === 'status')
+			return list.sort((a, b) => dir * a.status.localeCompare(b.status));
+		if (entriesSort.by === 'suite')
+			return list.sort(
+				(a, b) => dir * (a.case.suite?.name ?? '').localeCompare(b.case.suite?.name ?? '')
+			);
+		return list.sort((a, b) => dir * (a.order - b.order));
+	})();
+
+	function applyEntriesSort(by) {
+		if (entriesSort.by === by) {
+			entriesSort.order = entriesSort.order === 'asc' ? 'desc' : 'asc';
+		} else {
+			entriesSort = { by, order: 'asc' };
+		}
+		try {
+			sessionStorage.setItem('plum:run:entries:sort', JSON.stringify(entriesSort));
+		} catch {}
+	}
 
 	let dragOver = false;
 	let dragEntryId = null;
@@ -45,28 +99,72 @@
 
 	let executingEntryId = null;
 	let entryNote = '';
+	let expandedExecEntries = new Set();
+
+	function toggleExecSteps(entryId) {
+		if (expandedExecEntries.has(entryId)) expandedExecEntries.delete(entryId);
+		else expandedExecEntries.add(entryId);
+		expandedExecEntries = new Set(expandedExecEntries);
+	}
 
 	function showToast(type, message) {
 		toast = { type, message };
 		setTimeout(() => (toast = null), TOAST_TIMEOUT_MS);
 	}
 
+	let refreshInterval = null;
+
 	onMount(async () => {
 		try {
-			[run, suites] = await Promise.all([fetchRun(runId), fetchSuites({ withCases: true })]);
+			[run, suites, members] = await Promise.all([
+				fetchRun(runId),
+				fetchAllSuitesWithCases(),
+				fetchMembers()
+			]);
 			expandedSuites = new Set(suites.map((s) => s.id));
+			if (run.status === 'in-progress') mode = 'execute';
 		} catch (e) {
 			showToast('error', 'Failed to load data');
 		} finally {
 			loading = false;
 		}
+		refreshInterval = setInterval(async () => {
+			try {
+				const fresh = await fetchRun(runId);
+				run = fresh;
+			} catch {}
+		}, 15000);
 	});
+
+	onDestroy(() => {
+		if (refreshInterval) clearInterval(refreshInterval);
+	});
+
+	async function handleAssignEntry(entryId, userId) {
+		assigning = entryId;
+		try {
+			const updated = await assignEntry(entryId, userId || null);
+			run = {
+				...run,
+				entries: run.entries.map((e) =>
+					e.id === entryId
+						? { ...e, assignedToId: updated.assignedToId, assignedTo: updated.assignedTo }
+						: e
+				)
+			};
+		} catch (e) {
+			showToast('error', e.message);
+		} finally {
+			assigning = null;
+		}
+	}
 
 	$: runCaseIds = new Set(run?.entries.map((e) => e.case.id) ?? []);
 
 	$: filteredSuites = suites
 		.map((suite) => ({
 			...suite,
+			_totalCases: (suite.cases ?? []).length,
 			cases: (suite.cases ?? []).filter(
 				(tc) =>
 					!runCaseIds.has(tc.id) &&
@@ -135,15 +233,41 @@
 		}
 	}
 
+	async function handleStopExecution() {
+		try {
+			await updateRun(runId, { status: 'backlog' });
+			run = { ...run, status: 'backlog' };
+			mode = 'build';
+			runsVersion.update((v) => v + 1);
+		} catch (e) {
+			showToast('error', e.message);
+		}
+	}
+
 	async function handleCompleteRun() {
 		try {
 			await updateRun(runId, { status: 'complete' });
 			run = { ...run, status: 'complete' };
+			runsVersion.update((v) => v + 1);
 			showToast('success', 'Run marked as complete.');
 		} catch (e) {
 			showToast('error', e.message);
 		}
 	}
+
+	async function handleReopenRun() {
+		try {
+			await updateRun(runId, { status: 'backlog' });
+			run = { ...run, status: 'backlog' };
+			mode = 'build';
+			runsVersion.update((v) => v + 1);
+			showToast('success', 'Run reopened.');
+		} catch (e) {
+			showToast('error', e.message);
+		}
+	}
+
+	$: isLocked = run?.status === 'complete';
 
 	function onDragStart(e, entryId) {
 		dragEntryId = entryId;
@@ -205,18 +329,21 @@
 			<span class="run-status-badge {run.status}">{run.status}</span>
 		</div>
 		<div class="run-header-actions">
-			{#if mode === 'build'}
+			{#if isLocked}
+				<Button variant="ghost" on:click={handleReopenRun}>Reopen</Button>
+			{:else if mode === 'build'}
 				<Button variant="ghost" on:click={handleSaveRun} disabled={saving}>
 					{saving ? 'Saving…' : 'Save'}
 				</Button>
-				{#if run.entries.length > 0 && run.status !== 'complete'}
+				{#if run.entries.length > 0}
 					<Button on:click={handleStartExecution}>Start Execution</Button>
 				{/if}
+			{:else if run.status === 'in-progress'}
+				<Button variant="ghost" on:click={handleStopExecution}>Stop Execution</Button>
+				<Button variant="ghost" on:click={() => (mode = 'build')}>← Edit Run</Button>
+				<Button on:click={handleCompleteRun}>Mark Complete</Button>
 			{:else}
 				<Button variant="ghost" on:click={() => (mode = 'build')}>← Edit Run</Button>
-				{#if run.status !== 'complete'}
-					<Button on:click={handleCompleteRun}>Mark Complete</Button>
-				{/if}
 			{/if}
 		</div>
 	</div>
@@ -235,48 +362,70 @@
 	</div>
 
 	{#if mode === 'build'}
-		<div class="builder-workspace" transition:fly={{ y: 4, duration: 150 }}>
+		<div
+			class="builder-workspace"
+			class:locked-workspace={isLocked}
+			transition:fly={{ y: 4, duration: 150 }}
+		>
 			<!-- Left: run entries -->
 			<div class="builder-panel left-panel">
 				<div class="builder-panel-head">
 					<h2 class="builder-panel-title">In this run</h2>
 					<span class="count-chip">{run.entries.length}</span>
+					{#if isLocked}
+						<span class="locked-badge">locked</span>
+					{/if}
 				</div>
 
 				{#if run.entries.length === 0}
-					<div class="drop-hint">
-						Drag cases here from the suite browser, or click a case to add it.
-					</div>
+					<div class="drop-hint">No cases in this run.</div>
 				{:else}
-					<div
-						class="entry-list"
-						role="list"
-						on:dragover={(e) => e.preventDefault()}
-						on:drop={(e) => onDrop(e, null)}
-					>
-						{#each run.entries as entry (entry.id)}
+					<div class="entry-sort-bar">
+						{#each [['order', 'Order'], ['name', 'Name'], ['priority', 'Priority'], ['status', 'Status'], ['suite', 'Suite']] as [val, label]}
+							<button
+								class="entry-sort-chip"
+								class:active={entriesSort.by === val}
+								on:click={() => applyEntriesSort(val)}
+							>
+								{label}{#if entriesSort.by === val}<span class="entry-sort-dir"
+										>{entriesSort.order === 'asc' ? ' ↑' : ' ↓'}</span
+									>{/if}
+							</button>
+						{/each}
+					</div>
+					<div class="entry-list" role="list">
+						{#each sortedEntries as entry (entry.id)}
 							<div
 								class="entry-row"
+								class:entry-locked={isLocked}
+								role="listitem"
+								draggable={!isLocked && entriesSort.by === 'order'}
+								on:dragstart={isLocked || entriesSort.by !== 'order'
+									? null
+									: (e) => onDragStart(e, entry.id)}
+								on:dragover={isLocked || entriesSort.by !== 'order'
+									? null
+									: (e) => onDragOver(e, entry.id)}
+								on:dragleave={isLocked || entriesSort.by !== 'order'
+									? null
+									: () => (dragOverEntryId = null)}
+								on:drop={isLocked || entriesSort.by !== 'order' ? null : (e) => onDrop(e, entry.id)}
 								class:dragging={dragEntryId === entry.id}
 								class:drag-over={dragOverEntryId === entry.id}
-								role="listitem"
-								draggable="true"
-								on:dragstart={(e) => onDragStart(e, entry.id)}
-								on:dragover={(e) => onDragOver(e, entry.id)}
-								on:dragleave={() => (dragOverEntryId = null)}
-								on:drop={(e) => onDrop(e, entry.id)}
 							>
-								<svg
-									class="drag-handle"
-									width="12"
-									height="12"
-									viewBox="0 0 24 24"
-									fill="currentColor"
-								>
-									<circle cx="9" cy="5" r="1.5" /><circle cx="15" cy="5" r="1.5" />
-									<circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
-									<circle cx="9" cy="19" r="1.5" /><circle cx="15" cy="19" r="1.5" />
-								</svg>
+								{#if !isLocked && entriesSort.by === 'order'}
+									<svg
+										class="drag-handle"
+										width="12"
+										height="12"
+										viewBox="0 0 24 24"
+										fill="currentColor"
+									>
+										<circle cx="9" cy="5" r="1.5" /><circle cx="15" cy="5" r="1.5" />
+										<circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
+										<circle cx="9" cy="19" r="1.5" /><circle cx="15" cy="19" r="1.5" />
+									</svg>
+								{/if}
 								<div class="entry-info">
 									<div class="entry-badges">
 										<span class="id-chip">{entry.case.displayId}</span>
@@ -287,79 +436,114 @@
 									<p class="entry-title">{entry.case.title}</p>
 									<span class="entry-suite">{entry.case.suite?.name ?? ''}</span>
 								</div>
-								<button class="icon-btn danger" on:click={() => removeEntry(entry.id)}>
-									<svg width="11" height="11" viewBox="0 0 14 14" fill="none"
-										><path
-											d="M1 1l12 12M13 1L1 13"
-											stroke="currentColor"
-											stroke-width="1.5"
-											stroke-linecap="round"
-										/></svg
+								{#if entry.case.isAutomated}
+									<span class="assignee-auto-label">Automated</span>
+								{:else}
+									<select
+										class="assignee-select"
+										value={entry.assignedToId ?? ''}
+										disabled={assigning === entry.id}
+										on:change={(e) => handleAssignEntry(entry.id, e.target.value)}
 									>
-								</button>
+										<option value="">Unassigned</option>
+										{#each members as m}
+											<option value={m.id}>{m.name}</option>
+										{/each}
+									</select>
+								{/if}
+								{#if !isLocked}
+									<button class="icon-btn danger" on:click={() => removeEntry(entry.id)}>
+										<svg width="11" height="11" viewBox="0 0 14 14" fill="none"
+											><path
+												d="M1 1l12 12M13 1L1 13"
+												stroke="currentColor"
+												stroke-width="1.5"
+												stroke-linecap="round"
+											/></svg
+										>
+									</button>
+								{/if}
 							</div>
 						{/each}
 					</div>
 				{/if}
 			</div>
 
-			<!-- Right: suite browser -->
-			<div class="builder-panel right-panel">
-				<div class="builder-panel-head">
-					<h2 class="builder-panel-title">Suite browser</h2>
-					<input type="text" class="search-input" bind:value={search} placeholder="Search cases…" />
-				</div>
+			<!-- Right: suite browser (hidden when locked) -->
+			{#if !isLocked}
+				<div class="builder-panel right-panel">
+					<div class="builder-panel-head">
+						<h2 class="builder-panel-title">Suite browser</h2>
+						<input
+							type="text"
+							class="search-input"
+							bind:value={search}
+							placeholder="Search cases…"
+						/>
+					</div>
 
-				<div class="suite-browser">
-					{#each filteredSuites as suite (suite.id)}
-						<div class="browser-suite">
-							<button
-								class="browser-suite-header"
-								on:click={() => {
-									if (expandedSuites.has(suite.id)) expandedSuites.delete(suite.id);
-									else expandedSuites.add(suite.id);
-									expandedSuites = new Set(expandedSuites);
-								}}
-							>
-								<svg
-									class="chevron"
-									class:open={expandedSuites.has(suite.id)}
-									width="12"
-									height="12"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"><polyline points="9 18 15 12 9 6" /></svg
+					<div class="suite-browser">
+						{#each filteredSuites as suite (suite.id)}
+							<div class="browser-suite">
+								<button
+									class="browser-suite-header"
+									on:click={() => {
+										if (expandedSuites.has(suite.id)) expandedSuites.delete(suite.id);
+										else expandedSuites.add(suite.id);
+										expandedSuites = new Set(expandedSuites);
+									}}
 								>
-								<span class="browser-suite-name">{suite.name}</span>
-								<span class="browser-suite-count">{suite.cases?.length ?? 0}</span>
-							</button>
-							{#if expandedSuites.has(suite.id) && suite.cases?.length > 0}
-								<div class="browser-cases" transition:fly={{ y: -4, duration: 120 }}>
-									{#each suite.cases as tc (tc.id)}
-										<button class="browser-case" on:click={() => addCase(tc)}>
-											<span class="id-chip small">{tc.displayId}</span>
-											<span class="browser-case-title">{tc.title}</span>
-											<span class="priority-badge small {priorityClass(tc.priority)}"
-												>{tc.priority}</span
-											>
-										</button>
-									{/each}
-								</div>
-							{:else if expandedSuites.has(suite.id)}
-								<p class="browser-empty">{search ? 'No matching cases' : 'All cases added'}</p>
-							{/if}
-						</div>
-					{/each}
-					{#if filteredSuites.length === 0}
-						<p class="browser-empty">No suites available.</p>
-					{/if}
+									<svg
+										class="chevron"
+										class:open={expandedSuites.has(suite.id)}
+										width="12"
+										height="12"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"><polyline points="9 18 15 12 9 6" /></svg
+									>
+									<span class="browser-suite-name">{suite.name}</span>
+									<span class="browser-suite-count">{suite.cases?.length ?? 0}</span>
+								</button>
+								{#if expandedSuites.has(suite.id) && suite.cases?.length > 0}
+									<div class="browser-cases" transition:fly={{ y: -4, duration: 120 }}>
+										{#each suite.cases as tc (tc.id)}
+											<button class="browser-case" on:click={() => addCase(tc)}>
+												<span class="id-chip small">{tc.displayId}</span>
+												<span class="browser-case-title">{tc.title}</span>
+												<span class="priority-badge small {priorityClass(tc.priority)}"
+													>{tc.priority}</span
+												>
+											</button>
+										{/each}
+									</div>
+								{:else if expandedSuites.has(suite.id)}
+									<p class="browser-empty">
+										{search
+											? 'No matching cases'
+											: suite._totalCases === 0
+												? 'No cases in this suite'
+												: 'All cases added'}
+									</p>
+								{/if}
+							</div>
+						{/each}
+						{#if filteredSuites.length === 0}
+							<p class="browser-empty">No suites available.</p>
+						{/if}
+					</div>
 				</div>
-			</div>
+			{/if}
 		</div>
 	{:else}
 		<div class="execute-workspace" transition:fly={{ y: 4, duration: 150 }}>
+			{#if run.status !== 'in-progress' && !isLocked}
+				<div class="exec-locked-banner">
+					This run is not in progress — start execution to record results.
+				</div>
+			{/if}
 			<!-- Progress bar -->
 			{#if totalCount > 0}
 				<div class="progress-bar-wrap">
@@ -380,47 +564,92 @@
 					<div class="execute-row" class:expanded={executingEntryId === entry.id}>
 						<div class="execute-row-main">
 							<div class="exec-info">
+								{#if entry.case.steps?.length > 0}
+									<button
+										class="exec-chevron"
+										on:click={() => toggleExecSteps(entry.id)}
+										title="Toggle steps"
+									>
+										<svg
+											class="chevron"
+											class:open={expandedExecEntries.has(entry.id)}
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"><polyline points="9 18 15 12 9 6" /></svg
+										>
+									</button>
+								{/if}
 								<span class="id-chip">{entry.case.displayId}</span>
+								{#if entry.case.isAutomated}<span class="auto-pill">Automated</span>{/if}
 								<div>
 									<p class="exec-title">{entry.case.title}</p>
 									<span class="exec-suite">{entry.case.suite?.name ?? ''}</span>
 								</div>
 							</div>
 							<div class="exec-actions">
-								{#if entry.status === 'pending'}
-									<button
-										class="exec-btn pass"
-										on:click={() => handleMarkEntry(entry, 'pass')}
-										title="Pass">✓</button
-									>
-									<button
-										class="exec-btn fail"
-										on:click={() => handleMarkEntry(entry, 'fail')}
-										title="Fail">✗</button
-									>
-									<button
-										class="exec-btn warn"
-										on:click={() => handleMarkEntry(entry, 'blocked')}
-										title="Blocked">⊘</button
-									>
-									<button
-										class="exec-btn muted"
-										on:click={() => handleMarkEntry(entry, 'skip')}
-										title="Skip">→</button
-									>
-								{:else}
+								{#if entry.case.isAutomated}
+									<div class="exec-assignee-row">
+										<span class="exec-assignee-name auto-label">Automated</span>
+									</div>
+									<div class="exec-assignee-divider"></div>
+								{:else if entry.assignedTo || (!isLocked && entry.assignedTo?.id !== currentUserId)}
+									<div class="exec-assignee-row">
+										{#if entry.assignedTo}
+											<span class="exec-assignee-name">{entry.assignedTo.name}</span>
+										{/if}
+										{#if !isLocked && entry.assignedTo?.id !== currentUserId}
+											<button
+												class="exec-assign-me"
+												on:click={() => handleAssignEntry(entry.id, currentUserId)}
+												disabled={assigning === entry.id}
+											>
+												Assign to me
+											</button>
+										{/if}
+									</div>
+									<div class="exec-assignee-divider"></div>
+								{/if}
+								{#if isLocked || run.status !== 'in-progress'}
 									<span class="result-chip {statusClass(entry.status)}">{entry.status}</span>
-									<button
-										class="exec-reset"
-										on:click={() => handleMarkEntry(entry, 'pending')}
-										title="Reset">↩</button
-									>
+								{:else if entry.status === 'pending' || entry.status === 'in-progress'}
+									<div class="exec-btns">
+										<button
+											class="exec-btn in-progress"
+											class:active={entry.status === 'in-progress'}
+											on:click={() => handleMarkEntry(entry, 'in-progress')}>In Progress</button
+										>
+										<button class="exec-btn pass" on:click={() => handleMarkEntry(entry, 'pass')}
+											>Pass</button
+										>
+										<button class="exec-btn fail" on:click={() => handleMarkEntry(entry, 'fail')}
+											>Fail</button
+										>
+										<button class="exec-btn warn" on:click={() => handleMarkEntry(entry, 'blocked')}
+											>Blocked</button
+										>
+										<button class="exec-btn muted" on:click={() => handleMarkEntry(entry, 'skip')}
+											>Skip</button
+										>
+									</div>
+								{:else}
+									<div class="exec-btns">
+										<span class="result-chip {statusClass(entry.status)}">{entry.status}</span>
+										<button
+											class="exec-reset"
+											on:click={() => handleMarkEntry(entry, 'pending')}
+											title="Reset to pending">↩ Reset</button
+										>
+									</div>
 								{/if}
 							</div>
 						</div>
 
 						<!-- Step viewer for current entry -->
-						{#if entry.case.steps && entry.case.steps.length > 0}
+						{#if entry.case.steps && entry.case.steps.length > 0 && expandedExecEntries.has(entry.id)}
 							<div class="exec-steps">
 								{#each entry.case.steps as step, i}
 									<div class="exec-step">
@@ -511,6 +740,42 @@
 		color: var(--pass);
 		border-color: var(--pass);
 	}
+
+	.run-status-badge.in-progress {
+		background: var(--accent-soft);
+		color: var(--accent);
+		border-color: var(--accent);
+	}
+
+	.run-status-badge.backlog {
+		background: var(--bg-subtle);
+		color: var(--text-muted);
+		border-color: var(--border);
+	}
+
+	.locked-badge {
+		font-size: 0.62rem;
+		font-weight: 600;
+		letter-spacing: 0.07em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: 100px;
+		padding: 0.1rem 0.45rem;
+		margin-left: auto;
+	}
+
+	.locked-workspace {
+		grid-template-columns: 1fr;
+	}
+
+	.entry-row.entry-locked {
+		cursor: default;
+	}
+	.entry-row.entry-locked:hover {
+		border-color: var(--border);
+	}
 	.run-status-badge.in-progress {
 		background: var(--warn-soft);
 		color: var(--warn);
@@ -570,7 +835,7 @@
 	/* ── Builder ── */
 	.builder-workspace {
 		display: grid;
-		grid-template-columns: 1fr 340px;
+		grid-template-columns: 1fr 1fr;
 		gap: 1.5rem;
 		align-items: start;
 	}
@@ -629,6 +894,40 @@
 		color: var(--text-muted);
 		text-align: center;
 		line-height: 1.6;
+	}
+
+	.entry-sort-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.5rem 0.75rem;
+		border-bottom: 1px solid var(--border);
+		flex-wrap: wrap;
+	}
+
+	.entry-sort-chip {
+		font-size: 0.75rem;
+		padding: 0.2rem 0.55rem;
+		border-radius: 100px;
+		border: 1px solid var(--border);
+		background: var(--bg);
+		color: var(--text-muted);
+		cursor: pointer;
+		font-family: var(--font-body);
+		transition:
+			background var(--duration-fast),
+			border-color var(--duration-fast),
+			color var(--duration-fast);
+	}
+
+	.entry-sort-chip.active {
+		background: var(--accent-soft);
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+
+	.entry-sort-dir {
+		opacity: 0.7;
 	}
 
 	.entry-list {
@@ -693,13 +992,77 @@
 		color: var(--text-muted);
 	}
 
+	.assignee-auto-label {
+		font-size: 0.72rem;
+		font-weight: 500;
+		color: var(--accent);
+		background: var(--accent-soft);
+		border-radius: 100px;
+		padding: 0.15rem 0.5rem;
+		flex-shrink: 0;
+	}
+
+	.auto-pill {
+		font-size: 0.62rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--accent);
+		background: var(--accent-soft);
+		border-radius: 100px;
+		padding: 0.1rem 0.4rem;
+		flex-shrink: 0;
+	}
+
+	.auto-label {
+		color: var(--accent);
+		font-weight: 500;
+	}
+
+	.exec-locked-banner {
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.625rem 1rem;
+		margin-bottom: 1rem;
+	}
+
+	.assignee-select {
+		font-size: 0.75rem;
+		font-family: var(--font-body);
+		color: var(--text);
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.2rem 0.4rem;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+
+	.assignee-select:focus {
+		outline: none;
+		border-color: var(--accent);
+	}
+
 	/* ── Suite browser ── */
+	.right-panel {
+		position: sticky;
+		top: calc(56px + 1.5rem);
+		height: calc(100vh - 56px - 3rem);
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
 	.suite-browser {
+		flex: 1;
+		min-height: 0;
 		padding: 0.625rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
-		max-height: 60vh;
 		overflow-y: auto;
 	}
 
@@ -707,6 +1070,7 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
 		overflow: hidden;
+		flex-shrink: 0;
 	}
 
 	.browser-suite-header {
@@ -714,6 +1078,7 @@
 		align-items: center;
 		gap: 0.5rem;
 		width: 100%;
+		min-height: 40px;
 		padding: 0.5rem 0.75rem;
 		background: var(--bg-subtle);
 		border: none;
@@ -754,6 +1119,8 @@
 		flex-direction: column;
 		gap: 0;
 		border-top: 1px solid var(--border);
+		max-height: 380px;
+		overflow-y: auto;
 	}
 
 	.browser-case {
@@ -897,23 +1264,39 @@
 		flex-shrink: 0;
 	}
 
+	.exec-btns {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		flex-wrap: wrap;
+	}
+
 	.exec-btn {
-		width: 32px;
-		height: 32px;
+		height: 26px;
+		padding: 0 0.6rem;
 		border-radius: var(--radius-sm);
 		border: 1px solid var(--border);
 		background: var(--bg);
 		cursor: pointer;
-		font-size: 0.9rem;
+		font-size: 0.75rem;
+		font-family: var(--font-body);
+		font-weight: 500;
+		color: var(--text-muted);
 		display: flex;
 		align-items: center;
-		justify-content: center;
+		white-space: nowrap;
 		transition:
 			background var(--duration-fast),
 			border-color var(--duration-fast),
 			color var(--duration-fast);
 	}
 
+	.exec-btn.in-progress:hover,
+	.exec-btn.in-progress.active {
+		background: var(--accent-soft);
+		border-color: var(--accent);
+		color: var(--accent);
+	}
 	.exec-btn.pass:hover {
 		background: var(--pass-soft);
 		border-color: var(--pass);
@@ -936,17 +1319,62 @@
 	}
 
 	.exec-reset {
-		font-size: 0.875rem;
+		height: 26px;
+		padding: 0 0.6rem;
+		font-size: 0.75rem;
+		font-family: var(--font-body);
 		color: var(--text-muted);
-		background: none;
-		border: none;
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
 		cursor: pointer;
-		padding: 0.25rem;
-		transition: color var(--duration-fast);
+		transition:
+			color var(--duration-fast),
+			border-color var(--duration-fast);
 	}
 
 	.exec-reset:hover {
 		color: var(--text);
+		border-color: var(--text-muted);
+	}
+
+	.exec-assignee-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.exec-assignee-divider {
+		height: 1px;
+		background: var(--border);
+		margin: 0.375rem 0;
+	}
+
+	.exec-assignee-name {
+		font-size: 0.75rem;
+		line-height: 26px;
+		color: var(--text-muted);
+	}
+
+	.exec-assign-me {
+		font-size: 0.7rem;
+		font-family: var(--font-body);
+		color: var(--accent);
+		background: none;
+		border: 1px solid var(--accent);
+		border-radius: 100px;
+		padding: 0.1rem 0.5rem;
+		cursor: pointer;
+		transition: background var(--duration-fast);
+	}
+
+	.exec-assign-me:hover {
+		background: var(--accent-soft);
+	}
+
+	.exec-assign-me:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
 	.result-chip {
@@ -977,6 +1405,22 @@
 	.result-chip.pending {
 		background: var(--bg-subtle);
 		color: var(--text-muted);
+	}
+
+	.exec-chevron {
+		background: none;
+		border: none;
+		padding: 0.125rem;
+		cursor: pointer;
+		color: var(--text-muted);
+		display: flex;
+		align-items: center;
+		flex-shrink: 0;
+		transition: color var(--duration-fast);
+	}
+
+	.exec-chevron:hover {
+		color: var(--text);
 	}
 
 	/* ── Steps in execute view ── */

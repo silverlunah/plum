@@ -18,10 +18,19 @@
 <script>
 	import { page } from '$app/stores';
 	import { slide } from 'svelte/transition';
+	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
+	import { fetchProject } from '$lib/api/settings';
 
 	let menuOpen = false;
+	let project = { name: '', logoUrl: '' };
+
+	onMount(async () => {
+		try {
+			project = await fetchProject();
+		} catch {}
+	});
 
 	const links = [
 		{ href: '/', label: 'Automated Tests' },
@@ -60,6 +69,14 @@
 		</div>
 
 		<div class="actions">
+			{#if project.name}
+				<div class="project-card">
+					{#if project.logoUrl}
+						<img src={project.logoUrl} alt="" class="project-logo" />
+					{/if}
+					<span class="project-name">{project.name}</span>
+				</div>
+			{/if}
 			{#if $auth.user}
 				<span class="nav-user">{$auth.user.name}</span>
 			{/if}
@@ -169,6 +186,36 @@
 		font-family: var(--font-body);
 		font-weight: 400;
 		color: var(--text);
+	}
+
+	/* Project card */
+	.project-card {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.25rem 0.6rem 0.25rem 0.5rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--bg-elevated);
+		flex-shrink: 0;
+	}
+
+	.project-logo {
+		width: 16px;
+		height: 16px;
+		object-fit: contain;
+		border-radius: 2px;
+		flex-shrink: 0;
+	}
+
+	.project-name {
+		font-size: 0.78rem;
+		font-weight: 500;
+		color: var(--text);
+		max-width: 140px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	/* Desktop links */

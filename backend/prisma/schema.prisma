@@ -86,11 +86,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  suites        TestSuite[]
-  cases         TestCase[]
-  runs          TestRun[]
-  runEntries    TestRunEntry[]
-  caseHistories TestCaseHistory[]
+  suites          TestSuite[]
+  cases           TestCase[]
+  runs            TestRun[]
+  executedEntries TestRunEntry[]   @relation("entryExecutor")
+  assignedEntries TestRunEntry[]   @relation("entryAssignee")
+  caseHistories   TestCaseHistory[]
 }
 
 model TestSuite {
@@ -138,7 +139,7 @@ model TestStep {
 model TestRun {
   id          String         @id @default(cuid())
   title       String
-  status      String         @default("draft")
+  status      String         @default("backlog")
   createdById String
   createdBy   User           @relation(fields: [createdById], references: [id])
   createdAt   DateTime       @default(now())
@@ -157,8 +158,10 @@ model TestRunEntry {
   notes        String    @default("")
   order        Int       @default(0)
   executedById String?
-  executedBy   User?     @relation(fields: [executedById], references: [id])
+  executedBy   User?     @relation("entryExecutor", fields: [executedById], references: [id])
   executedAt   DateTime?
+  assignedToId String?
+  assignedTo   User?     @relation("entryAssignee", fields: [assignedToId], references: [id])
 }
 
 model TestCaseHistory {

@@ -59,6 +59,13 @@ async function getAll() {
 	return prisma.user.findMany({ select: userSelect, orderBy: { createdAt: 'asc' } });
 }
 
+async function getMembers() {
+	return prisma.user.findMany({
+		select: { id: true, name: true },
+		orderBy: { name: 'asc' }
+	});
+}
+
 async function getById(id) {
 	return prisma.user.findUnique({ where: { id }, select: userSelect });
 }
@@ -99,6 +106,7 @@ module.exports = {
 	login,
 	verifyToken,
 	getAll,
+	getMembers,
 	getById,
 	updateProfile,
 	updatePassword,

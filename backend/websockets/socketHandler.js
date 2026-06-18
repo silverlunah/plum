@@ -30,12 +30,13 @@ const socketHandler = (io) => {
 		const activeProcs = new Set();
 
 		socket.on('run-test', async (payload, legacyWorkers) => {
-			let tag, workers, browser, runners;
+			let tag, workers, browser, runners, testRunId;
 			if (typeof payload === 'string') {
 				tag = payload;
 				workers = Number(legacyWorkers) > 1 ? Number(legacyWorkers) : 1;
 				browser = 'chromium';
 				runners = [BUILT_IN_RUNNER_ID];
+				testRunId = null;
 			} else {
 				tag = payload.tag ?? '';
 				workers = Number(payload.workers) > 1 ? Number(payload.workers) : 1;
@@ -44,6 +45,7 @@ const socketHandler = (io) => {
 					Array.isArray(payload.runners) && payload.runners.length > 0
 						? payload.runners
 						: [BUILT_IN_RUNNER_ID];
+				testRunId = payload.testRunId ?? null;
 			}
 
 			// Drop runner ids that no longer exist (e.g. a deleted runner still
@@ -61,9 +63,9 @@ const socketHandler = (io) => {
 			const isSingleBuiltIn = runners.length === 1 && runners[0] === BUILT_IN_RUNNER_ID;
 
 			if (isSingleBuiltIn) {
-				runBuiltIn(io, socket, activeProcs, tag, workers, browser);
+				runBuiltIn(io, socket, activeProcs, tag, workers, browser, testRunId);
 			} else {
-				runDistributed(io, socket, activeProcs, tag, workers, browser, runners);
+				runDistributed(io, socket, activeProcs, tag, workers, browser, runners, testRunId);
 			}
 		});
 
@@ -85,7 +87,7 @@ const socketHandler = (io) => {
 // Single built-in runner
 // ---------------------------------------------------------------------------
 
-function runBuiltIn(io, socket, activeProcs, tag, workers, browser) {
+function runBuiltIn(io, socket, activeProcs, tag, workers, browser, testRunId) {
 	const env = {
 		...process.env,
 		TAG: tag,
@@ -94,6 +96,7 @@ function runBuiltIn(io, socket, activeProcs, tag, workers, browser) {
 		BROWSER: browser
 	};
 	if (workers > 1) env.PARALLEL = String(workers);
+	if (testRunId) env.TEST_RUN_ID = testRunId;
 
 	const proc = spawn('npm', ['run', 'test'], { env, shell: true });
 	activeProcs.add(proc);
@@ -114,7 +117,16 @@ function runBuiltIn(io, socket, activeProcs, tag, workers, browser) {
 // Distributed (multi-runner) path
 // ---------------------------------------------------------------------------
 
-async function runDistributed(io, socket, activeProcs, tag, workers, browser, runnerIds) {
+async function runDistributed(
+	io,
+	socket,
+	activeProcs,
+	tag,
+	workers,
+	browser,
+	runnerIds,
+	testRunId
+) {
 	const allIds = getTestIdsForTag(tag);
 	const chunks = chunkTests(allIds, runnerIds.length);
 
@@ -170,7 +182,8 @@ async function runDistributed(io, socket, activeProcs, tag, workers, browser, ru
 					overallCode,
 					tag,
 					triggerType: TRIGGER_TYPE.MANUAL,
-					browser
+					browser,
+					testRunId: testRunId ?? null
 				})
 				.then((saved) => {
 					// Result is authoritative from the merged report, not the exit code —

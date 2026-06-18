@@ -18,8 +18,11 @@
 <script>
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
-	import { fetchSuites, createSuite, deleteSuite } from '$lib/api/repository';
-	import { fetchRuns, createRun, deleteRun } from '$lib/api/repository';
+	import { fetchSuites, createSuite, deleteSuite, searchRepository } from '$lib/api/repository';
+	import { fetchRuns, createRun, duplicateRun, deleteRun } from '$lib/api/repository';
+	import { runsVersion } from '$lib/stores/runner';
+	import Pagination from '$lib/components/ui/Pagination.svelte';
+	import { REPO_PAGE_SIZE } from '$lib/constants';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
@@ -28,12 +31,56 @@
 	import { TOAST_TIMEOUT_MS } from '$lib/constants';
 
 	/** @type {'suites' | 'runs'} */
-	let tab = 'suites';
+	let tab =
+		(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('plum:repo:tab')) || 'suites';
+
+	function setTab(t) {
+		tab = t;
+		try {
+			sessionStorage.setItem('plum:repo:tab', t);
+		} catch {}
+	}
+
+	function readSort(key, fallback) {
+		try {
+			const v = sessionStorage.getItem(key);
+			if (v) return JSON.parse(v);
+		} catch {}
+		return fallback;
+	}
+
+	function writeSort(key, sort) {
+		try {
+			sessionStorage.setItem(key, JSON.stringify(sort));
+		} catch {}
+	}
 
 	let suites = [];
+	let suitesTotal = 0;
+	let suitesPage = 1;
+	let suitesSort = readSort('plum:repo:suites:sort', { by: 'createdAt', order: 'desc' });
+
 	let runs = [];
+	let runsTotal = 0;
+	let runsPage = 1;
+	let runsSort = readSort('plum:repo:runs:sort', { by: 'createdAt', order: 'desc' });
+
+	const PRIORITY_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+
+	function sortByPriority(items, order) {
+		return [...items].sort((a, b) => {
+			const diff = (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4);
+			return order === 'asc' ? diff : -diff;
+		});
+	}
+
 	let loading = true;
 	let toast = null;
+
+	// Search results (server-side when query is active)
+	let searchResults = null;
+	let searchLoading = false;
+	let searchTimer = null;
 
 	let suiteModalOpen = false;
 	let suiteForm = { name: '', description: '', priority: 'Medium' };
@@ -48,15 +95,36 @@
 	let confirmDelete = null;
 	let confirmDeleteOpen = false;
 
+	let confirmDuplicate = null;
+	let confirmDuplicateOpen = false;
+
 	let search = '';
 
-	$: q = search.trim().toLowerCase();
-	$: filteredSuites = q
-		? suites.filter(
-				(s) => s.displayId.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)
-			)
-		: suites;
-	$: filteredRuns = q ? runs.filter((r) => r.title.toLowerCase().includes(q)) : runs;
+	$: q = search.trim();
+
+	$: {
+		clearTimeout(searchTimer);
+		if (q) {
+			searchLoading = true;
+			searchResults = null;
+			searchTimer = setTimeout(async () => {
+				try {
+					searchResults = await searchRepository(q);
+				} catch {
+					searchResults = { suites: [], cases: [], runs: [] };
+				} finally {
+					searchLoading = false;
+				}
+			}, 300);
+		} else {
+			searchResults = null;
+			searchLoading = false;
+		}
+	}
+
+	$: filteredCases = searchResults?.cases ?? [];
+	$: filteredSuites = searchResults?.suites ?? [];
+	$: filteredRuns = searchResults?.runs ?? [];
 
 	const PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
 
@@ -65,9 +133,48 @@
 		setTimeout(() => (toast = null), TOAST_TIMEOUT_MS);
 	}
 
+	async function loadSuites(page = 1) {
+		const isPrioritySort = suitesSort.by === 'priority';
+		const result = await fetchSuites({
+			page,
+			sortBy: isPrioritySort ? 'createdAt' : suitesSort.by,
+			sortOrder: suitesSort.order
+		});
+		suites = isPrioritySort ? sortByPriority(result.suites, suitesSort.order) : result.suites;
+		suitesTotal = result.total;
+		suitesPage = page;
+	}
+
+	async function loadRuns(page = 1) {
+		const result = await fetchRuns({ page, sortBy: runsSort.by, sortOrder: runsSort.order });
+		runs = result.runs;
+		runsTotal = result.total;
+		runsPage = page;
+	}
+
+	async function applySuitesSort(by) {
+		if (suitesSort.by === by) {
+			suitesSort.order = suitesSort.order === 'asc' ? 'desc' : 'asc';
+		} else {
+			suitesSort = { by, order: by === 'createdAt' ? 'desc' : 'asc' };
+		}
+		writeSort('plum:repo:suites:sort', suitesSort);
+		await loadSuites(1);
+	}
+
+	async function applyRunsSort(by) {
+		if (runsSort.by === by) {
+			runsSort.order = runsSort.order === 'asc' ? 'desc' : 'asc';
+		} else {
+			runsSort = { by, order: by === 'createdAt' || by === 'updatedAt' ? 'desc' : 'asc' };
+		}
+		writeSort('plum:repo:runs:sort', runsSort);
+		await loadRuns(1);
+	}
+
 	onMount(async () => {
 		try {
-			[suites, runs] = await Promise.all([fetchSuites(), fetchRuns()]);
+			await Promise.all([loadSuites(1), loadRuns(1)]);
 		} catch (e) {
 			showToast('error', 'Failed to load data');
 		} finally {
@@ -85,6 +192,7 @@
 		try {
 			const suite = await createSuite(suiteForm);
 			suites = [...suites, suite];
+			suitesTotal += 1;
 			suiteModalOpen = false;
 			suiteForm = { name: '', description: '', priority: 'Medium' };
 			showToast('success', `Suite "${suite.name}" created.`);
@@ -99,6 +207,7 @@
 		try {
 			await deleteSuite(id);
 			suites = suites.filter((s) => s.id !== id);
+			suitesTotal -= 1;
 			showToast('success', `Suite "${name}" deleted.`);
 		} catch {
 			showToast('error', 'Failed to delete suite.');
@@ -127,10 +236,33 @@
 		}
 	}
 
+	async function handleDuplicateRun(run) {
+		confirmDuplicate = run;
+		confirmDuplicateOpen = true;
+	}
+
+	async function executeDuplicate() {
+		if (!confirmDuplicate) return;
+		const run = confirmDuplicate;
+		confirmDuplicate = null;
+		confirmDuplicateOpen = false;
+		try {
+			const copy = await duplicateRun(run.id);
+			runs = [copy, ...runs];
+			runsTotal += 1;
+			runsVersion.update((v) => v + 1);
+			showToast('success', `Duplicated as "${copy.title}".`);
+		} catch {
+			showToast('error', 'Failed to duplicate run.');
+		}
+	}
+
 	async function handleDeleteRun(id, title) {
 		try {
 			await deleteRun(id);
 			runs = runs.filter((r) => r.id !== id);
+			runsTotal -= 1;
+			runsVersion.update((v) => v + 1);
 			showToast('success', `Run "${title}" deleted.`);
 		} catch {
 			showToast('error', 'Failed to delete run.');
@@ -163,6 +295,18 @@
 >
 	{#if confirmDelete}
 		Delete <strong>"{confirmDelete.name}"</strong>? This cannot be undone.
+	{/if}
+</ConfirmModal>
+
+<ConfirmModal
+	bind:open={confirmDuplicateOpen}
+	title="Duplicate Run"
+	confirmLabel="Duplicate"
+	on:confirm={executeDuplicate}
+>
+	{#if confirmDuplicate}
+		Duplicate <strong>"{confirmDuplicate.title}"</strong>? A copy will be added at the top of the
+		list.
 	{/if}
 </ConfirmModal>
 
@@ -253,13 +397,13 @@
 </div>
 
 <div class="tabs">
-	<button class="tab" class:active={tab === 'suites'} on:click={() => (tab = 'suites')}>
+	<button class="tab" class:active={tab === 'suites'} on:click={() => setTab('suites')}>
 		Suites
-		<span class="tab-count">{q ? filteredSuites.length + '/' : ''}{suites.length}</span>
+		<span class="tab-count">{q ? filteredSuites.length + '/' : ''}{suitesTotal}</span>
 	</button>
-	<button class="tab" class:active={tab === 'runs'} on:click={() => (tab = 'runs')}>
+	<button class="tab" class:active={tab === 'runs'} on:click={() => setTab('runs')}>
 		Test Runs
-		<span class="tab-count">{q ? filteredRuns.length + '/' : ''}{runs.length}</span>
+		<span class="tab-count">{q ? filteredRuns.length + '/' : ''}{runsTotal}</span>
 	</button>
 </div>
 
@@ -298,7 +442,220 @@
 	{/if}
 </div>
 
-{#if tab === 'suites'}
+{#if !q}
+	<div class="sort-bar">
+		<span class="sort-label">Sort by</span>
+		{#if tab === 'suites'}
+			{#each [['createdAt', 'Date Created'], ['displayId', 'ID'], ['name', 'Name'], ['priority', 'Priority']] as [val, label]}
+				<button
+					class="sort-chip"
+					class:active={suitesSort.by === val}
+					on:click={() => applySuitesSort(val)}
+				>
+					{label}
+					{#if suitesSort.by === val}
+						<span class="sort-dir">{suitesSort.order === 'asc' ? '↑' : '↓'}</span>
+					{/if}
+				</button>
+			{/each}
+		{:else}
+			{#each [['createdAt', 'Date Created'], ['updatedAt', 'Last Updated'], ['title', 'Name']] as [val, label]}
+				<button
+					class="sort-chip"
+					class:active={runsSort.by === val}
+					on:click={() => applyRunsSort(val)}
+				>
+					{label}
+					{#if runsSort.by === val}
+						<span class="sort-dir">{runsSort.order === 'asc' ? '↑' : '↓'}</span>
+					{/if}
+				</button>
+			{/each}
+		{/if}
+	</div>
+{/if}
+
+{#if q}
+	<!-- ── Global search results ── -->
+	<div transition:fly={{ y: 4, duration: 160 }}>
+		{#if searchLoading}
+			<div class="loading-row">Searching…</div>
+		{:else if !searchResults}
+			<div class="loading-row">Searching…</div>
+		{:else if filteredCases.length === 0 && filteredSuites.length === 0 && filteredRuns.length === 0}
+			<EmptyState title="No results" description="Nothing matches &ldquo;{search}&rdquo;." />
+		{:else}
+			{#if filteredCases.length > 0}
+				<div class="search-section">
+					<h2 class="search-section-title">
+						Cases <span class="tab-count">{filteredCases.length}</span>
+					</h2>
+					<div class="case-results">
+						{#each filteredCases as tc (tc.id)}
+							<a href="/test-repository/suites/{tc.suite.id}" class="case-result-row">
+								<span class="id-chip small">{tc.displayId}</span>
+								<span class="case-result-title">{tc.title}</span>
+								{#if tc.isAutomated}<span class="auto-badge">automated</span>{/if}
+								<span class="priority-badge small {priorityClass(tc.priority)}">{tc.priority}</span>
+								<span class="case-result-suite">{tc.suite.displayId} · {tc.suite.name}</span>
+							</a>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			{#if filteredSuites.length > 0}
+				<div class="search-section">
+					<h2 class="search-section-title">
+						Suites <span class="tab-count">{filteredSuites.length}</span>
+					</h2>
+					<div class="suite-grid">
+						{#each filteredSuites as suite (suite.id)}
+							<div class="suite-card">
+								<a
+									href="/test-repository/suites/{suite.id}"
+									class="card-link"
+									aria-label={suite.name}
+								></a>
+								<div class="suite-card-header">
+									<span class="id-chip">{suite.displayId}</span>
+									<span class="priority-badge {priorityClass(suite.priority)}"
+										>{suite.priority}</span
+									>
+									<div class="suite-card-actions">
+										<button
+											class="icon-btn danger"
+											title="Delete suite"
+											on:click={() => {
+												confirmDelete = {
+													type: 'suite',
+													id: suite.id,
+													name: suite.name
+												};
+												confirmDeleteOpen = true;
+											}}
+										>
+											<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<polyline points="3 6 5 6 21 6" /><path
+													d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+												/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+											</svg>
+										</button>
+									</div>
+								</div>
+								<h3 class="suite-name">{suite.name}</h3>
+								{#if suite.description}
+									<p class="suite-desc">{suite.description}</p>
+								{/if}
+								<div class="suite-meta">
+									<span class="meta-item">
+										<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											><path
+												d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"
+											/></svg
+										>
+										{suite._count.cases} case{suite._count.cases !== 1 ? 's' : ''}
+									</span>
+									<span class="meta-item">by {suite.createdBy.name}</span>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			{#if filteredRuns.length > 0}
+				<div class="search-section">
+					<h2 class="search-section-title">
+						Runs <span class="tab-count">{filteredRuns.length}</span>
+					</h2>
+					<div class="runs-list">
+						{#each filteredRuns as run (run.id)}
+							<div class="run-row">
+								<a href="/test-repository/runs/{run.id}" class="card-link" aria-label={run.title}
+								></a>
+								<div class="run-row-main">
+									<span class="run-status-dot {runStatusClass(run.status)}"></span>
+									<span class="run-title">{run.title}</span>
+									<span class="run-count"
+										>{run._count.entries} case{run._count.entries !== 1 ? 's' : ''}</span
+									>
+								</div>
+								<div class="run-meta">
+									<span class="run-status-label">{run.status}</span>
+									<span class="meta-sep">·</span>
+									<span>by {run.createdBy.name}</span>
+									<span class="meta-sep">·</span>
+									<span>{new Date(run.createdAt).toLocaleDateString()}</span>
+								</div>
+								<div class="run-row-actions">
+									<button
+										class="icon-btn"
+										title="Duplicate run"
+										on:click={() => handleDuplicateRun(run)}
+									>
+										<svg
+											width="13"
+											height="13"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<rect x="9" y="9" width="13" height="13" rx="2" /><path
+												d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+											/>
+										</svg>
+									</button>
+									<button
+										class="icon-btn danger"
+										title="Delete run"
+										on:click={() => {
+											confirmDelete = { type: 'run', id: run.id, name: run.title };
+											confirmDeleteOpen = true;
+										}}
+									>
+										<svg
+											width="13"
+											height="13"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<polyline points="3 6 5 6 21 6" /><path
+												d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+											/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+										</svg>
+									</button>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		{/if}
+	</div>
+{:else if tab === 'suites'}
 	<div transition:fly={{ y: 4, duration: 160 }}>
 		{#if loading}
 			<div class="loading-row">Loading…</div>
@@ -307,12 +664,12 @@
 				title="No test suites yet"
 				description="Create your first suite to start organising test cases."
 			/>
-		{:else if filteredSuites.length === 0}
-			<EmptyState title="No results" description="No suites match &ldquo;{search}&rdquo;." />
 		{:else}
 			<div class="suite-grid">
-				{#each filteredSuites as suite (suite.id)}
-					<a href="/test-repository/suites/{suite.id}" class="suite-card">
+				{#each suites as suite (suite.id)}
+					<div class="suite-card">
+						<a href="/test-repository/suites/{suite.id}" class="card-link" aria-label={suite.name}
+						></a>
 						<div class="suite-card-header">
 							<span class="id-chip">{suite.displayId}</span>
 							<span class="priority-badge {priorityClass(suite.priority)}">{suite.priority}</span>
@@ -320,7 +677,7 @@
 								<button
 									class="icon-btn danger"
 									title="Delete suite"
-									on:click|stopPropagation={() => {
+									on:click={() => {
 										confirmDelete = { type: 'suite', id: suite.id, name: suite.name };
 										confirmDeleteOpen = true;
 									}}
@@ -363,9 +720,18 @@
 							</span>
 							<span class="meta-item">by {suite.createdBy.name}</span>
 						</div>
-					</a>
+					</div>
 				{/each}
 			</div>
+			{#if Math.ceil(suitesTotal / REPO_PAGE_SIZE) > 1}
+				<div class="pagination-row">
+					<Pagination
+						current={suitesPage}
+						total={Math.ceil(suitesTotal / REPO_PAGE_SIZE)}
+						on:change={(e) => loadSuites(e.detail)}
+					/>
+				</div>
+			{/if}
 		{/if}
 	</div>
 {:else}
@@ -377,12 +743,11 @@
 				title="No test runs yet"
 				description="Create a test run to start executing and tracking manual tests."
 			/>
-		{:else if filteredRuns.length === 0}
-			<EmptyState title="No results" description="No runs match &ldquo;{search}&rdquo;." />
 		{:else}
 			<div class="runs-list">
-				{#each filteredRuns as run (run.id)}
-					<a href="/test-repository/runs/{run.id}" class="run-row">
+				{#each runs as run (run.id)}
+					<div class="run-row">
+						<a href="/test-repository/runs/{run.id}" class="card-link" aria-label={run.title}></a>
 						<div class="run-row-main">
 							<span class="run-status-dot {runStatusClass(run.status)}"></span>
 							<span class="run-title">{run.title}</span>
@@ -399,9 +764,29 @@
 						</div>
 						<div class="run-row-actions">
 							<button
+								class="icon-btn"
+								title="Duplicate run"
+								on:click={() => handleDuplicateRun(run)}
+							>
+								<svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<rect x="9" y="9" width="13" height="13" rx="2" /><path
+										d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+									/>
+								</svg>
+							</button>
+							<button
 								class="icon-btn danger"
 								title="Delete run"
-								on:click|stopPropagation={() => {
+								on:click={() => {
 									confirmDelete = { type: 'run', id: run.id, name: run.title };
 									confirmDeleteOpen = true;
 								}}
@@ -422,9 +807,18 @@
 								</svg>
 							</button>
 						</div>
-					</a>
+					</div>
 				{/each}
 			</div>
+			{#if Math.ceil(runsTotal / REPO_PAGE_SIZE) > 1}
+				<div class="pagination-row">
+					<Pagination
+						current={runsPage}
+						total={Math.ceil(runsTotal / REPO_PAGE_SIZE)}
+						on:change={(e) => loadRuns(e.detail)}
+					/>
+				</div>
+			{/if}
 		{/if}
 	</div>
 {/if}
@@ -507,6 +901,10 @@
 		padding: 2rem 0;
 	}
 
+	.pagination-row {
+		margin-top: 1.5rem;
+	}
+
 	/* ── Search ── */
 	.search-bar {
 		position: relative;
@@ -567,6 +965,114 @@
 		color: var(--text);
 	}
 
+	/* ── Sort bar ── */
+	.sort-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		margin-bottom: 1.25rem;
+		flex-wrap: wrap;
+	}
+
+	.sort-label {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		margin-right: 0.25rem;
+	}
+
+	.sort-chip {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		height: 28px;
+		padding: 0 0.625rem;
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: 100px;
+		cursor: pointer;
+		transition:
+			color var(--duration-fast),
+			border-color var(--duration-fast),
+			background var(--duration-fast);
+	}
+
+	.sort-chip:hover {
+		color: var(--text);
+		border-color: var(--accent);
+	}
+
+	.sort-chip.active {
+		color: var(--accent);
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+
+	.sort-dir {
+		font-size: 0.7rem;
+		opacity: 0.8;
+	}
+
+	/* ── Search results ── */
+	.search-section {
+		margin-bottom: 2rem;
+	}
+
+	.search-section-title {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-muted);
+		margin-bottom: 0.75rem;
+	}
+
+	.case-results {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.case-result-row {
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
+		padding: 0.6rem 0.875rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		text-decoration: none;
+		color: inherit;
+		transition: border-color var(--duration-fast);
+	}
+
+	.case-result-row:hover {
+		border-color: var(--accent);
+	}
+
+	.case-result-title {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--text);
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.case-result-suite {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		flex-shrink: 0;
+		white-space: nowrap;
+	}
+
 	/* ── Suite grid ── */
 	.suite-grid {
 		display: grid;
@@ -574,7 +1080,15 @@
 		gap: 0.875rem;
 	}
 
+	.card-link {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		z-index: 0;
+	}
+
 	.suite-card {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
@@ -583,7 +1097,6 @@
 		border-top: 3px solid var(--accent);
 		border-radius: var(--radius-md);
 		padding: 1rem;
-		text-decoration: none;
 		color: inherit;
 		transition:
 			border-color var(--duration-fast),
@@ -602,6 +1115,8 @@
 	}
 
 	.suite-card-actions {
+		position: relative;
+		z-index: 1;
 		margin-left: auto;
 		opacity: 0;
 		transition: opacity var(--duration-fast);
@@ -655,6 +1170,22 @@
 		flex-shrink: 0;
 	}
 
+	.id-chip.small {
+		font-size: 0.65rem;
+	}
+
+	.auto-badge {
+		font-size: 0.62rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--pass);
+		background: var(--pass-soft);
+		border-radius: 100px;
+		padding: 0.1rem 0.4rem;
+		flex-shrink: 0;
+	}
+
 	/* ── Priority badges ── */
 	.priority-badge {
 		font-size: 0.68rem;
@@ -662,6 +1193,11 @@
 		border-radius: 100px;
 		padding: 0.15rem 0.5rem;
 		flex-shrink: 0;
+	}
+
+	.priority-badge.small {
+		font-size: 0.62rem;
+		padding: 0.1rem 0.4rem;
 	}
 
 	.priority-badge.critical {
@@ -711,6 +1247,7 @@
 	}
 
 	.run-row {
+		position: relative;
 		display: flex;
 		align-items: center;
 		gap: 1rem;
@@ -718,7 +1255,6 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
 		padding: 0.875rem 1rem;
-		text-decoration: none;
 		color: inherit;
 		transition: border-color var(--duration-fast);
 	}
@@ -793,6 +1329,8 @@
 	}
 
 	.run-row-actions {
+		position: relative;
+		z-index: 1;
 		opacity: 0;
 		transition: opacity var(--duration-fast);
 	}
