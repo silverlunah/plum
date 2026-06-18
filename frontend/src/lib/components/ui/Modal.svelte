@@ -22,12 +22,18 @@
 	export let open = false;
 	export let title = '';
 
+	let mousedownOnBackdrop = false;
+
 	function close() {
 		open = false;
 	}
 
+	function onBackdropMousedown(e) {
+		mousedownOnBackdrop = e.target === e.currentTarget;
+	}
+
 	function onBackdrop(e) {
-		if (e.target === e.currentTarget) close();
+		if (e.target === e.currentTarget && mousedownOnBackdrop) close();
 	}
 
 	function onKeydown(e) {
@@ -41,6 +47,7 @@
 	<div
 		class="backdrop"
 		role="presentation"
+		on:mousedown={onBackdropMousedown}
 		on:click={onBackdrop}
 		on:keydown={(e) => e.key === 'Escape' && close()}
 		transition:fade={{ duration: 200 }}

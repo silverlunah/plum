@@ -18,9 +18,11 @@
 <script>
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
-	import { fetchSuites, createSuite, deleteSuite } from '$lib/api/repository';
+	import { fetchSuites, createSuite, deleteSuite, searchRepository } from '$lib/api/repository';
 	import { fetchRuns, createRun, duplicateRun, deleteRun } from '$lib/api/repository';
 	import { runsVersion } from '$lib/stores/runner';
+	import Pagination from '$lib/components/ui/Pagination.svelte';
+	import { REPO_PAGE_SIZE } from '$lib/constants';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
@@ -29,12 +31,56 @@
 	import { TOAST_TIMEOUT_MS } from '$lib/constants';
 
 	/** @type {'suites' | 'runs'} */
-	let tab = 'suites';
+	let tab =
+		(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('plum:repo:tab')) || 'suites';
+
+	function setTab(t) {
+		tab = t;
+		try {
+			sessionStorage.setItem('plum:repo:tab', t);
+		} catch {}
+	}
+
+	function readSort(key, fallback) {
+		try {
+			const v = sessionStorage.getItem(key);
+			if (v) return JSON.parse(v);
+		} catch {}
+		return fallback;
+	}
+
+	function writeSort(key, sort) {
+		try {
+			sessionStorage.setItem(key, JSON.stringify(sort));
+		} catch {}
+	}
 
 	let suites = [];
+	let suitesTotal = 0;
+	let suitesPage = 1;
+	let suitesSort = readSort('plum:repo:suites:sort', { by: 'createdAt', order: 'desc' });
+
 	let runs = [];
+	let runsTotal = 0;
+	let runsPage = 1;
+	let runsSort = readSort('plum:repo:runs:sort', { by: 'createdAt', order: 'desc' });
+
+	const PRIORITY_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+
+	function sortByPriority(items, order) {
+		return [...items].sort((a, b) => {
+			const diff = (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4);
+			return order === 'asc' ? diff : -diff;
+		});
+	}
+
 	let loading = true;
 	let toast = null;
+
+	// Search results (server-side when query is active)
+	let searchResults = null;
+	let searchLoading = false;
+	let searchTimer = null;
 
 	let suiteModalOpen = false;
 	let suiteForm = { name: '', description: '', priority: 'Medium' };
@@ -54,24 +100,31 @@
 
 	let search = '';
 
-	$: q = search.trim().toLowerCase();
-	$: filteredSuites = q
-		? suites.filter(
-				(s) => s.displayId.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)
-			)
-		: suites;
-	$: filteredRuns = q ? runs.filter((r) => r.title.toLowerCase().includes(q)) : runs;
-	$: allCases = suites.flatMap((s) =>
-		(s.cases ?? []).map((c) => ({
-			...c,
-			suite: { id: s.id, name: s.name, displayId: s.displayId }
-		}))
-	);
-	$: filteredCases = q
-		? allCases.filter(
-				(c) => c.displayId.toLowerCase().includes(q) || c.title.toLowerCase().includes(q)
-			)
-		: [];
+	$: q = search.trim();
+
+	$: {
+		clearTimeout(searchTimer);
+		if (q) {
+			searchLoading = true;
+			searchResults = null;
+			searchTimer = setTimeout(async () => {
+				try {
+					searchResults = await searchRepository(q);
+				} catch {
+					searchResults = { suites: [], cases: [], runs: [] };
+				} finally {
+					searchLoading = false;
+				}
+			}, 300);
+		} else {
+			searchResults = null;
+			searchLoading = false;
+		}
+	}
+
+	$: filteredCases = searchResults?.cases ?? [];
+	$: filteredSuites = searchResults?.suites ?? [];
+	$: filteredRuns = searchResults?.runs ?? [];
 
 	const PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
 
@@ -80,9 +133,48 @@
 		setTimeout(() => (toast = null), TOAST_TIMEOUT_MS);
 	}
 
+	async function loadSuites(page = 1) {
+		const isPrioritySort = suitesSort.by === 'priority';
+		const result = await fetchSuites({
+			page,
+			sortBy: isPrioritySort ? 'createdAt' : suitesSort.by,
+			sortOrder: suitesSort.order
+		});
+		suites = isPrioritySort ? sortByPriority(result.suites, suitesSort.order) : result.suites;
+		suitesTotal = result.total;
+		suitesPage = page;
+	}
+
+	async function loadRuns(page = 1) {
+		const result = await fetchRuns({ page, sortBy: runsSort.by, sortOrder: runsSort.order });
+		runs = result.runs;
+		runsTotal = result.total;
+		runsPage = page;
+	}
+
+	async function applySuitesSort(by) {
+		if (suitesSort.by === by) {
+			suitesSort.order = suitesSort.order === 'asc' ? 'desc' : 'asc';
+		} else {
+			suitesSort = { by, order: by === 'createdAt' ? 'desc' : 'asc' };
+		}
+		writeSort('plum:repo:suites:sort', suitesSort);
+		await loadSuites(1);
+	}
+
+	async function applyRunsSort(by) {
+		if (runsSort.by === by) {
+			runsSort.order = runsSort.order === 'asc' ? 'desc' : 'asc';
+		} else {
+			runsSort = { by, order: by === 'createdAt' || by === 'updatedAt' ? 'desc' : 'asc' };
+		}
+		writeSort('plum:repo:runs:sort', runsSort);
+		await loadRuns(1);
+	}
+
 	onMount(async () => {
 		try {
-			[suites, runs] = await Promise.all([fetchSuites({ withCases: true }), fetchRuns()]);
+			await Promise.all([loadSuites(1), loadRuns(1)]);
 		} catch (e) {
 			showToast('error', 'Failed to load data');
 		} finally {
@@ -100,6 +192,7 @@
 		try {
 			const suite = await createSuite(suiteForm);
 			suites = [...suites, suite];
+			suitesTotal += 1;
 			suiteModalOpen = false;
 			suiteForm = { name: '', description: '', priority: 'Medium' };
 			showToast('success', `Suite "${suite.name}" created.`);
@@ -114,6 +207,7 @@
 		try {
 			await deleteSuite(id);
 			suites = suites.filter((s) => s.id !== id);
+			suitesTotal -= 1;
 			showToast('success', `Suite "${name}" deleted.`);
 		} catch {
 			showToast('error', 'Failed to delete suite.');
@@ -155,6 +249,7 @@
 		try {
 			const copy = await duplicateRun(run.id);
 			runs = [copy, ...runs];
+			runsTotal += 1;
 			runsVersion.update((v) => v + 1);
 			showToast('success', `Duplicated as "${copy.title}".`);
 		} catch {
@@ -166,6 +261,7 @@
 		try {
 			await deleteRun(id);
 			runs = runs.filter((r) => r.id !== id);
+			runsTotal -= 1;
 			runsVersion.update((v) => v + 1);
 			showToast('success', `Run "${title}" deleted.`);
 		} catch {
@@ -301,13 +397,13 @@
 </div>
 
 <div class="tabs">
-	<button class="tab" class:active={tab === 'suites'} on:click={() => (tab = 'suites')}>
+	<button class="tab" class:active={tab === 'suites'} on:click={() => setTab('suites')}>
 		Suites
-		<span class="tab-count">{q ? filteredSuites.length + '/' : ''}{suites.length}</span>
+		<span class="tab-count">{q ? filteredSuites.length + '/' : ''}{suitesTotal}</span>
 	</button>
-	<button class="tab" class:active={tab === 'runs'} on:click={() => (tab = 'runs')}>
+	<button class="tab" class:active={tab === 'runs'} on:click={() => setTab('runs')}>
 		Test Runs
-		<span class="tab-count">{q ? filteredRuns.length + '/' : ''}{runs.length}</span>
+		<span class="tab-count">{q ? filteredRuns.length + '/' : ''}{runsTotal}</span>
 	</button>
 </div>
 
@@ -346,11 +442,46 @@
 	{/if}
 </div>
 
+{#if !q}
+	<div class="sort-bar">
+		<span class="sort-label">Sort by</span>
+		{#if tab === 'suites'}
+			{#each [['createdAt', 'Date Created'], ['displayId', 'ID'], ['name', 'Name'], ['priority', 'Priority']] as [val, label]}
+				<button
+					class="sort-chip"
+					class:active={suitesSort.by === val}
+					on:click={() => applySuitesSort(val)}
+				>
+					{label}
+					{#if suitesSort.by === val}
+						<span class="sort-dir">{suitesSort.order === 'asc' ? '↑' : '↓'}</span>
+					{/if}
+				</button>
+			{/each}
+		{:else}
+			{#each [['createdAt', 'Date Created'], ['updatedAt', 'Last Updated'], ['title', 'Name']] as [val, label]}
+				<button
+					class="sort-chip"
+					class:active={runsSort.by === val}
+					on:click={() => applyRunsSort(val)}
+				>
+					{label}
+					{#if runsSort.by === val}
+						<span class="sort-dir">{runsSort.order === 'asc' ? '↑' : '↓'}</span>
+					{/if}
+				</button>
+			{/each}
+		{/if}
+	</div>
+{/if}
+
 {#if q}
 	<!-- ── Global search results ── -->
 	<div transition:fly={{ y: 4, duration: 160 }}>
-		{#if loading}
-			<div class="loading-row">Loading…</div>
+		{#if searchLoading}
+			<div class="loading-row">Searching…</div>
+		{:else if !searchResults}
+			<div class="loading-row">Searching…</div>
 		{:else if filteredCases.length === 0 && filteredSuites.length === 0 && filteredRuns.length === 0}
 			<EmptyState title="No results" description="Nothing matches &ldquo;{search}&rdquo;." />
 		{:else}
@@ -592,6 +723,15 @@
 					</div>
 				{/each}
 			</div>
+			{#if Math.ceil(suitesTotal / REPO_PAGE_SIZE) > 1}
+				<div class="pagination-row">
+					<Pagination
+						current={suitesPage}
+						total={Math.ceil(suitesTotal / REPO_PAGE_SIZE)}
+						on:change={(e) => loadSuites(e.detail)}
+					/>
+				</div>
+			{/if}
 		{/if}
 	</div>
 {:else}
@@ -670,6 +810,15 @@
 					</div>
 				{/each}
 			</div>
+			{#if Math.ceil(runsTotal / REPO_PAGE_SIZE) > 1}
+				<div class="pagination-row">
+					<Pagination
+						current={runsPage}
+						total={Math.ceil(runsTotal / REPO_PAGE_SIZE)}
+						on:change={(e) => loadRuns(e.detail)}
+					/>
+				</div>
+			{/if}
 		{/if}
 	</div>
 {/if}
@@ -752,6 +901,10 @@
 		padding: 2rem 0;
 	}
 
+	.pagination-row {
+		margin-top: 1.5rem;
+	}
+
 	/* ── Search ── */
 	.search-bar {
 		position: relative;
@@ -810,6 +963,56 @@
 
 	.search-clear:hover {
 		color: var(--text);
+	}
+
+	/* ── Sort bar ── */
+	.sort-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		margin-bottom: 1.25rem;
+		flex-wrap: wrap;
+	}
+
+	.sort-label {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		margin-right: 0.25rem;
+	}
+
+	.sort-chip {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		height: 28px;
+		padding: 0 0.625rem;
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: 100px;
+		cursor: pointer;
+		transition:
+			color var(--duration-fast),
+			border-color var(--duration-fast),
+			background var(--duration-fast);
+	}
+
+	.sort-chip:hover {
+		color: var(--text);
+		border-color: var(--accent);
+	}
+
+	.sort-chip.active {
+		color: var(--accent);
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+
+	.sort-dir {
+		font-size: 0.7rem;
+		opacity: 0.8;
 	}
 
 	/* ── Search results ── */

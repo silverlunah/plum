@@ -90,7 +90,7 @@ async function syncAutomatedTags(reportId, features, testRunId = null) {
 						})
 					),
 					prisma.testRun.updateMany({
-						where: { id: testRunId, status: 'draft' },
+						where: { id: testRunId, status: { in: ['backlog', 'draft'] } },
 						data: { status: 'in-progress' }
 					})
 				]);

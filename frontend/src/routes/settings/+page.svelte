@@ -44,7 +44,16 @@
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 
 	/** @type {'project' | 'runners' | 'repository' | 'account' | 'users' | 'backup'} */
-	let section = 'project';
+	let section =
+		(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('plum:settings:section')) ||
+		'project';
+
+	function setSection(s) {
+		section = s;
+		try {
+			sessionStorage.setItem('plum:settings:section', s);
+		} catch {}
+	}
 
 	let project = { name: '', logoUrl: '' };
 	let projectSaving = false;
@@ -411,7 +420,7 @@
 				<button
 					class="sidebar-item"
 					class:active={section === item.id}
-					on:click={() => (section = item.id)}
+					on:click={() => setSection(item.id)}
 				>
 					{item.label}
 				</button>

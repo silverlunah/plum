@@ -195,8 +195,8 @@
 	$: anyRunning = state.running || anyCronRunning;
 
 	$: if ($runsVersion >= 0)
-		fetchRuns()
-			.then((r) => (testRuns = r))
+		fetchRuns({ limit: 200 })
+			.then((r) => (testRuns = r.runs))
 			.catch(() => {});
 
 	$: statusColor =

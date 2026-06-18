@@ -64,12 +64,13 @@ async function main() {
 	}
 
 	const pascal = toPascalCase(rawName);
+	const base = pascal.endsWith('Page') ? pascal.slice(0, -4) : pascal;
 	const kebab = toKebabCase(pascal);
 	const suiteTag = `@suite-${kebab}`;
 	const testTag = `@test-${kebab}-1`;
 
 	const featurePath = path.join(testsRoot, 'features', `${pascal}.feature`);
-	const pagePath = path.join(testsRoot, 'pages', `${pascal}Page.ts`);
+	const pagePath = path.join(testsRoot, 'pages', `${base}Page.ts`);
 	const stepsPath = path.join(testsRoot, 'step_definitions', `${pascal}Steps.ts`);
 
 	const conflicts = [featurePath, pagePath, stepsPath].filter(fs.existsSync);
@@ -95,7 +96,7 @@ Feature: ${pascal}
 
 	const page = `import { page } from '../utils/browser';
 
-export class ${pascal}Page {
+export class ${base}Page {
   static async goTo() {
     await page().goto(process.env.BASE_URL as string);
   }
@@ -111,18 +112,18 @@ export class ${pascal}Page {
 `;
 
 	const steps = `import { Given, When, Then } from '@cucumber/cucumber';
-import { ${pascal}Page } from '../pages/${pascal}Page';
+import { ${base}Page } from '../pages/${base}Page';
 
 Given('I am on the ${pascal} page', async () => {
-  await ${pascal}Page.goTo();
+  await ${base}Page.goTo();
 });
 
 When('I perform an action', async () => {
-  await ${pascal}Page.performAction();
+  await ${base}Page.performAction();
 });
 
 Then('I should see the expected result', async () => {
-  await ${pascal}Page.verifyResult();
+  await ${base}Page.verifyResult();
 });
 `;
 

@@ -22,8 +22,11 @@ const testRunService = require('../services/testRunService');
 
 router.get('/', jwtAuth, async (req, res, next) => {
 	try {
-		const runs = await testRunService.getAll();
-		res.json({ runs });
+		const page = Math.max(1, parseInt(req.query.page) || 1);
+		const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 20));
+		const { q, sortBy, sortOrder } = req.query;
+		const result = await testRunService.getAll({ page, limit, q, sortBy, sortOrder });
+		res.json(result);
 	} catch (e) {
 		next(e);
 	}
@@ -74,6 +77,16 @@ router.delete('/:id', jwtAuth, async (req, res, next) => {
 	try {
 		await testRunService.remove(req.params.id);
 		res.json({ ok: true });
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.put('/entries/:entryId/assign', jwtAuth, async (req, res, next) => {
+	try {
+		const { userId } = req.body;
+		const entry = await testRunService.assignEntry(req.params.entryId, { userId: userId ?? null });
+		res.json({ entry });
 	} catch (e) {
 		next(e);
 	}

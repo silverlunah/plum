@@ -22,11 +22,19 @@ const testSuiteService = require('../services/testSuiteService');
 
 router.get('/', jwtAuth, async (req, res, next) => {
 	try {
-		const suites =
-			req.query.withCases === 'true'
-				? await testSuiteService.getAllWithCases()
-				: await testSuiteService.getAll();
-		res.json({ suites });
+		if (req.query.withCases === 'true') {
+			const suites = await testSuiteService.getAllWithCases();
+			return res.json({ suites });
+		}
+		if (req.query.q) {
+			const results = await testSuiteService.search(req.query.q);
+			return res.json(results);
+		}
+		const page = Math.max(1, parseInt(req.query.page) || 1);
+		const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+		const { sortBy, sortOrder } = req.query;
+		const result = await testSuiteService.getAll({ page, limit, sortBy, sortOrder });
+		res.json(result);
 	} catch (e) {
 		next(e);
 	}

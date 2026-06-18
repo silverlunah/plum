@@ -15,7 +15,7 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-import { API_BASE } from '$lib/constants';
+import { API_BASE, REPO_PAGE_SIZE } from '$lib/constants';
 import { auth } from '$lib/stores/auth';
 
 function getToken() {
@@ -28,12 +28,31 @@ function authHeaders() {
 
 // ── Test Suites ──────────────────────────────────────────────────────────────
 
-export async function fetchSuites({ withCases = false } = {}) {
-	const url = withCases ? `${API_BASE}/test-suites?withCases=true` : `${API_BASE}/test-suites`;
-	const res = await fetch(url, { headers: authHeaders() });
+export async function fetchSuites({ page = 1, limit = REPO_PAGE_SIZE, sortBy, sortOrder } = {}) {
+	const params = new URLSearchParams({ page, limit });
+	if (sortBy) params.set('sortBy', sortBy);
+	if (sortOrder) params.set('sortOrder', sortOrder);
+	const res = await fetch(`${API_BASE}/test-suites?${params}`, { headers: authHeaders() });
+	if (!res.ok) throw new Error('Failed to fetch suites');
+	return res.json(); // { suites, total }
+}
+
+export async function fetchAllSuitesWithCases() {
+	const res = await fetch(`${API_BASE}/test-suites?withCases=true`, { headers: authHeaders() });
 	if (!res.ok) throw new Error('Failed to fetch suites');
 	const data = await res.json();
 	return data.suites;
+}
+
+export async function searchRepository(q) {
+	const enc = encodeURIComponent(q);
+	const [sRes, rRes] = await Promise.all([
+		fetch(`${API_BASE}/test-suites?q=${enc}`, { headers: authHeaders() }),
+		fetch(`${API_BASE}/test-runs?q=${enc}&limit=50`, { headers: authHeaders() })
+	]);
+	const { suites, cases } = await sRes.json();
+	const { runs } = await rRes.json();
+	return { suites, cases, runs };
 }
 
 export async function fetchSuite(id) {
@@ -125,11 +144,13 @@ export async function deleteTestCase(id) {
 
 // ── Test Runs ────────────────────────────────────────────────────────────────
 
-export async function fetchRuns() {
-	const res = await fetch(`${API_BASE}/test-runs`, { headers: authHeaders() });
+export async function fetchRuns({ page = 1, limit = REPO_PAGE_SIZE, sortBy, sortOrder } = {}) {
+	const params = new URLSearchParams({ page, limit });
+	if (sortBy) params.set('sortBy', sortBy);
+	if (sortOrder) params.set('sortOrder', sortOrder);
+	const res = await fetch(`${API_BASE}/test-runs?${params}`, { headers: authHeaders() });
 	if (!res.ok) throw new Error('Failed to fetch test runs');
-	const data = await res.json();
-	return data.runs;
+	return res.json(); // { runs, total }
 }
 
 export async function fetchRun(id) {
@@ -188,6 +209,24 @@ export async function recordEntryResult(entryId, { status, notes }) {
 	const data = await res.json();
 	if (!res.ok) throw new Error(data.error ?? 'Failed to record result');
 	return data.entry;
+}
+
+export async function assignEntry(entryId, userId) {
+	const res = await fetch(`${API_BASE}/test-runs/entries/${entryId}/assign`, {
+		method: 'PUT',
+		headers: authHeaders(),
+		body: JSON.stringify({ userId: userId ?? null })
+	});
+	const data = await res.json();
+	if (!res.ok) throw new Error(data.error ?? 'Failed to assign entry');
+	return data.entry;
+}
+
+export async function fetchMembers() {
+	const res = await fetch(`${API_BASE}/users/members`, { headers: authHeaders() });
+	if (!res.ok) throw new Error('Failed to fetch members');
+	const data = await res.json();
+	return data.users;
 }
 
 // ── Prefixes ─────────────────────────────────────────────────────────────────

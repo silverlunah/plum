@@ -33,7 +33,8 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
-	import { TOAST_TIMEOUT_MS } from '$lib/constants';
+	import Pagination from '$lib/components/ui/Pagination.svelte';
+	import { TOAST_TIMEOUT_MS, SUITE_CASES_PER_PAGE } from '$lib/constants';
 
 	const suiteId = $page.params.id;
 
@@ -64,14 +65,51 @@
 	let confirmDeleteCaseOpen = false;
 
 	let caseSearch = '';
+	let casesPage = 1;
+	let casesSort = (() => {
+		try {
+			const v = sessionStorage.getItem('plum:repo:cases:sort');
+			if (v) return JSON.parse(v);
+		} catch {}
+		return { by: 'createdAt', order: 'asc' };
+	})();
+
+	const PRIORITY_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+
 	$: caseQ = caseSearch.trim().toLowerCase();
 	$: filteredCases = suite?.cases
-		? caseQ
-			? suite.cases.filter(
-					(c) => c.displayId.toLowerCase().includes(caseQ) || c.title.toLowerCase().includes(caseQ)
-				)
-			: suite.cases
+		? suite.cases.filter(
+				(c) =>
+					!caseQ ||
+					c.displayId.toLowerCase().includes(caseQ) ||
+					c.title.toLowerCase().includes(caseQ)
+			)
 		: [];
+	$: sortedCases = [...filteredCases].sort((a, b) => {
+		const dir = casesSort.order === 'asc' ? 1 : -1;
+		if (casesSort.by === 'displayId') return dir * a.displayId.localeCompare(b.displayId);
+		if (casesSort.by === 'name') return dir * a.title.localeCompare(b.title);
+		if (casesSort.by === 'priority')
+			return dir * ((PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4));
+		return dir * (new Date(a.createdAt) - new Date(b.createdAt));
+	});
+	$: casesTotalPages = Math.ceil(sortedCases.length / SUITE_CASES_PER_PAGE);
+	$: pagedCases = sortedCases.slice(
+		(casesPage - 1) * SUITE_CASES_PER_PAGE,
+		casesPage * SUITE_CASES_PER_PAGE
+	);
+	$: if (caseSearch) casesPage = 1;
+
+	function applyCasesSort(by) {
+		if (casesSort.by === by) {
+			casesSort.order = casesSort.order === 'asc' ? 'desc' : 'asc';
+		} else {
+			casesSort = { by, order: 'asc' };
+		}
+		try {
+			sessionStorage.setItem('plum:repo:cases:sort', JSON.stringify(casesSort));
+		} catch {}
+	}
 	let editSuiteOpen = false;
 	let editSuiteForm = {};
 	let editSuiteSaving = false;
@@ -101,6 +139,7 @@
 		try {
 			const tc = await createTestCase({ suiteId, ...caseForm });
 			suite = { ...suite, cases: [...suite.cases, tc], _count: { cases: suite._count.cases + 1 } };
+			casesPage = Math.ceil(suite.cases.length / SUITE_CASES_PER_PAGE);
 			caseModalOpen = false;
 			caseForm = { title: '', description: '', priority: 'Medium' };
 			showToast('success', `${tc.displayId} created.`);
@@ -408,13 +447,30 @@
 				</div>
 			{/if}
 
+			{#if suite.cases.length > 0}
+				<div class="case-sort-bar">
+					{#each [['createdAt', 'Date'], ['displayId', 'ID'], ['name', 'Name'], ['priority', 'Priority']] as [val, label]}
+						<button
+							class="case-sort-chip"
+							class:active={casesSort.by === val}
+							on:click={() => applyCasesSort(val)}
+						>
+							{label}
+							{#if casesSort.by === val}
+								<span class="case-sort-dir">{casesSort.order === 'asc' ? '↑' : '↓'}</span>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			{/if}
+
 			{#if suite.cases.length === 0}
 				<EmptyState title="No cases yet" description="Add your first test case to this suite." />
 			{:else if filteredCases.length === 0}
 				<div class="case-no-results">No cases match "<strong>{caseSearch}</strong>"</div>
 			{:else}
 				<div class="case-list">
-					{#each filteredCases as tc (tc.id)}
+					{#each pagedCases as tc (tc.id)}
 						<div
 							class="case-row"
 							class:selected={selectedCase?.id === tc.id}
@@ -427,7 +483,7 @@
 								<span class="id-chip small">{tc.displayId}</span>
 								<span class="priority-badge small {priorityClass(tc.priority)}">{tc.priority}</span>
 								{#if tc.isAutomated}
-									<span class="auto-badge">automated</span>
+									<span class="auto-badge">Automated</span>
 								{/if}
 								<div class="case-row-actions" on:click|stopPropagation>
 									<button
@@ -461,6 +517,15 @@
 						</div>
 					{/each}
 				</div>
+				{#if casesTotalPages > 1}
+					<div class="cases-pagination">
+						<Pagination
+							current={casesPage}
+							total={casesTotalPages}
+							on:change={(e) => (casesPage = e.detail)}
+						/>
+					</div>
+				{/if}
 			{/if}
 		</div>
 
@@ -477,7 +542,7 @@
 								>{selectedCase.priority}</span
 							>
 							{#if selectedCase.isAutomated}
-								<span class="auto-badge">automated</span>
+								<span class="auto-badge">Automated</span>
 							{/if}
 							<div class="detail-header-actions">
 								{#if !editingCase}
@@ -609,24 +674,33 @@
 											<div class="step-editor-row">
 												<span class="step-num">{i + 1}</span>
 												<div class="step-editor-fields">
-													<input
-														type="text"
-														class="field-input"
-														bind:value={step.action}
-														placeholder="Action"
-													/>
-													<input
-														type="text"
-														class="field-input"
-														bind:value={step.testData}
-														placeholder="Test data (optional)"
-													/>
-													<input
-														type="text"
-														class="field-input"
-														bind:value={step.expectedOutput}
-														placeholder="Expected output"
-													/>
+													<div class="step-field">
+														<label class="step-field-label">Step</label>
+														<input
+															type="text"
+															class="field-input"
+															bind:value={step.action}
+															placeholder="Describe the action…"
+														/>
+													</div>
+													<div class="step-field">
+														<label class="step-field-label">Test Data</label>
+														<input
+															type="text"
+															class="field-input"
+															bind:value={step.testData}
+															placeholder="Optional"
+														/>
+													</div>
+													<div class="step-field">
+														<label class="step-field-label">Expected Output</label>
+														<input
+															type="text"
+															class="field-input"
+															bind:value={step.expectedOutput}
+															placeholder="What should happen…"
+														/>
+													</div>
 												</div>
 												<button class="icon-btn danger small" on:click={() => removeStep(i)}>
 													<svg width="11" height="11" viewBox="0 0 14 14" fill="none"
@@ -675,11 +749,25 @@
 										<div class="history-row">
 											<span class="result-badge {resultClass(h.result)}">{h.result}</span>
 											<div class="history-info">
-												<span class="history-source"
-													>{h.source === 'automated'
-														? 'Auto build'
-														: (h.run?.title ?? 'Manual')}</span
-												>
+												{#if h.source === 'automated' && h.report?.id}
+													<a
+														href="/reports/{h.report.id}"
+														target="_blank"
+														rel="noopener noreferrer"
+														class="history-source history-link">Automated run ↗</a
+													>
+												{:else if h.source === 'automated'}
+													<span class="history-source history-missing">Report not found</span>
+												{:else if h.run?.id}
+													<a
+														href="/test-repository/runs/{h.run.id}"
+														target="_blank"
+														rel="noopener noreferrer"
+														class="history-source history-link">{h.run.title} ↗</a
+													>
+												{:else}
+													<span class="history-source history-missing">Run not found</span>
+												{/if}
 												<span class="history-by">{h.executedBy?.name ?? '—'}</span>
 												<span class="history-date">{new Date(h.executedAt).toLocaleString()}</span>
 											</div>
@@ -868,6 +956,53 @@
 		gap: 0.375rem;
 	}
 
+	.cases-pagination {
+		margin-top: 0.875rem;
+	}
+
+	/* ── Case sort bar ── */
+	.case-sort-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		margin-bottom: 0.625rem;
+		flex-wrap: wrap;
+	}
+
+	.case-sort-chip {
+		display: flex;
+		align-items: center;
+		gap: 0.2rem;
+		height: 24px;
+		padding: 0 0.5rem;
+		font-family: var(--font-body);
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: 100px;
+		cursor: pointer;
+		transition:
+			color var(--duration-fast),
+			border-color var(--duration-fast),
+			background var(--duration-fast);
+	}
+
+	.case-sort-chip:hover {
+		color: var(--text);
+		border-color: var(--accent);
+	}
+
+	.case-sort-chip.active {
+		color: var(--accent);
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+
+	.case-sort-dir {
+		font-size: 0.65rem;
+	}
+
 	.case-row {
 		display: flex;
 		flex-direction: column;
@@ -925,7 +1060,11 @@
 		background: var(--bg-elevated);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
-		overflow: hidden;
+		overflow-y: auto;
+		position: sticky;
+		top: calc(56px + 1.5rem);
+		max-height: calc(100vh - 56px - 3rem);
+		padding-bottom: 1.5rem;
 	}
 
 	.detail-loading {
@@ -1080,7 +1219,7 @@
 
 	.step-editor-row {
 		display: flex;
-		align-items: flex-start;
+		align-items: flex-end;
 		gap: 0.5rem;
 	}
 
@@ -1088,14 +1227,28 @@
 		font-size: 0.75rem;
 		color: var(--text-muted);
 		min-width: 20px;
-		padding-top: 0.5rem;
+		padding-bottom: 0.5rem;
 	}
 
 	.step-editor-fields {
 		flex: 1;
+		display: grid;
+		grid-template-columns: 1fr 1fr 1fr;
+		gap: 0.5rem;
+	}
+
+	.step-field {
 		display: flex;
 		flex-direction: column;
-		gap: 0.3rem;
+		gap: 0.25rem;
+	}
+
+	.step-field-label {
+		font-size: 0.7rem;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-muted);
 	}
 
 	.edit-case-form {
@@ -1133,6 +1286,20 @@
 		font-size: 0.8125rem;
 		font-weight: 500;
 		color: var(--text);
+	}
+
+	.history-link {
+		color: var(--accent);
+		text-decoration: none;
+	}
+
+	.history-link:hover {
+		text-decoration: underline;
+	}
+
+	.history-missing {
+		font-style: italic;
+		color: var(--text-muted);
 	}
 
 	.history-by,

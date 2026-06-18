@@ -28,6 +28,8 @@ export const TRIGGER_TYPES = Object.freeze({
 });
 
 export const REPORTS_PER_PAGE = 15;
+export const REPO_PAGE_SIZE = 20;
+export const SUITE_CASES_PER_PAGE = 20;
 
 export const COPY_TIMEOUT_MS = 1400;
 export const TOAST_TIMEOUT_MS = 4000;

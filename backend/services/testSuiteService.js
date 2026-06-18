@@ -29,8 +29,54 @@ const suiteSelect = {
 	_count: { select: { cases: true } }
 };
 
-async function getAll() {
-	return prisma.testSuite.findMany({ select: suiteSelect, orderBy: { createdAt: 'asc' } });
+function suiteOrderBy(sortBy, sortOrder) {
+	const dir = sortOrder === 'desc' ? 'desc' : 'asc';
+	if (sortBy === 'displayId') return { displayId: dir };
+	if (sortBy === 'name') return { name: dir };
+	return { createdAt: dir };
+}
+
+async function getAll({ page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = {}) {
+	const skip = (page - 1) * limit;
+	const orderBy = suiteOrderBy(sortBy, sortOrder);
+	const [suites, total] = await Promise.all([
+		prisma.testSuite.findMany({ select: suiteSelect, orderBy, skip, take: limit }),
+		prisma.testSuite.count()
+	]);
+	return { suites, total };
+}
+
+async function search(q) {
+	const [suites, cases] = await Promise.all([
+		prisma.testSuite.findMany({
+			where: {
+				OR: [
+					{ displayId: { contains: q, mode: 'insensitive' } },
+					{ name: { contains: q, mode: 'insensitive' } }
+				]
+			},
+			select: suiteSelect,
+			orderBy: { createdAt: 'asc' }
+		}),
+		prisma.testCase.findMany({
+			where: {
+				OR: [
+					{ displayId: { contains: q, mode: 'insensitive' } },
+					{ title: { contains: q, mode: 'insensitive' } }
+				]
+			},
+			select: {
+				id: true,
+				displayId: true,
+				title: true,
+				priority: true,
+				isAutomated: true,
+				suite: { select: { id: true, displayId: true, name: true } }
+			},
+			orderBy: { createdAt: 'asc' }
+		})
+	]);
+	return { suites, cases };
 }
 
 async function getAllWithCases() {
@@ -133,4 +179,13 @@ async function migratePrefix(newPrefix) {
 	return project;
 }
 
-module.exports = { getAll, getAllWithCases, getById, create, update, remove, migratePrefix };
+module.exports = {
+	getAll,
+	search,
+	getAllWithCases,
+	getById,
+	create,
+	update,
+	remove,
+	migratePrefix
+};
