@@ -34,6 +34,15 @@ router.get('/ping', authGuard, (req, res) => {
 	res.json({ ok: true, mode: process.env.PLUM_MODE || 'server' });
 });
 
+// Graceful shutdown for node-mode processes (no-op on the primary server)
+router.post('/shutdown', authGuard, (req, res) => {
+	if (process.env.PLUM_MODE !== 'node') {
+		return res.status(403).json({ error: 'Not a node runner' });
+	}
+	res.json({ ok: true });
+	setTimeout(() => process.exit(0), 200);
+});
+
 // Start a remote test job
 router.post('/execute', authGuard, (req, res) => {
 	const { tags, browser = 'chromium', workers = 1, tests = null } = req.body;

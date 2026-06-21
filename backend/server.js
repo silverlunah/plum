@@ -53,7 +53,28 @@ async function start() {
 
 	server.listen(port, async () => {
 		console.log(`Backend running on port ${port}${isNodeMode ? ' (node/runner mode)' : ''}`);
-		if (isNodeMode) return; // nodes don't watch files or schedule jobs
+		if (isNodeMode) {
+			// Self-register PID so manage-runners can track and stop this process.
+			const runnerId = process.env.RUNNER_ID;
+			if (runnerId) {
+				const { loadRegistry, saveRegistry } = require('./lib/runnerProcess');
+				const registry = loadRegistry();
+				registry[runnerId] = { pid: process.pid, port: String(port), startedAt: Date.now() };
+				saveRegistry(registry);
+
+				const cleanup = () => {
+					try {
+						const reg = loadRegistry();
+						delete reg[runnerId];
+						saveRegistry(reg);
+					} catch {}
+				};
+				process.once('SIGTERM', cleanup);
+				process.once('SIGINT', cleanup);
+				process.once('exit', cleanup);
+			}
+			return;
+		}
 
 		// chokidar v5+ is ESM-only — use dynamic import to stay compatible with CJS
 		let chokidar;
