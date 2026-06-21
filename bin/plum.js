@@ -324,7 +324,7 @@ async function serverStart() {
 }
 
 async function serverRestart() {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Restart  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Server Restart  ')));
 	const { loadServerConfig } = serverConfigLib();
 	const cfg = loadServerConfig(process.cwd());
 	applyServerConfig(cfg);
@@ -349,7 +349,7 @@ async function serverRestart() {
 	s.stop(ready ? pc.green('✓ Server is ready') : pc.yellow('Server may still be starting'));
 	clack.log.info(`UI:  ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
 	clack.log.info(`API: ${pc.cyan(`http://localhost:${cfg.backendPort}`)}`);
-	clack.outro(pc.green('Plum restarted.'));
+	clack.outro(pc.green('Server restarted.'));
 }
 
 async function serverUpdate() {
@@ -357,8 +357,33 @@ async function serverUpdate() {
 	clack.log.step('Fetching latest Plum version…');
 	execSync('npm install -g plum-e2e@latest', { stdio: 'inherit' });
 	clack.log.success('Plum CLI updated.');
-	clack.log.step('Rebuilding server with new version…');
-	await serverRestart();
+
+	const serverCfgPath = path.join(process.cwd(), '.plum-server.json');
+	const hasServerCfg = fs.existsSync(serverCfgPath);
+
+	const { loadNodeConfig } = nodeRegisterLib();
+	const { loadRegistry, isAlive } = runnerProcessLib();
+	const nodeCfg = loadNodeConfig(process.cwd());
+	const registry = loadRegistry();
+	const nodeRunning = !!(
+		nodeCfg.id &&
+		registry[String(nodeCfg.id)]?.pid &&
+		isAlive(registry[String(nodeCfg.id)].pid)
+	);
+
+	if (hasServerCfg) {
+		clack.log.step('Rebuilding server with new version…');
+		await serverRestart();
+	}
+
+	if (nodeRunning) {
+		clack.log.step('Restarting node runner with new version…');
+		await nodeRestart();
+	}
+
+	if (!hasServerCfg && !nodeRunning) {
+		clack.outro(pc.green('Plum updated. Run `plum server start` or `plum node start` to launch.'));
+	}
 }
 
 async function serverReconfig() {
@@ -526,6 +551,46 @@ async function nodeStart({ reconfig }) {
 
 	await openManageRunnersMenu(cfg.primary);
 	clack.outro(`Manage runners anytime: ${pc.cyan('plum manage-runners')}`);
+}
+
+async function nodeRestart() {
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Restart  ')));
+	const { loadNodeConfig } = nodeRegisterLib();
+	const { prepareEnv, stopNode, startNode } = runnerProcessLib();
+	const cfg = loadNodeConfig(process.cwd());
+
+	if (!cfg.id) {
+		clack.log.warn('No node configured in this folder — run `plum node start` first.');
+		clack.outro(pc.dim('Done.'));
+		return;
+	}
+
+	const stopped = stopNode(String(cfg.id));
+	if (stopped) {
+		clack.log.success(`Stopped runner "${cfg.name ?? cfg.id}".`);
+	} else {
+		clack.log.info('Node was not running — starting fresh.');
+	}
+
+	clack.log.step('Refreshing dependencies…');
+	try {
+		prepareEnv();
+	} catch (e) {
+		clack.log.warn(`Dependency refresh failed: ${e.message}`);
+	}
+
+	try {
+		const entry = startNode({ id: String(cfg.id), port: cfg.port, token: cfg.token });
+		clack.log.success(
+			pc.green(
+				`Node "${cfg.name}" restarted (pid ${entry.pid}) — logs at backend/logs/runner-${cfg.id}.log`
+			)
+		);
+	} catch (e) {
+		clack.log.warn(`Could not restart node: ${e.message}`);
+	}
+
+	clack.outro(pc.green('Node restarted.'));
 }
 
 async function nodeReconfig() {
@@ -809,11 +874,17 @@ switch (command) {
 	// intentional fall-through
 
 	case 'start':
-		await serverStart();
+		console.log(
+			`\nSpecify what to start:\n  ${pc.cyan('plum server start')}   — start the web UI stack (Docker)\n  ${pc.cyan('plum node start')}     — start a runner node\n`
+		);
+		process.exit(1);
 		break;
 
 	case 'restart':
-		await serverRestart();
+		console.log(
+			`\nSpecify what to restart:\n  ${pc.cyan('plum server restart')}  — rebuild and restart the server\n  ${pc.cyan('plum node restart')}    — restart the runner node\n`
+		);
+		process.exit(1);
 		break;
 
 	case 'update':
@@ -894,14 +965,10 @@ switch (command) {
 	}
 
 	case 'stop':
-		console.log('--------------------------------------\n');
-		console.log('🛑 Stopping Plum...');
-		execSync('docker compose down', {
-			cwd: plumRoot,
-			stdio: 'inherit'
-		});
-		console.log('✅ Plum stopped. Your data is preserved in the database volume.\n');
-		console.log('--------------------------------------\n');
+		console.log(
+			`\nSpecify what to stop:\n  ${pc.cyan('plum server stop')}    — stop the web UI stack\n  ${pc.cyan('plum node stop')}      — stop the runner node\n`
+		);
+		process.exit(1);
 		break;
 
 	case 'node': {
@@ -939,6 +1006,11 @@ switch (command) {
 				clack.log.info(`Use ${pc.cyan('plum manage-runners')} to stop running nodes.`);
 			}
 			clack.outro(pc.dim('Done.'));
+			break;
+		}
+
+		if (subcommand === 'restart') {
+			await nodeRestart();
 			break;
 		}
 
@@ -1006,16 +1078,16 @@ switch (command) {
 		console.log('--------------------------------------\n');
 		console.log('Usage: plum <command>\n');
 		console.log('  init                 Set up a new Plum project');
-		console.log('  server start         Start the full UI stack (interactive; alias: plum start)');
+		console.log('  server start         Start the full UI stack (interactive)');
 		console.log('    --headless <bool>  Run browsers headless (true/false)');
 		console.log('    --backend-port <n> Host port for the backend/API (default: 3001)');
 		console.log('    --frontend-port <n> Host port for the UI (default: 5173)');
+		console.log('  server restart       Rebuild Docker images and restart the server (no prompts)');
+		console.log('  server stop          Stop the server (data preserved)');
 		console.log('  server reconfig      Re-enter server settings without starting');
 		console.log(
-			'  server restart       Rebuild and restart the server (no prompts; alias: plum restart)'
+			'  update               Update Plum and restart whichever is running (server/node)'
 		);
-		console.log('  server stop          Stop the server  (alias: plum stop)');
-		console.log('  update               Update Plum to the latest version and restart the server');
 		console.log('  node start           Start a runner node (interactive), then open runner menu');
 		console.log('    --primary <url>    Primary Plum server to auto-register with');
 		console.log('    --url <url>        Address the primary calls back (default: <lan-ip>:<port>;');
@@ -1026,6 +1098,7 @@ switch (command) {
 		console.log('    --token <secret>   Auth token (auto-generated + saved if omitted)');
 		console.log('    --name <name>      Runner name shown on the primary (default: node-<rand>)');
 		console.log('    --browser <name>   chromium | firefox (default: chromium)');
+		console.log('  node restart         Stop, refresh deps, and restart the node runner');
 		console.log('  node reconfig        Re-enter node settings + re-register, without starting');
 		console.log('  node stop            Stop the runner node started from this folder');
 		console.log('  manage-runners       Open the runner management menu');

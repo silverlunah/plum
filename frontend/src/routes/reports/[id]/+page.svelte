@@ -181,27 +181,14 @@
 				</div>
 
 				<div>
-					{#if isScheduled(detail.triggerType)}
-						<p class="report-task-name">
-							<svg
-								width="11"
-								height="11"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<rect x="3" y="4" width="18" height="18" rx="2" />
-								<line x1="16" y1="2" x2="16" y2="6" />
-								<line x1="8" y1="2" x2="8" y2="6" />
-								<line x1="3" y1="10" x2="21" y2="10" />
-							</svg>
-							{detail.triggerType}
-						</p>
-					{/if}
-					<h1>{overallPass ? 'Passed' : 'Failed'}</h1>
+					<div class="h1-row">
+						<h1>{overallPass ? 'Passed' : 'Failed'}</h1>
+						{#if detail.testRun?.title}
+							<span class="run-name-badge">{detail.testRun.title}</span>
+						{:else if isScheduled(detail.triggerType)}
+							<span class="run-name-badge">{detail.triggerType}</span>
+						{/if}
+					</div>
 					<div class="header-meta">
 						<span class="mono">{detail.tags}</span>
 						<span class="meta-sep">·</span>
@@ -524,21 +511,32 @@
 		color: var(--fail);
 	}
 
-	.report-task-name {
+	.h1-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 0.2rem;
+	}
+
+	.run-name-badge {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.35rem;
-		font-size: 0.7rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.1em;
-		color: var(--warn);
-		margin-bottom: 0.35rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--accent);
+		background: var(--accent-soft);
+		border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+		border-radius: 100px;
+		padding: 0.25rem 0.7rem;
+		white-space: nowrap;
+		max-width: 240px;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	h1 {
 		font-size: 2rem;
-		margin-bottom: 0.2rem;
+		margin-bottom: 0;
 	}
 
 	.header-meta {

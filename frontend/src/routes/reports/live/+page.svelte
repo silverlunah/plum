@@ -166,6 +166,10 @@
 
 			{#if state.currentRun}
 				<div class="run-info">
+					{#if state.currentRun.runTitle}
+						<span class="run-title-label">{state.currentRun.runTitle}</span>
+						<span class="run-sep">·</span>
+					{/if}
 					<span class="run-tag-label">{state.currentRun.tag || 'all tests'}</span>
 					<span class="run-sep">·</span>
 					<span class="run-detail"
@@ -461,6 +465,17 @@
 		align-items: center;
 		gap: 0.35rem;
 		flex-wrap: wrap;
+	}
+
+	.run-title-label {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--accent);
+		background: var(--accent-soft);
+		border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+		border-radius: 100px;
+		padding: 0.15rem 0.6rem;
+		white-space: nowrap;
 	}
 
 	.run-tag-label {

@@ -139,9 +139,26 @@ function statusOf(id, registry = loadRegistry()) {
  */
 function prepareEnv() {
 	const stdio = ['ignore', 'inherit', 'inherit'];
-	if (!fs.existsSync(path.join(BACKEND_DIR, 'node_modules'))) {
+
+	// Re-run npm install when node_modules is missing OR when the plum package
+	// version has changed (npm install -g wipes node_modules on upgrade).
+	const markerPath = path.join(BACKEND_DIR, 'node_modules', '.plum-version');
+	let installedVersion = null;
+	try {
+		installedVersion = fs.readFileSync(markerPath, 'utf8').trim();
+	} catch {}
+	const currentVersion = JSON.parse(
+		fs.readFileSync(path.join(BACKEND_DIR, '..', 'package.json'), 'utf8')
+	).version;
+
+	if (
+		!fs.existsSync(path.join(BACKEND_DIR, 'node_modules')) ||
+		installedVersion !== currentVersion
+	) {
 		execSync('npm install', { cwd: BACKEND_DIR, stdio, shell: true });
+		fs.writeFileSync(markerPath, currentVersion, 'utf8');
 	}
+
 	execSync('npx playwright install chromium firefox', { cwd: BACKEND_DIR, stdio, shell: true });
 }
 
