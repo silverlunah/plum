@@ -532,6 +532,7 @@
 		max-width: 240px;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		margin-top: 3px;
 	}
 
 	h1 {
