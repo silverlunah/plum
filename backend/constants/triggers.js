@@ -23,7 +23,8 @@
  */
 const TRIGGER_TYPE = Object.freeze({
 	MANUAL: 'manual-trigger',
-	CLI: 'command-line-trigger'
+	CLI: 'command-line-trigger',
+	MCP: 'mcp-trigger'
 });
 
 /**
@@ -43,6 +44,7 @@ const BUILT_IN_RUNNER_ID = 'built-in';
 const NON_SCHEDULED_TRIGGERS = new Set([
 	TRIGGER_TYPE.MANUAL,
 	TRIGGER_TYPE.CLI,
+	TRIGGER_TYPE.MCP,
 	TRIGGER_REMOTE,
 	'undefined'
 ]);

@@ -28,30 +28,38 @@
 
 	const PUBLIC_ROUTES = ['/login', '/setup'];
 
-	let ready = true;
+	let ready = false;
 
 	onMount(async () => {
 		const pathname = $page.url.pathname;
-		if (PUBLIC_ROUTES.includes(pathname)) return;
+		if (PUBLIC_ROUTES.includes(pathname)) {
+			ready = true;
+			return;
+		}
 
 		const token = $auth.token;
-		if (!token) {
-			try {
-				const needsSetup = await checkNeedsSetup();
-				goto(needsSetup ? '/setup' : '/login');
-			} catch {
-				goto('/login');
-			}
+		if (token) {
+			ready = true;
+			return;
+		}
+
+		try {
+			const needsSetup = await checkNeedsSetup();
+			goto(needsSetup ? '/setup' : '/login');
+		} catch {
+			goto('/login');
 		}
 	});
 </script>
 
-{#if $page.url.pathname === '/login' || $page.url.pathname === '/setup'}
-	<slot />
-{:else}
-	<Nav />
-	<PageShell>
+{#if ready}
+	{#if $page.url.pathname === '/login' || $page.url.pathname === '/setup'}
 		<slot />
-	</PageShell>
-	<RunnerPanel />
+	{:else}
+		<Nav />
+		<PageShell>
+			<slot />
+		</PageShell>
+		<RunnerPanel />
+	{/if}
 {/if}

@@ -935,6 +935,19 @@ switch (command) {
 		break;
 	}
 
+	case 'mcp': {
+		const mcpScript = path.join(plumRoot, 'backend', 'mcp', 'server.js');
+		spawn(process.execPath, [mcpScript], {
+			stdio: 'inherit',
+			env: {
+				...process.env,
+				PLUM_API_URL: process.env.PLUM_API_URL || 'http://localhost:3001',
+				PLUM_API_KEY: process.env.PLUM_API_KEY || ''
+			}
+		});
+		break;
+	}
+
 	default:
 		console.log('--------------------------------------\n');
 		console.log('Usage: plum <command>\n');
@@ -967,5 +980,6 @@ switch (command) {
 		console.log('    --browser <name>   chromium | firefox (default: chromium)');
 		console.log('  create-step          Interactively scaffold a new step definition');
 		console.log('  create-test          Scaffold a new .feature + Page.ts + Steps.ts');
+		console.log('  mcp                  Start the Plum MCP server (stdio) for Claude integration');
 		console.log('\n--------------------------------------\n');
 }

@@ -54,6 +54,14 @@ async function start() {
 	if (cronService) await cronService.init();
 	if (backupCronService) await backupCronService.init();
 
+	if (!isNodeMode && !process.env.PLUM_MCP_KEY) {
+		try {
+			const settingsService = require('./services/settingsService');
+			const { mcpKey } = await settingsService.getMcpConfig();
+			if (mcpKey) process.env.PLUM_MCP_KEY = mcpKey;
+		} catch {}
+	}
+
 	server.listen(port, async () => {
 		console.log(`Backend running on port ${port}${isNodeMode ? ' (node/runner mode)' : ''}`);
 		if (isNodeMode) {

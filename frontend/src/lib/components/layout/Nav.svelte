@@ -20,7 +20,6 @@
 	import { slide } from 'svelte/transition';
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
-	import { goto } from '$app/navigation';
 	import { fetchProject } from '$lib/api/settings';
 
 	let menuOpen = false;

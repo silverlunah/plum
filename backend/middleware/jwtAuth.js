@@ -16,9 +16,27 @@
  */
 
 const { verifyToken } = require('../services/userService');
+const prisma = require('../services/prisma');
 
 function jwtAuth(req, res, next) {
 	const auth = req.headers.authorization;
+
+	// MCP API key — resolves to the first admin user so createdById is always valid
+	const mcpKey = process.env.PLUM_MCP_KEY;
+	if (mcpKey && auth === `ApiKey ${mcpKey}`) {
+		prisma.user
+			.findFirst({ where: { role: 'admin' }, select: { id: true } })
+			.then((admin) => {
+				req.user = { userId: admin?.id ?? null };
+				next();
+			})
+			.catch(() => {
+				req.user = { userId: null };
+				next();
+			});
+		return;
+	}
+
 	if (!auth || !auth.startsWith('Bearer ')) {
 		return res.status(401).json({ error: 'Unauthorized' });
 	}
