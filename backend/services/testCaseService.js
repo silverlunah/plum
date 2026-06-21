@@ -15,7 +15,23 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
+const fs = require('fs');
+const path = require('path');
 const prisma = require('./prisma');
+
+const FEATURES_DIR = path.join(__dirname, '../tests/features');
+
+function isTaggedInFeatures(displayId) {
+	try {
+		const tag = `@${displayId}`;
+		return fs
+			.readdirSync(FEATURES_DIR)
+			.filter((f) => f.endsWith('.feature'))
+			.some((f) => fs.readFileSync(path.join(FEATURES_DIR, f), 'utf8').includes(tag));
+	} catch {
+		return false;
+	}
+}
 
 const caseSelect = {
 	id: true,
@@ -75,7 +91,8 @@ async function create({ suiteId, title, description, priority, createdById }) {
 			title,
 			description: description ?? '',
 			priority: priority ?? 'Medium',
-			createdById
+			createdById,
+			isAutomated: isTaggedInFeatures(displayId)
 		},
 		select: caseSelect
 	});
