@@ -19,15 +19,15 @@ const settingsService = require('./settingsService');
 
 function countScenarios(content) {
 	try {
+		// DB stores the processed format: { features: [{ scenarios: [{ status: 'passed'|'failed' }] }] }
 		const features = content?.features ?? (Array.isArray(content) ? content : []);
 		let passed = 0;
 		let failed = 0;
 		let total = 0;
 		for (const feature of features) {
-			for (const element of feature.elements ?? []) {
+			for (const scenario of feature.scenarios ?? []) {
 				total++;
-				const allPassed = (element.steps ?? []).every((s) => s.result?.status === 'passed');
-				if (allPassed) passed++;
+				if (scenario.status === 'passed') passed++;
 				else failed++;
 			}
 		}
@@ -51,6 +51,9 @@ function buildDiscordPayload({ jobName, status, counts, browser, tags, reportUrl
 		{ name: 'Browser', value: browser ?? 'chromium', inline: true },
 		{ name: 'Tags', value: tags || '(all tests)', inline: false }
 	];
+	if (reportUrl) {
+		fields.push({ name: 'Report', value: `[View Report](${reportUrl})`, inline: false });
+	}
 
 	const embed = { title: `Plum — ${jobName}`, color, fields, timestamp: new Date().toISOString() };
 	if (reportUrl) embed.url = reportUrl;
