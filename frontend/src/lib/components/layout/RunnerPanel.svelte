@@ -198,6 +198,13 @@
 
 	$: state = $runnerState;
 	$: cfg = $runnerConfig;
+
+	$: truncatedRunTag = (() => {
+		if (!state.currentRun?.tag) return 'all tests';
+		const parts = state.currentRun.tag.split(/ or /i);
+		if (parts.length <= 5) return state.currentRun.tag;
+		return parts.slice(0, 5).join(' or ') + ` +${parts.length - 5} more`;
+	})();
 	$: cronJobs = Object.keys($activeCronJobs);
 	$: anyCronRunning = cronJobs.length > 0;
 	$: anyRunning = state.running || anyCronRunning;
@@ -263,7 +270,7 @@
 		if (selectedRun) {
 			if (selectedRunLoading || !selectedRun.tags) return;
 			if (selectedRun.tags.length === 0) return;
-			triggerRun(selectedRun.tags.join(' or '), selectedRun.id, notify);
+			triggerRun(selectedRun.tags.join(' or '), selectedRun.id, notify, selectedRun.title);
 		} else if ($runnerConfig.testID.trim() === '') {
 			runAllModalOpen = true;
 		} else {
@@ -682,10 +689,10 @@
 				<a href="/reports/live" class="run-card active-run">
 					<span class="run-card-dot pulse-accent"></span>
 					<div class="run-card-info">
-						<span class="run-card-label">Manual run</span>
+						<span class="run-card-label">{state.currentRun?.runTitle || 'Manual run'}</span>
 						{#if state.currentRun}
 							<span class="run-card-meta">
-								{state.currentRun.tag || 'all tests'}
+								{truncatedRunTag}
 								<span class="meta-dot">·</span>
 								{state.currentRun.workers}w
 								<span class="meta-dot">·</span>
