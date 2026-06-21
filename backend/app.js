@@ -47,4 +47,11 @@ if (process.env.PLUM_MODE !== 'node') {
 	app.use('/trigger', require('./routes/trigger.routes'));
 }
 
+// Global JSON error handler — Express's default sends HTML, which breaks JSON clients
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+	console.error(err);
+	res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+});
+
 module.exports = app;
