@@ -133,7 +133,6 @@ async function send({
 		return;
 	}
 
-	console.log(`[notify] publicUrl="${notifyPublicUrl}" reportId=${reportId}`);
 	const reportUrl =
 		notifyPublicUrl && reportId
 			? `${notifyPublicUrl.replace(/\/$/, '')}/reports/${reportId}`
