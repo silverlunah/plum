@@ -5,7 +5,7 @@
 		"type": "git",
 		"url": "https://github.com/silverlunah/plum.git"
 	},
-	"description": "A detached test automation environment that combines Playwright and Cucumber with a Svelte frontend and an Express backend. It allows users to trigger tests, monitor reports, and schedule test runs through an intuitive UI.",
+	"description": "A ready-to-use E2E test automation environment built on Playwright + Cucumber. Write tests in Gherkin, run them from the CLI or UI, view reports, schedule jobs, manage your entire test case repository, and get notified on Discord or Slack — all in one place.",
 	"main": "index.js",
 	"scripts": {
 		"init": "npm install && npm --prefix backend install && npm --prefix backend run init && npm --prefix frontend install && node bin/scaffold-tests.js",

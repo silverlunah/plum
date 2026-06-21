@@ -8,7 +8,8 @@
 		"create-env": "node services/envService.js",
 		"test": "node config/scripts/run-tests.js",
 		"manage-runners": "node scripts/manage-runners.mjs",
-		"create-test": "node scripts/create-test.js"
+		"create-test": "node scripts/create-test.js",
+		"mcp": "node mcp/server.js"
 	},
 	"keywords": [],
 	"author": "",
@@ -25,6 +26,7 @@
 		"@aws-sdk/client-s3": "^3.840.0",
 		"@clack/prompts": "^1.5.1",
 		"@cucumber/cucumber": "^11.2.0",
+		"@modelcontextprotocol/sdk": "^1.29.0",
 		"@prisma/client": "^6.19.3",
 		"bcryptjs": "^2.4.3",
 		"chai": "^4.3.6",
