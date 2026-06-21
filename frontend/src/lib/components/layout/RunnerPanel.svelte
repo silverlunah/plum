@@ -714,14 +714,30 @@
 			{/if}
 
 			{#each cronJobs as name}
-				<div class="run-card cron-run" transition:fly={{ x: -4, duration: 160 }}>
+				<a
+					href="/scheduled-tests"
+					class="run-card cron-run"
+					transition:fly={{ x: -4, duration: 160 }}
+				>
 					<span class="run-card-dot pulse-pass"></span>
 					<div class="run-card-info">
 						<span class="run-card-label">{name}</span>
 						<span class="run-card-meta">Scheduled run</span>
 					</div>
 					<span class="run-card-badge cron-badge">Scheduled</span>
-				</div>
+					<svg
+						width="13"
+						height="13"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						class="run-card-arrow"
+					>
+						<line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+					</svg>
+				</a>
 			{/each}
 
 			{#if !anyRunning}

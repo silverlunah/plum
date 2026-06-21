@@ -57,10 +57,10 @@ function resolveNodeUrl(url) {
 		const u = new URL(url);
 		if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
 			u.hostname = 'host.docker.internal';
-			return u.toString();
 		}
+		return u.toString().replace(/\/+$/, '');
 	} catch {}
-	return url;
+	return url.replace(/\/+$/, '');
 }
 
 async function fetchRunners() {
