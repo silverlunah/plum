@@ -55,7 +55,7 @@ function buildDiscordPayload({ jobName, status, counts, browser, tags, reportUrl
 		fields.push({ name: 'Report', value: `[View Report](${reportUrl})`, inline: false });
 	}
 
-	const embed = { title: `Plum — ${jobName}`, color, fields, timestamp: new Date().toISOString() };
+	const embed = { title: jobName, color, fields, timestamp: new Date().toISOString() };
 	if (reportUrl) embed.url = reportUrl;
 	return { embeds: [embed] };
 }
