@@ -870,8 +870,8 @@ switch (command) {
 			await serverUpdate();
 			break;
 		}
-	// fall through to start for 'plum server start' or 'plum server'
-	// intentional fall-through
+		await serverStart();
+		break;
 
 	case 'start':
 		console.log(
