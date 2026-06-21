@@ -64,6 +64,16 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
 	try {
+		const runner = await runnerService.getById(req.params.id);
+		if (runner) {
+			try {
+				await fetch(`${runner.url}/api/shutdown`, {
+					method: 'POST',
+					headers: { Authorization: `Bearer ${runner.token}` },
+					signal: AbortSignal.timeout(3000)
+				});
+			} catch {}
+		}
 		await runnerService.remove(req.params.id);
 		res.json({ message: 'Runner deleted' });
 	} catch (e) {

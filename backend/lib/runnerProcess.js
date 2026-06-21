@@ -49,6 +49,34 @@ function saveRegistry(registry) {
 	fs.writeFileSync(REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
 }
 
+/**
+ * Returns the PID of the process listening on the given TCP port, or null.
+ * Uses lsof on macOS/Linux and netstat on Windows.
+ */
+function findPidOnPort(port) {
+	const portStr = String(port);
+	try {
+		if (process.platform === 'win32') {
+			const out = execSync('netstat -ano', { encoding: 'utf8' });
+			for (const line of out.split('\n')) {
+				const upper = line.toUpperCase();
+				if (upper.includes(`:${portStr}`) && upper.includes('LISTENING')) {
+					const parts = line.trim().split(/\s+/);
+					const pid = parseInt(parts[parts.length - 1], 10);
+					if (!isNaN(pid) && pid > 0) return pid;
+				}
+			}
+		} else {
+			const out = execSync(`lsof -i :${portStr} -t -sTCP:LISTEN`, { encoding: 'utf8' }).trim();
+			if (out) {
+				const pid = parseInt(out.split('\n')[0].trim(), 10);
+				if (!isNaN(pid) && pid > 0) return pid;
+			}
+		}
+	} catch {}
+	return null;
+}
+
 // Signal 0 performs the OS-level permission/existence check without actually
 // delivering a signal — the portable way to ask "is this pid alive?".
 function isAlive(pid) {
@@ -128,7 +156,13 @@ function startNode({ id, port, token }) {
 
 	const child = spawn(process.execPath, [SERVER_PATH], {
 		cwd: BACKEND_DIR,
-		env: { ...process.env, NODE_TOKEN: token, PLUM_MODE: 'node', PORT: String(port) },
+		env: {
+			...process.env,
+			NODE_TOKEN: token,
+			PLUM_MODE: 'node',
+			PORT: String(port),
+			RUNNER_ID: String(id)
+		},
 		detached: true,
 		stdio: ['ignore', out, out],
 		windowsHide: true
@@ -146,14 +180,25 @@ function startNode({ id, port, token }) {
 /**
  * Stops the managed process for a runner. Returns true if a live process was
  * signalled, false if nothing was running.
+ *
+ * Falls back to port-based PID discovery when the registry entry is missing or
+ * its PID is stale, using the port stored in the entry or an explicit fallback.
  */
-function stopNode(id) {
+function stopNode(id, fallbackPort = null) {
 	const registry = loadRegistry();
 	const entry = registry[id];
 	let signalled = false;
-	if (entry?.pid && isAlive(entry.pid)) {
+
+	let pid = entry?.pid && isAlive(entry.pid) ? entry.pid : null;
+
+	if (!pid) {
+		const port = fallbackPort ?? (entry?.port ? Number(entry.port) : null);
+		if (port) pid = findPidOnPort(port);
+	}
+
+	if (pid) {
 		try {
-			process.kill(entry.pid, 'SIGTERM');
+			process.kill(pid, 'SIGTERM');
 			signalled = true;
 		} catch {}
 	}
@@ -171,6 +216,7 @@ module.exports = {
 	isAlive,
 	isLocalUrl,
 	parsePort,
+	findPidOnPort,
 	pruneDead,
 	statusOf,
 	prepareEnv,

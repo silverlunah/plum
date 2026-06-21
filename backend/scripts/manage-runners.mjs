@@ -32,8 +32,16 @@ import pc from 'picocolors';
 import runnerProcess from '../lib/runnerProcess.js';
 import nodeRegister from '../lib/nodeRegister.js';
 
-const { isLocalUrl, parsePort, pruneDead, statusOf, prepareEnv, startNode, stopNode } =
-	runnerProcess;
+const {
+	isLocalUrl,
+	parsePort,
+	pruneDead,
+	statusOf,
+	prepareEnv,
+	startNode,
+	stopNode,
+	findPidOnPort
+} = runnerProcess;
 const { generateToken, registerWithPrimary } = nodeRegister;
 
 const API_URL = process.env.PLUM_API_URL || 'http://localhost:3001';
@@ -68,6 +76,9 @@ async function deleteRunner(id) {
 /**
  * Resolves the display + control state for every runner: reachability (ping),
  * whether we own a live process for it, and whether we can control it at all.
+ *
+ * Local runners that are online but absent from the registry are automatically
+ * reclaimed by scanning their port for a running process.
  */
 async function describeRunners() {
 	const runners = await fetchRunners();
@@ -77,7 +88,19 @@ async function describeRunners() {
 		runners.map(async (r) => {
 			const online = await pingRunner(r.id);
 			const local = isLocalUrl(r.url);
-			const managed = statusOf(r.id) === 'running';
+			let managed = statusOf(r.id) === 'running';
+
+			if (local && online && !managed) {
+				const port = Number(parsePort(r.url));
+				const pid = findPidOnPort(port);
+				if (pid) {
+					const registry = runnerProcess.loadRegistry();
+					registry[r.id] = { pid, port: String(port), startedAt: Date.now() };
+					runnerProcess.saveRegistry(registry);
+					managed = true;
+				}
+			}
+
 			let state;
 			if (managed) state = 'managed';
 			else if (online) state = 'unmanaged';
@@ -181,7 +204,7 @@ async function runAction(r) {
 		if (cancelled(confirmed) || !confirmed) return;
 		const s = clack.spinner();
 		s.start(`Deleting "${r.name}"...`);
-		if (r.managed) stopNode(r.id);
+		if (r.local) stopNode(r.id, Number(parsePort(r.url)));
 		try {
 			await deleteRunner(r.id);
 			s.stop(pc.green(`Deleted "${r.name}"`));
@@ -194,7 +217,11 @@ async function runAction(r) {
 async function addRunner() {
 	const suggested = `node-${generateToken().slice(0, 6)}`;
 
-	const name = await clack.text({ message: 'Runner name', placeholder: suggested, defaultValue: suggested });
+	const name = await clack.text({
+		message: 'Runner name',
+		placeholder: suggested,
+		defaultValue: suggested
+	});
 	if (cancelled(name)) return;
 
 	const port = await clack.text({
@@ -205,7 +232,11 @@ async function addRunner() {
 	if (cancelled(port)) return;
 
 	const defToken = process.env.NODE_TOKEN || generateToken();
-	const token = await clack.text({ message: 'Auth token', placeholder: defToken, defaultValue: defToken });
+	const token = await clack.text({
+		message: 'Auth token',
+		placeholder: defToken,
+		defaultValue: defToken
+	});
 	if (cancelled(token)) return;
 
 	// Dev nodes run as a bare process on the host; the dockerized primary reaches
@@ -216,9 +247,19 @@ async function addRunner() {
 	s.start(`Registering "${name}" with the primary...`);
 	let id;
 	try {
-		const res = await registerWithPrimary({ primary: API_URL, name, url, token, browser: 'chromium' });
+		const res = await registerWithPrimary({
+			primary: API_URL,
+			name,
+			url,
+			token,
+			browser: 'chromium'
+		});
 		id = res.id;
-		s.stop(res.reused ? pc.green(`Reusing existing runner "${name}"`) : pc.green(`Registered "${name}" (id ${id})`));
+		s.stop(
+			res.reused
+				? pc.green(`Reusing existing runner "${name}"`)
+				: pc.green(`Registered "${name}" (id ${id})`)
+		);
 	} catch (e) {
 		s.stop(pc.red(`Could not register "${name}": ${e.message}`));
 		return;
