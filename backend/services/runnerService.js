@@ -25,8 +25,10 @@ const prisma = require('./prisma');
 
 const getAll = () => prisma.runner.findMany({ orderBy: { createdAt: 'asc' } });
 
+const normaliseUrl = (url) => (url ?? '').replace(/\/+$/, '');
+
 const create = ({ name, url, token, browser = 'chromium' }) =>
-	prisma.runner.create({ data: { name, url, token, browser } });
+	prisma.runner.create({ data: { name, url: normaliseUrl(url), token, browser } });
 
 async function remove(id) {
 	// Scrub the deleted runner from any cron job's runnerIds string before
@@ -45,7 +47,11 @@ async function remove(id) {
 	return prisma.runner.delete({ where: { id } });
 }
 
-const update = (id, data) => prisma.runner.update({ where: { id }, data });
+const update = (id, data) =>
+	prisma.runner.update({
+		where: { id },
+		data: { ...data, ...(data.url && { url: normaliseUrl(data.url) }) }
+	});
 
 const getById = (id) => prisma.runner.findUnique({ where: { id } });
 
