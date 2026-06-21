@@ -186,36 +186,18 @@ async function configureServer({ force }) {
 	const cfg = loadServerConfig(cwd);
 
 	const overrides = {
-		baseUrl: getFlag(args, '--base-url'),
 		headless: getFlag(args, '--headless'),
 		backendPort: getFlag(args, '--backend-port'),
-		frontendPort: getFlag(args, '--frontend-port'),
-		primaryPublicUrl: getFlag(args, '--primary-url')
+		frontendPort: getFlag(args, '--frontend-port')
 	};
-	if (overrides.baseUrl !== undefined) cfg.baseUrl = overrides.baseUrl;
 	if (overrides.headless !== undefined) cfg.headless = overrides.headless === 'true';
 	if (overrides.backendPort !== undefined) cfg.backendPort = overrides.backendPort;
 	if (overrides.frontendPort !== undefined) cfg.frontendPort = overrides.frontendPort;
-	if (overrides.primaryPublicUrl !== undefined) cfg.primaryPublicUrl = overrides.primaryPublicUrl;
 
-	const hasFlags = anyFlags(args, [
-		'--base-url',
-		'--headless',
-		'--backend-port',
-		'--frontend-port',
-		'--primary-url'
-	]);
+	const hasFlags = anyFlags(args, ['--headless', '--backend-port', '--frontend-port']);
 	const interactive = force || (interactiveAllowed() && !hasFlags);
 
 	if (interactive) {
-		const baseUrl = await clack.text({
-			message: 'App URL to test (BASE_URL)',
-			placeholder: cfg.baseUrl,
-			defaultValue: cfg.baseUrl
-		});
-		if (clack.isCancel(baseUrl)) cancelAndExit();
-		cfg.baseUrl = baseUrl || cfg.baseUrl;
-
 		const headless = await clack.confirm({
 			message: 'Run browsers headless?',
 			initialValue: cfg.headless
@@ -238,14 +220,6 @@ async function configureServer({ force }) {
 		});
 		if (clack.isCancel(frontendPort)) cancelAndExit();
 		cfg.frontendPort = frontendPort || cfg.frontendPort;
-
-		const primaryPublicUrl = await clack.text({
-			message: 'Primary public URL (share with node operators)',
-			placeholder: cfg.primaryPublicUrl,
-			defaultValue: cfg.primaryPublicUrl
-		});
-		if (clack.isCancel(primaryPublicUrl)) cancelAndExit();
-		cfg.primaryPublicUrl = primaryPublicUrl || cfg.primaryPublicUrl;
 	}
 
 	saveServerConfig(cwd, cfg);
@@ -277,8 +251,7 @@ async function serverStart() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Server  ')));
 	const cfg = await configureServer({ force: false });
 	applyServerConfig(cfg);
-	clack.log.info(`UI:                    ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
-	clack.log.info(`Nodes register against: ${pc.dim(cfg.primaryPublicUrl)}`);
+	clack.log.info(`UI: ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
 
 	execSync('docker compose up --build -d', { cwd: plumRoot, stdio: 'inherit' });
 
@@ -355,9 +328,7 @@ async function serverReconfig() {
 	const cfg = await configureServer({ force: true });
 	applyServerConfig(cfg);
 	clack.log.success("Saved. Run 'plum server start' to apply.");
-	clack.outro(
-		`UI: ${pc.cyan(`http://localhost:${cfg.frontendPort}`)} · Nodes: ${pc.dim(cfg.primaryPublicUrl)}`
-	);
+	clack.outro(`UI: ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
 }
 
 /* -----------------------------------------------------
@@ -413,22 +384,6 @@ async function configureNode({ force }) {
 		});
 		if (clack.isCancel(urlVal)) cancelAndExit();
 		url = urlVal || defaultUrl;
-
-		const nameVal = await clack.text({
-			message: 'Runner name',
-			placeholder: name,
-			defaultValue: name
-		});
-		if (clack.isCancel(nameVal)) cancelAndExit();
-		name = nameVal || name;
-
-		const tokenVal = await clack.text({
-			message: 'Auth token (Enter to keep)',
-			placeholder: token,
-			defaultValue: token
-		});
-		if (clack.isCancel(tokenVal)) cancelAndExit();
-		token = tokenVal || token;
 	}
 
 	if (!url) url = `http://${detectLanIp()}:${port}`;
@@ -985,11 +940,9 @@ switch (command) {
 		console.log('Usage: plum <command>\n');
 		console.log('  init                 Set up a new Plum project');
 		console.log('  server start         Start the full UI stack (interactive; alias: plum start)');
-		console.log('    --base-url <url>   App URL to test (skips the prompt)');
 		console.log('    --headless <bool>  Run browsers headless (true/false)');
 		console.log('    --backend-port <n> Host port for the backend/API (default: 3001)');
 		console.log('    --frontend-port <n> Host port for the UI (default: 5173)');
-		console.log('    --primary-url <url> Public URL node operators point --primary at');
 		console.log('  server reconfig      Re-enter server settings without starting');
 		console.log('  server stop          Stop the server  (alias: plum stop)');
 		console.log('  node start           Start a runner node (interactive), then open runner menu');

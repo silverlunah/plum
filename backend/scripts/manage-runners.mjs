@@ -42,11 +42,26 @@ const {
 	stopNode,
 	findPidOnPort
 } = runnerProcess;
-const { generateToken, registerWithPrimary } = nodeRegister;
+const { generateToken, registerWithPrimary, detectLanIp } = nodeRegister;
 
 const API_URL = process.env.PLUM_API_URL || 'http://localhost:3001';
 
 const cancelled = (v) => clack.isCancel(v);
+
+/**
+ * When the primary runs in Docker it cannot reach `localhost` on the host —
+ * only substitute when the user explicitly enters localhost/127.0.0.1.
+ */
+function resolveNodeUrl(url) {
+	try {
+		const u = new URL(url);
+		if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
+			u.hostname = 'host.docker.internal';
+			return u.toString();
+		}
+	} catch {}
+	return url;
+}
 
 async function fetchRunners() {
 	const res = await fetch(`${API_URL}/runners`);
@@ -239,9 +254,15 @@ async function addRunner() {
 	});
 	if (cancelled(token)) return;
 
-	// Dev nodes run as a bare process on the host; the dockerized primary reaches
-	// them via host.docker.internal.
-	const url = `http://host.docker.internal:${port}`;
+	const defaultUrl = `http://${detectLanIp()}:${port}`;
+	const urlInput = await clack.text({
+		message: 'URL the Plum server uses to reach this node',
+		placeholder: defaultUrl,
+		defaultValue: defaultUrl
+	});
+	if (cancelled(urlInput)) return;
+
+	const url = resolveNodeUrl(urlInput || defaultUrl);
 
 	const s = clack.spinner();
 	s.start(`Registering "${name}" with the primary...`);

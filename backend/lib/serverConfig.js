@@ -25,18 +25,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const { detectLanIp } = require('./nodeRegister');
 
 const CONFIG_FILENAME = '.plum-server.json';
 
 function defaults() {
-	const backendPort = '3001';
 	return {
-		baseUrl: 'https://www.saucedemo.com/v1/',
 		headless: false,
-		backendPort,
-		frontendPort: '5173',
-		primaryPublicUrl: `http://${detectLanIp()}:${backendPort}`
+		backendPort: '3001',
+		frontendPort: '5173'
 	};
 }
 
@@ -44,13 +40,11 @@ function configPath(dir) {
 	return path.join(dir, CONFIG_FILENAME);
 }
 
-/** Seeds baseUrl/headless from an existing .env so first-run prompts reflect it. */
+/** Seeds headless from an existing .env so the first-run prompt reflects it. */
 function readEnvSeed(dir) {
 	try {
 		const txt = fs.readFileSync(path.join(dir, '.env'), 'utf8');
 		const seed = {};
-		const baseUrl = txt.match(/^BASE_URL=(.*)$/m);
-		if (baseUrl) seed.baseUrl = baseUrl[1].trim();
 		const headless = txt.match(/^IS_HEADLESS=(.*)$/m);
 		if (headless) seed.headless = headless[1].trim() === 'true';
 		return seed;
@@ -69,13 +63,28 @@ function loadServerConfig(dir) {
 }
 
 function saveServerConfig(dir, cfg) {
-	fs.writeFileSync(configPath(dir), JSON.stringify(cfg, null, 2) + '\n', 'utf8');
+	const { headless, backendPort, frontendPort } = cfg;
+	fs.writeFileSync(
+		configPath(dir),
+		JSON.stringify({ headless, backendPort, frontendPort }, null, 2) + '\n',
+		'utf8'
+	);
 }
 
-/** Writes the root .env consumed by the backend/tests from the server config. */
-function writeEnvFile(dir, { baseUrl, headless }) {
-	const content = `BASE_URL=${baseUrl}\nIS_HEADLESS=${headless ? 'true' : 'false'}\n`;
-	fs.writeFileSync(path.join(dir, '.env'), content, 'utf8');
+/** Updates IS_HEADLESS in the root .env, preserving all other entries. */
+function writeEnvFile(dir, { headless }) {
+	const envPath = path.join(dir, '.env');
+	let content = '';
+	try {
+		content = fs.readFileSync(envPath, 'utf8');
+	} catch {}
+	const line = `IS_HEADLESS=${headless ? 'true' : 'false'}`;
+	if (/^IS_HEADLESS=/m.test(content)) {
+		content = content.replace(/^IS_HEADLESS=.*/m, line);
+	} else {
+		content = content.endsWith('\n') ? content + line + '\n' : content + '\n' + line + '\n';
+	}
+	fs.writeFileSync(envPath, content, 'utf8');
 }
 
 /**
