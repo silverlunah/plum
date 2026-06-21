@@ -297,10 +297,12 @@ const saveReport = async ({
 	browser,
 	runnerName,
 	runnerId,
-	testRunId
+	testRunId,
+	forceFail = false
 }) => {
 	const normTrigger = normaliseTrigger(triggerType);
-	const { features, status } = processCucumberJson(rawCucumberJson);
+	const { features, status: derivedStatus } = processCucumberJson(rawCucumberJson);
+	const status = forceFail ? 'FAIL' : derivedStatus;
 	const cronJobId = await resolveCronJobId(normTrigger);
 
 	const report = await prisma.report.create({
@@ -374,7 +376,8 @@ const saveCombinedReport = async ({
 		browser,
 		runnerName: runners.map((r) => r.name).join(', '),
 		runnerId: null,
-		testRunId: testRunId ?? null
+		testRunId: testRunId ?? null,
+		forceFail: reports.some((r) => r === null)
 	});
 };
 

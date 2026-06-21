@@ -61,7 +61,12 @@ async function probe({ url, token }) {
 			headers: { Authorization: `Bearer ${token}` },
 			signal: AbortSignal.timeout(5000)
 		});
-		return { ok: res.ok, latency: Date.now() - start };
+		if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+		const body = await res.json();
+		if (!body.ok || body.mode !== 'node') {
+			return { ok: false, error: 'URL does not point to a Plum runner node' };
+		}
+		return { ok: true, latency: Date.now() - start };
 	} catch (e) {
 		return { ok: false, error: e.message };
 	}
