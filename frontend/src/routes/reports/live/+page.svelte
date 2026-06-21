@@ -19,7 +19,7 @@
 	import { onMount, afterUpdate, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { fly, fade } from 'svelte/transition';
-	import { runnerState, cancelRun } from '$lib/stores/runner';
+	import { runnerState, cancelRun, activeCronJobs } from '$lib/stores/runner';
 	import { reportUrl } from '$lib/api/reports';
 
 	let terminalEl;
@@ -30,6 +30,16 @@
 
 	$: state = $runnerState;
 	$: isMulti = state.lanes.length > 0;
+	$: cronJobs = Object.keys($activeCronJobs);
+	$: anyCronRunning = cronJobs.length > 0;
+
+	let wasAnyCronRunning = false;
+	$: {
+		if (wasAnyCronRunning && !anyCronRunning && !state.running && !state.testCompleted) {
+			goto('/reports');
+		}
+		wasAnyCronRunning = anyCronRunning;
+	}
 
 	// Auto-scroll terminals
 	afterUpdate(() => {
@@ -95,7 +105,7 @@
 	</a>
 </div>
 
-{#if !state.running && !state.testCompleted}
+{#if !state.running && !state.testCompleted && !anyCronRunning}
 	<!-- Nothing running and no completed test -->
 	<div class="idle-state">
 		<div class="idle-icon">
@@ -116,6 +126,20 @@
 		<h2>No tests currently running</h2>
 		<p>Start a test from the panel below, then come back here to watch it live.</p>
 		<a href="/reports" class="idle-link">View past reports →</a>
+	</div>
+{:else if anyCronRunning && !state.running && !state.testCompleted}
+	<!-- Scheduled run(s) in progress -->
+	<div class="cron-running-state">
+		<div class="cron-running-icon">
+			<span class="cron-pulse-dot"></span>
+		</div>
+		<h2>Scheduled {cronJobs.length === 1 ? 'run' : 'runs'} in progress</h2>
+		<div class="cron-task-list">
+			{#each cronJobs as name}
+				<span class="cron-task-chip">{name}</span>
+			{/each}
+		</div>
+		<p>The report will open automatically when the run finishes.</p>
 	</div>
 {:else}
 	<!-- Run header -->
@@ -372,6 +396,70 @@
 
 	.idle-link:hover {
 		text-decoration: underline;
+	}
+
+	/* ── Cron running state ── */
+	.cron-running-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 5rem 1rem;
+		text-align: center;
+		gap: 0.75rem;
+	}
+
+	.cron-running-icon {
+		margin-bottom: 0.5rem;
+	}
+
+	.cron-pulse-dot {
+		display: inline-block;
+		width: 18px;
+		height: 18px;
+		border-radius: 50%;
+		background: var(--pass);
+		animation: pulse-pass 1.4s ease-in-out infinite;
+	}
+
+	@keyframes pulse-pass {
+		0%,
+		100% {
+			opacity: 1;
+			transform: scale(1);
+		}
+		50% {
+			opacity: 0.5;
+			transform: scale(0.8);
+		}
+	}
+
+	.cron-running-state h2 {
+		font-size: 1.5rem;
+		font-weight: 400;
+	}
+
+	.cron-task-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		justify-content: center;
+	}
+
+	.cron-task-chip {
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--accent);
+		background: var(--accent-soft);
+		border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+		border-radius: 100px;
+		padding: 0.2rem 0.65rem;
+	}
+
+	.cron-running-state p {
+		font-size: 0.9375rem;
+		color: var(--text-muted);
+		max-width: 360px;
 	}
 
 	/* ── Run header ── */

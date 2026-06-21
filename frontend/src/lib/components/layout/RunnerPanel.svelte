@@ -721,11 +721,7 @@
 			{/if}
 
 			{#each cronJobs as name}
-				<a
-					href="/scheduled-tests"
-					class="run-card cron-run"
-					transition:fly={{ x: -4, duration: 160 }}
-				>
+				<a href="/reports/live" class="run-card cron-run" transition:fly={{ x: -4, duration: 160 }}>
 					<span class="run-card-dot pulse-pass"></span>
 					<div class="run-card-info">
 						<span class="run-card-label">{name}</span>
