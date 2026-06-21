@@ -70,11 +70,56 @@ const updateWebhooks = async ({ discordWebhookUrl, slackWebhookUrl, notifyPublic
 	});
 };
 
+const getBackupConfig = async () => {
+	const project = await getProject();
+	return {
+		backupEnabled: project.backupEnabled,
+		backupCron: project.backupCron,
+		backupS3Endpoint: project.backupS3Endpoint,
+		backupS3Region: project.backupS3Region,
+		backupS3Bucket: project.backupS3Bucket,
+		backupS3AccessKey: project.backupS3AccessKey,
+		backupS3SecretKeySet: project.backupS3SecretKey.length > 0,
+		backupS3Prefix: project.backupS3Prefix,
+		backupLastRunAt: project.backupLastRunAt,
+		backupLastStatus: project.backupLastStatus
+	};
+};
+
+const updateBackupConfig = async ({
+	backupEnabled,
+	backupCron,
+	backupS3Endpoint,
+	backupS3Region,
+	backupS3Bucket,
+	backupS3AccessKey,
+	backupS3SecretKey,
+	backupS3Prefix
+}) => {
+	const update = {
+		...(backupEnabled !== undefined && { backupEnabled }),
+		...(backupCron !== undefined && { backupCron }),
+		...(backupS3Endpoint !== undefined && { backupS3Endpoint }),
+		...(backupS3Region !== undefined && { backupS3Region }),
+		...(backupS3Bucket !== undefined && { backupS3Bucket }),
+		...(backupS3AccessKey !== undefined && { backupS3AccessKey }),
+		...(backupS3SecretKey && { backupS3SecretKey }),
+		...(backupS3Prefix !== undefined && { backupS3Prefix })
+	};
+	return prisma.project.upsert({
+		where: { id: 1 },
+		create: { id: 1, ...update },
+		update
+	});
+};
+
 module.exports = {
 	getProject,
 	updateProject,
 	getTestPrefixes,
 	updateTestPrefixes,
 	getWebhooks,
-	updateWebhooks
+	updateWebhooks,
+	getBackupConfig,
+	updateBackupConfig
 };
