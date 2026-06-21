@@ -228,9 +228,10 @@
 							{report.status === 'PASS' ? '✓' : '✗'}
 						</span>
 						<div class="item-meta">
-							<span class="item-tags"
-								>{isScheduled(report.triggerType) ? report.triggerType : report.tags}</span
-							>
+							<span class="item-tags">
+								{report.testRun?.title ??
+									(isScheduled(report.triggerType) ? report.triggerType : report.tags)}
+							</span>
 							<div class="item-badges">
 								<Badge variant={triggerVariant(report.triggerType)}>
 									{triggerLabel(report.triggerType)}

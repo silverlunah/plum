@@ -64,6 +64,8 @@ model Report {
   runner      Runner?           @relation(fields: [runnerId], references: [id], onDelete: SetNull)
   cronJobId   Int?
   cronJob     CronJob?          @relation(fields: [cronJobId], references: [id], onDelete: SetNull)
+  testRunId   String?
+  testRun     TestRun?          @relation(fields: [testRunId], references: [id], onDelete: SetNull)
   content     Json
   createdAt   DateTime          @default(now())
   testHistory TestCaseHistory[]
@@ -162,6 +164,7 @@ model TestRun {
   updatedAt   DateTime       @updatedAt
   entries     TestRunEntry[]
   history     TestCaseHistory[]
+  reports     Report[]
 }
 
 model TestRunEntry {
