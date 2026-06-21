@@ -400,12 +400,33 @@ const deleteReports = async (ids) => {
 	await prisma.report.deleteMany({ where: { id: { in: ids } } });
 };
 
+const FEATURES_DIR = path.join(__dirname, '../tests/features');
+
+async function syncAutomatedFromFeatures() {
+	try {
+		if (!fs.existsSync(FEATURES_DIR)) return;
+		const tagSet = new Set();
+		for (const file of fs.readdirSync(FEATURES_DIR).filter((f) => f.endsWith('.feature'))) {
+			const content = fs.readFileSync(path.join(FEATURES_DIR, file), 'utf8');
+			for (const m of content.matchAll(/@(\S+)/g)) tagSet.add(m[1]);
+		}
+		if (tagSet.size === 0) return;
+		await prisma.testCase.updateMany({
+			where: { displayId: { in: [...tagSet] }, isAutomated: false },
+			data: { isAutomated: true }
+		});
+	} catch (e) {
+		console.error('[sync] syncAutomatedFromFeatures failed:', e.message);
+	}
+}
+
 module.exports = {
 	getAllReports,
 	getLatestReportId,
 	getReportDetail,
 	saveReport,
 	saveCombinedReport,
+	syncAutomatedFromFeatures,
 	deleteReport,
 	deleteReports
 };
