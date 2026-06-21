@@ -555,6 +555,12 @@
 		}
 	}
 
+	$: s3Configured = !!(
+		backupConfig.backupS3Bucket &&
+		backupConfig.backupS3AccessKey &&
+		backupS3SecretKeySet
+	);
+
 	$: mcpConfigSnippet = JSON.stringify(
 		{
 			mcpServers: {
@@ -1565,67 +1571,71 @@
 				</div>
 
 				<!-- Scheduled backup -->
-				<div class="card settings-card">
+				<div class="card settings-card" class:card-disabled={!s3Configured}>
 					<p class="card-title">Scheduled Backup</p>
 
-					<div class="field">
-						<label class="field-label backup-toggle-label" for="backup-enabled">
-							<span>Enable scheduled backup</span>
-							<button
-								id="backup-enabled"
-								class="toggle-btn"
-								class:active={backupConfig.backupEnabled}
-								on:click={() => (backupConfig.backupEnabled = !backupConfig.backupEnabled)}
-								role="switch"
-								aria-checked={backupConfig.backupEnabled}
-							>
-								<span class="toggle-thumb"></span>
-							</button>
-						</label>
-					</div>
-
-					<div class="field">
-						<label class="field-label" for="backup-cron">
-							<span>Cron Expression</span>
-							<span class="field-hint">
-								5-field cron — e.g. <code>0 2 * * *</code> = daily at 2 AM.
-								<a href="https://crontab.guru" target="_blank" rel="noopener noreferrer"
-									>Test at crontab.guru ↗</a
+					{#if !s3Configured}
+						<p class="backup-block-desc">Configure S3 storage above to enable scheduled backups.</p>
+					{:else}
+						<div class="field">
+							<label class="field-label backup-toggle-label" for="backup-enabled">
+								<span>Enable scheduled backup</span>
+								<button
+									id="backup-enabled"
+									class="toggle-btn"
+									class:active={backupConfig.backupEnabled}
+									on:click={() => (backupConfig.backupEnabled = !backupConfig.backupEnabled)}
+									role="switch"
+									aria-checked={backupConfig.backupEnabled}
 								>
-							</span>
-						</label>
-						<input
-							id="backup-cron"
-							type="text"
-							class="field-input field-input-mono"
-							bind:value={backupConfig.backupCron}
-							placeholder="0 2 * * *"
-						/>
-					</div>
+									<span class="toggle-thumb"></span>
+								</button>
+							</label>
+						</div>
 
-					{#if backupLastRunAt}
-						<p class="backup-last-run">
-							Last backup: {new Date(backupLastRunAt).toLocaleString()} —
-							{#if backupLastStatus?.startsWith('success:')}
-								<span class="status-success"
-									>uploaded to {backupLastStatus.replace('success:', '')}</span
-								>
-							{:else if backupLastStatus?.startsWith('error:')}
-								<span class="status-error">{backupLastStatus.replace('error:', '')}</span>
-							{:else}
-								<span>{backupLastStatus}</span>
-							{/if}
-						</p>
+						<div class="field">
+							<label class="field-label" for="backup-cron">
+								<span>Cron Expression</span>
+								<span class="field-hint">
+									5-field cron — e.g. <code>0 2 * * *</code> = daily at 2 AM.
+									<a href="https://crontab.guru" target="_blank" rel="noopener noreferrer"
+										>Test at crontab.guru ↗</a
+									>
+								</span>
+							</label>
+							<input
+								id="backup-cron"
+								type="text"
+								class="field-input field-input-mono"
+								bind:value={backupConfig.backupCron}
+								placeholder="0 2 * * *"
+							/>
+						</div>
+
+						{#if backupLastRunAt}
+							<p class="backup-last-run">
+								Last backup: {new Date(backupLastRunAt).toLocaleString()} —
+								{#if backupLastStatus?.startsWith('success:')}
+									<span class="status-success"
+										>uploaded to {backupLastStatus.replace('success:', '')}</span
+									>
+								{:else if backupLastStatus?.startsWith('error:')}
+									<span class="status-error">{backupLastStatus.replace('error:', '')}</span>
+								{:else}
+									<span>{backupLastStatus}</span>
+								{/if}
+							</p>
+						{/if}
+
+						<div class="backup-actions">
+							<Button variant="ghost" on:click={handleRunBackupNow} disabled={backupRunningNow}>
+								{backupRunningNow ? 'Uploading…' : 'Upload to S3 Now'}
+							</Button>
+							<Button on:click={handleSaveBackupConfig} disabled={backupConfigSaving}>
+								{backupConfigSaving ? 'Saving…' : 'Save Schedule'}
+							</Button>
+						</div>
 					{/if}
-
-					<div class="backup-actions">
-						<Button variant="ghost" on:click={handleRunBackupNow} disabled={backupRunningNow}>
-							{backupRunningNow ? 'Uploading…' : 'Upload to S3 Now'}
-						</Button>
-						<Button on:click={handleSaveBackupConfig} disabled={backupConfigSaving}>
-							{backupConfigSaving ? 'Saving…' : 'Save Schedule'}
-						</Button>
-					</div>
 				</div>
 			</div>
 		{/if}
@@ -1954,6 +1964,11 @@
 	.runner-form-actions {
 		display: flex;
 		gap: 0.5rem;
+	}
+
+	.card-disabled {
+		opacity: 0.5;
+		pointer-events: none;
 	}
 
 	/* ── Backup ── */
