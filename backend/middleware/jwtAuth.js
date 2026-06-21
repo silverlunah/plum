@@ -40,12 +40,24 @@ function jwtAuth(req, res, next) {
 	if (!auth || !auth.startsWith('Bearer ')) {
 		return res.status(401).json({ error: 'Unauthorized' });
 	}
+	let payload;
 	try {
-		req.user = verifyToken(auth.slice(7));
-		next();
+		payload = verifyToken(auth.slice(7));
 	} catch {
 		return res.status(401).json({ error: 'Invalid or expired token' });
 	}
+	// Confirm the user still exists — catches stale JWTs after a DB reset
+	prisma.user
+		.findUnique({ where: { id: payload.userId }, select: { id: true } })
+		.then((user) => {
+			if (!user) return res.status(401).json({ error: 'Session expired. Please log in again.' });
+			req.user = payload;
+			next();
+		})
+		.catch(() => {
+			req.user = payload;
+			next();
+		});
 }
 
 module.exports = { jwtAuth };
