@@ -578,16 +578,33 @@
 		2
 	);
 
-	$: navItems = [
-		{ id: 'project', label: 'Project' },
-		{ id: 'runners', label: 'Runners' },
-		{ id: 'repository', label: 'Repository' },
-		{ id: 'integrations', label: 'Integrations' },
-		{ id: 'mcp', label: 'MCP' },
-		{ id: 'account', label: 'Account' },
-		...($auth.user?.role === 'admin' ? [{ id: 'users', label: 'Users' }] : []),
-		{ id: 'backup', label: 'Backup' }
-	];
+	const ADMIN_SECTIONS = new Set([
+		'project',
+		'runners',
+		'repository',
+		'integrations',
+		'mcp',
+		'users',
+		'backup'
+	]);
+
+	$: if ($auth.user && $auth.user.role !== 'admin' && ADMIN_SECTIONS.has(section)) {
+		section = 'account';
+	}
+
+	$: navItems =
+		$auth.user?.role === 'admin'
+			? [
+					{ id: 'project', label: 'Project' },
+					{ id: 'runners', label: 'Runners' },
+					{ id: 'repository', label: 'Repository' },
+					{ id: 'integrations', label: 'Integrations' },
+					{ id: 'mcp', label: 'MCP' },
+					{ id: 'account', label: 'Account' },
+					{ id: 'users', label: 'Users' },
+					{ id: 'backup', label: 'Backup' }
+				]
+			: [{ id: 'account', label: 'Account' }];
 </script>
 
 <svelte:head><title>Settings — Plum</title></svelte:head>
