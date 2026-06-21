@@ -332,8 +332,8 @@
 				<span class="status-dot" class:pulse={state.running} style="background:{statusColor}"
 				></span>
 				<span class="status-word" style="color:{statusColor}">{statusLabel}</span>
-				{#if state.lastRunId}
-					<span class="run-tag">{state.lastRunId || 'all tests'}</span>
+				{#if state.lastRunId || state.currentRun?.runTitle}
+					<span class="run-tag">{state.currentRun?.runTitle || state.lastRunId}</span>
 				{/if}
 			</div>
 			{#if state.testCompleted && state.latestReportId}
