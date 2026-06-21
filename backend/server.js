@@ -87,6 +87,11 @@ async function start() {
 			return;
 		}
 
+		// Sync automated flags from feature files on every startup
+		require('./services/reportService')
+			.syncAutomatedFromFeatures()
+			.catch(() => {});
+
 		// chokidar v5+ is ESM-only — use dynamic import to stay compatible with CJS
 		let chokidar;
 		try {
@@ -109,6 +114,9 @@ async function start() {
 						`📝 Tests changed (${event}: ${path.basename(filePath)}) — notifying clients`
 					);
 					io.emit('tests-changed');
+					require('./services/reportService')
+						.syncAutomatedFromFeatures()
+						.catch(() => {});
 				}, 300);
 			});
 			console.log('👀 Watching for test file changes...');
