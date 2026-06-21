@@ -239,7 +239,8 @@ const getAllReports = () =>
 			runners: true,
 			browser: true,
 			runnerName: true,
-			createdAt: true
+			createdAt: true,
+			testRun: { select: { id: true, title: true } }
 		}
 	});
 
@@ -263,7 +264,8 @@ const getReportDetail = async (id) => {
 			browser: true,
 			runnerName: true,
 			createdAt: true,
-			content: true
+			content: true,
+			testRun: { select: { id: true, title: true } }
 		}
 	});
 	if (!report) return null;
@@ -315,6 +317,7 @@ const saveReport = async ({
 			runnerName: runnerName ?? null,
 			runnerId: runnerId ?? null,
 			cronJobId,
+			testRunId: testRunId ?? null,
 			content: { features }
 		}
 	});
