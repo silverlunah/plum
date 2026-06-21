@@ -318,9 +318,9 @@ async function serverStart() {
 		}
 	}
 
-	clack.log.info(pc.dim('Streaming logs (Ctrl+C to detach — server keeps running):'));
-	execSync('docker compose logs -f', { cwd: plumRoot, stdio: 'inherit' });
-	clack.outro(pc.dim('Detached from logs. Run "docker compose down" to stop.'));
+	clack.log.info(`UI:  ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
+	clack.log.info(`API: ${pc.cyan(`http://localhost:${cfg.backendPort}`)}`);
+	clack.outro(pc.green('Plum is running. Use "plum server stop" to shut down.'));
 }
 
 async function serverReconfig() {
