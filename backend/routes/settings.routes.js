@@ -103,4 +103,22 @@ router.post('/integrations', async (req, res, next) => {
 	}
 });
 
+router.get('/mcp', jwtAuth, async (req, res, next) => {
+	try {
+		const config = await settingsService.getMcpConfig();
+		res.json(config);
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/mcp/generate', jwtAuth, async (req, res, next) => {
+	try {
+		const config = await settingsService.generateMcpKey();
+		res.json(config);
+	} catch (e) {
+		next(e);
+	}
+});
+
 module.exports = router;

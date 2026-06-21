@@ -90,6 +90,7 @@ model Project {
   backupS3Prefix     String    @default("")
   backupLastRunAt    DateTime?
   backupLastStatus   String    @default("")
+  mcpKey             String    @default("")
 }
 
 model User {

@@ -15,6 +15,7 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
+const crypto = require('crypto');
 const prisma = require('./prisma');
 
 const getProject = async () => {
@@ -113,6 +114,22 @@ const updateBackupConfig = async ({
 	});
 };
 
+const getMcpConfig = async () => {
+	const project = await getProject();
+	return { mcpKeySet: project.mcpKey.length > 0, mcpKey: project.mcpKey };
+};
+
+const generateMcpKey = async () => {
+	const key = crypto.randomBytes(32).toString('hex');
+	await prisma.project.upsert({
+		where: { id: 1 },
+		create: { id: 1, mcpKey: key },
+		update: { mcpKey: key }
+	});
+	process.env.PLUM_MCP_KEY = key;
+	return { mcpKey: key };
+};
+
 module.exports = {
 	getProject,
 	updateProject,
@@ -121,5 +138,7 @@ module.exports = {
 	getWebhooks,
 	updateWebhooks,
 	getBackupConfig,
-	updateBackupConfig
+	updateBackupConfig,
+	getMcpConfig,
+	generateMcpKey
 };

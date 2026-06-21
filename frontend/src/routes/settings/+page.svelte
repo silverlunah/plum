@@ -29,7 +29,9 @@
 		fetchBackupConfig,
 		saveBackupConfig,
 		testBackupS3,
-		runBackupNow
+		runBackupNow,
+		fetchMcpConfig,
+		generateMcpKey as generateMcpKeyApi
 	} from '$lib/api/settings';
 	import {
 		fetchRunners,
@@ -54,7 +56,7 @@
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 
-	/** @type {'project' | 'runners' | 'repository' | 'integrations' | 'account' | 'users' | 'backup'} */
+	/** @type {'project' | 'runners' | 'repository' | 'integrations' | 'mcp' | 'account' | 'users' | 'backup'} */
 	let section =
 		(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('plum:settings:section')) ||
 		'project';
@@ -97,6 +99,13 @@
 
 	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
 	let integrationsSaving = false;
+
+	let mcpKey = '';
+	let mcpKeySet = false;
+	let mcpShowKey = false;
+	let mcpGenerating = false;
+	let mcpKeyCopied = false;
+	let mcpSnippetCopied = false;
 
 	let backupConfig = {
 		backupEnabled: false,
@@ -156,6 +165,11 @@
 		} catch {}
 		try {
 			integrations = await fetchIntegrations();
+		} catch {}
+		try {
+			const mcp = await fetchMcpConfig();
+			mcpKeySet = mcp.mcpKeySet;
+			mcpKey = mcp.mcpKey;
 		} catch {}
 		try {
 			const bc = await fetchBackupConfig();
@@ -446,6 +460,35 @@
 		goto('/login');
 	}
 
+	async function handleGenerateMcpKey() {
+		mcpGenerating = true;
+		try {
+			const result = await generateMcpKeyApi();
+			mcpKey = result.mcpKey;
+			mcpKeySet = true;
+			mcpShowKey = true;
+			showToast('success', 'MCP key generated.');
+		} catch {
+			showToast('error', 'Failed to generate MCP key.');
+		} finally {
+			mcpGenerating = false;
+		}
+	}
+
+	function handleCopyMcpKey() {
+		navigator.clipboard.writeText(mcpKey).then(() => {
+			mcpKeyCopied = true;
+			setTimeout(() => (mcpKeyCopied = false), 1500);
+		});
+	}
+
+	function handleCopyMcpSnippet() {
+		navigator.clipboard.writeText(mcpConfigSnippet).then(() => {
+			mcpSnippetCopied = true;
+			setTimeout(() => (mcpSnippetCopied = false), 1500);
+		});
+	}
+
 	async function handleSaveIntegrations() {
 		integrationsSaving = true;
 		try {
@@ -512,11 +555,29 @@
 		}
 	}
 
+	$: mcpConfigSnippet = JSON.stringify(
+		{
+			mcpServers: {
+				plum: {
+					command: 'plum',
+					args: ['mcp'],
+					env: {
+						PLUM_API_URL: 'http://localhost:3001',
+						PLUM_API_KEY: mcpKey
+					}
+				}
+			}
+		},
+		null,
+		2
+	);
+
 	$: navItems = [
 		{ id: 'project', label: 'Project' },
 		{ id: 'runners', label: 'Runners' },
 		{ id: 'repository', label: 'Repository' },
 		{ id: 'integrations', label: 'Integrations' },
+		{ id: 'mcp', label: 'MCP' },
 		{ id: 'account', label: 'Account' },
 		...($auth.user?.role === 'admin' ? [{ id: 'users', label: 'Users' }] : []),
 		{ id: 'backup', label: 'Backup' }
@@ -992,6 +1053,137 @@
 						{integrationsSaving ? 'Saving…' : 'Save Integrations'}
 					</Button>
 				</div>
+			</div>
+
+			<!-- MCP -->
+		{:else if section === 'mcp'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<div class="content-header">
+					<h2>MCP Integration</h2>
+					<p class="content-desc">
+						Generate an API key for any MCP-compatible AI client — Claude, Cursor, Windsurf, and
+						others.
+					</p>
+				</div>
+
+				<div class="card settings-card">
+					<p class="card-title">API Key</p>
+
+					{#if !mcpKeySet}
+						<p class="content-desc">No key generated yet.</p>
+						<div class="card-footer">
+							<Button on:click={handleGenerateMcpKey} disabled={mcpGenerating}>
+								{mcpGenerating ? 'Generating…' : 'Generate Key'}
+							</Button>
+						</div>
+					{:else}
+						<div class="mcp-key-row">
+							<input
+								type={mcpShowKey ? 'text' : 'password'}
+								class="field-input mcp-key-input"
+								value={mcpKey}
+								readonly
+								spellcheck="false"
+								autocomplete="off"
+							/>
+							<button
+								class="icon-btn"
+								title={mcpShowKey ? 'Hide key' : 'Show key'}
+								on:click={() => (mcpShowKey = !mcpShowKey)}
+							>
+								{#if mcpShowKey}
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<path
+											d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"
+										/><path
+											d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"
+										/><line x1="1" y1="1" x2="23" y2="23" />
+									</svg>
+								{:else}
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle
+											cx="12"
+											cy="12"
+											r="3"
+										/>
+									</svg>
+								{/if}
+							</button>
+							<button class="icon-btn" title="Copy key" on:click={handleCopyMcpKey}>
+								{#if mcpKeyCopied}
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<polyline points="20 6 9 17 4 12" />
+									</svg>
+								{:else}
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<rect x="9" y="9" width="13" height="13" rx="2" /><path
+											d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+										/>
+									</svg>
+								{/if}
+							</button>
+						</div>
+						<p class="mcp-regen-note">Regenerating invalidates the existing key immediately.</p>
+						<div class="card-footer">
+							<Button variant="ghost" on:click={handleGenerateMcpKey} disabled={mcpGenerating}>
+								{mcpGenerating ? 'Generating…' : 'Regenerate Key'}
+							</Button>
+						</div>
+					{/if}
+				</div>
+
+				{#if mcpKeySet}
+					<div class="card settings-card">
+						<p class="card-title">Config Snippet</p>
+						<p class="content-desc">
+							Add this to your MCP client's config file (e.g.
+							<code class="code-sample">claude_desktop_config.json</code>, Cursor MCP settings,
+							etc.).
+						</p>
+						<pre class="mcp-snippet">{mcpConfigSnippet}</pre>
+						<div class="card-footer">
+							<Button variant="ghost" on:click={handleCopyMcpSnippet}>
+								{mcpSnippetCopied ? 'Copied!' : 'Copy Config'}
+							</Button>
+						</div>
+					</div>
+				{/if}
 			</div>
 
 			<!-- ACCOUNT -->
@@ -2074,6 +2266,39 @@
 		border-radius: 100px;
 		padding: 0.15rem 0.55rem;
 		flex-shrink: 0;
+	}
+
+	/* ── MCP ── */
+	.mcp-key-row {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+
+	.mcp-key-input {
+		flex: 1;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.8125rem;
+		min-width: 0;
+	}
+
+	.mcp-regen-note {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+	}
+
+	.mcp-snippet {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.78rem;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.875rem 1rem;
+		white-space: pre;
+		overflow-x: auto;
+		color: var(--text);
+		line-height: 1.6;
+		margin: 0;
 	}
 
 	/* reuse icon-btn from other pages */

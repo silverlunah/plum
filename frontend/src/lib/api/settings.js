@@ -16,6 +16,11 @@
  */
 
 import { API_BASE } from '$lib/constants';
+import { auth } from '$lib/stores/auth';
+
+function authHeaders() {
+	return { Authorization: `Bearer ${auth.getToken()}` };
+}
 
 export async function fetchProject() {
 	const res = await fetch(`${API_BASE}/settings/project`);
@@ -100,5 +105,20 @@ export async function saveIntegrations({ discordWebhookUrl, slackWebhookUrl, not
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl })
 	});
+	return res.json();
+}
+
+export async function fetchMcpConfig() {
+	const res = await fetch(`${API_BASE}/settings/mcp`, { headers: authHeaders() });
+	if (!res.ok) return { mcpKeySet: false, mcpKey: '' };
+	return res.json();
+}
+
+export async function generateMcpKey() {
+	const res = await fetch(`${API_BASE}/settings/mcp/generate`, {
+		method: 'POST',
+		headers: authHeaders()
+	});
+	if (!res.ok) throw new Error('Failed to generate key');
 	return res.json();
 }
