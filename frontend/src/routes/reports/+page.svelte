@@ -571,6 +571,9 @@
 		font-size: 0.8rem;
 		color: var(--text);
 		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		min-width: 0;
 	}
 
 	.item-badges {

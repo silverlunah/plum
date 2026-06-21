@@ -516,6 +516,9 @@
 												<span class="priority-badge small {priorityClass(tc.priority)}"
 													>{tc.priority}</span
 												>
+												{#if tc.isAutomated}
+													<span class="auto-pill">Auto</span>
+												{/if}
 											</button>
 										{/each}
 									</div>

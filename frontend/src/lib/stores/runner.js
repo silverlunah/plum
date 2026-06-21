@@ -48,7 +48,7 @@ export const runsVersion = writable(0);
 // Map of taskName → true for every cron job currently executing
 export const activeCronJobs = writable({});
 
-export function triggerRun(id, testRunId, notify = {}) {
+export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 	const s = get(socket);
 	if (!s) return;
 
@@ -63,7 +63,7 @@ export function triggerRun(id, testRunId, notify = {}) {
 		status: 'running',
 		lastRunId: runId,
 		lanes: [],
-		currentRun: { tag: runId, workers, browser, runners: selectedRunners }
+		currentRun: { tag: runId, workers, browser, runners: selectedRunners, runTitle }
 	});
 	panelExpanded.set(true);
 
