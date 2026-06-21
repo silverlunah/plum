@@ -29,13 +29,25 @@ function getTestIdsForTag(tag) {
 	const ids = [];
 	const normalTag = tag?.trim();
 
+	// A test run selection produces a compound OR expression like "@test-1 or @test-2".
+	// Split it so each part is matched individually instead of against the whole string.
+	const tagParts = normalTag
+		? normalTag
+				.split(/\s+or\s+/i)
+				.map((t) => t.trim())
+				.filter(Boolean)
+		: [];
+
+	const matchesAny = (candidates) =>
+		tagParts.length === 0 || tagParts.some((part) => candidates.some((id) => id === part));
+
 	for (const suite of suites) {
 		const suiteIds = Array.isArray(suite.suiteId) ? suite.suiteId : [suite.suiteId];
-		const suiteMatches = !normalTag || suiteIds.some((id) => id === normalTag);
+		const suiteMatches = !normalTag || matchesAny(suiteIds);
 
 		for (const test of suite.tests) {
 			const testIds = Array.isArray(test.id) ? test.id : [test.id];
-			if (suiteMatches || testIds.some((id) => id === normalTag)) {
+			if (suiteMatches || matchesAny(testIds)) {
 				ids.push(testIds[0]);
 			}
 		}
