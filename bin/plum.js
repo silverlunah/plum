@@ -323,6 +323,44 @@ async function serverStart() {
 	clack.outro(pc.green('Plum is running. Use "plum server stop" to shut down.'));
 }
 
+async function serverRestart() {
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Restart  ')));
+	const { loadServerConfig } = serverConfigLib();
+	const cfg = loadServerConfig(process.cwd());
+	applyServerConfig(cfg);
+	clack.log.info(`UI: ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
+
+	execSync('docker compose up --build -d', { cwd: plumRoot, stdio: 'inherit' });
+
+	const apiBase = `http://localhost:${cfg.backendPort}`;
+	const s = clack.spinner();
+	s.start('Waiting for server to be ready…');
+	let ready = false;
+	for (let i = 0; i < 40; i++) {
+		await new Promise((r) => setTimeout(r, 1500));
+		try {
+			const res = await fetch(`${apiBase}/auth/needs-setup`);
+			if (res.ok) {
+				ready = true;
+				break;
+			}
+		} catch {}
+	}
+	s.stop(ready ? pc.green('✓ Server is ready') : pc.yellow('Server may still be starting'));
+	clack.log.info(`UI:  ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
+	clack.log.info(`API: ${pc.cyan(`http://localhost:${cfg.backendPort}`)}`);
+	clack.outro(pc.green('Plum restarted.'));
+}
+
+async function serverUpdate() {
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Update  ')));
+	clack.log.step('Fetching latest Plum version…');
+	execSync('npm install -g plum-e2e@latest', { stdio: 'inherit' });
+	clack.log.success('Plum CLI updated.');
+	clack.log.step('Rebuilding server with new version…');
+	await serverRestart();
+}
+
 async function serverReconfig() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Reconfigure Server  ')));
 	const cfg = await configureServer({ force: true });
@@ -759,11 +797,27 @@ switch (command) {
 			await serverReconfig();
 			break;
 		}
+		if (subcommand === 'restart') {
+			await serverRestart();
+			break;
+		}
+		if (subcommand === 'update') {
+			await serverUpdate();
+			break;
+		}
 	// fall through to start for 'plum server start' or 'plum server'
 	// intentional fall-through
 
 	case 'start':
 		await serverStart();
+		break;
+
+	case 'restart':
+		await serverRestart();
+		break;
+
+	case 'update':
+		await serverUpdate();
 		break;
 
 	case 'run-test': {
@@ -957,7 +1011,11 @@ switch (command) {
 		console.log('    --backend-port <n> Host port for the backend/API (default: 3001)');
 		console.log('    --frontend-port <n> Host port for the UI (default: 5173)');
 		console.log('  server reconfig      Re-enter server settings without starting');
+		console.log(
+			'  server restart       Rebuild and restart the server (no prompts; alias: plum restart)'
+		);
 		console.log('  server stop          Stop the server  (alias: plum stop)');
+		console.log('  update               Update Plum to the latest version and restart the server');
 		console.log('  node start           Start a runner node (interactive), then open runner menu');
 		console.log('    --primary <url>    Primary Plum server to auto-register with');
 		console.log('    --url <url>        Address the primary calls back (default: <lan-ip>:<port>;');
