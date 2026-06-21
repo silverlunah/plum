@@ -76,4 +76,31 @@ router.post('/test-prefixes/migrate', jwtAuth, async (req, res, next) => {
 	}
 });
 
+router.get('/integrations', async (req, res, next) => {
+	try {
+		const webhooks = await settingsService.getWebhooks();
+		res.json(webhooks);
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/integrations', async (req, res, next) => {
+	try {
+		const { discordWebhookUrl, slackWebhookUrl, notifyPublicUrl } = req.body;
+		const project = await settingsService.updateWebhooks({
+			discordWebhookUrl,
+			slackWebhookUrl,
+			notifyPublicUrl
+		});
+		res.json({
+			discordWebhookUrl: project.discordWebhookUrl,
+			slackWebhookUrl: project.slackWebhookUrl,
+			notifyPublicUrl: project.notifyPublicUrl
+		});
+	} catch (e) {
+		next(e);
+	}
+});
+
 module.exports = router;

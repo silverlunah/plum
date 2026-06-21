@@ -19,7 +19,14 @@
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { goto } from '$app/navigation';
-	import { fetchProject, saveProject, exportBackup, importBackup } from '$lib/api/settings';
+	import {
+		fetchProject,
+		saveProject,
+		exportBackup,
+		importBackup,
+		fetchIntegrations,
+		saveIntegrations
+	} from '$lib/api/settings';
 	import {
 		fetchRunners,
 		createRunner,
@@ -43,7 +50,7 @@
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 
-	/** @type {'project' | 'runners' | 'repository' | 'account' | 'users' | 'backup'} */
+	/** @type {'project' | 'runners' | 'repository' | 'integrations' | 'account' | 'users' | 'backup'} */
 	let section =
 		(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('plum:settings:section')) ||
 		'project';
@@ -84,6 +91,9 @@
 	let exporting = false;
 	let fileInput;
 
+	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
+	let integrationsSaving = false;
+
 	let runners = [];
 	let runnerForm = { name: '', url: '', token: '', browser: 'chromium' };
 	let runnerFormError = '';
@@ -120,6 +130,9 @@
 				testCasePrefix: prefixes.testCasePrefix,
 				testSuitePrefix: prefixes.testSuitePrefix
 			};
+		} catch {}
+		try {
+			integrations = await fetchIntegrations();
 		} catch {}
 		if ($auth.user) {
 			profileForm = { name: $auth.user.name, email: $auth.user.email };
@@ -394,10 +407,23 @@
 		goto('/login');
 	}
 
+	async function handleSaveIntegrations() {
+		integrationsSaving = true;
+		try {
+			integrations = await saveIntegrations(integrations);
+			showToast('success', 'Integration settings saved.');
+		} catch {
+			showToast('error', 'Failed to save integration settings.');
+		} finally {
+			integrationsSaving = false;
+		}
+	}
+
 	$: navItems = [
 		{ id: 'project', label: 'Project' },
 		{ id: 'runners', label: 'Runners' },
 		{ id: 'repository', label: 'Repository' },
+		{ id: 'integrations', label: 'Integrations' },
 		{ id: 'account', label: 'Account' },
 		...($auth.user?.role === 'admin' ? [{ id: 'users', label: 'Users' }] : []),
 		{ id: 'backup', label: 'Backup' }
@@ -808,6 +834,70 @@
 							{migrating ? 'Migrating…' : 'Run Migration'}
 						</Button>
 					</div>
+				</div>
+			</div>
+
+			<!-- INTEGRATIONS -->
+		{:else if section === 'integrations'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<div class="content-header">
+					<h2>Integrations</h2>
+					<p class="content-desc">
+						Connect Discord and Slack to receive run notifications with pass/fail results and report
+						links.
+					</p>
+				</div>
+
+				<div class="card settings-card">
+					<p class="card-title">Webhooks</p>
+
+					<div class="field">
+						<label class="field-label" for="discord-url">
+							<span>Discord Webhook URL</span>
+							<span class="field-hint">Leave blank to disable Discord notifications</span>
+						</label>
+						<input
+							id="discord-url"
+							type="url"
+							class="field-input"
+							bind:value={integrations.discordWebhookUrl}
+							placeholder="https://discord.com/api/webhooks/…"
+						/>
+					</div>
+
+					<div class="field">
+						<label class="field-label" for="slack-url">
+							<span>Slack Webhook URL</span>
+							<span class="field-hint">Leave blank to disable Slack notifications</span>
+						</label>
+						<input
+							id="slack-url"
+							type="url"
+							class="field-input"
+							bind:value={integrations.slackWebhookUrl}
+							placeholder="https://hooks.slack.com/services/…"
+						/>
+					</div>
+
+					<div class="field">
+						<label class="field-label" for="public-url">
+							<span>Public URL</span>
+							<span class="field-hint"
+								>Base URL of this Plum instance, used to link reports in notifications</span
+							>
+						</label>
+						<input
+							id="public-url"
+							type="url"
+							class="field-input"
+							bind:value={integrations.notifyPublicUrl}
+							placeholder="https://plum.yourcompany.com"
+						/>
+					</div>
+
+					<Button on:click={handleSaveIntegrations} disabled={integrationsSaving}>
+						{integrationsSaving ? 'Saving…' : 'Save Integrations'}
+					</Button>
 				</div>
 			</div>
 

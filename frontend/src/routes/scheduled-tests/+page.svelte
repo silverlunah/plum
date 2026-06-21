@@ -25,6 +25,7 @@
 		toggleCronJob
 	} from '$lib/api/schedules';
 	import { fetchRunners } from '$lib/api/runners';
+	import { fetchIntegrations } from '$lib/api/settings';
 	import { activeCronJobs } from '$lib/stores/runner';
 	import { BROWSERS, TOAST_TIMEOUT_MS } from '$lib/constants';
 	import { stagger } from '$lib/utils/format';
@@ -50,6 +51,7 @@
 
 	let cronJobs = [];
 	let availableRunners = [];
+	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
 	let toast = null;
 
 	let modalOpen = false;
@@ -64,7 +66,9 @@
 		tags: '',
 		workers: 1,
 		browser: 'chromium',
-		runnerIds: ['built-in']
+		runnerIds: ['built-in'],
+		notifyDiscord: false,
+		notifySlack: false
 	};
 	let selectedSchedule = '';
 	let useCustomCron = false;
@@ -137,7 +141,9 @@
 			tags: '',
 			workers: 1,
 			browser: 'chromium',
-			runnerIds: ['built-in']
+			runnerIds: ['built-in'],
+			notifyDiscord: false,
+			notifySlack: false
 		};
 		selectedSchedule = '';
 		useCustomCron = false;
@@ -157,7 +163,9 @@
 			tags: job.tags,
 			workers: job.workers ?? 1,
 			browser: job.browser ?? 'chromium',
-			runnerIds: prunedIds.length > 0 ? prunedIds : ['built-in']
+			runnerIds: prunedIds.length > 0 ? prunedIds : ['built-in'],
+			notifyDiscord: job.notifyDiscord ?? false,
+			notifySlack: job.notifySlack ?? false
 		};
 		const isPreset = scheduleOptions.some((o) => o.value === job.cronExpression);
 		useCustomCron = !isPreset;
@@ -231,10 +239,15 @@
 	}
 
 	onMount(async () => {
-		cronJobs = await fetchCronJobs();
-		try {
-			availableRunners = await fetchRunners();
-		} catch {}
+		[cronJobs, availableRunners, integrations] = await Promise.all([
+			fetchCronJobs(),
+			fetchRunners().catch(() => []),
+			fetchIntegrations().catch(() => ({
+				discordWebhookUrl: '',
+				slackWebhookUrl: '',
+				notifyPublicUrl: ''
+			}))
+		]);
 	});
 </script>
 
@@ -372,6 +385,26 @@
 				{/each}
 			</div>
 		</div>
+
+		{#if integrations.discordWebhookUrl || integrations.slackWebhookUrl}
+			<div class="field">
+				<div class="field-label"><span>Notifications</span></div>
+				<div class="notify-checks">
+					{#if integrations.discordWebhookUrl}
+						<label class="notify-check-option">
+							<input type="checkbox" bind:checked={form.notifyDiscord} />
+							<span>Discord</span>
+						</label>
+					{/if}
+					{#if integrations.slackWebhookUrl}
+						<label class="notify-check-option">
+							<input type="checkbox" bind:checked={form.notifySlack} />
+							<span>Slack</span>
+						</label>
+					{/if}
+				</div>
+			</div>
+		{/if}
 
 		{#if formError}
 			<p class="form-error">{formError}</p>
@@ -858,5 +891,30 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 180px;
+	}
+
+	/* Notification checkboxes in modal */
+	.notify-checks {
+		display: flex;
+		flex-direction: row;
+		gap: 1rem;
+		padding: 0.375rem 0;
+	}
+
+	.notify-check-option {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.8125rem;
+		color: var(--text);
+		cursor: pointer;
+	}
+
+	.notify-check-option input[type='checkbox'] {
+		accent-color: var(--accent);
+		width: 13px;
+		height: 13px;
+		flex-shrink: 0;
+		cursor: pointer;
 	}
 </style>

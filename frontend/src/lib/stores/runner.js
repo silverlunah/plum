@@ -48,7 +48,7 @@ export const runsVersion = writable(0);
 // Map of taskName → true for every cron job currently executing
 export const activeCronJobs = writable({});
 
-export function triggerRun(id, testRunId) {
+export function triggerRun(id, testRunId, notify = {}) {
 	const s = get(socket);
 	if (!s) return;
 
@@ -72,7 +72,9 @@ export function triggerRun(id, testRunId) {
 		workers,
 		browser,
 		runners: selectedRunners,
-		testRunId: testRunId ?? null
+		testRunId: testRunId ?? null,
+		notifyDiscord: notify.notifyDiscord ?? false,
+		notifySlack: notify.notifySlack ?? false
 	});
 }
 

@@ -18,9 +18,11 @@
 const { spawn } = require('child_process');
 const runnerService = require('../services/runnerService');
 const reportService = require('../services/reportService');
+const notificationService = require('../services/notificationService');
 const { TRIGGER_TYPE, BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { readCucumberReportFile } = require('../lib/reportFilename');
+const prisma = require('../services/prisma');
 
 const socketHandler = (io) => {
 	io.on('connection', (socket) => {
@@ -30,13 +32,15 @@ const socketHandler = (io) => {
 		const activeProcs = new Set();
 
 		socket.on('run-test', async (payload, legacyWorkers) => {
-			let tag, workers, browser, runners, testRunId;
+			let tag, workers, browser, runners, testRunId, notifyDiscord, notifySlack;
 			if (typeof payload === 'string') {
 				tag = payload;
 				workers = Number(legacyWorkers) > 1 ? Number(legacyWorkers) : 1;
 				browser = 'chromium';
 				runners = [BUILT_IN_RUNNER_ID];
 				testRunId = null;
+				notifyDiscord = false;
+				notifySlack = false;
 			} else {
 				tag = payload.tag ?? '';
 				workers = Number(payload.workers) > 1 ? Number(payload.workers) : 1;
@@ -46,6 +50,8 @@ const socketHandler = (io) => {
 						? payload.runners
 						: [BUILT_IN_RUNNER_ID];
 				testRunId = payload.testRunId ?? null;
+				notifyDiscord = payload.notifyDiscord === true;
+				notifySlack = payload.notifySlack === true;
 			}
 
 			// Drop runner ids that no longer exist (e.g. a deleted runner still
@@ -63,9 +69,30 @@ const socketHandler = (io) => {
 			const isSingleBuiltIn = runners.length === 1 && runners[0] === BUILT_IN_RUNNER_ID;
 
 			if (isSingleBuiltIn) {
-				runBuiltIn(io, socket, activeProcs, tag, workers, browser, testRunId);
+				runBuiltIn(
+					io,
+					socket,
+					activeProcs,
+					tag,
+					workers,
+					browser,
+					testRunId,
+					notifyDiscord,
+					notifySlack
+				);
 			} else {
-				runDistributed(io, socket, activeProcs, tag, workers, browser, runners, testRunId);
+				runDistributed(
+					io,
+					socket,
+					activeProcs,
+					tag,
+					workers,
+					browser,
+					runners,
+					testRunId,
+					notifyDiscord,
+					notifySlack
+				);
 			}
 		});
 
@@ -87,7 +114,17 @@ const socketHandler = (io) => {
 // Single built-in runner
 // ---------------------------------------------------------------------------
 
-function runBuiltIn(io, socket, activeProcs, tag, workers, browser, testRunId) {
+function runBuiltIn(
+	io,
+	socket,
+	activeProcs,
+	tag,
+	workers,
+	browser,
+	testRunId,
+	notifyDiscord,
+	notifySlack
+) {
 	const env = {
 		...process.env,
 		TAG: tag,
@@ -108,8 +145,30 @@ function runBuiltIn(io, socket, activeProcs, tag, workers, browser, testRunId) {
 		activeProcs.delete(proc);
 		socket.emit('log', `\nTest finished with code ${code}`);
 		socket.emit('done', code);
-		// Notify all connected clients that a new report is available
 		io.emit('report-ready');
+
+		if (notifyDiscord || notifySlack) {
+			prisma.report
+				.findFirst({
+					where: { triggerType: TRIGGER_TYPE.MANUAL },
+					orderBy: { createdAt: 'desc' },
+					select: { id: true, status: true, content: true }
+				})
+				.then((report) => {
+					if (!report) return;
+					return notificationService.send({
+						jobName: 'Manual Run',
+						status: report.status,
+						content: report.content,
+						browser,
+						tags: tag,
+						reportId: report.id,
+						notifyDiscord,
+						notifySlack
+					});
+				})
+				.catch((e) => console.error(`[socket] Notification failed: ${e.message}`));
+		}
 	});
 }
 
@@ -125,7 +184,9 @@ async function runDistributed(
 	workers,
 	browser,
 	runnerIds,
-	testRunId
+	testRunId,
+	notifyDiscord,
+	notifySlack
 ) {
 	const allIds = getTestIdsForTag(tag);
 	const chunks = chunkTests(allIds, runnerIds.length);
@@ -191,6 +252,21 @@ async function runDistributed(
 					// a passing run to "fail" in the live UI.
 					socket.emit('done', { code: saved.status === 'PASS' ? 0 : 1, reportId: saved.id });
 					io.emit('report-ready');
+
+					if (notifyDiscord || notifySlack) {
+						notificationService
+							.send({
+								jobName: 'Manual Run',
+								status: saved.status,
+								content: saved.content,
+								browser,
+								tags: tag,
+								reportId: saved.id,
+								notifyDiscord,
+								notifySlack
+							})
+							.catch((e) => console.error(`[socket] Notification failed: ${e.message}`));
+					}
 				})
 				.catch((e) => {
 					console.error('[runner] Failed to save combined report:', e.message);

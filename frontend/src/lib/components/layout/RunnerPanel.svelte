@@ -34,6 +34,7 @@
 	import { fetchLatestReportId, reportUrl } from '$lib/api/reports';
 	import { fetchRunners } from '$lib/api/runners';
 	import { fetchRuns, fetchRun } from '$lib/api/repository';
+	import { fetchIntegrations } from '$lib/api/settings';
 	import { API_BASE, BROWSERS } from '$lib/constants';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 
@@ -45,6 +46,9 @@
 	let runnersOpen = false;
 	let runPickOpen = false;
 	let runAllModalOpen = false;
+	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
+	let notifyDiscord = false;
+	let notifySlack = false;
 
 	function clickOutside(node) {
 		function handle(e) {
@@ -85,6 +89,10 @@
 					return { ...c, selectedRunners: pruned.length > 0 ? pruned : ['built-in'] };
 				});
 			})
+			.catch(() => {});
+
+		fetchIntegrations()
+			.then((i) => (integrations = i))
 			.catch(() => {});
 
 		_unsubConfig = runnerConfig.subscribe((v) => {
@@ -251,14 +259,15 @@
 	}
 
 	function handleRunClick() {
+		const notify = { notifyDiscord, notifySlack };
 		if (selectedRun) {
 			if (selectedRunLoading || !selectedRun.tags) return;
 			if (selectedRun.tags.length === 0) return;
-			triggerRun(selectedRun.tags.join(' or '), selectedRun.id);
+			triggerRun(selectedRun.tags.join(' or '), selectedRun.id, notify);
 		} else if ($runnerConfig.testID.trim() === '') {
 			runAllModalOpen = true;
 		} else {
-			triggerRun();
+			triggerRun(undefined, undefined, notify);
 		}
 	}
 
@@ -294,7 +303,7 @@
 	confirmLabel="Run all tests"
 	on:confirm={() => {
 		runAllModalOpen = false;
-		triggerRun();
+		triggerRun(undefined, undefined, { notifyDiscord, notifySlack });
 	}}
 >
 	No tag or filter is set. This will run <strong>every test</strong> in the suite, which may take a while.
@@ -581,6 +590,35 @@
 									</label>
 								{/each}
 							</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
+
+			{#if integrations.discordWebhookUrl || integrations.slackWebhookUrl}
+				<div class="ctrl-divider"></div>
+				<div class="ctrl-group">
+					<span class="ctrl-label">Notify</span>
+					<div class="notify-toggles">
+						{#if integrations.discordWebhookUrl}
+							<button
+								type="button"
+								class="notify-btn"
+								class:active={notifyDiscord}
+								on:click={() => (notifyDiscord = !notifyDiscord)}
+								title={notifyDiscord ? 'Discord notification on' : 'Discord notification off'}
+								disabled={state.running}>Discord</button
+							>
+						{/if}
+						{#if integrations.slackWebhookUrl}
+							<button
+								type="button"
+								class="notify-btn"
+								class:active={notifySlack}
+								on:click={() => (notifySlack = !notifySlack)}
+								title={notifySlack ? 'Slack notification on' : 'Slack notification off'}
+								disabled={state.running}>Slack</button
+							>
 						{/if}
 					</div>
 				</div>
@@ -1152,6 +1190,44 @@
 		to {
 			transform: rotate(360deg);
 		}
+	}
+
+	/* Notification toggles */
+	.notify-toggles {
+		display: flex;
+		gap: 0.25rem;
+	}
+
+	.notify-btn {
+		height: 26px;
+		padding: 0 0.5rem;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--border);
+		background: transparent;
+		color: var(--text-muted);
+		font-size: 0.75rem;
+		font-family: inherit;
+		cursor: pointer;
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast),
+			border-color var(--duration-fast);
+	}
+
+	.notify-btn:hover:not(:disabled) {
+		color: var(--text);
+		border-color: var(--text-muted);
+	}
+
+	.notify-btn.active {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: #fff;
+	}
+
+	.notify-btn:disabled {
+		opacity: 0.4;
+		cursor: default;
 	}
 
 	/* Expand button */

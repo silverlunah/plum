@@ -44,6 +44,8 @@ model CronJob {
   enabled        Boolean  @default(true)
   runnerId       String?
   runnerIds      String   @default("built-in")
+  notifyDiscord  Boolean  @default(false)
+  notifySlack    Boolean  @default(false)
   runner         Runner?  @relation(fields: [runnerId], references: [id], onDelete: SetNull)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -68,13 +70,16 @@ model Report {
 }
 
 model Project {
-  id              Int    @id @default(autoincrement())
-  name            String @default("")
-  logoUrl         String @default("")
-  testCasePrefix  String @default("TC")
-  testSuitePrefix String @default("TS")
-  caseSeqNext     Int    @default(0)
-  suiteSeqNext    Int    @default(0)
+  id                Int    @id @default(autoincrement())
+  name              String @default("")
+  logoUrl           String @default("")
+  testCasePrefix    String @default("TC")
+  testSuitePrefix   String @default("TS")
+  caseSeqNext       Int    @default(0)
+  suiteSeqNext      Int    @default(0)
+  discordWebhookUrl String @default("")
+  slackWebhookUrl   String @default("")
+  notifyPublicUrl   String @default("")
 }
 
 model User {

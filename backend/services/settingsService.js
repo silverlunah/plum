@@ -49,4 +49,32 @@ const updateTestPrefixes = async ({ testCasePrefix, testSuitePrefix }) => {
 	});
 };
 
-module.exports = { getProject, updateProject, getTestPrefixes, updateTestPrefixes };
+const getWebhooks = async () => {
+	const project = await getProject();
+	return {
+		discordWebhookUrl: project.discordWebhookUrl ?? '',
+		slackWebhookUrl: project.slackWebhookUrl ?? '',
+		notifyPublicUrl: project.notifyPublicUrl ?? ''
+	};
+};
+
+const updateWebhooks = async ({ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl }) => {
+	return prisma.project.upsert({
+		where: { id: 1 },
+		create: { id: 1 },
+		update: {
+			discordWebhookUrl: discordWebhookUrl ?? '',
+			slackWebhookUrl: slackWebhookUrl ?? '',
+			notifyPublicUrl: notifyPublicUrl ?? ''
+		}
+	});
+};
+
+module.exports = {
+	getProject,
+	updateProject,
+	getTestPrefixes,
+	updateTestPrefixes,
+	getWebhooks,
+	updateWebhooks
+};
