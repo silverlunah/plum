@@ -17,7 +17,12 @@
 
 import { TRIGGER_TYPES } from '$lib/constants';
 
-const NON_SCHEDULED = new Set([TRIGGER_TYPES.MANUAL, TRIGGER_TYPES.CLI, 'undefined']);
+const NON_SCHEDULED = new Set([
+	TRIGGER_TYPES.MANUAL,
+	TRIGGER_TYPES.CLI,
+	TRIGGER_TYPES.MCP,
+	'undefined'
+]);
 
 export function isScheduled(type) {
 	return !!type && !NON_SCHEDULED.has(type);
@@ -26,12 +31,14 @@ export function isScheduled(type) {
 export function triggerLabel(type) {
 	if (type === TRIGGER_TYPES.MANUAL) return 'Manual';
 	if (type === TRIGGER_TYPES.CLI || type === 'undefined') return 'CLI';
+	if (type === TRIGGER_TYPES.MCP) return 'MCP';
 	return 'Scheduled';
 }
 
 export function triggerVariant(type) {
 	if (type === TRIGGER_TYPES.MANUAL) return 'tag';
 	if (type === TRIGGER_TYPES.CLI || type === 'undefined') return 'neutral';
+	if (type === TRIGGER_TYPES.MCP) return 'mcp';
 	return 'schedule';
 }
 

@@ -24,7 +24,8 @@ export const BROWSERS = [
 
 export const TRIGGER_TYPES = Object.freeze({
 	MANUAL: 'manual-trigger',
-	CLI: 'command-line-trigger'
+	CLI: 'command-line-trigger',
+	MCP: 'mcp-trigger'
 });
 
 export const REPORTS_PER_PAGE = 15;
