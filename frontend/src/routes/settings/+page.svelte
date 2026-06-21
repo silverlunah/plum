@@ -25,7 +25,11 @@
 		exportBackup,
 		importBackup,
 		fetchIntegrations,
-		saveIntegrations
+		saveIntegrations,
+		fetchBackupConfig,
+		saveBackupConfig,
+		testBackupS3,
+		runBackupNow
 	} from '$lib/api/settings';
 	import {
 		fetchRunners,
@@ -94,6 +98,25 @@
 	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
 	let integrationsSaving = false;
 
+	let backupConfig = {
+		backupEnabled: false,
+		backupCron: '0 2 * * *',
+		backupS3Endpoint: '',
+		backupS3Region: '',
+		backupS3Bucket: '',
+		backupS3AccessKey: '',
+		backupS3SecretKey: '',
+		backupS3Prefix: ''
+	};
+	let backupConfigSaving = false;
+	let backupS3SecretKeySet = false;
+	let backupTestingS3 = false;
+	let backupRunningNow = false;
+	let backupS3TestResult = null;
+	let backupS3TestMessage = '';
+	let backupLastRunAt = null;
+	let backupLastStatus = '';
+
 	let runners = [];
 	let runnerForm = { name: '', url: '', token: '', browser: 'chromium' };
 	let runnerFormError = '';
@@ -133,6 +156,22 @@
 		} catch {}
 		try {
 			integrations = await fetchIntegrations();
+		} catch {}
+		try {
+			const bc = await fetchBackupConfig();
+			backupS3SecretKeySet = bc.backupS3SecretKeySet;
+			backupLastRunAt = bc.backupLastRunAt;
+			backupLastStatus = bc.backupLastStatus;
+			backupConfig = {
+				backupEnabled: bc.backupEnabled,
+				backupCron: bc.backupCron,
+				backupS3Endpoint: bc.backupS3Endpoint,
+				backupS3Region: bc.backupS3Region,
+				backupS3Bucket: bc.backupS3Bucket,
+				backupS3AccessKey: bc.backupS3AccessKey,
+				backupS3SecretKey: '',
+				backupS3Prefix: bc.backupS3Prefix
+			};
 		} catch {}
 		if ($auth.user) {
 			profileForm = { name: $auth.user.name, email: $auth.user.email };
@@ -416,6 +455,60 @@
 			showToast('error', 'Failed to save integration settings.');
 		} finally {
 			integrationsSaving = false;
+		}
+	}
+
+	async function handleSaveBackupConfig() {
+		backupConfigSaving = true;
+		try {
+			const payload = { ...backupConfig };
+			if (!payload.backupS3SecretKey) delete payload.backupS3SecretKey;
+			const result = await saveBackupConfig(payload);
+			if (result.error) throw new Error(result.error);
+			if (backupConfig.backupS3SecretKey) backupS3SecretKeySet = true;
+			backupConfig = { ...backupConfig, backupS3SecretKey: '' };
+			showToast('success', 'Backup configuration saved.');
+		} catch (e) {
+			showToast('error', e.message || 'Failed to save backup configuration.');
+		} finally {
+			backupConfigSaving = false;
+		}
+	}
+
+	async function handleTestS3() {
+		backupTestingS3 = true;
+		backupS3TestResult = null;
+		backupS3TestMessage = '';
+		try {
+			const result = await testBackupS3(backupConfig);
+			if (result.error) throw new Error(result.error);
+			backupS3TestResult = 'success';
+			backupS3TestMessage = 'Connection successful.';
+		} catch (e) {
+			backupS3TestResult = 'error';
+			backupS3TestMessage = e.message || 'Connection failed.';
+		} finally {
+			backupTestingS3 = false;
+		}
+	}
+
+	async function handleRunBackupNow() {
+		backupRunningNow = true;
+		try {
+			const result = await runBackupNow();
+			if (result.error) throw new Error(result.error);
+			backupLastRunAt = result.lastRunAt;
+			backupLastStatus = result.lastStatus ?? '';
+			showToast('success', 'Backup uploaded to S3 successfully.');
+		} catch (e) {
+			showToast('error', e.message || 'Backup failed. Check your S3 configuration.');
+			const bc = await fetchBackupConfig().catch(() => null);
+			if (bc) {
+				backupLastRunAt = bc.backupLastRunAt;
+				backupLastStatus = bc.backupLastStatus;
+			}
+		} finally {
+			backupRunningNow = false;
 		}
 	}
 
@@ -1108,21 +1201,23 @@
 				<div class="content-header">
 					<h2>Backup</h2>
 					<p class="content-desc">
-						Export all scheduled tests, report history, and project settings to a JSON file. Import
-						to restore after a data loss or migration.
+						Export your test cases, schedules, users, and project settings. Automate uploads to any
+						S3-compatible storage — Cloudflare R2, Backblaze B2, AWS S3, or MinIO.
 					</p>
 				</div>
 
+				<!-- Manual export / import -->
 				<div class="card settings-card">
+					<p class="card-title">Manual Backup</p>
 					<div class="backup-row">
 						<div class="backup-block">
 							<p class="backup-block-title">Export</p>
 							<p class="backup-block-desc">
-								Downloads a <code>.json</code> file containing all cron jobs, report metadata, and project
-								settings. Report detail files are stored on disk and not included.
+								Downloads a <code>.json</code> file with all cron jobs, test cases, test runs, users,
+								runners, and project settings.
 							</p>
 							<Button on:click={handleExport} disabled={exporting}>
-								{exporting ? 'Exporting…' : 'Export Backup'}
+								{exporting ? 'Exporting…' : 'Export JSON'}
 							</Button>
 						</div>
 
@@ -1131,8 +1226,8 @@
 						<div class="backup-block">
 							<p class="backup-block-title">Import</p>
 							<p class="backup-block-desc">
-								Restores cron jobs, report metadata, and project settings from a previously exported
-								backup. Existing records with the same identifier are overwritten.
+								Restores all data from a previously exported backup. Existing records are
+								overwritten. Cron jobs are re-scheduled after import.
 							</p>
 							<div class="import-row">
 								<label class="file-label">
@@ -1150,6 +1245,194 @@
 								</Button>
 							</div>
 						</div>
+					</div>
+					<p class="backup-disclaimer">
+						Reports are not included in backups. To back up report history, run
+						<code>pg_dump</code> directly on the PostgreSQL volume.
+					</p>
+				</div>
+
+				<!-- S3 cloud backup -->
+				<div class="card settings-card">
+					<p class="card-title">S3 Storage</p>
+					<p class="backup-block-desc" style="margin-bottom: 1.25rem;">
+						Works with any S3-compatible provider — Cloudflare R2, Backblaze B2, AWS S3, or MinIO.
+						Leave <strong>Endpoint URL</strong> empty for AWS S3.
+					</p>
+
+					<div class="field-row">
+						<div class="field">
+							<label class="field-label" for="s3-endpoint">
+								<span>Endpoint URL</span>
+								<span class="field-hint">Leave blank for AWS S3</span>
+							</label>
+							<input
+								id="s3-endpoint"
+								type="url"
+								class="field-input"
+								bind:value={backupConfig.backupS3Endpoint}
+								placeholder="https://account.r2.cloudflarestorage.com"
+							/>
+						</div>
+						<div class="field">
+							<label class="field-label" for="s3-region">
+								<span>Region</span>
+								<span class="field-hint">Use <code>auto</code> for Cloudflare R2</span>
+							</label>
+							<input
+								id="s3-region"
+								type="text"
+								class="field-input"
+								bind:value={backupConfig.backupS3Region}
+								placeholder="us-east-1"
+							/>
+						</div>
+					</div>
+
+					<div class="field-row">
+						<div class="field">
+							<label class="field-label" for="s3-bucket">
+								<span>Bucket</span>
+							</label>
+							<input
+								id="s3-bucket"
+								type="text"
+								class="field-input"
+								bind:value={backupConfig.backupS3Bucket}
+								placeholder="my-plum-backups"
+							/>
+						</div>
+						<div class="field">
+							<label class="field-label" for="s3-prefix">
+								<span>Path Prefix</span>
+								<span class="field-hint">Optional folder inside the bucket</span>
+							</label>
+							<input
+								id="s3-prefix"
+								type="text"
+								class="field-input"
+								bind:value={backupConfig.backupS3Prefix}
+								placeholder="plum/"
+							/>
+						</div>
+					</div>
+
+					<div class="field-row">
+						<div class="field">
+							<label class="field-label" for="s3-access-key">
+								<span>Access Key ID</span>
+							</label>
+							<input
+								id="s3-access-key"
+								type="text"
+								class="field-input"
+								bind:value={backupConfig.backupS3AccessKey}
+								placeholder="AKIAIOSFODNN7EXAMPLE"
+								autocomplete="off"
+							/>
+						</div>
+						<div class="field">
+							<label class="field-label" for="s3-secret-key">
+								<span>Secret Access Key</span>
+								<span class="field-hint"
+									>{backupS3SecretKeySet
+										? 'A key is already saved — leave blank to keep it'
+										: 'Required'}</span
+								>
+							</label>
+							<input
+								id="s3-secret-key"
+								type="password"
+								class="field-input"
+								bind:value={backupConfig.backupS3SecretKey}
+								placeholder={backupS3SecretKeySet ? '••••••••' : 'Enter secret key'}
+								autocomplete="new-password"
+							/>
+						</div>
+					</div>
+
+					<div class="backup-actions">
+						<Button variant="ghost" on:click={handleTestS3} disabled={backupTestingS3}>
+							{backupTestingS3 ? 'Testing…' : 'Test Connection'}
+						</Button>
+						<Button on:click={handleSaveBackupConfig} disabled={backupConfigSaving}>
+							{backupConfigSaving ? 'Saving…' : 'Save S3 Config'}
+						</Button>
+					</div>
+
+					{#if backupS3TestResult}
+						<p
+							class="s3-test-result"
+							class:s3-test-success={backupS3TestResult === 'success'}
+							class:s3-test-error={backupS3TestResult === 'error'}
+						>
+							{backupS3TestResult === 'success' ? '✓' : '✗'}
+							{backupS3TestMessage}
+						</p>
+					{/if}
+				</div>
+
+				<!-- Scheduled backup -->
+				<div class="card settings-card">
+					<p class="card-title">Scheduled Backup</p>
+
+					<div class="field">
+						<label class="field-label backup-toggle-label" for="backup-enabled">
+							<span>Enable scheduled backup</span>
+							<button
+								id="backup-enabled"
+								class="toggle-btn"
+								class:active={backupConfig.backupEnabled}
+								on:click={() => (backupConfig.backupEnabled = !backupConfig.backupEnabled)}
+								role="switch"
+								aria-checked={backupConfig.backupEnabled}
+							>
+								<span class="toggle-thumb"></span>
+							</button>
+						</label>
+					</div>
+
+					<div class="field">
+						<label class="field-label" for="backup-cron">
+							<span>Cron Expression</span>
+							<span class="field-hint">
+								5-field cron — e.g. <code>0 2 * * *</code> = daily at 2 AM.
+								<a href="https://crontab.guru" target="_blank" rel="noopener noreferrer"
+									>Test at crontab.guru ↗</a
+								>
+							</span>
+						</label>
+						<input
+							id="backup-cron"
+							type="text"
+							class="field-input field-input-mono"
+							bind:value={backupConfig.backupCron}
+							placeholder="0 2 * * *"
+						/>
+					</div>
+
+					{#if backupLastRunAt}
+						<p class="backup-last-run">
+							Last backup: {new Date(backupLastRunAt).toLocaleString()} —
+							{#if backupLastStatus?.startsWith('success:')}
+								<span class="status-success"
+									>uploaded to {backupLastStatus.replace('success:', '')}</span
+								>
+							{:else if backupLastStatus?.startsWith('error:')}
+								<span class="status-error">{backupLastStatus.replace('error:', '')}</span>
+							{:else}
+								<span>{backupLastStatus}</span>
+							{/if}
+						</p>
+					{/if}
+
+					<div class="backup-actions">
+						<Button variant="ghost" on:click={handleRunBackupNow} disabled={backupRunningNow}>
+							{backupRunningNow ? 'Uploading…' : 'Upload to S3 Now'}
+						</Button>
+						<Button on:click={handleSaveBackupConfig} disabled={backupConfigSaving}>
+							{backupConfigSaving ? 'Saving…' : 'Save Schedule'}
+						</Button>
 					</div>
 				</div>
 			</div>
@@ -1518,6 +1801,96 @@
 		background: var(--bg-subtle);
 		padding: 0.1em 0.3em;
 		border-radius: 3px;
+	}
+
+	.backup-disclaimer {
+		margin-top: 1rem;
+		padding: 0.625rem 0.875rem;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		line-height: 1.5;
+	}
+
+	.backup-actions {
+		display: flex;
+		gap: 0.625rem;
+		margin-top: 0.25rem;
+		flex-wrap: wrap;
+	}
+
+	.s3-test-result {
+		margin-top: 0.625rem;
+		font-size: 0.8125rem;
+		font-weight: 500;
+	}
+
+	.s3-test-success {
+		color: var(--pass);
+	}
+
+	.s3-test-error {
+		color: var(--fail);
+	}
+
+	.backup-last-run {
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		margin-top: 0.25rem;
+	}
+
+	.status-success {
+		color: var(--pass);
+	}
+
+	.status-error {
+		color: var(--fail);
+	}
+
+	.backup-toggle-label {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		cursor: default;
+	}
+
+	.toggle-btn {
+		flex-shrink: 0;
+		width: 40px;
+		height: 22px;
+		border-radius: 100px;
+		border: none;
+		background: var(--border);
+		cursor: pointer;
+		position: relative;
+		transition: background 0.2s var(--ease-out);
+	}
+
+	.toggle-btn.active {
+		background: var(--accent);
+	}
+
+	.toggle-btn .toggle-thumb {
+		position: absolute;
+		top: 3px;
+		left: 3px;
+		width: 16px;
+		height: 16px;
+		border-radius: 50%;
+		background: white;
+		transition: transform 0.2s var(--ease-out);
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+	}
+
+	.toggle-btn.active .toggle-thumb {
+		transform: translateX(18px);
+	}
+
+	.field-input-mono {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.8125rem;
 	}
 
 	.import-row {

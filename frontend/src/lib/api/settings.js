@@ -47,6 +47,47 @@ export async function importBackup(data) {
 	return res.json();
 }
 
+export async function fetchBackupConfig() {
+	const res = await fetch(`${API_BASE}/backup/config`);
+	if (!res.ok)
+		return {
+			backupEnabled: false,
+			backupCron: '0 2 * * *',
+			backupS3Endpoint: '',
+			backupS3Region: '',
+			backupS3Bucket: '',
+			backupS3AccessKey: '',
+			backupS3SecretKeySet: false,
+			backupS3Prefix: '',
+			backupLastRunAt: null,
+			backupLastStatus: ''
+		};
+	return res.json();
+}
+
+export async function saveBackupConfig(config) {
+	const res = await fetch(`${API_BASE}/backup/config`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(config)
+	});
+	return res.json();
+}
+
+export async function testBackupS3(config) {
+	const res = await fetch(`${API_BASE}/backup/test-s3`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(config)
+	});
+	return res.json();
+}
+
+export async function runBackupNow() {
+	const res = await fetch(`${API_BASE}/backup/run-now`, { method: 'POST' });
+	return res.json();
+}
+
 export async function fetchIntegrations() {
 	const res = await fetch(`${API_BASE}/settings/integrations`);
 	if (!res.ok) return { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };

@@ -70,16 +70,26 @@ model Report {
 }
 
 model Project {
-  id                Int    @id @default(autoincrement())
-  name              String @default("")
-  logoUrl           String @default("")
-  testCasePrefix    String @default("TC")
-  testSuitePrefix   String @default("TS")
-  caseSeqNext       Int    @default(0)
-  suiteSeqNext      Int    @default(0)
-  discordWebhookUrl String @default("")
-  slackWebhookUrl   String @default("")
-  notifyPublicUrl   String @default("")
+  id                 Int       @id @default(autoincrement())
+  name               String    @default("")
+  logoUrl            String    @default("")
+  testCasePrefix     String    @default("TC")
+  testSuitePrefix    String    @default("TS")
+  caseSeqNext        Int       @default(0)
+  suiteSeqNext       Int       @default(0)
+  discordWebhookUrl  String    @default("")
+  slackWebhookUrl    String    @default("")
+  notifyPublicUrl    String    @default("")
+  backupEnabled      Boolean   @default(false)
+  backupCron         String    @default("0 2 * * *")
+  backupS3Endpoint   String    @default("")
+  backupS3Region     String    @default("")
+  backupS3Bucket     String    @default("")
+  backupS3AccessKey  String    @default("")
+  backupS3SecretKey  String    @default("")
+  backupS3Prefix     String    @default("")
+  backupLastRunAt    DateTime?
+  backupLastStatus   String    @default("")
 }
 
 model User {

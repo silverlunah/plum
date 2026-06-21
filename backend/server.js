@@ -41,15 +41,18 @@ const isNodeMode = process.env.PLUM_MODE === 'node';
 const port = parseInt(process.env.PORT || '3001', 10);
 
 let cronService = null;
+let backupCronService = null;
 if (!isNodeMode) {
 	const socketHandler = require('./websockets/socketHandler.js');
 	cronService = require('./services/cronService');
+	backupCronService = require('./services/backupCronService');
 	socketHandler(io);
 	cronService.setSocketIO(io);
 }
 
 async function start() {
 	if (cronService) await cronService.init();
+	if (backupCronService) await backupCronService.init();
 
 	server.listen(port, async () => {
 		console.log(`Backend running on port ${port}${isNodeMode ? ' (node/runner mode)' : ''}`);
