@@ -20,6 +20,7 @@ const { spawn } = require('child_process');
 const prisma = require('./prisma');
 const runnerService = require('./runnerService');
 const reportService = require('./reportService');
+const notificationService = require('./notificationService');
 const { BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { readCucumberReportFile } = require('../lib/reportFilename');
@@ -63,7 +64,7 @@ async function resolveLaneInfos(runnerIds) {
  * Single built-in runner — spawns tests locally.
  * TRIGGER is set to taskName so generate-report.js can persist it correctly.
  */
-function runSingleBuiltIn({ taskName, tags, workers, browser }) {
+function runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscord, notifySlack }) {
 	const env = {
 		...process.env,
 		TAG: tags,
@@ -78,6 +79,29 @@ function runSingleBuiltIn({ taskName, tags, workers, browser }) {
 	task.on('close', (code) => {
 		console.log(`Task "${taskName}" finished with code ${code}`);
 		if (_io) _io.emit('cron-done', { taskName, code });
+
+		if (notifyDiscord || notifySlack) {
+			prisma.report
+				.findFirst({
+					where: { triggerType: taskName },
+					orderBy: { createdAt: 'desc' },
+					select: { id: true, status: true, content: true }
+				})
+				.then((report) => {
+					if (!report) return;
+					return notificationService.send({
+						jobName: taskName,
+						status: report.status,
+						content: report.content,
+						browser,
+						tags,
+						reportId: report.id,
+						notifyDiscord,
+						notifySlack
+					});
+				})
+				.catch((e) => console.error(`[cron] Notification failed: ${e.message}`));
+		}
 	});
 }
 
@@ -85,7 +109,15 @@ function runSingleBuiltIn({ taskName, tags, workers, browser }) {
  * Multi-runner distributed path — splits tests across nodes and combines reports.
  * triggerType = taskName so the combined report is correctly attributed.
  */
-async function runDistributed({ taskName, tags, workers, browser, runnerIds }) {
+async function runDistributed({
+	taskName,
+	tags,
+	workers,
+	browser,
+	runnerIds,
+	notifyDiscord,
+	notifySlack
+}) {
 	const allIds = getTestIdsForTag(tags);
 	const chunks = chunkTests(allIds, runnerIds.length);
 
@@ -122,6 +154,20 @@ async function runDistributed({ taskName, tags, workers, browser, runnerIds }) {
 					tag: tags,
 					triggerType: taskName,
 					browser
+				})
+				.then((saved) => {
+					if (saved && (notifyDiscord || notifySlack)) {
+						return notificationService.send({
+							jobName: taskName,
+							status: saved.status,
+							content: saved.content,
+							browser,
+							tags,
+							reportId: saved.id,
+							notifyDiscord,
+							notifySlack
+						});
+					}
 				})
 				.catch((e) => console.error(`[cron] Failed to save combined report: ${e.message}`));
 		}
@@ -163,7 +209,15 @@ async function runDistributed({ taskName, tags, workers, browser, runnerIds }) {
 // ---------------------------------------------------------------------------
 
 async function runCronJob(job) {
-	const { taskName, tags, workers, browser, runnerIds: runnerIdsStr } = job;
+	const {
+		taskName,
+		tags,
+		workers,
+		browser,
+		runnerIds: runnerIdsStr,
+		notifyDiscord,
+		notifySlack
+	} = job;
 	const runnerIds = parseRunnerIds(runnerIdsStr);
 
 	if (_io) _io.emit('cron-start', { taskName });
@@ -172,9 +226,17 @@ async function runCronJob(job) {
 	const isSingleBuiltIn = runnerIds.length === 1 && runnerIds[0] === BUILT_IN_RUNNER_ID;
 
 	if (isSingleBuiltIn) {
-		runSingleBuiltIn({ taskName, tags, workers, browser });
+		runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscord, notifySlack });
 	} else {
-		await runDistributed({ taskName, tags, workers, browser, runnerIds });
+		await runDistributed({
+			taskName,
+			tags,
+			workers,
+			browser,
+			runnerIds,
+			notifyDiscord,
+			notifySlack
+		});
 	}
 }
 
@@ -212,7 +274,16 @@ const reload = async () => {
 
 const getAllCronJobs = () => prisma.cronJob.findMany({ orderBy: { createdAt: 'asc' } });
 
-const addCronJob = async ({ taskName, cronExpression, tags, workers, browser, runnerIds }) => {
+const addCronJob = async ({
+	taskName,
+	cronExpression,
+	tags,
+	workers,
+	browser,
+	runnerIds,
+	notifyDiscord,
+	notifySlack
+}) => {
 	if (!cronExpression || !taskName || !tags) {
 		return { status: 400, message: 'Missing required parameters' };
 	}
@@ -227,6 +298,8 @@ const addCronJob = async ({ taskName, cronExpression, tags, workers, browser, ru
 			workers: workers ?? 1,
 			browser: browser ?? 'chromium',
 			runnerIds: runnerIdsStr,
+			notifyDiscord: notifyDiscord ?? false,
+			notifySlack: notifySlack ?? false,
 			runnerId: null
 		}
 	});
@@ -248,7 +321,16 @@ const removeCronJob = async (taskName) => {
 
 const updateCronJob = async (
 	oldTaskName,
-	{ taskName: newTaskName, cronExpression, tags, workers, browser, runnerIds }
+	{
+		taskName: newTaskName,
+		cronExpression,
+		tags,
+		workers,
+		browser,
+		runnerIds,
+		notifyDiscord,
+		notifySlack
+	}
 ) => {
 	const job = await prisma.cronJob.findUnique({ where: { taskName: oldTaskName } });
 	if (!job) return { status: 404, message: `Cron job "${oldTaskName}" not found` };
@@ -271,6 +353,8 @@ const updateCronJob = async (
 			workers: workers ?? 1,
 			browser: browser ?? 'chromium',
 			runnerIds: runnerIdsStr,
+			notifyDiscord: notifyDiscord ?? false,
+			notifySlack: notifySlack ?? false,
 			runnerId: null
 		}
 	});

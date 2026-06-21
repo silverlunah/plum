@@ -30,6 +30,8 @@ export async function saveCronJob({
 	workers,
 	browser,
 	runnerIds,
+	notifyDiscord,
+	notifySlack,
 	isEditing,
 	editTaskName
 }) {
@@ -47,7 +49,9 @@ export async function saveCronJob({
 			tags: formattedTags,
 			workers,
 			browser,
-			runnerIds
+			runnerIds,
+			notifyDiscord: notifyDiscord ?? false,
+			notifySlack: notifySlack ?? false
 		})
 	});
 	return res.json();

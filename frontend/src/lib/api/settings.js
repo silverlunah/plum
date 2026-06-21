@@ -46,3 +46,18 @@ export async function importBackup(data) {
 	});
 	return res.json();
 }
+
+export async function fetchIntegrations() {
+	const res = await fetch(`${API_BASE}/settings/integrations`);
+	if (!res.ok) return { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
+	return res.json();
+}
+
+export async function saveIntegrations({ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl }) {
+	const res = await fetch(`${API_BASE}/settings/integrations`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl })
+	});
+	return res.json();
+}
