@@ -78,23 +78,24 @@ Full documentation is available at:
 
 ## Command Reference
 
-| Command                       | Description                                                                   |
-| ----------------------------- | ----------------------------------------------------------------------------- |
-| `plum init`                   | Initialize a new project in the current folder                                |
-| `plum server start`           | Start the full UI stack via Docker (alias: `plum start`)                      |
-| `plum server stop`            | Stop the server and preserve data (alias: `plum stop`)                        |
-| `plum restart`                | Rebuild and restart the server without prompts (alias: `plum server restart`) |
-| `plum update`                 | Update Plum to the latest version and restart the server                      |
-| `plum server reconfig`        | Re-enter server settings without starting                                     |
-| `plum run-test`               | Run all tests locally without Docker                                          |
-| `plum run-test @tag`          | Run tests matching a tag                                                      |
-| `plum run-test --parallel N`  | Run tests across N parallel workers                                           |
-| `plum run-test --browser <b>` | Run in `chromium` (default) or `firefox`                                      |
-| `plum create-step`            | Interactively scaffold a new step definition                                  |
-| `plum node start`             | Set up connectivity, start a runner node, and open the runner menu            |
-| `plum node stop`              | Stop the runner node started from this folder                                 |
-| `plum node reconfig`          | Re-enter node settings and re-register                                        |
-| `plum manage-runners`         | Open the interactive runner management menu                                   |
+| Command                       | Description                                                        |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `plum init`                   | Initialize a new project in the current folder                     |
+| `plum server start`           | Start the full UI stack via Docker                                 |
+| `plum server restart`         | Rebuild Docker images and restart the server without prompts       |
+| `plum server stop`            | Stop the server (data preserved)                                   |
+| `plum server reconfig`        | Re-enter server settings without starting                          |
+| `plum update`                 | Update Plum and auto-restart whatever is running (server or node)  |
+| `plum node start`             | Set up connectivity, start a runner node, and open the runner menu |
+| `plum node restart`           | Stop, refresh dependencies, and restart the runner node            |
+| `plum node stop`              | Stop the runner node started from this folder                      |
+| `plum node reconfig`          | Re-enter node settings and re-register                             |
+| `plum run-test`               | Run all tests locally without Docker                               |
+| `plum run-test @tag`          | Run tests matching a tag                                           |
+| `plum run-test --parallel N`  | Run tests across N parallel workers                                |
+| `plum run-test --browser <b>` | Run in `chromium` (default) or `firefox`                           |
+| `plum create-step`            | Interactively scaffold a new step definition                       |
+| `plum manage-runners`         | Open the interactive runner management menu                        |
 
 ---
 
