@@ -442,6 +442,56 @@ Stops the node started from the current folder. You can also stop individual run
 
 ---
 
+## 6. Notifications (Discord & Slack)
+
+Plum can post a pass/fail summary to a Discord channel or Slack workspace after every automated or manual test run. The notification includes the job name, overall result, scenario counts, browser, tags, and a link to the full report.
+
+### Step 1 — Get a webhook URL
+
+**Discord:**
+
+1. Open your Discord server, right-click the target channel → **Edit Channel**
+2. Go to **Integrations → Webhooks → New Webhook**
+3. Copy the webhook URL
+
+**Slack:**
+
+1. Go to your workspace's [Slack App directory](https://api.slack.com/apps) → **Create New App → From scratch**
+2. Under **Features**, choose **Incoming Webhooks** and activate them
+3. Click **Add New Webhook to Workspace**, choose the channel, and copy the webhook URL
+
+### Step 2 — Configure in Plum
+
+1. Open the Plum UI and go to **Settings → Integrations**
+2. Paste your webhook URL(s) into the **Discord Webhook URL** and/or **Slack Webhook URL** fields
+3. Set **Public URL** to the base address of your Plum instance (e.g. `http://192.168.1.5:5173`). This is used to generate the "View Report" link in the notification. Leave it blank if you don't want report links included.
+4. Click **Save Integrations**
+
+### Step 3 — Enable notifications
+
+**Scheduled runs:**
+
+Open **Scheduled Tests**, click **Edit** (or **New Job**) on a job, and check the **Discord** and/or **Slack** boxes that appear at the bottom of the form. Each job has its own toggle so you can notify only on the jobs that matter.
+
+> The notification toggles only appear if the corresponding webhook URL is configured in Settings.
+
+**Manual runs:**
+
+When at least one webhook is configured, small **Discord** and **Slack** buttons appear in the runner panel at the bottom of every page. Click a button to highlight it — the notification will fire when the run finishes.
+
+### What the notification contains
+
+| Field       | Example                                                      |
+| ----------- | ------------------------------------------------------------ |
+| Job / Run   | `nightly-login-suite` or `Manual Run`                        |
+| Status      | ✅ PASS or ❌ FAIL                                           |
+| Results     | `42 / 45 passed`                                             |
+| Browser     | `chromium`                                                   |
+| Tags        | `@suite-login`                                               |
+| Report link | Button / link to the full HTML report (if Public URL is set) |
+
+---
+
 ## Command Reference
 
 | Command                       | Description                                                                    |
