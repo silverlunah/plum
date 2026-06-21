@@ -25,6 +25,8 @@ const path = require('path');
 const { authGuard } = require('../middleware/auth');
 const { TRIGGER_REMOTE } = require('../constants/triggers');
 
+const BACKEND_DIR = path.resolve(__dirname, '..');
+
 // In-memory job store for active remote executions.
 // Jobs are purged after 10 minutes post-completion.
 const jobs = {};
@@ -84,7 +86,7 @@ router.post('/execute', authGuard, (req, res) => {
 	};
 	if (workers > 1) env.PARALLEL = String(workers);
 
-	const proc = spawn('npm', ['run', 'test'], { env, shell: true });
+	const proc = spawn('npm', ['run', 'test'], { env, shell: true, cwd: BACKEND_DIR });
 	proc.stdout.on('data', (d) => {
 		jobs[jobId].logs += d.toString();
 	});
