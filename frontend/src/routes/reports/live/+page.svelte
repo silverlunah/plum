@@ -23,15 +23,26 @@
 	import { reportUrl } from '$lib/api/reports';
 
 	let terminalEl;
-	let laneEls = {};
+	let laneTerminalEl;
 	let redirectTimer = null;
 	let redirectCountdown = 3;
 	let countdownInterval = null;
+	let activeTab = null;
 
 	$: state = $runnerState;
 	$: isMulti = state.lanes.length > 0;
 	$: cronJobs = Object.keys($activeCronJobs);
 	$: anyCronRunning = cronJobs.length > 0;
+
+	// Keep active tab pointing at a valid lane
+	$: {
+		if (state.lanes.length === 0) {
+			activeTab = null;
+		} else if (!state.lanes.find((l) => l.id === activeTab)) {
+			activeTab = state.lanes[0].id;
+		}
+	}
+	$: activeLane = state.lanes.find((l) => l.id === activeTab) ?? null;
 
 	let wasAnyCronRunning = false;
 	$: {
@@ -41,26 +52,20 @@
 		wasAnyCronRunning = anyCronRunning;
 	}
 
-	// Auto-scroll terminals
+	// Auto-scroll active terminal
 	afterUpdate(() => {
 		if (terminalEl) terminalEl.scrollTop = terminalEl.scrollHeight;
-		for (const el of Object.values(laneEls)) {
-			if (el) el.scrollTop = el.scrollHeight;
-		}
+		if (laneTerminalEl) laneTerminalEl.scrollTop = laneTerminalEl.scrollHeight;
 	});
 
-	// Watch for test completion → auto-navigate to report
+	// Auto-navigate to report when done
 	$: if (state.testCompleted && state.latestReportId && !redirectTimer) {
 		redirectCountdown = 3;
 		countdownInterval = setInterval(() => {
 			redirectCountdown--;
-			if (redirectCountdown <= 0) {
-				clearInterval(countdownInterval);
-			}
+			if (redirectCountdown <= 0) clearInterval(countdownInterval);
 		}, 1000);
-		redirectTimer = setTimeout(() => {
-			goto(reportUrl(state.latestReportId));
-		}, 3000);
+		redirectTimer = setTimeout(() => goto(reportUrl(state.latestReportId)), 3000);
 	}
 
 	onDestroy(() => {
@@ -72,10 +77,6 @@
 		if (redirectTimer) clearTimeout(redirectTimer);
 		if (countdownInterval) clearInterval(countdownInterval);
 		goto(reportUrl(state.latestReportId));
-	}
-
-	function handleCancel() {
-		cancelRun();
 	}
 
 	function laneStatusColor(status) {
@@ -106,7 +107,6 @@
 </div>
 
 {#if !state.running && !state.testCompleted && !anyCronRunning}
-	<!-- Nothing running and no completed test -->
 	<div class="idle-state">
 		<div class="idle-icon">
 			<svg
@@ -128,11 +128,8 @@
 		<a href="/reports" class="idle-link">View past reports →</a>
 	</div>
 {:else if anyCronRunning && !state.running && !state.testCompleted}
-	<!-- Scheduled run(s) in progress -->
 	<div class="cron-running-state">
-		<div class="cron-running-icon">
-			<span class="cron-pulse-dot"></span>
-		</div>
+		<div class="cron-running-icon"><span class="cron-pulse-dot"></span></div>
 		<h2>Scheduled {cronJobs.length === 1 ? 'run' : 'runs'} in progress</h2>
 		<div class="cron-task-list">
 			{#each cronJobs as name}
@@ -142,7 +139,7 @@
 		<p>The report will open automatically when the run finishes.</p>
 	</div>
 {:else}
-	<!-- Run header -->
+	<!-- ── Run header ── -->
 	<div
 		class="run-header"
 		class:header-pass={state.status === 'pass'}
@@ -150,10 +147,7 @@
 	>
 		<div class="header-left">
 			{#if state.running}
-				<span class="live-badge">
-					<span class="live-dot"></span>
-					Live
-				</span>
+				<span class="live-badge"><span class="live-dot"></span>Live</span>
 			{:else if state.status === 'pass'}
 				<span class="result-badge pass-badge">
 					<svg
@@ -164,10 +158,8 @@
 						stroke="currentColor"
 						stroke-width="2.5"
 						stroke-linecap="round"
-						stroke-linejoin="round"
+						stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg
 					>
-						<polyline points="20 6 9 17 4 12" />
-					</svg>
 					Passed
 				</span>
 			{:else}
@@ -181,9 +173,8 @@
 						stroke-width="2.5"
 						stroke-linecap="round"
 						stroke-linejoin="round"
+						><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
 					>
-						<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-					</svg>
 					Failed
 				</span>
 			{/if}
@@ -210,7 +201,7 @@
 		</div>
 
 		{#if state.running}
-			<button class="cancel-btn" on:click={handleCancel}>
+			<button class="cancel-btn" on:click={cancelRun}>
 				<svg
 					width="12"
 					height="12"
@@ -230,7 +221,7 @@
 		{/if}
 	</div>
 
-	<!-- Completion overlay -->
+	<!-- ── Completion bar ── -->
 	{#if state.testCompleted && state.latestReportId}
 		<div
 			class="completion-bar"
@@ -248,10 +239,8 @@
 						stroke="currentColor"
 						stroke-width="2.5"
 						stroke-linecap="round"
-						stroke-linejoin="round"
+						stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg
 					>
-						<polyline points="20 6 9 17 4 12" />
-					</svg>
 					All tests passed
 				{:else}
 					<svg
@@ -263,9 +252,8 @@
 						stroke-width="2.5"
 						stroke-linecap="round"
 						stroke-linejoin="round"
+						><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
 					>
-						<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-					</svg>
 					Some tests failed
 				{/if}
 			</div>
@@ -282,62 +270,130 @@
 						stroke-width="2"
 						stroke-linecap="round"
 						stroke-linejoin="round"
+						><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg
 					>
-						<line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-					</svg>
 				</button>
 			</div>
 		</div>
 	{/if}
 
-	<!-- Terminals -->
+	<!-- ── Multi-runner tabs ── -->
 	{#if isMulti}
-		<!-- Multi-runner: one terminal per lane -->
-		<div
-			class="lanes-grid"
-			style="grid-template-columns: repeat({Math.min(state.lanes.length, 2)}, 1fr)"
-		>
+		<div class="lane-tabs">
 			{#each state.lanes as lane}
-				<div class="lane-terminal">
-					<div class="lane-header">
-						<span
-							class="lane-dot"
-							style="background:{laneStatusColor(lane.status)}; {lane.status === 'running'
-								? 'animation: dotPulse 1.6s ease-in-out infinite'
-								: ''}"
-						></span>
-						<span class="lane-name">{lane.name}</span>
-						{#if lane.testCount}
-							<span class="lane-count">{lane.testCount} test{lane.testCount !== 1 ? 's' : ''}</span>
-						{/if}
-						<span class="lane-status-text" style="color:{laneStatusColor(lane.status)}">
-							{lane.status === 'done' ? 'Done' : lane.status === 'error' ? 'Failed' : 'Running'}
-						</span>
-					</div>
-					<div class="terminal-bar">
-						<span class="dot red"></span>
-						<span class="dot yellow"></span>
-						<span class="dot green"></span>
-					</div>
-					<pre class="terminal" bind:this={laneEls[lane.id]}>{lane.logs ||
-							'(waiting for output…)'}</pre>
-				</div>
+				<button
+					class="lane-tab"
+					class:active={activeTab === lane.id}
+					on:click={() => (activeTab = lane.id)}
+				>
+					<span
+						class="tab-dot"
+						style="background:{laneStatusColor(lane.status)};{lane.status === 'running'
+							? 'animation:dotPulse 1.6s ease-in-out infinite'
+							: ''}"
+					></span>
+					{lane.name}
+					{#if lane.testCount}
+						<span class="tab-count">{lane.testCount}</span>
+					{/if}
+				</button>
 			{/each}
 		</div>
-	{:else}
-		<!-- Single terminal -->
-		<div class="terminal-wrap">
+	{/if}
+
+	<!-- ── Dual-stream view ── -->
+	<div class="run-view" class:no-top-radius={isMulti}>
+		<!-- Screenshot panel -->
+		<div class="screenshot-panel">
+			{#if isMulti}
+				{#if activeLane?.latestScreenshot}
+					{#key activeLane.latestScreenshot.data}
+						<img
+							src="data:image/jpeg;base64,{activeLane.latestScreenshot.data}"
+							class="live-shot"
+							alt="Live browser view"
+							in:fade={{ duration: 120 }}
+						/>
+					{/key}
+					<div class="step-overlay">
+						<span class="step-keyword">Step</span>
+						<span class="step-name">{activeLane.latestScreenshot.stepName}</span>
+					</div>
+				{:else}
+					<div class="awaiting-state">
+						<svg
+							width="32"
+							height="32"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							opacity="0.25"
+						>
+							<rect x="2" y="5" width="20" height="14" rx="2" />
+							<circle cx="12" cy="12" r="3" />
+						</svg>
+						<span>{activeLane?.status === 'running' ? 'Awaiting stream...' : 'No stream...'}</span>
+					</div>
+				{/if}
+			{:else if state.latestScreenshot}
+				{#key state.latestScreenshot.data}
+					<img
+						src="data:image/jpeg;base64,{state.latestScreenshot.data}"
+						class="live-shot"
+						alt="Live browser view"
+						in:fade={{ duration: 120 }}
+					/>
+				{/key}
+				<div class="step-overlay">
+					<span class="step-keyword">Step</span>
+					<span class="step-name">{state.latestScreenshot.stepName}</span>
+				</div>
+			{:else}
+				<div class="awaiting-state">
+					<svg
+						width="32"
+						height="32"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						opacity="0.25"
+					>
+						<rect x="2" y="5" width="20" height="14" rx="2" />
+						<circle cx="12" cy="12" r="3" />
+					</svg>
+					<span>{state.running ? 'Awaiting stream...' : 'No stream'}</span>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Terminal panel -->
+		<div class="terminal-panel">
 			<div class="terminal-bar">
 				<span class="dot red"></span>
 				<span class="dot yellow"></span>
 				<span class="dot green"></span>
 				<span class="terminal-label">
-					{state.running ? 'Running…' : 'Finished'}
+					{#if isMulti}
+						{activeLane?.name ?? 'Runner'}
+					{:else}
+						{state.running ? 'Running…' : 'Finished'}
+					{/if}
 				</span>
 			</div>
-			<pre class="terminal" bind:this={terminalEl}>{state.output}</pre>
+			{#if isMulti}
+				<pre class="terminal" bind:this={laneTerminalEl}>{activeLane?.logs ||
+						'(waiting for output…)'}</pre>
+			{:else}
+				<pre class="terminal" bind:this={terminalEl}>{state.output}</pre>
+			{/if}
 		</div>
-	{/if}
+	</div>
 {/if}
 
 <style>
@@ -354,7 +410,6 @@
 		text-decoration: none;
 		transition: color var(--duration-fast);
 	}
-
 	.back-link:hover {
 		color: var(--text);
 	}
@@ -369,31 +424,26 @@
 		text-align: center;
 		gap: 0.75rem;
 	}
-
 	.idle-icon {
 		color: var(--text-muted);
 		opacity: 0.4;
 		margin-bottom: 0.5rem;
 	}
-
 	.idle-state h2 {
 		font-size: 1.5rem;
 		font-weight: 400;
 	}
-
 	.idle-state p {
 		font-size: 0.9375rem;
 		color: var(--text-muted);
 		max-width: 360px;
 	}
-
 	.idle-link {
 		font-size: 0.875rem;
 		color: var(--accent);
 		text-decoration: none;
 		margin-top: 0.5rem;
 	}
-
 	.idle-link:hover {
 		text-decoration: underline;
 	}
@@ -408,11 +458,9 @@
 		text-align: center;
 		gap: 0.75rem;
 	}
-
 	.cron-running-icon {
 		margin-bottom: 0.5rem;
 	}
-
 	.cron-pulse-dot {
 		display: inline-block;
 		width: 18px;
@@ -421,7 +469,6 @@
 		background: var(--pass);
 		animation: pulse-pass 1.4s ease-in-out infinite;
 	}
-
 	@keyframes pulse-pass {
 		0%,
 		100% {
@@ -433,19 +480,16 @@
 			transform: scale(0.8);
 		}
 	}
-
 	.cron-running-state h2 {
 		font-size: 1.5rem;
 		font-weight: 400;
 	}
-
 	.cron-task-list {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
 		justify-content: center;
 	}
-
 	.cron-task-chip {
 		font-size: 0.8125rem;
 		font-weight: 500;
@@ -455,7 +499,6 @@
 		border-radius: 100px;
 		padding: 0.2rem 0.65rem;
 	}
-
 	.cron-running-state p {
 		font-size: 0.9375rem;
 		color: var(--text-muted);
@@ -468,15 +511,13 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
-		padding: 1rem 1.25rem;
-		margin-bottom: 0;
+		padding: 0.875rem 1.25rem;
 		background: var(--bg-elevated);
 		border: 1px solid var(--border);
 		border-bottom: none;
 		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 		animation: fadeUp 0.3s var(--ease-out) both;
 	}
-
 	.run-header.header-pass {
 		border-top: 3px solid var(--pass);
 	}
@@ -491,7 +532,6 @@
 		flex-wrap: wrap;
 	}
 
-	/* Live badge */
 	.live-badge {
 		display: inline-flex;
 		align-items: center;
@@ -505,7 +545,6 @@
 		padding: 0.2rem 0.6rem;
 		border-radius: 100px;
 	}
-
 	.live-dot {
 		width: 6px;
 		height: 6px;
@@ -513,7 +552,6 @@
 		background: rgba(255, 255, 255, 0.8);
 		animation: dotPulse 1.2s ease-in-out infinite;
 	}
-
 	@keyframes dotPulse {
 		0%,
 		100% {
@@ -526,7 +564,6 @@
 		}
 	}
 
-	/* Result badges */
 	.result-badge {
 		display: inline-flex;
 		align-items: center;
@@ -538,7 +575,6 @@
 		padding: 0.2rem 0.6rem;
 		border-radius: 100px;
 	}
-
 	.pass-badge {
 		background: var(--pass-soft);
 		color: var(--pass);
@@ -554,7 +590,6 @@
 		gap: 0.35rem;
 		flex-wrap: wrap;
 	}
-
 	.run-title-label {
 		font-size: 0.875rem;
 		font-weight: 500;
@@ -565,27 +600,23 @@
 		padding: 0.15rem 0.6rem;
 		white-space: nowrap;
 	}
-
 	.run-tag-label {
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.8125rem;
 		font-weight: 500;
 		color: var(--text);
 	}
-
 	.run-sep {
 		color: var(--text-muted);
 		opacity: 0.4;
 		font-size: 0.75rem;
 	}
-
 	.run-detail {
 		font-size: 0.8rem;
 		color: var(--text-muted);
 		font-family: 'JetBrains Mono', monospace;
 	}
 
-	/* Cancel button */
 	.cancel-btn {
 		display: inline-flex;
 		align-items: center;
@@ -604,7 +635,6 @@
 			color var(--duration-fast);
 		flex-shrink: 0;
 	}
-
 	.cancel-btn:hover {
 		background: var(--fail);
 		color: #fff;
@@ -620,21 +650,17 @@
 		border: 1px solid var(--border);
 		border-top: none;
 		border-bottom: none;
-		animation: fadeUp 0.3s var(--ease-out) both;
 	}
-
 	.completion-bar.pass-bar {
 		background: var(--pass-soft);
 		border-color: color-mix(in srgb, var(--pass) 30%, var(--border));
 		color: var(--pass);
 	}
-
 	.completion-bar.fail-bar {
 		background: var(--fail-soft);
 		border-color: color-mix(in srgb, var(--fail) 30%, var(--border));
 		color: var(--fail);
 	}
-
 	.completion-left {
 		display: flex;
 		align-items: center;
@@ -642,20 +668,17 @@
 		font-size: 0.9rem;
 		font-weight: 500;
 	}
-
 	.completion-right {
 		display: flex;
 		align-items: center;
 		gap: 0.875rem;
 	}
-
 	.redirect-hint {
 		font-size: 0.8rem;
 		opacity: 0.7;
 		font-family: 'JetBrains Mono', monospace;
 		color: inherit;
 	}
-
 	.view-now-btn {
 		display: inline-flex;
 		align-items: center;
@@ -671,22 +694,141 @@
 		cursor: pointer;
 		transition: background var(--duration-fast);
 	}
-
 	.view-now-btn:hover {
 		background: rgba(0, 0, 0, 0.06);
 	}
 
-	/* ── Terminal ── */
-	.terminal-wrap {
+	/* ── Lane tabs ── */
+	.lane-tabs {
+		display: flex;
+		gap: 2px;
+		padding: 0.5rem 1rem 0;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-top: none;
+		border-bottom: none;
+	}
+	.lane-tab {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.375rem 0.875rem;
+		border: 1px solid transparent;
+		border-bottom: none;
+		border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+		background: transparent;
+		font-family: var(--font-body);
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			color var(--duration-fast),
+			background var(--duration-fast),
+			border-color var(--duration-fast);
+		white-space: nowrap;
+	}
+	.lane-tab:hover {
+		color: var(--text);
+		background: var(--bg-subtle);
+	}
+	.lane-tab.active {
+		color: var(--text);
+		background: var(--bg-elevated);
+		border-color: var(--border);
+		border-bottom-color: var(--bg-elevated);
+	}
+	.tab-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+	.tab-count {
+		font-size: 0.65rem;
+		font-weight: 600;
+		font-family: 'JetBrains Mono', monospace;
+		opacity: 0.55;
+	}
+
+	/* ── Dual-stream view ── */
+	.run-view {
+		display: grid;
+		grid-template-columns: 1fr 420px;
+		height: calc(100vh - 290px);
+		min-height: 380px;
 		border: 1px solid var(--border);
 		border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+		border-top: none;
 		overflow: hidden;
 		animation: fadeUp 0.35s var(--ease-out) 0.05s both;
 	}
+	.run-view.no-top-radius {
+		border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+	}
 
-	.run-header + .terminal-wrap,
-	.run-header + .completion-bar + .terminal-wrap {
-		border-top: none;
+	/* ── Screenshot panel ── */
+	.screenshot-panel {
+		position: relative;
+		background: #0d0d0e;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		overflow: hidden;
+		border-right: 1px solid var(--border);
+	}
+
+	.live-shot {
+		max-width: 100%;
+		max-height: 100%;
+		object-fit: contain;
+		display: block;
+		border-radius: 2px;
+	}
+
+	.step-overlay {
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		padding: 1.25rem 1rem 0.625rem;
+		background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		pointer-events: none;
+	}
+	.step-keyword {
+		font-size: 0.65rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--accent);
+		flex-shrink: 0;
+	}
+	.step-name {
+		font-size: 0.8125rem;
+		color: rgba(255, 255, 255, 0.85);
+		font-family: 'JetBrains Mono', monospace;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.awaiting-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.625rem;
+		color: rgba(255, 255, 255, 0.2);
+		font-size: 0.8rem;
+		font-family: 'JetBrains Mono', monospace;
+	}
+
+	/* ── Terminal panel ── */
+	.terminal-panel {
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
 	}
 
 	.terminal-bar {
@@ -695,15 +837,14 @@
 		gap: 6px;
 		padding: 0.6rem 0.875rem;
 		background: rgba(0, 0, 0, 0.35);
+		flex-shrink: 0;
 	}
-
 	.dot {
 		display: block;
 		width: 10px;
 		height: 10px;
 		border-radius: 50%;
 	}
-
 	.dot.red {
 		background: #ff5f57;
 	}
@@ -713,7 +854,6 @@
 	.dot.green {
 		background: #28c840;
 	}
-
 	.terminal-label {
 		margin-left: auto;
 		font-size: 0.68rem;
@@ -731,14 +871,12 @@
 		background: var(--terminal-bg);
 		color: var(--terminal-text);
 		padding: 1rem 1.25rem;
-		height: calc(100vh - 320px);
-		min-height: 240px;
+		flex: 1;
 		overflow-y: auto;
 		white-space: pre-wrap;
 		word-break: break-word;
 		margin: 0;
 	}
-
 	.terminal::-webkit-scrollbar {
 		width: 4px;
 	}
@@ -750,58 +888,14 @@
 		border-radius: 2px;
 	}
 
-	/* ── Multi-runner lanes ── */
-	.lanes-grid {
-		display: grid;
-		gap: 1rem;
-		animation: fadeUp 0.35s var(--ease-out) both;
-	}
-
-	.lane-terminal {
-		border: 1px solid var(--border);
-		border-radius: var(--radius-md);
-		overflow: hidden;
-	}
-
-	.lane-header {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.625rem 0.875rem;
-		background: var(--bg-subtle);
-		border-bottom: 1px solid var(--border);
-	}
-
-	.lane-dot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-		flex-shrink: 0;
-	}
-
-	.lane-name {
-		font-size: 0.8125rem;
-		font-weight: 500;
-		color: var(--text);
-	}
-
-	.lane-count {
-		font-size: 0.72rem;
-		color: var(--text-muted);
-		font-family: 'JetBrains Mono', monospace;
-	}
-
-	.lane-status-text {
-		margin-left: auto;
-		font-size: 0.7rem;
-		font-weight: 600;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-	}
-
-	.lane-terminal .terminal {
-		height: 280px;
-		min-height: unset;
-		font-size: 0.75rem;
+	@keyframes fadeUp {
+		from {
+			opacity: 0;
+			transform: translateY(6px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 </style>

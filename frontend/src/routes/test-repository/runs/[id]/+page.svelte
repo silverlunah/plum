@@ -517,7 +517,7 @@
 													>{tc.priority}</span
 												>
 												{#if tc.isAutomated}
-													<span class="auto-pill">Auto</span>
+													<span class="auto-pill">Automated</span>
 												{/if}
 											</button>
 										{/each}

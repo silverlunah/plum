@@ -168,8 +168,15 @@ function processCucumberJson(raw) {
 			const failedStepIndex = visibleSteps.findLastIndex((s) => s.result?.status === 'failed');
 
 			const steps = visibleSteps.map((step, index) => {
+				// AfterStep hook attachments land in step.after[].embeddings in Cucumber.js JSON
+				const afterStepScreenshot =
+					(step.after ?? []).flatMap(
+						(a) => a.embeddings?.filter((e) => e.mime_type === 'image/png') ?? []
+					)[0]?.data ?? null;
+
 				const screenshotData =
 					step.embeddings?.find((e) => e.mime_type === 'image/png')?.data ??
+					afterStepScreenshot ??
 					(index === failedStepIndex ? hookScreenshots[0]?.data : null) ??
 					null;
 
@@ -265,6 +272,7 @@ const getReportDetail = async (id) => {
 			runnerName: true,
 			createdAt: true,
 			content: true,
+			logs: true,
 			testRun: { select: { id: true, title: true } }
 		}
 	});
@@ -300,7 +308,8 @@ const saveReport = async ({
 	runnerName,
 	runnerId,
 	testRunId,
-	forceFail = false
+	forceFail = false,
+	logs = null
 }) => {
 	const normTrigger = normaliseTrigger(triggerType);
 	const { features, status: derivedStatus } = processCucumberJson(rawCucumberJson);
@@ -318,7 +327,8 @@ const saveReport = async ({
 			runnerId: runnerId ?? null,
 			cronJobId,
 			testRunId: testRunId ?? null,
-			content: { features }
+			content: { features },
+			logs: logs || null
 		}
 	});
 	syncAutomatedTags(report.id, features, testRunId ?? null);
@@ -345,7 +355,8 @@ const saveCombinedReport = async ({
 	tag,
 	triggerType,
 	browser,
-	testRunId
+	testRunId,
+	laneLogs = null
 }) => {
 	const featureMap = new Map();
 	for (const content of reports) {
@@ -371,6 +382,14 @@ const saveCombinedReport = async ({
 	}
 	const combined = [...featureMap.values()];
 
+	let combinedLogs = null;
+	if (laneLogs) {
+		const parts = runners
+			.map((r) => (laneLogs[r.id] ? `=== ${r.name} ===\n${laneLogs[r.id]}` : null))
+			.filter(Boolean);
+		if (parts.length > 0) combinedLogs = parts.join('\n\n');
+	}
+
 	return saveReport({
 		rawCucumberJson: combined,
 		tags: tag,
@@ -380,7 +399,8 @@ const saveCombinedReport = async ({
 		runnerName: runners.map((r) => r.name).join(', '),
 		runnerId: null,
 		testRunId: testRunId ?? null,
-		forceFail: reports.some((r) => r === null)
+		forceFail: reports.some((r) => r === null),
+		logs: combinedLogs
 	});
 };
 

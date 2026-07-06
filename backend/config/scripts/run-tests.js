@@ -52,21 +52,39 @@ try {
 		`BROWSER=${browser}`,
 		'TS_NODE_TRANSPILE_ONLY=true',
 		'cucumber-js',
-		`${testsRoot}/features/**/*.feature`
+		// Pass the directory, not a glob — avoids shell globstar expansion differences
+		// across platforms and lets cucumber-js discover .feature files recursively.
+		`${testsRoot}/features`
 	];
 
-	// A dispatched run executes test files in a temp dir on a runner node. The node's
-	// own working directory ships a cucumber.json whose `require` globs point at the
-	// node's *local* tests/ — and cucumber merges config-file `require` additively with
-	// the CLI ones, so every step would match two definitions (local + dispatched) and
-	// run as "ambiguous": never executing, reporting zero duration. Point cucumber at a
-	// self-contained config inside the dispatched dir so the node's own cucumber.json is
-	// skipped entirely (an explicit --config disables auto-discovery of the cwd file).
+	// A dispatched run executes test files in a temp dir on a runner node. Running
+	// cucumber from that temp dir (cwd = testsRootAbs) makes it auto-discover the
+	// cucumber.json written there, so the node's own backend cucumber.json is never
+	// loaded — preventing step-definition conflicts without relying on --config path
+	// resolution (which is fragile when the temp path is outside the project).
+	let execCwd;
 	if (process.env.TESTS_ROOT) {
-		const testsRootAbs = path.resolve(testsRoot);
-		const configPath = path.join(testsRootAbs, 'cucumber.json');
+		const testsRootAbs = path.isAbsolute(testsRoot) ? testsRoot : path.resolve(testsRoot);
+		execCwd = testsRootAbs;
+
+		// hooks.ts calls dotenv.config() with no path, which defaults to process.cwd().
+		// When running from a temp dir there is no .env there, so vars like BASE_URL
+		// would be undefined. Pre-load BACKEND_DIR's .env so they are already in
+		// process.env before dotenv.config() runs (dotenv never overwrites existing vars).
+		const backendEnvPath = path.resolve(__dirname, '..', '..', '.env');
+		if (fs.existsSync(backendEnvPath)) {
+			for (const line of fs.readFileSync(backendEnvPath, 'utf8').split(/\r?\n/)) {
+				const m = line.match(/^([A-Za-z_]\w*)\s*=\s*(.*?)(\s*#.*)?$/);
+				if (m) {
+					const key = m[1];
+					const val = m[2].trim().replace(/^(['"])(.*)\1$/, '$2');
+					if (!(key in process.env)) process.env[key] = val;
+				}
+			}
+		}
+
 		fs.writeFileSync(
-			configPath,
+			path.join(testsRootAbs, 'cucumber.json'),
 			JSON.stringify({
 				default: {
 					requireModule: ['ts-node/register'],
@@ -77,7 +95,6 @@ try {
 				}
 			})
 		);
-		baseCommand.push('--config', path.relative(process.cwd(), configPath).replace(/\\/g, '/'));
 	} else {
 		baseCommand.push(
 			'--require-module',
@@ -102,11 +119,16 @@ try {
 	const cucumberCommand = baseCommand.join(' ');
 	execSync(cucumberCommand, {
 		stdio: 'inherit',
+		...(execCwd && { cwd: execCwd }),
 		env: {
 			...process.env,
 			NODE_PATH: process.env.NODE_PATH
 				? `${nodeModulesPath}${path.delimiter}${process.env.NODE_PATH}`
-				: nodeModulesPath
+				: nodeModulesPath,
+			// When running from a temp dir there is no tsconfig.json above it, so
+			// ts-node falls back to defaults that may conflict with the Node version.
+			// Point it at the backend tsconfig explicitly.
+			...(execCwd && { TS_NODE_PROJECT: path.resolve(__dirname, '..', '..', 'tsconfig.json') })
 		}
 	});
 } catch (error) {
