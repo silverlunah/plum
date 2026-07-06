@@ -26,8 +26,9 @@ export const runnerState = writable({
 	latestReportId: null, // number | null — set after test finishes
 	status: 'idle', // 'idle' | 'running' | 'pass' | 'fail'
 	lastRunId: '',
-	lanes: [], // [{ id, name, testCount, status, logs }] multi-runner only
-	currentRun: null // { tag, workers, browser, runners } — set while running
+	lanes: [], // [{ id, name, testCount, status, logs, latestScreenshot }] multi-runner only
+	currentRun: null, // { tag, workers, browser, runners } — set while running
+	latestScreenshot: null // { stepName, data: base64 } for single built-in runner
 });
 
 export const runnerConfig = writable({
@@ -63,7 +64,8 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 		status: 'running',
 		lastRunId: runId,
 		lanes: [],
-		currentRun: { tag: runId, workers, browser, runners: selectedRunners, runTitle }
+		currentRun: { tag: runId, workers, browser, runners: selectedRunners, runTitle },
+		latestScreenshot: null
 	});
 	panelExpanded.set(true);
 

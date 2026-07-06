@@ -17,8 +17,8 @@
 
 <script>
 	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
-	import { slide } from 'svelte/transition';
+	import { onMount, onDestroy } from 'svelte';
+	import { slide, fade } from 'svelte/transition';
 	import { fetchReportDetail, screenshotUrl } from '$lib/api/reports';
 	import { isScheduled, triggerLabel, fmtDuration, stagger, featureFile } from '$lib/utils/format';
 	import Badge from '$lib/components/ui/Badge.svelte';
@@ -29,6 +29,86 @@
 	let detail = null;
 	let error = null;
 	let expandedScenarios = new Set();
+
+	// Replay state
+	let replayOpen = false;
+	let replayScenario = null;
+	let replayIdx = 0;
+	let replayPlaying = false;
+	let replayTimer = null;
+	const REPLAY_MS = 900;
+
+	$: replaySteps = replayScenario?.steps ?? [];
+	$: currentReplayStep = replaySteps[replayIdx] ?? null;
+
+	onDestroy(() => {
+		if (replayTimer) clearInterval(replayTimer);
+	});
+
+	function startPlayback() {
+		replayPlaying = true;
+		replayTimer = setInterval(() => {
+			if (replayIdx < (replayScenario?.steps?.length ?? 0) - 1) {
+				replayIdx++;
+			} else {
+				stopPlayback();
+			}
+		}, REPLAY_MS);
+	}
+
+	function stopPlayback() {
+		replayPlaying = false;
+		if (replayTimer) {
+			clearInterval(replayTimer);
+			replayTimer = null;
+		}
+	}
+
+	function openReplay(scenario) {
+		replayScenario = scenario;
+		replayIdx = 0;
+		replayOpen = true;
+		startPlayback();
+	}
+
+	function closeReplay() {
+		stopPlayback();
+		replayOpen = false;
+		replayScenario = null;
+	}
+
+	function togglePlayback() {
+		if (replayPlaying) {
+			stopPlayback();
+		} else {
+			if (replayIdx >= replaySteps.length - 1) replayIdx = 0;
+			startPlayback();
+		}
+	}
+
+	function replayPrev() {
+		stopPlayback();
+		if (replayIdx > 0) replayIdx--;
+	}
+
+	function replayNext() {
+		stopPlayback();
+		if (replayIdx < replaySteps.length - 1) replayIdx++;
+	}
+
+	function handleKeydown(e) {
+		if (!replayOpen) return;
+		if (e.key === 'ArrowRight') replayNext();
+		else if (e.key === 'ArrowLeft') replayPrev();
+		else if (e.key === ' ') {
+			e.preventDefault();
+			togglePlayback();
+		} else if (e.key === 'Escape') closeReplay();
+	}
+
+	function scenarioHasScreenshots(scenario) {
+		return scenario.steps.some((s) => s.screenshot);
+	}
 
 	onMount(async () => {
 		try {
@@ -102,6 +182,23 @@
 		return Array.from(groups.values());
 	}
 
+	function parseRunnerLogs(logs) {
+		if (!logs) return [];
+		// Split on the === Runner Name === section headers written by saveCombinedReport
+		const headerRe = /^=== (.+?) ===/m;
+		if (!headerRe.test(logs)) return [{ name: 'Logs', content: logs }];
+		const sections = [];
+		for (const chunk of logs.split(/\n\n(?==== )/)) {
+			const m = chunk.match(/^=== (.+?) ===\n?([\s\S]*)/);
+			if (m) sections.push({ name: m[1].trim(), content: m[2].trim() });
+		}
+		return sections;
+	}
+
+	let activeLogTab = 0;
+	$: logSections = parseRunnerLogs(detail?.logs ?? null);
+	$: if (logSections) activeLogTab = 0;
+
 	$: overallPass = detail?.status === 'PASS';
 	$: passed =
 		detail?.features.flatMap((f) => f.scenarios).filter((s) => s.status === 'passed').length ?? 0;
@@ -119,6 +216,8 @@
 			scenarioGroups: groupedScenarios(feature.scenarios)
 		})) ?? [];
 </script>
+
+<svelte:window on:keydown={handleKeydown} />
 
 <svelte:head><title>Report — Plum</title></svelte:head>
 
@@ -302,6 +401,56 @@
 		</div>
 	</div>
 
+	{#if logSections.length > 0}
+		<details class="logs-section">
+			<summary class="logs-summary">
+				<svg
+					width="13"
+					height="13"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
+				</svg>
+				Run Logs
+				{#if logSections.length > 1}
+					<span class="log-runner-count">{logSections.length} runners</span>
+				{/if}
+			</summary>
+
+			{#if logSections.length > 1}
+				<div class="log-tabs">
+					{#each logSections as section, i}
+						<button
+							class="log-tab"
+							class:log-tab-active={activeLogTab === i}
+							on:click|stopPropagation={() => (activeLogTab = i)}
+						>
+							<svg
+								width="10"
+								height="10"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+							>
+								<rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
+							</svg>
+							{section.name}
+						</button>
+					{/each}
+				</div>
+			{/if}
+
+			<pre class="logs-body">{logSections[activeLogTab]?.content ?? ''}</pre>
+		</details>
+	{/if}
+
 	{#each groupedFeatures as feature, fi}
 		<div
 			class="feature"
@@ -342,48 +491,64 @@
 				{#each feature.scenarioGroups as group, si}
 					{@const scenId = `${fi}-${group.key}`}
 					{@const open = expandedScenarios.has(scenId)}
+					{@const groupHasReplay = group.scenarios.some(scenarioHasScreenshots)}
 					<div
 						class="scenario"
 						class:scenario-fail={group.status === 'failed'}
 						style={stagger(fi * 5 + si, 40)}
 					>
-						<button class="scenario-header" on:click={() => toggleScenario(scenId)}>
-							<span
-								class="scenario-status-dot"
-								class:pass={group.status === 'passed'}
-								class:fail={group.status === 'failed'}
-								class:skip={group.status === 'skipped' || group.status === 'pending'}
-							></span>
+						<div class="scenario-row">
+							<button class="scenario-header" on:click={() => toggleScenario(scenId)}>
+								<span
+									class="scenario-status-dot"
+									class:pass={group.status === 'passed'}
+									class:fail={group.status === 'failed'}
+									class:skip={group.status === 'skipped' || group.status === 'pending'}
+								></span>
 
-							<span class="scenario-name">
-								{group.name}
-								{#if group.scenarios.length > 1}
-									<span class="scenario-count">{group.scenarios.length} cases</span>
-								{/if}
-							</span>
+								<span class="scenario-name">
+									{group.name}
+									{#if group.scenarios.length > 1}
+										<span class="scenario-count">{group.scenarios.length} cases</span>
+									{/if}
+								</span>
 
-							<div class="scenario-tags">
-								{#each group.tags as tag}
-									<span class="tag-chip">{tag}</span>
-								{/each}
-							</div>
+								<div class="scenario-tags">
+									{#each group.tags as tag}
+										<span class="tag-chip">{tag}</span>
+									{/each}
+								</div>
 
-							<span class="scenario-duration">{fmtDuration(group.duration)}</span>
+								<span class="scenario-duration">{fmtDuration(group.duration)}</span>
 
-							<svg
-								width="13"
-								height="13"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								class="chevron"
-								class:rotated={open}
-							>
-								<polyline points="9 18 15 12 9 6" />
-							</svg>
-						</button>
+								<svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									class="chevron"
+									class:rotated={open}
+								>
+									<polyline points="9 18 15 12 9 6" />
+								</svg>
+							</button>
+
+							{#if groupHasReplay && group.scenarios.length === 1}
+								<button
+									class="replay-btn"
+									title="Watch replay"
+									on:click={() => openReplay(group.scenarios[0])}
+								>
+									<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+										<polygon points="5,3 19,12 5,21" />
+									</svg>
+									Replay
+								</button>
+							{/if}
+						</div>
 
 						{#if open}
 							<div class="steps" transition:slide={{ duration: 200 }}>
@@ -398,6 +563,23 @@
 											></span>
 											<span>Case {exampleIndex + 1}</span>
 											<span class="scenario-duration">{fmtDuration(scenario.duration)}</span>
+											{#if scenarioHasScreenshots(scenario)}
+												<button
+													class="replay-btn replay-btn-sm"
+													on:click={() => openReplay(scenario)}
+												>
+													<svg
+														width="9"
+														height="9"
+														viewBox="0 0 24 24"
+														fill="currentColor"
+														stroke="none"
+													>
+														<polygon points="5,3 19,12 5,21" />
+													</svg>
+													Replay
+												</button>
+											{/if}
 										</div>
 									{/if}
 
@@ -421,12 +603,12 @@
 											{/if}
 
 											{#if step.screenshot}
-												<details class="screenshot-wrap" open>
+												<details class="screenshot-wrap">
 													<summary class="screenshot-toggle">Screenshot</summary>
 													<img
 														class="screenshot"
 														src={screenshotUrl(step.screenshot)}
-														alt="Failure screenshot"
+														alt="Step screenshot"
 													/>
 												</details>
 											{/if}
@@ -440,6 +622,134 @@
 			</div>
 		</div>
 	{/each}
+{/if}
+
+{#if replayOpen && replayScenario}
+	<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+	<div class="replay-overlay" transition:fade={{ duration: 150 }} on:click={closeReplay}>
+		<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+		<div class="replay-modal" on:click|stopPropagation>
+			<div class="replay-modal-header">
+				<span class="replay-modal-title">{replayScenario.name}</span>
+				<button class="replay-close" on:click={closeReplay}>
+					<svg
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+					>
+						<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+					</svg>
+				</button>
+			</div>
+
+			<div class="replay-screenshot-area">
+				{#if currentReplayStep?.screenshot}
+					<img
+						class="replay-screenshot"
+						src={screenshotUrl(currentReplayStep.screenshot)}
+						alt="Step {replayIdx + 1} screenshot"
+					/>
+				{:else}
+					<div class="replay-no-screenshot">No screenshot captured for this step</div>
+				{/if}
+			</div>
+
+			<div class="replay-timeline">
+				<input
+					type="range"
+					class="replay-slider"
+					min="0"
+					max={replaySteps.length - 1}
+					value={replayIdx}
+					style="--fill: {replaySteps.length > 1
+						? (replayIdx / (replaySteps.length - 1)) * 100
+						: 0}%"
+					on:input={(e) => {
+						stopPlayback();
+						replayIdx = Number(e.target.value);
+					}}
+				/>
+			</div>
+
+			<div class="replay-step-info">
+				<span
+					class="replay-step-status"
+					class:status-pass={currentReplayStep?.status === 'passed'}
+					class:status-fail={currentReplayStep?.status === 'failed'}
+					class:status-skip={currentReplayStep?.status !== 'passed' &&
+						currentReplayStep?.status !== 'failed'}
+				>
+					{#if currentReplayStep?.status === 'passed'}✓{:else if currentReplayStep?.status === 'failed'}✗{:else}−{/if}
+				</span>
+				<span class="kw {keywordClass(currentReplayStep?.keyword ?? '')}"
+					>{currentReplayStep?.keyword}</span
+				>
+				<span class="replay-step-name">{currentReplayStep?.name}</span>
+			</div>
+
+			<div class="replay-nav">
+				<button class="replay-nav-btn" on:click={replayPrev} disabled={replayIdx === 0}>
+					<svg
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+					>
+						<polyline points="15 18 9 12 15 6" />
+					</svg>
+				</button>
+
+				<button
+					class="replay-play-btn"
+					on:click={togglePlayback}
+					title={replayPlaying ? 'Pause' : 'Play'}
+				>
+					{#if replayPlaying}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+							<rect x="6" y="4" width="4" height="16" rx="1" /><rect
+								x="14"
+								y="4"
+								width="4"
+								height="16"
+								rx="1"
+							/>
+						</svg>
+					{:else}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+							<polygon points="5,3 19,12 5,21" />
+						</svg>
+					{/if}
+				</button>
+
+				<button
+					class="replay-nav-btn"
+					on:click={replayNext}
+					disabled={replayIdx === replaySteps.length - 1}
+				>
+					<svg
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+					>
+						<polyline points="9 18 15 12 9 6" />
+					</svg>
+				</button>
+
+				<span class="replay-counter">{replayIdx + 1} / {replaySteps.length}</span>
+			</div>
+		</div>
+	</div>
 {/if}
 
 <style>
@@ -699,12 +1009,18 @@
 		border-left-color: var(--fail);
 	}
 
+	.scenario-row {
+		display: flex;
+		align-items: stretch;
+	}
+
 	.scenario-header {
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.75rem 1rem;
-		width: 100%;
+		flex: 1;
+		min-width: 0;
 		background: transparent;
 		border: none;
 		cursor: pointer;
@@ -715,6 +1031,36 @@
 
 	.scenario-header:hover {
 		background: var(--bg-subtle);
+	}
+
+	.replay-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0 0.875rem;
+		font-family: var(--font-body);
+		font-size: 0.72rem;
+		font-weight: 500;
+		color: var(--accent);
+		background: transparent;
+		border: none;
+		border-left: 1px solid var(--border);
+		cursor: pointer;
+		flex-shrink: 0;
+		transition: background var(--duration-fast);
+		white-space: nowrap;
+	}
+
+	.replay-btn:hover {
+		background: var(--accent-soft);
+	}
+
+	.replay-btn-sm {
+		margin-left: auto;
+		padding: 0.15rem 0.5rem;
+		border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+		border-radius: var(--radius-sm);
+		font-size: 0.68rem;
 	}
 
 	.scenario-status-dot {
@@ -967,5 +1313,353 @@
 		color: var(--fail);
 		text-align: center;
 		font-size: 0.9375rem;
+	}
+
+	/* ── Run Logs ── */
+	.logs-section {
+		margin-bottom: 1.25rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		overflow: hidden;
+		animation: fadeUp 0.35s var(--ease-out) both;
+	}
+
+	.logs-summary {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.875rem 1.25rem;
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--text);
+		cursor: pointer;
+		user-select: none;
+		list-style: none;
+	}
+
+	.logs-summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.logs-summary:hover {
+		background: var(--bg-subtle);
+	}
+
+	.log-runner-count {
+		margin-left: auto;
+		font-size: 0.7rem;
+		font-weight: 500;
+		color: var(--text-muted);
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: 100px;
+		padding: 0.1rem 0.5rem;
+	}
+
+	.log-tabs {
+		display: flex;
+		gap: 0;
+		border-bottom: 1px solid var(--border);
+		background: var(--bg-subtle);
+		overflow-x: auto;
+	}
+
+	.log-tab {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.5rem 1rem;
+		font-size: 0.78rem;
+		font-weight: 500;
+		font-family: var(--font-body);
+		color: var(--text-muted);
+		background: transparent;
+		border: none;
+		border-bottom: 2px solid transparent;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: color var(--duration-fast);
+	}
+
+	.log-tab:hover {
+		color: var(--text);
+	}
+
+	.log-tab-active {
+		color: var(--text);
+		border-bottom-color: var(--accent);
+	}
+
+	.logs-body {
+		font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+		font-size: 0.775rem;
+		line-height: 1.7;
+		background: var(--terminal-bg);
+		color: var(--terminal-text);
+		padding: 1rem 1.25rem;
+		max-height: 480px;
+		overflow-y: auto;
+		white-space: pre-wrap;
+		word-break: break-word;
+		margin: 0;
+		border-top: 1px solid var(--border);
+	}
+
+	.logs-body::-webkit-scrollbar {
+		width: 4px;
+	}
+	.logs-body::-webkit-scrollbar-thumb {
+		background: rgba(255, 255, 255, 0.1);
+		border-radius: 2px;
+	}
+
+	/* ── Replay modal ── */
+	.replay-overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.72);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 200;
+		padding: 1rem;
+	}
+
+	.replay-modal {
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		width: min(920px, 100%);
+		max-height: 90vh;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+	}
+
+	.replay-modal-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.875rem 1.25rem;
+		border-bottom: 1px solid var(--border);
+		gap: 1rem;
+		flex-shrink: 0;
+	}
+
+	.replay-modal-title {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--text);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.replay-close {
+		background: transparent;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		padding: 0.25rem;
+		display: flex;
+		align-items: center;
+		border-radius: var(--radius-sm);
+		flex-shrink: 0;
+		transition: color var(--duration-fast);
+	}
+
+	.replay-close:hover {
+		color: var(--text);
+	}
+
+	.replay-screenshot-area {
+		flex: 1;
+		min-height: 0;
+		background: var(--bg-subtle);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		overflow: hidden;
+		position: relative;
+	}
+
+	.replay-screenshot {
+		max-width: 100%;
+		max-height: 100%;
+		object-fit: contain;
+		display: block;
+	}
+
+	.replay-no-screenshot {
+		color: var(--text-muted);
+		font-size: 0.8125rem;
+		font-family: 'JetBrains Mono', monospace;
+	}
+
+	.replay-step-info {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.75rem 1.25rem;
+		border-top: 1px solid var(--border);
+		flex-shrink: 0;
+		min-width: 0;
+	}
+
+	.replay-step-status {
+		font-size: 0.875rem;
+		font-weight: 600;
+		width: 18px;
+		flex-shrink: 0;
+	}
+
+	.replay-step-status.status-pass {
+		color: var(--pass);
+	}
+	.replay-step-status.status-fail {
+		color: var(--fail);
+	}
+	.replay-step-status.status-skip {
+		color: var(--text-muted);
+	}
+
+	.replay-step-name {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.8125rem;
+		color: var(--text);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* ── Timeline slider ── */
+	.replay-timeline {
+		padding: 0.5rem 1.25rem;
+		border-top: 1px solid var(--border);
+		flex-shrink: 0;
+	}
+
+	.replay-slider {
+		display: block;
+		width: 100%;
+		height: 4px;
+		-webkit-appearance: none;
+		appearance: none;
+		background: transparent;
+		border-radius: 2px;
+		cursor: pointer;
+		outline: none;
+	}
+
+	.replay-slider::-webkit-slider-runnable-track {
+		height: 4px;
+		border-radius: 2px;
+		background: linear-gradient(
+			to right,
+			var(--accent) var(--fill, 0%),
+			var(--border) var(--fill, 0%)
+		);
+	}
+
+	.replay-slider::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		width: 14px;
+		height: 14px;
+		margin-top: -5px;
+		border-radius: 50%;
+		background: var(--accent);
+		cursor: pointer;
+		transition: transform 0.1s;
+	}
+
+	.replay-slider:hover::-webkit-slider-thumb {
+		transform: scale(1.25);
+	}
+
+	.replay-slider::-moz-range-track {
+		height: 4px;
+		border-radius: 2px;
+		background: var(--border);
+	}
+
+	.replay-slider::-moz-range-progress {
+		height: 4px;
+		border-radius: 2px;
+		background: var(--accent);
+	}
+
+	.replay-slider::-moz-range-thumb {
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: var(--accent);
+		border: none;
+		cursor: pointer;
+	}
+
+	/* ── Nav bar ── */
+	.replay-nav {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+		padding: 0.5rem 1.25rem 0.625rem;
+		border-top: 1px solid var(--border);
+		flex-shrink: 0;
+	}
+
+	.replay-nav-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		height: 30px;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		color: var(--text);
+		cursor: pointer;
+		transition: background var(--duration-fast);
+	}
+
+	.replay-nav-btn:hover:not(:disabled) {
+		background: var(--bg-elevated);
+	}
+
+	.replay-nav-btn:disabled {
+		opacity: 0.35;
+		cursor: default;
+	}
+
+	.replay-play-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 38px;
+		height: 38px;
+		background: var(--accent);
+		border: none;
+		border-radius: 50%;
+		color: #fff;
+		cursor: pointer;
+		transition:
+			opacity var(--duration-fast),
+			transform var(--duration-fast);
+	}
+
+	.replay-play-btn:hover {
+		opacity: 0.85;
+		transform: scale(1.05);
+	}
+
+	.replay-counter {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		min-width: 5ch;
+		text-align: center;
+		margin-left: 0.25rem;
 	}
 </style>

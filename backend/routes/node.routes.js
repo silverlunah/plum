@@ -50,10 +50,13 @@ router.post('/execute', authGuard, (req, res) => {
 	const { tags, browser = 'chromium', workers = 1, tests = null } = req.body;
 	const jobId = crypto.randomUUID();
 
+	// path.resolve ensures absolute even if TMPDIR env var is set to a relative path
+	const tmpdir = path.resolve(os.tmpdir());
+
 	// Write test files sent by the primary into a per-job temp dir
 	let tempTestsDir = null;
 	if (tests && Object.keys(tests).length > 0) {
-		tempTestsDir = path.join(os.tmpdir(), `plum-job-${jobId}`);
+		tempTestsDir = path.join(tmpdir, `plum-job-${jobId}`);
 		for (const [rel, content] of Object.entries(tests)) {
 			const dest = path.join(tempTestsDir, rel);
 			fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -63,7 +66,9 @@ router.post('/execute', authGuard, (req, res) => {
 
 	// Each job writes to its own temp file so concurrent jobs on the same node
 	// cannot clobber each other's reports (shared cucumber_report.json race condition).
-	const reportFile = path.join(os.tmpdir(), `plum-report-${jobId}.json`);
+	const reportFile = path.join(tmpdir, `plum-report-${jobId}.json`);
+	const ssDir = path.join(tmpdir, `plum-ss-${jobId}`);
+	fs.mkdirSync(ssDir, { recursive: true });
 
 	jobs[jobId] = {
 		status: 'running',
@@ -72,7 +77,9 @@ router.post('/execute', authGuard, (req, res) => {
 		startedAt: Date.now(),
 		meta: { tags: tags || '', browser, workers },
 		tempTestsDir,
-		reportFile
+		reportFile,
+		ssDir,
+		pendingScreenshots: []
 	};
 
 	const env = {
@@ -82,9 +89,35 @@ router.post('/execute', authGuard, (req, res) => {
 		BROWSER: browser,
 		REPORT_RUNNERS: String(workers),
 		CUCUMBER_REPORT_FILE: reportFile,
+		PLUM_SS_DIR: ssDir,
 		...(tempTestsDir ? { TESTS_ROOT: tempTestsDir } : {})
 	};
 	if (workers > 1) env.PARALLEL = String(workers);
+
+	const seenSsFiles = new Set();
+	const ssPoller = setInterval(() => {
+		const job = jobs[jobId];
+		if (!job) {
+			clearInterval(ssPoller);
+			return;
+		}
+		try {
+			const files = fs
+				.readdirSync(ssDir)
+				.filter((f) => f.endsWith('.ss.json'))
+				.sort();
+			for (const f of files) {
+				if (seenSsFiles.has(f)) continue;
+				seenSsFiles.add(f);
+				const filePath = path.join(ssDir, f);
+				const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+				job.pendingScreenshots.push(data);
+				try {
+					fs.unlinkSync(filePath);
+				} catch {}
+			}
+		} catch {}
+	}, 400);
 
 	const proc = spawn('npm', ['run', 'test'], { env, shell: true, cwd: BACKEND_DIR });
 	proc.stdout.on('data', (d) => {
@@ -94,6 +127,7 @@ router.post('/execute', authGuard, (req, res) => {
 		jobs[jobId].logs += d.toString();
 	});
 	proc.on('close', (code) => {
+		clearInterval(ssPoller);
 		jobs[jobId].status = code === 0 ? 'done' : 'error';
 		jobs[jobId].exitCode = code;
 
@@ -102,6 +136,8 @@ router.post('/execute', authGuard, (req, res) => {
 				jobs[jobId].reportContent = fs.readFileSync(reportFile, 'utf8');
 			}
 		} catch {}
+
+		fs.rm(ssDir, { recursive: true, force: true }, () => {});
 
 		if (jobs[jobId].tempTestsDir) {
 			fs.rm(jobs[jobId].tempTestsDir, { recursive: true, force: true }, () => {});
@@ -132,10 +168,12 @@ router.get('/execute/:jobId', authGuard, (req, res) => {
 	if (!job) return res.status(404).json({ error: 'Job not found' });
 
 	const offset = parseInt(req.query.offset || '0', 10);
+	const screenshots = job.pendingScreenshots.splice(0);
 	res.json({
 		status: job.status,
 		logs: job.logs.slice(offset),
-		exitCode: job.exitCode
+		exitCode: job.exitCode,
+		screenshots
 	});
 });
 

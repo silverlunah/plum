@@ -16,12 +16,16 @@
  */
 
 const { spawn } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const runnerService = require('../services/runnerService');
 const reportService = require('../services/reportService');
 const notificationService = require('../services/notificationService');
 const { TRIGGER_TYPE, BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { readCucumberReportFile } = require('../lib/reportFilename');
+const { getTestSuites } = require('../services/testService');
 const prisma = require('../services/prisma');
 
 const socketHandler = (io) => {
@@ -111,8 +115,78 @@ const socketHandler = (io) => {
 };
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function makeSyntheticFailReport(laneName, testIds, reason) {
+	// Build id → scenario title from local feature files so names match the real report.
+	const nameMap = {};
+	try {
+		const { suites } = getTestSuites();
+		for (const suite of suites) {
+			for (const test of suite.tests) {
+				for (const id of Array.isArray(test.id) ? test.id : [test.id]) {
+					nameMap[id] = test.testCase;
+				}
+			}
+		}
+	} catch {}
+
+	return JSON.stringify([
+		{
+			id: 'runner-error',
+			uri: 'runner-error',
+			name: `Runner: ${laneName}`,
+			keyword: 'Feature',
+			elements: testIds.map((id) => ({
+				id: id.replace(/^@/, '').toLowerCase(),
+				// Use real scenario title; fall back to bare ID without @
+				name: nameMap[id] || id.replace(/^@/, ''),
+				keyword: 'Scenario',
+				type: 'scenario',
+				// ids from getTestIdsForTag already carry the @ — don't add a second one
+				tags: [{ name: id.startsWith('@') ? id : `@${id}` }],
+				steps: [
+					{
+						keyword: 'Given ',
+						name: 'the scenario was assigned to this runner',
+						result: {
+							status: 'failed',
+							error_message: `Runner "${laneName}" did not complete: ${reason}`,
+							duration: 0
+						}
+					}
+				]
+			}))
+		}
+	]);
+}
+
+// ---------------------------------------------------------------------------
 // Single built-in runner
 // ---------------------------------------------------------------------------
+
+function startSsPoller(ssDir, onScreenshot) {
+	const seenFiles = new Set();
+	return setInterval(() => {
+		try {
+			const files = fs
+				.readdirSync(ssDir)
+				.filter((f) => f.endsWith('.ss.json'))
+				.sort();
+			for (const f of files) {
+				if (seenFiles.has(f)) continue;
+				seenFiles.add(f);
+				const filePath = path.join(ssDir, f);
+				const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+				onScreenshot(data);
+				try {
+					fs.unlinkSync(filePath);
+				} catch {}
+			}
+		} catch {}
+	}, 400);
+}
 
 function runBuiltIn(
 	io,
@@ -125,12 +199,16 @@ function runBuiltIn(
 	notifyDiscord,
 	notifySlack
 ) {
+	const ssDir = path.join(os.tmpdir(), `plum-ss-${Date.now()}`);
+	fs.mkdirSync(ssDir, { recursive: true });
+
 	const env = {
 		...process.env,
 		TAG: tag,
 		TRIGGER: TRIGGER_TYPE.MANUAL,
 		REPORT_RUNNERS: String(workers),
-		BROWSER: browser
+		BROWSER: browser,
+		PLUM_SS_DIR: ssDir
 	};
 	if (workers > 1) env.PARALLEL = String(workers);
 	if (testRunId) env.TEST_RUN_ID = testRunId;
@@ -138,14 +216,46 @@ function runBuiltIn(
 	const proc = spawn('npm', ['run', 'test'], { env, shell: true });
 	activeProcs.add(proc);
 
-	proc.stdout.on('data', (d) => socket.emit('log', d.toString()));
-	proc.stderr.on('data', (d) => socket.emit('log', `[ERROR] ${d.toString()}`));
+	const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
+		socket.emit('step-screenshot', { stepName, data });
+	});
 
-	proc.on('close', (code) => {
+	let logBuffer = '';
+	proc.stdout.on('data', (d) => {
+		const text = d.toString();
+		logBuffer += text;
+		socket.emit('log', text);
+	});
+	proc.stderr.on('data', (d) => {
+		const text = `[ERROR] ${d.toString()}`;
+		logBuffer += text;
+		socket.emit('log', text);
+	});
+
+	proc.on('close', async (code) => {
+		clearInterval(ssPoller);
+		fs.rm(ssDir, { recursive: true, force: true }, () => {});
 		activeProcs.delete(proc);
 		socket.emit('log', `\nTest finished with code ${code}`);
 		socket.emit('done', code);
 		io.emit('report-ready');
+
+		// Attach accumulated logs to the report generate-report.js just saved
+		try {
+			const latest = await prisma.report.findFirst({
+				where: { triggerType: TRIGGER_TYPE.MANUAL },
+				orderBy: { createdAt: 'desc' },
+				select: { id: true }
+			});
+			if (latest) {
+				await prisma.report.update({
+					where: { id: latest.id },
+					data: { logs: logBuffer || null }
+				});
+			}
+		} catch (e) {
+			console.error('[socket] Failed to save run logs:', e.message);
+		}
 
 		if (notifyDiscord || notifySlack) {
 			prisma.report
@@ -224,6 +334,8 @@ async function runDistributed(
 
 	const total = activeRunnerIds.length;
 	const collectedReports = new Array(total).fill(null);
+	const laneLogs = {};
+	for (const l of laneInfos) laneLogs[l.id] = '';
 	let doneCount = 0;
 	let overallCode = 0;
 
@@ -244,7 +356,8 @@ async function runDistributed(
 					tag,
 					triggerType: TRIGGER_TYPE.MANUAL,
 					browser,
-					testRunId: testRunId ?? null
+					testRunId: testRunId ?? null,
+					laneLogs
 				})
 				.then((saved) => {
 					// Result is authoritative from the merged report, not the exit code —
@@ -278,40 +391,73 @@ async function runDistributed(
 	for (let i = 0; i < activeRunnerIds.length; i++) {
 		const lane = laneInfos[i];
 		const chunkTag = buildTagExpression(chunks[i]);
+		const chunkIds = chunks[i];
 
 		if (lane.id === BUILT_IN_RUNNER_ID) {
+			const laneId = lane.id;
+			const ssDir = path.join(os.tmpdir(), `plum-ss-${Date.now()}-${i}`);
+			fs.mkdirSync(ssDir, { recursive: true });
+
 			const env = {
 				...process.env,
 				TAG: chunkTag,
 				TRIGGER: TRIGGER_REMOTE,
 				BROWSER: browser,
 				REPORT_RUNNERS: String(workers),
-				PLUM_MODE: 'node'
+				PLUM_MODE: 'node',
+				PLUM_SS_DIR: ssDir
 			};
 			if (workers > 1) env.PARALLEL = String(workers);
 
 			const proc = spawn('npm', ['run', 'test'], { env, shell: true });
 			activeProcs.add(proc);
 
-			proc.stdout.on('data', (d) =>
-				socket.emit('runner-lane-log', { id: lane.id, log: d.toString() })
-			);
-			proc.stderr.on('data', (d) =>
-				socket.emit('runner-lane-log', { id: lane.id, log: `[ERROR] ${d.toString()}` })
-			);
+			const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
+				socket.emit('runner-lane-screenshot', { id: laneId, stepName, data });
+			});
+
+			proc.stdout.on('data', (d) => {
+				const text = d.toString();
+				laneLogs[laneId] += text;
+				socket.emit('runner-lane-log', { id: laneId, log: text });
+			});
+			proc.stderr.on('data', (d) => {
+				const text = `[ERROR] ${d.toString()}`;
+				laneLogs[laneId] += text;
+				socket.emit('runner-lane-log', { id: laneId, log: text });
+			});
 
 			const idx = i;
 			proc.on('close', (code) => {
+				clearInterval(ssPoller);
+				fs.rm(ssDir, { recursive: true, force: true }, () => {});
 				activeProcs.delete(proc);
-				onLaneDone(idx, lane.id, code, readCucumberReportFile());
+				const content =
+					readCucumberReportFile() ??
+					makeSyntheticFailReport(lane.name, chunkIds, 'process exited with error');
+				onLaneDone(idx, laneId, code, content);
 			});
 		} else {
 			const idx = i;
+			const laneId = lane.id;
 			runnerService.dispatchAndPoll(
-				lane.id,
+				laneId,
 				{ tags: chunkTag, browser, workers },
-				(log) => socket.emit('runner-lane-log', { id: lane.id, log }),
-				(code, content) => onLaneDone(idx, lane.id, code, content)
+				(log) => {
+					laneLogs[laneId] += log;
+					socket.emit('runner-lane-log', { id: laneId, log });
+				},
+				(code, content) =>
+					onLaneDone(
+						idx,
+						laneId,
+						code,
+						content ??
+							makeSyntheticFailReport(lane.name, chunkIds, 'could not fetch report from runner')
+					),
+				({ stepName, data }) => {
+					socket.emit('runner-lane-screenshot', { id: laneId, stepName, data });
+				}
 			);
 		}
 	}

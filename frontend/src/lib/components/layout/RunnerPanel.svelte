@@ -155,7 +155,7 @@
 		s.on('runner-lanes-init', (lanes) => {
 			runnerState.update((r) => ({
 				...r,
-				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '' }))
+				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '', latestScreenshot: null }))
 			}));
 		});
 
@@ -170,6 +170,19 @@
 			runnerState.update((r) => ({
 				...r,
 				lanes: r.lanes.map((l) => (l.id === id ? { ...l, status } : l))
+			}));
+		});
+
+		s.on('step-screenshot', ({ stepName, data }) => {
+			runnerState.update((r) => ({ ...r, latestScreenshot: { stepName, data } }));
+		});
+
+		s.on('runner-lane-screenshot', ({ id, stepName, data }) => {
+			runnerState.update((r) => ({
+				...r,
+				lanes: r.lanes.map((l) =>
+					l.id === id ? { ...l, latestScreenshot: { stepName, data } } : l
+				)
 			}));
 		});
 

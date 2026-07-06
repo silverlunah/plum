@@ -138,7 +138,13 @@ async function fetchReportContent(runner, jobId, onLog) {
  * @param {(log: string) => void} onLog   Called with each new log chunk
  * @param {(exitCode: number, reportContent: string|null) => void} onDone
  */
-async function dispatchAndPoll(runnerId, { tags, browser, workers }, onLog, onDone) {
+async function dispatchAndPoll(
+	runnerId,
+	{ tags, browser, workers },
+	onLog,
+	onDone,
+	onScreenshot = null
+) {
 	// The async poll callback can overlap if a tick takes longer than the interval;
 	// guard so the run resolves exactly once and can't be finalised while a lane
 	// is still in flight.
@@ -193,6 +199,10 @@ async function dispatchAndPoll(runnerId, { tags, browser, workers }, onLog, onDo
 			if (body.logs) {
 				onLog(body.logs);
 				logOffset += body.logs.length;
+			}
+
+			if (onScreenshot && Array.isArray(body.screenshots)) {
+				for (const ss of body.screenshots) onScreenshot(ss);
 			}
 
 			if (body.status === 'done' || body.status === 'error') {
