@@ -20,8 +20,24 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { slide, fade } from 'svelte/transition';
 	import { fetchReportDetail, screenshotUrl } from '$lib/api/reports';
-	import { isScheduled, triggerLabel, fmtDuration, stagger, featureFile } from '$lib/utils/format';
+	import {
+		isScheduled,
+		triggerLabel,
+		fmtDuration,
+		stagger,
+		featureFile,
+		groupedScenarios,
+		parseRunnerLogs,
+		featureSuiteTag,
+		scenarioHasScreenshots
+	} from '$lib/utils/format';
+	import { REPLAY_STEP_MS } from '$lib/constants';
 	import Badge from '$lib/components/ui/Badge.svelte';
+	import BackLink from '$lib/components/ui/BackLink.svelte';
+	import StatusDot from '$lib/components/ui/StatusDot.svelte';
+	import TagChip from '$lib/components/ui/TagChip.svelte';
+	import StepKeyword from '$lib/components/ui/StepKeyword.svelte';
+	import StepStatusIcon from '$lib/components/ui/StepStatusIcon.svelte';
 	import BrowserIcon from '$lib/components/icons/BrowserIcon.svelte';
 
 	const reportId = parseInt($page.params.id, 10);
@@ -36,7 +52,6 @@
 	let replayIdx = 0;
 	let replayPlaying = false;
 	let replayTimer = null;
-	const REPLAY_MS = 900;
 
 	$: replaySteps = replayScenario?.steps ?? [];
 	$: currentReplayStep = replaySteps[replayIdx] ?? null;
@@ -53,7 +68,7 @@
 			} else {
 				stopPlayback();
 			}
-		}, REPLAY_MS);
+		}, REPLAY_STEP_MS);
 	}
 
 	function stopPlayback() {
@@ -65,6 +80,7 @@
 	}
 
 	function openReplay(scenario) {
+		stopPlayback();
 		replayScenario = scenario;
 		replayIdx = 0;
 		replayOpen = true;
@@ -106,10 +122,6 @@
 		} else if (e.key === 'Escape') closeReplay();
 	}
 
-	function scenarioHasScreenshots(scenario) {
-		return scenario.steps.some((s) => s.screenshot);
-	}
-
 	onMount(async () => {
 		try {
 			detail = await fetchReportDetail(reportId);
@@ -124,92 +136,16 @@
 		expandedScenarios = expandedScenarios;
 	}
 
-	function keywordClass(kw) {
-		const k = kw.toLowerCase();
-		if (k === 'given') return 'kw-given';
-		if (k === 'when') return 'kw-when';
-		if (k === 'then') return 'kw-then';
-		return 'kw-and';
-	}
-
-	function scenarioTestTag(scenario) {
-		return scenario.tags.find((tag) => /^@test[\w-]*/i.test(tag));
-	}
-
-	function featureSuiteTag(feature) {
-		for (const scenario of feature.scenarios) {
-			const suiteTag = scenario.tags.find((tag) => /suite/i.test(tag));
-			if (suiteTag) return suiteTag;
-		}
-		return null;
-	}
-
-	function visibleTags(scenario) {
-		const testTag = scenarioTestTag(scenario);
-		if (testTag) return [testTag];
-		return scenario.tags.filter((tag) => !tag.includes('suite'));
-	}
-
-	function worstStatus(scenarios) {
-		const rank = { failed: 3, pending: 2, skipped: 1, passed: 0 };
-		return scenarios.reduce(
-			(status, scenario) =>
-				(rank[scenario.status] ?? 0) > (rank[status] ?? 0) ? scenario.status : status,
-			'passed'
-		);
-	}
-
-	function groupedScenarios(scenarios) {
-		const groups = new Map();
-		for (const scenario of scenarios) {
-			const testTag = scenarioTestTag(scenario);
-			const key = testTag || `${scenario.keyword}:${scenario.name}`;
-			if (!groups.has(key)) {
-				groups.set(key, {
-					key,
-					name: scenario.name,
-					tags: visibleTags(scenario),
-					scenarios: [],
-					duration: 0,
-					status: scenario.status
-				});
-			}
-			const group = groups.get(key);
-			group.scenarios.push(scenario);
-			group.duration += scenario.duration;
-			group.status = worstStatus(group.scenarios);
-		}
-		return Array.from(groups.values());
-	}
-
-	function parseRunnerLogs(logs) {
-		if (!logs) return [];
-		// Split on the === Runner Name === section headers written by saveCombinedReport
-		const headerRe = /^=== (.+?) ===/m;
-		if (!headerRe.test(logs)) return [{ name: 'Logs', content: logs }];
-		const sections = [];
-		for (const chunk of logs.split(/\n\n(?==== )/)) {
-			const m = chunk.match(/^=== (.+?) ===\n?([\s\S]*)/);
-			if (m) sections.push({ name: m[1].trim(), content: m[2].trim() });
-		}
-		return sections;
-	}
-
 	let activeLogTab = 0;
 	$: logSections = parseRunnerLogs(detail?.logs ?? null);
 	$: if (logSections) activeLogTab = 0;
 
 	$: overallPass = detail?.status === 'PASS';
-	$: passed =
-		detail?.features.flatMap((f) => f.scenarios).filter((s) => s.status === 'passed').length ?? 0;
-	$: failed =
-		detail?.features.flatMap((f) => f.scenarios).filter((s) => s.status === 'failed').length ?? 0;
-	$: skipped =
-		detail?.features
-			.flatMap((f) => f.scenarios)
-			.filter((s) => s.status === 'skipped' || s.status === 'pending').length ?? 0;
-	$: totalDuration =
-		detail?.features.flatMap((f) => f.scenarios).reduce((s, sc) => s + sc.duration, 0) ?? 0;
+	$: allScenarios = detail?.features.flatMap((f) => f.scenarios) ?? [];
+	$: passed = allScenarios.filter((s) => s.status === 'passed').length;
+	$: failed = allScenarios.filter((s) => s.status === 'failed').length;
+	$: skipped = allScenarios.filter((s) => s.status === 'skipped' || s.status === 'pending').length;
+	$: totalDuration = allScenarios.reduce((s, sc) => s + sc.duration, 0);
 	$: groupedFeatures =
 		detail?.features.map((feature) => ({
 			...feature,
@@ -221,23 +157,7 @@
 
 <svelte:head><title>Report — Plum</title></svelte:head>
 
-<div class="back-row">
-	<a href="/reports" class="back-link">
-		<svg
-			width="14"
-			height="14"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-		>
-			<line x1="19" y1="12" x2="5" y2="12" />
-			<polyline points="12 19 5 12 12 5" />
-		</svg>
-		Reports
-	</a>
-</div>
+<BackLink href="/reports" label="Reports" />
 
 {#if error}
 	<div class="error-state">{error}</div>
@@ -499,12 +419,7 @@
 					>
 						<div class="scenario-row">
 							<button class="scenario-header" on:click={() => toggleScenario(scenId)}>
-								<span
-									class="scenario-status-dot"
-									class:pass={group.status === 'passed'}
-									class:fail={group.status === 'failed'}
-									class:skip={group.status === 'skipped' || group.status === 'pending'}
-								></span>
+								<StatusDot status={group.status} />
 
 								<span class="scenario-name">
 									{group.name}
@@ -515,7 +430,7 @@
 
 								<div class="scenario-tags">
 									{#each group.tags as tag}
-										<span class="tag-chip">{tag}</span>
+										<TagChip {tag} />
 									{/each}
 								</div>
 
@@ -555,12 +470,7 @@
 								{#each group.scenarios as scenario, exampleIndex}
 									{#if group.scenarios.length > 1}
 										<div class="example-header">
-											<span
-												class="scenario-status-dot"
-												class:pass={scenario.status === 'passed'}
-												class:fail={scenario.status === 'failed'}
-												class:skip={scenario.status === 'skipped' || scenario.status === 'pending'}
-											></span>
+											<StatusDot status={scenario.status} />
 											<span>Case {exampleIndex + 1}</span>
 											<span class="scenario-duration">{fmtDuration(scenario.duration)}</span>
 											{#if scenarioHasScreenshots(scenario)}
@@ -590,10 +500,8 @@
 											class:step-skip={step.status === 'skipped' || step.status === 'pending'}
 										>
 											<div class="step-row">
-												<span class="step-status-icon">
-													{#if step.status === 'passed'}✓{:else if step.status === 'failed'}✗{:else}−{/if}
-												</span>
-												<span class="kw {keywordClass(step.keyword)}">{step.keyword}</span>
+												<StepStatusIcon status={step.status} />
+												<StepKeyword keyword={step.keyword} />
 												<span class="step-name">{step.name}</span>
 												<span class="step-duration">{fmtDuration(step.duration)}</span>
 											</div>
@@ -676,18 +584,8 @@
 			</div>
 
 			<div class="replay-step-info">
-				<span
-					class="replay-step-status"
-					class:status-pass={currentReplayStep?.status === 'passed'}
-					class:status-fail={currentReplayStep?.status === 'failed'}
-					class:status-skip={currentReplayStep?.status !== 'passed' &&
-						currentReplayStep?.status !== 'failed'}
-				>
-					{#if currentReplayStep?.status === 'passed'}✓{:else if currentReplayStep?.status === 'failed'}✗{:else}−{/if}
-				</span>
-				<span class="kw {keywordClass(currentReplayStep?.keyword ?? '')}"
-					>{currentReplayStep?.keyword}</span
-				>
+				<StepStatusIcon status={currentReplayStep?.status ?? 'skipped'} />
+				<StepKeyword keyword={currentReplayStep?.keyword ?? ''} />
 				<span class="replay-step-name">{currentReplayStep?.name}</span>
 			</div>
 
@@ -753,24 +651,6 @@
 {/if}
 
 <style>
-	.back-row {
-		margin-bottom: 1.5rem;
-	}
-
-	.back-link {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-		font-size: 0.8125rem;
-		color: var(--text-muted);
-		text-decoration: none;
-		transition: color var(--duration-fast);
-	}
-
-	.back-link:hover {
-		color: var(--text);
-	}
-
 	.report-header {
 		border-radius: var(--radius-lg);
 		border: 1px solid var(--border);
@@ -836,7 +716,7 @@
 		color: var(--accent);
 		background: var(--accent-soft);
 		border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.25rem 0.7rem;
 		white-space: nowrap;
 		max-width: 240px;
@@ -877,7 +757,7 @@
 		font-weight: 500;
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.1rem 0.45rem;
 	}
 
@@ -985,7 +865,7 @@
 		background: var(--accent-soft);
 		color: var(--accent);
 		padding: 0.1rem 0.4rem;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		font-weight: 500;
 	}
 
@@ -1063,23 +943,6 @@
 		font-size: 0.68rem;
 	}
 
-	.scenario-status-dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		flex-shrink: 0;
-	}
-
-	.scenario-status-dot.pass {
-		background: var(--pass);
-	}
-	.scenario-status-dot.fail {
-		background: var(--fail);
-	}
-	.scenario-status-dot.skip {
-		background: var(--text-muted);
-	}
-
 	.scenario-name {
 		flex: 1;
 		font-size: 0.875rem;
@@ -1100,7 +963,7 @@
 		color: var(--text-muted);
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.05rem 0.4rem;
 		white-space: nowrap;
 	}
@@ -1109,15 +972,6 @@
 		display: flex;
 		gap: 0.25rem;
 		flex-shrink: 0;
-	}
-
-	.tag-chip {
-		font-size: 0.65rem;
-		font-family: 'JetBrains Mono', monospace;
-		background: var(--accent-soft);
-		color: var(--accent);
-		padding: 0.1rem 0.4rem;
-		border-radius: 100px;
 	}
 
 	.scenario-duration {
@@ -1178,49 +1032,6 @@
 		display: flex;
 		align-items: baseline;
 		gap: 0.5rem;
-	}
-
-	.step-status-icon {
-		font-size: 0.75rem;
-		font-weight: 600;
-		width: 14px;
-		flex-shrink: 0;
-		color: var(--text-muted);
-	}
-
-	.step-fail .step-status-icon {
-		color: var(--fail);
-	}
-	.step:not(.step-fail):not(.step-skip) .step-status-icon {
-		color: var(--pass);
-	}
-
-	.kw {
-		font-size: 0.72rem;
-		font-weight: 500;
-		letter-spacing: 0.04em;
-		flex-shrink: 0;
-		padding: 0.05rem 0.4rem;
-		border-radius: 3px;
-		font-family: 'JetBrains Mono', monospace;
-	}
-
-	.kw-given {
-		background: var(--accent-soft);
-		color: var(--accent);
-	}
-	.kw-when {
-		background: var(--warn-soft);
-		color: var(--warn);
-	}
-	.kw-then {
-		background: var(--pass-soft);
-		color: var(--pass);
-	}
-	.kw-and {
-		background: var(--bg-elevated);
-		color: var(--text-muted);
-		border: 1px solid var(--border);
 	}
 
 	.step-name {
@@ -1353,7 +1164,7 @@
 		color: var(--text-muted);
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.1rem 0.5rem;
 	}
 
@@ -1508,23 +1319,6 @@
 		min-width: 0;
 	}
 
-	.replay-step-status {
-		font-size: 0.875rem;
-		font-weight: 600;
-		width: 18px;
-		flex-shrink: 0;
-	}
-
-	.replay-step-status.status-pass {
-		color: var(--pass);
-	}
-	.replay-step-status.status-fail {
-		color: var(--fail);
-	}
-	.replay-step-status.status-skip {
-		color: var(--text-muted);
-	}
-
 	.replay-step-name {
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.8125rem;
@@ -1642,7 +1436,7 @@
 		background: var(--accent);
 		border: none;
 		border-radius: 50%;
-		color: #fff;
+		color: var(--white);
 		cursor: pointer;
 		transition:
 			opacity var(--duration-fast),

@@ -630,7 +630,7 @@
 		width: 14px;
 		height: 14px;
 		border-radius: 50%;
-		background: #fff;
+		background: var(--white);
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 		transition: left var(--duration-fast);
 	}
@@ -666,7 +666,7 @@
 
 	.run-icon-btn:hover {
 		background: var(--accent);
-		color: #fff;
+		color: var(--white);
 		border-color: var(--accent);
 	}
 
@@ -803,7 +803,7 @@
 	}
 	.seg-btn.active {
 		background: var(--accent);
-		color: #fff;
+		color: var(--white);
 	}
 	.seg-btn.active .seg-label {
 		opacity: 0.85;

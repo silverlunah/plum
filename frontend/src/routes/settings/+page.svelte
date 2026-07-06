@@ -1828,7 +1828,7 @@
 		flex-shrink: 0;
 		width: 40px;
 		height: 22px;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		border: none;
 		background: var(--border);
 		cursor: pointer;
@@ -1908,7 +1908,7 @@
 		color: var(--text-muted);
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.1rem 0.45rem;
 		flex-shrink: 0;
 	}
@@ -1935,7 +1935,7 @@
 		font-size: 0.7rem;
 		font-weight: 500;
 		padding: 0.15rem 0.5rem;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		flex-shrink: 0;
 	}
 
@@ -2084,7 +2084,7 @@
 		flex-shrink: 0;
 		width: 40px;
 		height: 22px;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		border: none;
 		background: var(--border);
 		cursor: pointer;
@@ -2274,7 +2274,7 @@
 	.role-chip {
 		font-size: 0.7rem;
 		font-weight: 500;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.15rem 0.55rem;
 		flex-shrink: 0;
 	}
@@ -2295,7 +2295,7 @@
 		color: var(--text-muted);
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.15rem 0.55rem;
 		flex-shrink: 0;
 	}

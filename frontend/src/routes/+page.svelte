@@ -516,7 +516,7 @@
 
 	.run-icon-btn:hover {
 		background: var(--accent);
-		color: #fff;
+		color: var(--white);
 		border-color: var(--accent);
 	}
 
@@ -534,7 +534,7 @@
 		color: var(--accent);
 		background: var(--accent-soft);
 		border: none;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.15rem 0.55rem;
 		cursor: pointer;
 		font-family: 'JetBrains Mono', monospace;
@@ -589,7 +589,7 @@
 		background: var(--warn-soft);
 		color: var(--warn);
 		padding: 0.1rem 0.4rem;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		margin-left: 0.4rem;
 		vertical-align: middle;
 	}

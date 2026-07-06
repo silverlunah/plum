@@ -361,7 +361,7 @@
 	.pass-bar-track {
 		height: 3px;
 		background: var(--fail-soft);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		overflow: hidden;
 		margin-bottom: 0.5rem;
 	}
@@ -369,7 +369,7 @@
 	.pass-bar-fill {
 		height: 100%;
 		background: var(--pass);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		transition: width 0.9s var(--ease-out) 0.1s;
 	}
 
@@ -468,7 +468,7 @@
 
 	.btn-delete-selected:hover {
 		background: var(--fail);
-		color: #fff;
+		color: var(--white);
 	}
 
 	/* ── Report rows ── */

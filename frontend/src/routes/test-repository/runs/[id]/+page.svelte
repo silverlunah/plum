@@ -31,7 +31,12 @@
 	import { auth } from '$lib/stores/auth';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
-	import { TOAST_TIMEOUT_MS } from '$lib/constants';
+	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import AutomatedBadge from '$lib/components/ui/AutomatedBadge.svelte';
+	import PriorityBadge from '$lib/components/ui/PriorityBadge.svelte';
+	import CaseIdChip from '$lib/components/ui/CaseIdChip.svelte';
+	import ResultChip from '$lib/components/ui/ResultChip.svelte';
+	import { TOAST_TIMEOUT_MS, RUN_REFRESH_MS } from '$lib/constants';
 
 	const runId = $page.params.id;
 
@@ -133,7 +138,7 @@
 				const fresh = await fetchRun(runId);
 				run = fresh;
 			} catch {}
-		}, 15000);
+		}, RUN_REFRESH_MS);
 	});
 
 	onDestroy(() => {
@@ -292,18 +297,6 @@
 		dragOverEntryId = null;
 	}
 
-	function priorityClass(p) {
-		return p?.toLowerCase() ?? 'medium';
-	}
-
-	function statusClass(s) {
-		if (s === 'pass') return 'pass';
-		if (s === 'fail') return 'fail';
-		if (s === 'blocked') return 'warn';
-		if (s === 'skip') return 'muted';
-		return 'pending';
-	}
-
 	$: completedCount = run?.entries.filter((e) => e.status !== 'pending').length ?? 0;
 	$: totalCount = run?.entries.length ?? 0;
 	$: passCount = run?.entries.filter((e) => e.status === 'pass').length ?? 0;
@@ -378,7 +371,7 @@
 				</div>
 
 				{#if run.entries.length === 0}
-					<div class="drop-hint">No cases in this run.</div>
+					<EmptyState message="No cases in this run." size="sm" />
 				{:else}
 					<div class="entry-sort-bar">
 						{#each [['order', 'Order'], ['name', 'Name'], ['priority', 'Priority'], ['status', 'Status'], ['suite', 'Suite']] as [val, label]}
@@ -428,16 +421,14 @@
 								{/if}
 								<div class="entry-info">
 									<div class="entry-badges">
-										<span class="id-chip">{entry.case.displayId}</span>
-										<span class="priority-badge {priorityClass(entry.case.priority)}"
-											>{entry.case.priority}</span
-										>
+										<CaseIdChip id={entry.case.displayId} />
+										<PriorityBadge priority={entry.case.priority} />
 									</div>
 									<p class="entry-title">{entry.case.title}</p>
 									<span class="entry-suite">{entry.case.suite?.name ?? ''}</span>
 								</div>
 								{#if entry.case.isAutomated}
-									<span class="assignee-auto-label">Automated</span>
+									<AutomatedBadge />
 								{:else}
 									<select
 										class="assignee-select"
@@ -511,13 +502,11 @@
 									<div class="browser-cases" transition:fly={{ y: -4, duration: 120 }}>
 										{#each suite.cases as tc (tc.id)}
 											<button class="browser-case" on:click={() => addCase(tc)}>
-												<span class="id-chip small">{tc.displayId}</span>
+												<CaseIdChip id={tc.displayId} small />
 												<span class="browser-case-title">{tc.title}</span>
-												<span class="priority-badge small {priorityClass(tc.priority)}"
-													>{tc.priority}</span
-												>
+												<PriorityBadge priority={tc.priority} small />
 												{#if tc.isAutomated}
-													<span class="auto-pill">Automated</span>
+													<AutomatedBadge />
 												{/if}
 											</button>
 										{/each}
@@ -586,8 +575,8 @@
 										>
 									</button>
 								{/if}
-								<span class="id-chip">{entry.case.displayId}</span>
-								{#if entry.case.isAutomated}<span class="auto-pill">Automated</span>{/if}
+								<CaseIdChip id={entry.case.displayId} />
+								{#if entry.case.isAutomated}<AutomatedBadge />{/if}
 								<div>
 									<p class="exec-title">{entry.case.title}</p>
 									<span class="exec-suite">{entry.case.suite?.name ?? ''}</span>
@@ -596,7 +585,7 @@
 							<div class="exec-actions">
 								{#if entry.case.isAutomated}
 									<div class="exec-assignee-row">
-										<span class="exec-assignee-name auto-label">Automated</span>
+										<AutomatedBadge />
 									</div>
 									<div class="exec-assignee-divider"></div>
 								{:else if entry.assignedTo || (!isLocked && entry.assignedTo?.id !== currentUserId)}
@@ -617,7 +606,7 @@
 									<div class="exec-assignee-divider"></div>
 								{/if}
 								{#if isLocked || run.status !== 'in-progress'}
-									<span class="result-chip {statusClass(entry.status)}">{entry.status}</span>
+									<ResultChip status={entry.status} />
 								{:else if entry.status === 'pending' || entry.status === 'in-progress'}
 									<div class="exec-btns">
 										<button
@@ -640,7 +629,7 @@
 									</div>
 								{:else}
 									<div class="exec-btns">
-										<span class="result-chip {statusClass(entry.status)}">{entry.status}</span>
+										<ResultChip status={entry.status} />
 										<button
 											class="exec-reset"
 											on:click={() => handleMarkEntry(entry, 'pending')}
@@ -731,7 +720,7 @@
 		font-size: 0.7rem;
 		font-weight: 500;
 		text-transform: capitalize;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.2rem 0.6rem;
 		border: 1px solid var(--border);
 		color: var(--text-muted);
@@ -764,7 +753,7 @@
 		color: var(--text-muted);
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.1rem 0.45rem;
 		margin-left: auto;
 	}
@@ -830,7 +819,7 @@
 		font-size: 0.7rem;
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.05rem 0.4rem;
 		color: var(--text-muted);
 	}
@@ -869,7 +858,7 @@
 		font-size: 0.7rem;
 		background: var(--bg-elevated);
 		border: 1px solid var(--border);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.05rem 0.4rem;
 		color: var(--text-muted);
 	}
@@ -891,14 +880,6 @@
 		border-color: var(--accent);
 	}
 
-	.drop-hint {
-		padding: 2rem 1.25rem;
-		font-size: 0.8125rem;
-		color: var(--text-muted);
-		text-align: center;
-		line-height: 1.6;
-	}
-
 	.entry-sort-bar {
 		display: flex;
 		align-items: center;
@@ -911,7 +892,7 @@
 	.entry-sort-chip {
 		font-size: 0.75rem;
 		padding: 0.2rem 0.55rem;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		border: 1px solid var(--border);
 		background: var(--bg);
 		color: var(--text-muted);
@@ -993,33 +974,6 @@
 	.entry-suite {
 		font-size: 0.7rem;
 		color: var(--text-muted);
-	}
-
-	.assignee-auto-label {
-		font-size: 0.72rem;
-		font-weight: 500;
-		color: var(--accent);
-		background: var(--accent-soft);
-		border-radius: 100px;
-		padding: 0.15rem 0.5rem;
-		flex-shrink: 0;
-	}
-
-	.auto-pill {
-		font-size: 0.62rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--accent);
-		background: var(--accent-soft);
-		border-radius: 100px;
-		padding: 0.1rem 0.4rem;
-		flex-shrink: 0;
-	}
-
-	.auto-label {
-		color: var(--accent);
-		font-weight: 500;
 	}
 
 	.exec-locked-banner {
@@ -1165,9 +1119,6 @@
 	}
 
 	/* ── Execute ── */
-	.execute-workspace {
-	}
-
 	.progress-bar-wrap {
 		margin-bottom: 1.25rem;
 	}
@@ -1197,14 +1148,14 @@
 	.progress-bar {
 		height: 6px;
 		background: var(--bg-subtle);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		overflow: hidden;
 		display: flex;
 	}
 
 	.progress-fill {
 		height: 100%;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		transition: width 0.3s var(--ease-out);
 	}
 
@@ -1365,7 +1316,7 @@
 		color: var(--accent);
 		background: none;
 		border: 1px solid var(--accent);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.1rem 0.5rem;
 		cursor: pointer;
 		transition: background var(--duration-fast);
@@ -1378,36 +1329,6 @@
 	.exec-assign-me:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-	}
-
-	.result-chip {
-		font-size: 0.7rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		padding: 0.2rem 0.6rem;
-		border-radius: 100px;
-	}
-
-	.result-chip.pass {
-		background: var(--pass-soft);
-		color: var(--pass);
-	}
-	.result-chip.fail {
-		background: var(--fail-soft);
-		color: var(--fail);
-	}
-	.result-chip.warn {
-		background: var(--warn-soft);
-		color: var(--warn);
-	}
-	.result-chip.muted {
-		background: var(--bg-subtle);
-		color: var(--text-muted);
-	}
-	.result-chip.pending {
-		background: var(--bg-subtle);
-		color: var(--text-muted);
 	}
 
 	.exec-chevron {
@@ -1467,51 +1388,6 @@
 		color: var(--text-muted);
 		font-family: 'JetBrains Mono', monospace;
 		margin-top: 0.2rem;
-	}
-
-	/* ── Shared chips ── */
-	.id-chip {
-		font-family: 'JetBrains Mono', monospace;
-		font-weight: 600;
-		color: var(--accent);
-		background: var(--accent-soft);
-		border-radius: 4px;
-		letter-spacing: 0.02em;
-		font-size: 0.7rem;
-		padding: 0.1rem 0.4rem;
-		flex-shrink: 0;
-	}
-
-	.id-chip.small {
-		font-size: 0.63rem;
-	}
-
-	.priority-badge {
-		font-size: 0.65rem;
-		font-weight: 500;
-		border-radius: 100px;
-		padding: 0.12rem 0.45rem;
-		flex-shrink: 0;
-	}
-
-	.priority-badge.small {
-		font-size: 0.6rem;
-	}
-	.priority-badge.critical {
-		background: var(--fail-soft);
-		color: var(--fail);
-	}
-	.priority-badge.high {
-		background: var(--warn-soft);
-		color: var(--warn);
-	}
-	.priority-badge.medium {
-		background: var(--node-soft);
-		color: var(--node);
-	}
-	.priority-badge.low {
-		background: var(--bg-subtle);
-		color: var(--text-muted);
 	}
 
 	.icon-btn {

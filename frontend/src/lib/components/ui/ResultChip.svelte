@@ -13,23 +13,40 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Plum. If not, see https://www.gnu.org/licenses/.
- -->
+-->
 
 <script>
-	/** @type {'pass' | 'fail' | 'tag' | 'schedule' | 'neutral' | 'node' | 'mcp'} */
-	export let variant = 'neutral';
+	export let status = 'pending';
+
+	$: v =
+		status === 'pass'
+			? 'pass'
+			: status === 'fail'
+				? 'fail'
+				: status === 'blocked'
+					? 'warn'
+					: status === 'skip'
+						? 'muted'
+						: 'pending';
 </script>
 
-<span class="badge {variant}"><slot /></span>
+<span
+	class="result-chip"
+	class:pass={v === 'pass'}
+	class:fail={v === 'fail'}
+	class:warn={v === 'warn'}
+	class:muted={v === 'muted'}
+	class:pending={v === 'pending'}
+>
+	{status}
+</span>
 
 <style>
-	.badge {
-		display: inline-flex;
-		align-items: center;
-		font-size: 0.68rem;
-		font-weight: 500;
-		letter-spacing: 0.05em;
+	.result-chip {
+		font-size: 0.7rem;
+		font-weight: 600;
 		text-transform: uppercase;
+		letter-spacing: 0.05em;
 		padding: 0.2rem 0.6rem;
 		border-radius: var(--radius-pill);
 		white-space: nowrap;
@@ -39,35 +56,20 @@
 		background: var(--pass-soft);
 		color: var(--pass);
 	}
-
 	.fail {
 		background: var(--fail-soft);
 		color: var(--fail);
 	}
-
-	.tag {
-		background: var(--accent-soft);
-		color: var(--accent);
-	}
-
-	.schedule {
+	.warn {
 		background: var(--warn-soft);
 		color: var(--warn);
 	}
-
-	.neutral {
+	.muted {
 		background: var(--bg-subtle);
 		color: var(--text-muted);
-		border: 1px solid var(--border);
 	}
-
-	.node {
-		background: var(--node-soft);
-		color: var(--node);
-	}
-
-	.mcp {
-		background: var(--accent-soft);
-		color: var(--accent);
+	.pending {
+		background: var(--bg-subtle);
+		color: var(--text-muted);
 	}
 </style>

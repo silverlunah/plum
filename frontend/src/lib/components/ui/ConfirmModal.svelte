@@ -67,7 +67,7 @@
 		border: 1px solid var(--fail);
 		border-radius: var(--radius-sm);
 		cursor: pointer;
-		color: #fff;
+		color: var(--white);
 		transition: opacity var(--duration-fast);
 	}
 

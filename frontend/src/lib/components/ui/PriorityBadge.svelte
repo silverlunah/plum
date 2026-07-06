@@ -13,61 +13,54 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Plum. If not, see https://www.gnu.org/licenses/.
- -->
+-->
 
 <script>
-	/** @type {'pass' | 'fail' | 'tag' | 'schedule' | 'neutral' | 'node' | 'mcp'} */
-	export let variant = 'neutral';
+	export let priority = 'Medium';
+	export let small = false;
+
+	$: p = priority?.toLowerCase() ?? 'medium';
 </script>
 
-<span class="badge {variant}"><slot /></span>
+<span
+	class="priority-badge"
+	class:critical={p === 'critical'}
+	class:high={p === 'high'}
+	class:medium={p === 'medium'}
+	class:low={p === 'low'}
+	class:small
+>
+	{priority}
+</span>
 
 <style>
-	.badge {
-		display: inline-flex;
-		align-items: center;
-		font-size: 0.68rem;
+	.priority-badge {
+		font-size: 0.65rem;
 		font-weight: 500;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		padding: 0.2rem 0.6rem;
 		border-radius: var(--radius-pill);
+		padding: 0.12rem 0.45rem;
+		flex-shrink: 0;
 		white-space: nowrap;
 	}
 
-	.pass {
-		background: var(--pass-soft);
-		color: var(--pass);
+	.priority-badge.small {
+		font-size: 0.6rem;
 	}
 
-	.fail {
+	.critical {
 		background: var(--fail-soft);
 		color: var(--fail);
 	}
-
-	.tag {
-		background: var(--accent-soft);
-		color: var(--accent);
-	}
-
-	.schedule {
+	.high {
 		background: var(--warn-soft);
 		color: var(--warn);
 	}
-
-	.neutral {
-		background: var(--bg-subtle);
-		color: var(--text-muted);
-		border: 1px solid var(--border);
-	}
-
-	.node {
+	.medium {
 		background: var(--node-soft);
 		color: var(--node);
 	}
-
-	.mcp {
-		background: var(--accent-soft);
-		color: var(--accent);
+	.low {
+		background: var(--bg-subtle);
+		color: var(--text-muted);
 	}
 </style>

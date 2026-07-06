@@ -890,7 +890,7 @@
 		font-size: 0.7rem;
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.05rem 0.4rem;
 		color: var(--text-muted);
 	}
@@ -991,7 +991,7 @@
 		color: var(--text-muted);
 		background: var(--bg-elevated);
 		border: 1px solid var(--border);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		cursor: pointer;
 		transition:
 			color var(--duration-fast),
@@ -1181,7 +1181,7 @@
 		text-transform: uppercase;
 		color: var(--pass);
 		background: var(--pass-soft);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.1rem 0.4rem;
 		flex-shrink: 0;
 	}
@@ -1190,7 +1190,7 @@
 	.priority-badge {
 		font-size: 0.68rem;
 		font-weight: 500;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.15rem 0.5rem;
 		flex-shrink: 0;
 	}
@@ -1320,7 +1320,7 @@
 		color: var(--text-muted);
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.1rem 0.4rem;
 	}
 

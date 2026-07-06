@@ -35,8 +35,19 @@
 	import { fetchRunners } from '$lib/api/runners';
 	import { fetchRuns, fetchRun } from '$lib/api/repository';
 	import { fetchIntegrations } from '$lib/api/settings';
-	import { API_BASE, BROWSERS } from '$lib/constants';
+	import {
+		API_BASE,
+		BROWSERS,
+		BUILTIN_RUNNER_ID,
+		BUILTIN_RUNNER_LABEL,
+		WORKERS_MIN,
+		WORKERS_MAX,
+		RUN_PICKER_LIMIT,
+		RUN_TAG_DISPLAY_LIMIT,
+		ALL_TESTS_LABEL
+	} from '$lib/constants';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
+	import Badge from '$lib/components/ui/Badge.svelte';
 
 	let availableRunners = [];
 	let testRuns = [];
@@ -83,10 +94,10 @@
 				availableRunners = r;
 				// Drop any saved selection pointing at runners that no longer exist,
 				// so a deleted runner can't linger in the selection and break runs.
-				const validIds = new Set(['built-in', ...r.map((x) => x.id)]);
+				const validIds = new Set([BUILTIN_RUNNER_ID, ...r.map((x) => x.id)]);
 				runnerConfig.update((c) => {
 					const pruned = c.selectedRunners.filter((id) => validIds.has(id));
-					return { ...c, selectedRunners: pruned.length > 0 ? pruned : ['built-in'] };
+					return { ...c, selectedRunners: pruned.length > 0 ? pruned : [BUILTIN_RUNNER_ID] };
 				});
 			})
 			.catch(() => {});
@@ -110,8 +121,8 @@
 				localStorage.setItem('plum:builtInEnabled', String(v));
 			} catch {}
 			runnerConfig.update((c) => {
-				if (!v && c.selectedRunners.includes('built-in')) {
-					const others = c.selectedRunners.filter((r) => r !== 'built-in');
+				if (!v && c.selectedRunners.includes(BUILTIN_RUNNER_ID)) {
+					const others = c.selectedRunners.filter((r) => r !== BUILTIN_RUNNER_ID);
 					return { ...c, selectedRunners: others.length > 0 ? others : c.selectedRunners };
 				}
 				return c;
@@ -213,17 +224,20 @@
 	$: cfg = $runnerConfig;
 
 	$: truncatedRunTag = (() => {
-		if (!state.currentRun?.tag) return 'all tests';
+		if (!state.currentRun?.tag) return ALL_TESTS_LABEL;
 		const parts = state.currentRun.tag.split(/ or /i);
-		if (parts.length <= 5) return state.currentRun.tag;
-		return parts.slice(0, 5).join(' or ') + ` +${parts.length - 5} more`;
+		if (parts.length <= RUN_TAG_DISPLAY_LIMIT) return state.currentRun.tag;
+		return (
+			parts.slice(0, RUN_TAG_DISPLAY_LIMIT).join(' or ') +
+			` +${parts.length - RUN_TAG_DISPLAY_LIMIT} more`
+		);
 	})();
 	$: cronJobs = Object.keys($activeCronJobs);
 	$: anyCronRunning = cronJobs.length > 0;
 	$: anyRunning = state.running || anyCronRunning;
 
 	$: if ($runsVersion >= 0)
-		fetchRuns({ limit: 200 })
+		fetchRuns({ limit: RUN_PICKER_LIMIT })
 			.then((r) => (testRuns = r.runs))
 			.catch(() => {});
 
@@ -251,8 +265,8 @@
 	$: currentBrowser = BROWSERS.find((b) => b.id === cfg.browser) ?? BROWSERS[0];
 
 	$: runnerSummary =
-		cfg.selectedRunners.length === 1 && cfg.selectedRunners[0] === 'built-in'
-			? 'Built-in'
+		cfg.selectedRunners.length === 1 && cfg.selectedRunners[0] === BUILTIN_RUNNER_ID
+			? BUILTIN_RUNNER_LABEL
 			: cfg.selectedRunners.length === 1
 				? (availableRunners.find((r) => r.id === cfg.selectedRunners[0])?.name ?? '1 node')
 				: `${cfg.selectedRunners.length} nodes`;
@@ -298,7 +312,7 @@
 	function adjustWorkers(delta) {
 		runnerConfig.update((c) => ({
 			...c,
-			workers: Math.max(1, Math.min(10, c.workers + delta))
+			workers: Math.max(WORKERS_MIN, Math.min(WORKERS_MAX, c.workers + delta))
 		}));
 	}
 
@@ -496,13 +510,13 @@
 					<button
 						class="step-btn"
 						on:click={() => adjustWorkers(-1)}
-						disabled={cfg.workers <= 1 || state.running}>−</button
+						disabled={cfg.workers <= WORKERS_MIN || state.running}>−</button
 					>
 					<span class="step-val">{cfg.workers}</span>
 					<button
 						class="step-btn"
 						on:click={() => adjustWorkers(1)}
-						disabled={cfg.workers >= 10 || state.running}>+</button
+						disabled={cfg.workers >= WORKERS_MAX || state.running}>+</button
 					>
 				</div>
 			</div>
@@ -564,7 +578,7 @@
 						<button
 							class="dropdown-trigger"
 							class:open={runnersOpen}
-							class:has-remote={cfg.selectedRunners.some((r) => r !== 'built-in')}
+							class:has-remote={cfg.selectedRunners.some((r) => r !== BUILTIN_RUNNER_ID)}
 							on:click={() => {
 								if (!state.running) runnersOpen = !runnersOpen;
 							}}
@@ -591,11 +605,11 @@
 									<label class="runner-option">
 										<input
 											type="checkbox"
-											checked={isRunnerSelected('built-in')}
-											on:change={() => toggleRunner('built-in')}
+											checked={isRunnerSelected(BUILTIN_RUNNER_ID)}
+											on:change={() => toggleRunner(BUILTIN_RUNNER_ID)}
 										/>
 										<span class="runner-dot built-in"></span>
-										<span>Built-in</span>
+										<span>{BUILTIN_RUNNER_LABEL}</span>
 									</label>
 								{/if}
 								{#each availableRunners as r}
@@ -717,7 +731,7 @@
 							</span>
 						{/if}
 					</div>
-					<span class="run-card-badge">Live</span>
+					<Badge variant="tag">Live</Badge>
 					<svg
 						width="13"
 						height="13"
@@ -740,7 +754,7 @@
 						<span class="run-card-label">{name}</span>
 						<span class="run-card-meta">Scheduled run</span>
 					</div>
-					<span class="run-card-badge cron-badge">Scheduled</span>
+					<Badge variant="schedule">Scheduled</Badge>
 					<svg
 						width="13"
 						height="13"
@@ -873,18 +887,6 @@
 		animation: dotPulse 1.6s ease-in-out infinite;
 	}
 
-	@keyframes dotPulse {
-		0%,
-		100% {
-			opacity: 1;
-			transform: scale(1);
-		}
-		50% {
-			opacity: 0.4;
-			transform: scale(0.65);
-		}
-	}
-
 	.status-word {
 		font-size: 0.72rem;
 		font-weight: 600;
@@ -900,7 +902,7 @@
 		color: var(--text-muted);
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.1rem 0.45rem;
 		white-space: nowrap;
 		overflow: hidden;
@@ -928,7 +930,7 @@
 
 	.view-report-btn:hover {
 		background: var(--accent);
-		color: #fff;
+		color: var(--white);
 	}
 
 	/* ── Center: controls ── */
@@ -1188,7 +1190,7 @@
 		height: 30px;
 		padding: 0 0.875rem;
 		background: var(--accent);
-		color: white;
+		color: var(--white);
 		border: none;
 		border-radius: var(--radius-sm);
 		font-family: var(--font-body);
@@ -1212,7 +1214,7 @@
 		width: 10px;
 		height: 10px;
 		border: 1.5px solid rgba(255, 255, 255, 0.35);
-		border-top-color: white;
+		border-top-color: var(--white);
 		border-radius: 50%;
 		animation: spin 0.65s linear infinite;
 		flex-shrink: 0;
@@ -1254,7 +1256,7 @@
 	.notify-btn.active {
 		background: var(--accent);
 		border-color: var(--accent);
-		color: #fff;
+		color: var(--white);
 	}
 
 	.notify-btn:disabled {
@@ -1374,23 +1376,6 @@
 	.meta-dot {
 		opacity: 0.4;
 		margin: 0 0.15rem;
-	}
-
-	.run-card-badge {
-		font-size: 0.62rem;
-		font-weight: 600;
-		letter-spacing: 0.07em;
-		text-transform: uppercase;
-		color: var(--accent);
-		background: var(--accent-soft);
-		padding: 0.1rem 0.4rem;
-		border-radius: 100px;
-		flex-shrink: 0;
-	}
-
-	.run-card-badge.cron-badge {
-		color: var(--warn);
-		background: var(--warn-soft);
 	}
 
 	.run-card-arrow {
