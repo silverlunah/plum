@@ -74,7 +74,7 @@
 	/* Variants */
 	.primary {
 		background: var(--accent);
-		color: #fff;
+		color: var(--white);
 		border-color: var(--accent);
 	}
 

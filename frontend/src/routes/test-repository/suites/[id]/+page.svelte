@@ -980,7 +980,7 @@
 		color: var(--text-muted);
 		background: var(--bg);
 		border: 1px solid var(--border);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		cursor: pointer;
 		transition:
 			color var(--duration-fast),
@@ -1321,7 +1321,7 @@
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		padding: 0.15rem 0.5rem;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		align-self: flex-start;
 	}
 
@@ -1364,7 +1364,7 @@
 	.priority-badge {
 		font-size: 0.68rem;
 		font-weight: 500;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.15rem 0.5rem;
 	}
 
@@ -1393,7 +1393,7 @@
 		font-weight: 500;
 		background: var(--pass-soft);
 		color: var(--pass);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.15rem 0.5rem;
 	}
 

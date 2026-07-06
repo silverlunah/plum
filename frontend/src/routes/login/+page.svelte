@@ -188,7 +188,7 @@
 	.submit-btn {
 		height: 40px;
 		background: var(--accent);
-		color: #fff;
+		color: var(--white);
 		border: none;
 		border-radius: var(--radius-sm);
 		font-family: var(--font-body);

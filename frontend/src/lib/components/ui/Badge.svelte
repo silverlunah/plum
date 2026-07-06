@@ -31,7 +31,7 @@
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
 		padding: 0.2rem 0.6rem;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		white-space: nowrap;
 	}
 

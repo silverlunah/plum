@@ -16,16 +16,19 @@
  -->
 
 <script>
-	import { onMount, afterUpdate, onDestroy } from 'svelte';
+	import { afterUpdate, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { fly, fade } from 'svelte/transition';
 	import { runnerState, cancelRun, activeCronJobs } from '$lib/stores/runner';
 	import { reportUrl } from '$lib/api/reports';
+	import { REDIRECT_DELAY_MS, ALL_TESTS_LABEL } from '$lib/constants';
+	import BackLink from '$lib/components/ui/BackLink.svelte';
+	import Badge from '$lib/components/ui/Badge.svelte';
 
 	let terminalEl;
 	let laneTerminalEl;
 	let redirectTimer = null;
-	let redirectCountdown = 3;
+	let redirectCountdown = REDIRECT_DELAY_MS / 1000;
 	let countdownInterval = null;
 	let activeTab = null;
 
@@ -45,27 +48,23 @@
 	$: activeLane = state.lanes.find((l) => l.id === activeTab) ?? null;
 
 	let wasAnyCronRunning = false;
-	$: {
+
+	afterUpdate(() => {
+		if (terminalEl) terminalEl.scrollTop = terminalEl.scrollHeight;
+		if (laneTerminalEl) laneTerminalEl.scrollTop = laneTerminalEl.scrollHeight;
 		if (wasAnyCronRunning && !anyCronRunning && !state.running && !state.testCompleted) {
 			goto('/reports');
 		}
 		wasAnyCronRunning = anyCronRunning;
-	}
-
-	// Auto-scroll active terminal
-	afterUpdate(() => {
-		if (terminalEl) terminalEl.scrollTop = terminalEl.scrollHeight;
-		if (laneTerminalEl) laneTerminalEl.scrollTop = laneTerminalEl.scrollHeight;
 	});
 
-	// Auto-navigate to report when done
 	$: if (state.testCompleted && state.latestReportId && !redirectTimer) {
-		redirectCountdown = 3;
+		redirectCountdown = REDIRECT_DELAY_MS / 1000;
 		countdownInterval = setInterval(() => {
 			redirectCountdown--;
 			if (redirectCountdown <= 0) clearInterval(countdownInterval);
 		}, 1000);
-		redirectTimer = setTimeout(() => goto(reportUrl(state.latestReportId)), 3000);
+		redirectTimer = setTimeout(() => goto(reportUrl(state.latestReportId)), REDIRECT_DELAY_MS);
 	}
 
 	onDestroy(() => {
@@ -78,33 +77,11 @@
 		if (countdownInterval) clearInterval(countdownInterval);
 		goto(reportUrl(state.latestReportId));
 	}
-
-	function laneStatusColor(status) {
-		if (status === 'done') return 'var(--pass)';
-		if (status === 'error') return 'var(--fail)';
-		return 'var(--accent)';
-	}
 </script>
 
 <svelte:head><title>Live Run — Plum</title></svelte:head>
 
-<div class="back-row">
-	<a href="/reports" class="back-link">
-		<svg
-			width="14"
-			height="14"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-		>
-			<line x1="19" y1="12" x2="5" y2="12" />
-			<polyline points="12 19 5 12 12 5" />
-		</svg>
-		Reports
-	</a>
-</div>
+<BackLink href="/reports" label="Reports" />
 
 {#if !state.running && !state.testCompleted && !anyCronRunning}
 	<div class="idle-state">
@@ -149,34 +126,9 @@
 			{#if state.running}
 				<span class="live-badge"><span class="live-dot"></span>Live</span>
 			{:else if state.status === 'pass'}
-				<span class="result-badge pass-badge">
-					<svg
-						width="12"
-						height="12"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg
-					>
-					Passed
-				</span>
+				<Badge variant="pass">Passed</Badge>
 			{:else}
-				<span class="result-badge fail-badge">
-					<svg
-						width="12"
-						height="12"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
-					>
-					Failed
-				</span>
+				<Badge variant="fail">Failed</Badge>
 			{/if}
 
 			{#if state.currentRun}
@@ -185,7 +137,7 @@
 						<span class="run-title-label">{state.currentRun.runTitle}</span>
 						<span class="run-sep">·</span>
 					{/if}
-					<span class="run-tag-label">{state.currentRun.tag || 'all tests'}</span>
+					<span class="run-tag-label">{state.currentRun.tag || ALL_TESTS_LABEL}</span>
 					<span class="run-sep">·</span>
 					<span class="run-detail"
 						>{state.currentRun.workers} worker{state.currentRun.workers !== 1 ? 's' : ''}</span
@@ -288,9 +240,9 @@
 				>
 					<span
 						class="tab-dot"
-						style="background:{laneStatusColor(lane.status)};{lane.status === 'running'
-							? 'animation:dotPulse 1.6s ease-in-out infinite'
-							: ''}"
+						class:tab-dot-running={lane.status === 'running'}
+						class:tab-dot-done={lane.status === 'done'}
+						class:tab-dot-error={lane.status === 'error'}
 					></span>
 					{lane.name}
 					{#if lane.testCount}
@@ -397,23 +349,6 @@
 {/if}
 
 <style>
-	.back-row {
-		margin-bottom: 1.5rem;
-	}
-
-	.back-link {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-		font-size: 0.8125rem;
-		color: var(--text-muted);
-		text-decoration: none;
-		transition: color var(--duration-fast);
-	}
-	.back-link:hover {
-		color: var(--text);
-	}
-
 	/* ── Idle state ── */
 	.idle-state {
 		display: flex;
@@ -496,7 +431,7 @@
 		color: var(--accent);
 		background: var(--accent-soft);
 		border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.2rem 0.65rem;
 	}
 	.cron-running-state p {
@@ -540,10 +475,10 @@
 		font-weight: 600;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: #fff;
+		color: var(--white);
 		background: var(--accent);
 		padding: 0.2rem 0.6rem;
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 	}
 	.live-dot {
 		width: 6px;
@@ -551,37 +486,6 @@
 		border-radius: 50%;
 		background: rgba(255, 255, 255, 0.8);
 		animation: dotPulse 1.2s ease-in-out infinite;
-	}
-	@keyframes dotPulse {
-		0%,
-		100% {
-			opacity: 1;
-			transform: scale(1);
-		}
-		50% {
-			opacity: 0.4;
-			transform: scale(0.65);
-		}
-	}
-
-	.result-badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		font-size: 0.7rem;
-		font-weight: 600;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		padding: 0.2rem 0.6rem;
-		border-radius: 100px;
-	}
-	.pass-badge {
-		background: var(--pass-soft);
-		color: var(--pass);
-	}
-	.fail-badge {
-		background: var(--fail-soft);
-		color: var(--fail);
 	}
 
 	.run-info {
@@ -596,7 +500,7 @@
 		color: var(--accent);
 		background: var(--accent-soft);
 		border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-		border-radius: 100px;
+		border-radius: var(--radius-pill);
 		padding: 0.15rem 0.6rem;
 		white-space: nowrap;
 	}
@@ -637,7 +541,7 @@
 	}
 	.cancel-btn:hover {
 		background: var(--fail);
-		color: #fff;
+		color: var(--white);
 	}
 
 	/* ── Completion bar ── */
@@ -742,6 +646,17 @@
 		height: 6px;
 		border-radius: 50%;
 		flex-shrink: 0;
+		background: var(--accent);
+	}
+	.tab-dot-running {
+		background: var(--accent);
+		animation: dotPulse 1.6s ease-in-out infinite;
+	}
+	.tab-dot-done {
+		background: var(--pass);
+	}
+	.tab-dot-error {
+		background: var(--fail);
 	}
 	.tab-count {
 		font-size: 0.65rem;
@@ -769,7 +684,7 @@
 	/* ── Screenshot panel ── */
 	.screenshot-panel {
 		position: relative;
-		background: #0d0d0e;
+		background: var(--terminal-bg);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -886,16 +801,5 @@
 	.terminal::-webkit-scrollbar-thumb {
 		background: rgba(255, 255, 255, 0.1);
 		border-radius: 2px;
-	}
-
-	@keyframes fadeUp {
-		from {
-			opacity: 0;
-			transform: translateY(6px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
 	}
 </style>

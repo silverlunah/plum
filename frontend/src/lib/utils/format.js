@@ -64,3 +64,77 @@ export function featureFile(uri) {
 	if (idx !== -1) return normalized.slice(idx + 1);
 	return normalized.split('/').pop();
 }
+
+export function keywordClass(kw) {
+	const k = (kw ?? '').toLowerCase().replace(/:$/, '');
+	if (k === 'given') return 'kw-given';
+	if (k === 'when') return 'kw-when';
+	if (k === 'then') return 'kw-then';
+	return 'kw-and';
+}
+
+export function scenarioTestTag(scenario) {
+	return scenario.tags?.find((tag) => /^@test[\w-]*/i.test(tag)) ?? null;
+}
+
+export function featureSuiteTag(feature) {
+	for (const scenario of feature.scenarios ?? []) {
+		const suiteTag = scenario.tags?.find((tag) => /suite/i.test(tag));
+		if (suiteTag) return suiteTag;
+	}
+	return null;
+}
+
+export function visibleTags(scenario) {
+	const testTag = scenarioTestTag(scenario);
+	if (testTag) return [testTag];
+	return (scenario.tags ?? []).filter((tag) => !/suite/i.test(tag));
+}
+
+const STATUS_RANK = { failed: 3, pending: 2, skipped: 1, passed: 0 };
+
+export function worstStatus(scenarios) {
+	return scenarios.reduce(
+		(s, scenario) =>
+			(STATUS_RANK[scenario.status] ?? 0) > (STATUS_RANK[s] ?? 0) ? scenario.status : s,
+		'passed'
+	);
+}
+
+export function groupedScenarios(scenarios) {
+	const groups = new Map();
+	for (const scenario of scenarios) {
+		const testTag = scenarioTestTag(scenario);
+		const key = testTag ?? `${scenario.keyword}:${scenario.name}`;
+		if (!groups.has(key)) {
+			groups.set(key, {
+				key,
+				name: scenario.name,
+				tags: visibleTags(scenario),
+				scenarios: [],
+				duration: 0,
+				status: scenario.status
+			});
+		}
+		const group = groups.get(key);
+		group.scenarios.push(scenario);
+		group.duration += scenario.duration ?? 0;
+		group.status = worstStatus(group.scenarios);
+	}
+	return Array.from(groups.values());
+}
+
+export function parseRunnerLogs(logs) {
+	if (!logs) return [];
+	if (!/^=== .+ ===/m.test(logs)) return [{ name: 'Logs', content: logs }];
+	const sections = [];
+	for (const chunk of logs.split(/\n\n(?==== )/)) {
+		const m = chunk.match(/^=== (.+?) ===\n?([\s\S]*)/);
+		if (m) sections.push({ name: m[1].trim(), content: m[2].trim() });
+	}
+	return sections;
+}
+
+export function scenarioHasScreenshots(scenario) {
+	return scenario.steps?.some((step) => step.screenshot) ?? false;
+}
