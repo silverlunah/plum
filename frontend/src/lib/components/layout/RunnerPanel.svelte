@@ -123,7 +123,9 @@
 			runnerConfig.update((c) => {
 				if (!v && c.selectedRunners.includes(BUILTIN_RUNNER_ID)) {
 					const others = c.selectedRunners.filter((r) => r !== BUILTIN_RUNNER_ID);
-					return { ...c, selectedRunners: others.length > 0 ? others : c.selectedRunners };
+					const fallback =
+						others.length > 0 ? others : availableRunners[0] ? [availableRunners[0].id] : [];
+					return { ...c, selectedRunners: fallback };
 				}
 				return c;
 			});
@@ -601,7 +603,7 @@
 						</button>
 						{#if runnersOpen}
 							<div class="dropdown-menu runners-menu" transition:fly={{ y: 6, duration: 130 }}>
-								{#if $builtInEnabled}
+								{#if $builtInEnabled || isRunnerSelected(BUILTIN_RUNNER_ID)}
 									<label class="runner-option">
 										<input
 											type="checkbox"

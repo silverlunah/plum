@@ -73,13 +73,24 @@ export function keywordClass(kw) {
 	return 'kw-and';
 }
 
+// Matches both verbose tags (@test-login-1, @suite-login) and the TC-/TS-
+// displayId convention (@TC-001, @TS-001) used by default throughout the rest
+// of the app (test case/suite prefixes, configurable in Settings).
+function isSuiteTag(tag) {
+	return /suite/i.test(tag) || /^@ts-?\d+/i.test(tag);
+}
+
+function isTestCaseTag(tag) {
+	return /^@test[\w-]*/i.test(tag) || /^@tc-?\d+/i.test(tag);
+}
+
 export function scenarioTestTag(scenario) {
-	return scenario.tags?.find((tag) => /^@test[\w-]*/i.test(tag)) ?? null;
+	return scenario.tags?.find(isTestCaseTag) ?? null;
 }
 
 export function featureSuiteTag(feature) {
 	for (const scenario of feature.scenarios ?? []) {
-		const suiteTag = scenario.tags?.find((tag) => /suite/i.test(tag));
+		const suiteTag = scenario.tags?.find(isSuiteTag);
 		if (suiteTag) return suiteTag;
 	}
 	return null;
@@ -88,7 +99,7 @@ export function featureSuiteTag(feature) {
 export function visibleTags(scenario) {
 	const testTag = scenarioTestTag(scenario);
 	if (testTag) return [testTag];
-	return (scenario.tags ?? []).filter((tag) => !/suite/i.test(tag));
+	return (scenario.tags ?? []).filter((tag) => !isSuiteTag(tag));
 }
 
 const STATUS_RANK = { failed: 3, pending: 2, skipped: 1, passed: 0 };
