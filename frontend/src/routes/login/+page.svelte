@@ -16,14 +16,27 @@
  -->
 
 <script>
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { auth } from '$lib/stores/auth';
-	import { login } from '$lib/api/auth';
+	import { login, checkNeedsSetup } from '$lib/api/auth';
 	import { theme } from '$lib/stores/theme';
 
 	let email = '';
 	let password = '';
 	let error = '';
 	let loading = false;
+	let checking = true;
+
+	onMount(async () => {
+		try {
+			if (await checkNeedsSetup()) {
+				goto('/setup');
+				return;
+			}
+		} catch {}
+		checking = false;
+	});
 
 	async function handleSubmit() {
 		error = '';
@@ -47,48 +60,50 @@
 <svelte:head><title>Sign in — Plum</title></svelte:head>
 
 <div class="page" data-theme={$theme}>
-	<div class="card">
-		<div class="brand">
-			<span class="brand-serif">Pl</span><span class="brand-sans">um</span>
-		</div>
-		<h1 class="title">Sign in</h1>
-		<p class="subtitle">Access your test workspace</p>
-
-		<div class="fields">
-			<div class="field">
-				<label class="label" for="email">Email</label>
-				<input
-					id="email"
-					type="email"
-					class="input"
-					bind:value={email}
-					placeholder="jane@example.com"
-					autocomplete="email"
-					on:keydown={onKeydown}
-				/>
+	{#if !checking}
+		<div class="card">
+			<div class="brand">
+				<span class="brand-serif">Pl</span><span class="brand-sans">um</span>
 			</div>
-			<div class="field">
-				<label class="label" for="password">Password</label>
-				<input
-					id="password"
-					type="password"
-					class="input"
-					bind:value={password}
-					placeholder="••••••••"
-					autocomplete="current-password"
-					on:keydown={onKeydown}
-				/>
+			<h1 class="title">Sign in</h1>
+			<p class="subtitle">Access your test workspace</p>
+
+			<div class="fields">
+				<div class="field">
+					<label class="label" for="email">Email</label>
+					<input
+						id="email"
+						type="email"
+						class="input"
+						bind:value={email}
+						placeholder="jane@example.com"
+						autocomplete="email"
+						on:keydown={onKeydown}
+					/>
+				</div>
+				<div class="field">
+					<label class="label" for="password">Password</label>
+					<input
+						id="password"
+						type="password"
+						class="input"
+						bind:value={password}
+						placeholder="••••••••"
+						autocomplete="current-password"
+						on:keydown={onKeydown}
+					/>
+				</div>
 			</div>
+
+			{#if error}
+				<p class="error">{error}</p>
+			{/if}
+
+			<button class="submit-btn" on:click={handleSubmit} disabled={loading || !email || !password}>
+				{loading ? 'Signing in…' : 'Sign in'}
+			</button>
 		</div>
-
-		{#if error}
-			<p class="error">{error}</p>
-		{/if}
-
-		<button class="submit-btn" on:click={handleSubmit} disabled={loading || !email || !password}>
-			{loading ? 'Signing in…' : 'Sign in'}
-		</button>
-	</div>
+	{/if}
 </div>
 
 <style>
