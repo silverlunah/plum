@@ -235,21 +235,39 @@ function processCucumberJson(raw) {
 // Read operations
 // ---------------------------------------------------------------------------
 
-const getAllReports = () =>
-	prisma.report.findMany({
-		orderBy: { createdAt: 'desc' },
-		select: {
-			id: true,
-			status: true,
-			tags: true,
-			triggerType: true,
-			runners: true,
-			browser: true,
-			runnerName: true,
-			createdAt: true,
-			testRun: { select: { id: true, title: true } }
-		}
-	});
+const reportListSelect = {
+	id: true,
+	status: true,
+	tags: true,
+	triggerType: true,
+	runners: true,
+	browser: true,
+	runnerName: true,
+	createdAt: true,
+	testRun: { select: { id: true, title: true } }
+};
+
+const TREND_SIZE = 12;
+
+const getReports = async ({ page = 1, limit = 15 } = {}) => {
+	const skip = (page - 1) * limit;
+	const [reports, total, passCount, trend] = await Promise.all([
+		prisma.report.findMany({
+			orderBy: { createdAt: 'desc' },
+			skip,
+			take: limit,
+			select: reportListSelect
+		}),
+		prisma.report.count(),
+		prisma.report.count({ where: { status: 'PASS' } }),
+		prisma.report.findMany({
+			orderBy: { createdAt: 'desc' },
+			take: TREND_SIZE,
+			select: { id: true, status: true, tags: true, createdAt: true }
+		})
+	]);
+	return { reports, total, passCount, failCount: total - passCount, trend };
+};
 
 const getLatestReportId = async () => {
 	const report = await prisma.report.findFirst({
@@ -444,7 +462,7 @@ async function syncAutomatedFromFeatures() {
 }
 
 module.exports = {
-	getAllReports,
+	getReports,
 	getLatestReportId,
 	getReportDetail,
 	saveReport,

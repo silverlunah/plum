@@ -17,6 +17,7 @@
 
 <script>
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { setup, checkNeedsSetup } from '$lib/api/auth';
 	import { auth } from '$lib/stores/auth';
 	import { login as apiLogin } from '$lib/api/auth';

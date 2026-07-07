@@ -145,7 +145,7 @@ The GPL license header at the top of every file is a legal requirement — do no
 - All schema changes require a Prisma migration file in `backend/prisma/migrations/`.
 - Run `npx prisma migrate deploy` (or rebuild Docker) to apply.
 - Report content is stored as JSONB in the `Report.content` column — never reconstruct report metadata from filenames.
-- The `getAllReports()` service function deliberately excludes `content` for list performance — only `getReportDetail(id)` fetches it.
+- The `getReports()` service function is paginated (`page`/`limit`) and deliberately excludes `content` for list performance — only `getReportDetail(id)` fetches it.
 
 ---
 

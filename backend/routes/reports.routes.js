@@ -21,8 +21,10 @@ const reportService = require('../services/reportService');
 
 router.get('/', async (req, res) => {
 	try {
-		const reports = await reportService.getAllReports();
-		res.json({ reports });
+		const page = Math.max(1, parseInt(req.query.page) || 1);
+		const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 15));
+		const result = await reportService.getReports({ page, limit });
+		res.json(result);
 	} catch {
 		res.status(500).json({ error: 'Failed to fetch reports' });
 	}

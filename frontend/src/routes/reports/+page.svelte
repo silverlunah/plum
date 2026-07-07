@@ -27,6 +27,10 @@
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 
 	let reports = [];
+	let total = 0;
+	let passCount = 0;
+	let failCount = 0;
+	let trend = [];
 	let currentPage = 1;
 	let animateBar = false;
 
@@ -34,27 +38,35 @@
 	let deleteModal = { open: false, targets: [] };
 	let deleting = false;
 
-	$: totalPages = Math.ceil(reports.length / REPORTS_PER_PAGE);
-	$: paginated = reports.slice(
-		(currentPage - 1) * REPORTS_PER_PAGE,
-		currentPage * REPORTS_PER_PAGE
-	);
-	$: passCount = reports.filter((r) => r.status === 'PASS').length;
-	$: failCount = reports.length - passCount;
-	$: passRate = reports.length ? Math.round((passCount / reports.length) * 100) : 0;
-	$: trend = reports.slice(0, 12).reverse();
-	$: allOnPageSelected = paginated.length > 0 && paginated.every((r) => selected.has(r.id));
+	$: totalPages = Math.ceil(total / REPORTS_PER_PAGE);
+	$: passRate = total ? Math.round((passCount / total) * 100) : 0;
+	$: trendDots = [...trend].reverse();
+	$: allOnPageSelected = reports.length > 0 && reports.every((r) => selected.has(r.id));
 	$: someSelected = selected.size > 0;
 
 	async function loadReports() {
 		try {
-			reports = await fetchReports();
+			let data = await fetchReports({ page: currentPage, limit: REPORTS_PER_PAGE });
+			if (data.reports.length === 0 && currentPage > 1) {
+				currentPage = Math.max(1, Math.ceil(data.total / REPORTS_PER_PAGE));
+				data = await fetchReports({ page: currentPage, limit: REPORTS_PER_PAGE });
+			}
+			reports = data.reports;
+			total = data.total;
+			passCount = data.passCount;
+			failCount = data.failCount;
+			trend = data.trend;
 			selected = new Set();
 			await tick();
 			animateBar = true;
 		} catch (e) {
 			console.error('Failed to fetch reports', e);
 		}
+	}
+
+	function goToPage(page) {
+		currentPage = page;
+		loadReports();
 	}
 
 	onMount(loadReports);
@@ -73,11 +85,11 @@
 		e.stopPropagation();
 		if (allOnPageSelected) {
 			const next = new Set(selected);
-			paginated.forEach((r) => next.delete(r.id));
+			reports.forEach((r) => next.delete(r.id));
 			selected = next;
 		} else {
 			const next = new Set(selected);
-			paginated.forEach((r) => next.add(r.id));
+			reports.forEach((r) => next.add(r.id));
 			selected = next;
 		}
 	}
@@ -133,11 +145,11 @@
 		<div>
 			<h1>Reports</h1>
 			<p class="subtitle">
-				{reports.length} run{reports.length !== 1 ? 's' : ''} recorded
+				{total} run{total !== 1 ? 's' : ''} recorded
 			</p>
 		</div>
 
-		{#if reports.length > 0}
+		{#if total > 0}
 			<div class="rate-display">
 				<span
 					class="rate-number"
@@ -152,7 +164,7 @@
 		{/if}
 	</div>
 
-	{#if reports.length > 0}
+	{#if total > 0}
 		<div class="stats-bar">
 			<div class="pass-bar-track">
 				<div class="pass-bar-fill" style="width: {animateBar ? passRate + '%' : '0'}"></div>
@@ -166,7 +178,7 @@
 		<div class="trend-row">
 			<span class="trend-label">Recent</span>
 			<div class="trend-dots">
-				{#each trend as r, i}
+				{#each trendDots as r, i}
 					<span
 						class="trend-dot"
 						class:pass={r.status === 'PASS'}
@@ -181,7 +193,7 @@
 	{/if}
 </div>
 
-{#if reports.length === 0}
+{#if total === 0}
 	<EmptyState message="No reports yet. Run a test to generate one." />
 {:else}
 	<div class="list-header">
@@ -202,7 +214,7 @@
 	</div>
 
 	<div class="report-list">
-		{#each paginated as report, i}
+		{#each reports as report, i}
 			<div class="report-row" class:is-selected={selected.has(report.id)} style={stagger(i)}>
 				<label class="row-check-wrap" title="Select">
 					<input
@@ -287,11 +299,7 @@
 
 	{#if totalPages > 1}
 		<div class="pagination-wrap">
-			<Pagination
-				current={currentPage}
-				total={totalPages}
-				on:change={(e) => (currentPage = e.detail)}
-			/>
+			<Pagination current={currentPage} total={totalPages} on:change={(e) => goToPage(e.detail)} />
 		</div>
 	{/if}
 {/if}

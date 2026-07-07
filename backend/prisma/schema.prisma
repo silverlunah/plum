@@ -70,6 +70,12 @@ model Report {
   logs        String?
   createdAt   DateTime          @default(now())
   testHistory TestCaseHistory[]
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([testRunId])
+  @@index([runnerId])
+  @@index([cronJobId])
 }
 
 model Project {
@@ -124,6 +130,8 @@ model TestSuite {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   cases       TestCase[]
+
+  @@index([createdAt])
 }
 
 model TestCase {
@@ -142,6 +150,8 @@ model TestCase {
   steps        TestStep[]
   runEntries   TestRunEntry[]
   history      TestCaseHistory[]
+
+  @@index([suiteId])
 }
 
 model TestStep {
@@ -166,6 +176,8 @@ model TestRun {
   entries     TestRunEntry[]
   history     TestCaseHistory[]
   reports     Report[]
+
+  @@index([createdAt])
 }
 
 model TestRunEntry {
@@ -182,6 +194,9 @@ model TestRunEntry {
   executedAt   DateTime?
   assignedToId String?
   assignedTo   User?     @relation("entryAssignee", fields: [assignedToId], references: [id])
+
+  @@index([runId])
+  @@index([caseId])
 }
 
 model TestCaseHistory {
@@ -198,4 +213,8 @@ model TestCaseHistory {
   executedById String?
   executedBy   User?     @relation(fields: [executedById], references: [id])
   executedAt   DateTime  @default(now())
+
+  @@index([caseId])
+  @@index([runId])
+  @@index([reportId])
 }
