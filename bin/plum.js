@@ -479,14 +479,19 @@ async function serverUpdate() {
 		isAlive(registry[String(nodeCfg.id)].pid)
 	);
 
+	// Re-exec `plum` as a fresh process for the restart steps rather than
+	// calling serverRestart()/nodeRestart() directly — this same process
+	// already loaded the OLD code into memory before npm install ran above,
+	// so calling them in-process would rebuild using stale logic no matter
+	// how new the just-installed files on disk actually are.
 	if (hasServerCfg) {
-		clack.log.step('Rebuilding server with new version…');
-		await serverRestart();
+		clack.log.step('Rebuilding server with the newly installed version…');
+		execSync('plum server restart', { stdio: 'inherit' });
 	}
 
 	if (nodeRunning) {
-		clack.log.step('Restarting node runner with new version…');
-		await nodeRestart();
+		clack.log.step('Restarting node runner with the newly installed version…');
+		execSync('plum node restart', { stdio: 'inherit' });
 	}
 
 	if (!hasServerCfg && !nodeRunning) {
@@ -726,6 +731,14 @@ async function openManageRunnersMenu(primaryUrl) {
  * 		"plum <command>" to run the desired command.
  * ------------------------------------------------------ */
 switch (command) {
+	case '--version':
+	case '-v':
+	case 'version': {
+		const pkg = JSON.parse(fs.readFileSync(path.join(plumRoot, 'package.json'), 'utf8'));
+		console.log(pkg.version);
+		break;
+	}
+
 	case 'init': {
 		clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Init  ')));
 
@@ -1185,6 +1198,7 @@ switch (command) {
 	default:
 		console.log('--------------------------------------\n');
 		console.log('Usage: plum <command>\n');
+		console.log('  --version, -v        Print the installed Plum version');
 		console.log('  init                 Set up a new Plum project');
 		console.log('  server start         Start the full UI stack (interactive)');
 		console.log('    --headless <bool>  Run browsers headless (true/false)');
