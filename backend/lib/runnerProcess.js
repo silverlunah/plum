@@ -159,7 +159,15 @@ function prepareEnv() {
 		fs.writeFileSync(markerPath, currentVersion, 'utf8');
 	}
 
-	execSync('npx playwright install chromium firefox', { cwd: BACKEND_DIR, stdio, shell: true });
+	// --with-deps also installs the OS-level shared libraries (libnss3, libatk,
+	// etc.) Chromium/Firefox need to actually launch — without it, a fresh
+	// Linux host has the browser binaries but fails at launch time with
+	// "Host system is missing dependencies to run browsers."
+	execSync('npx playwright install --with-deps chromium firefox', {
+		cwd: BACKEND_DIR,
+		stdio,
+		shell: true
+	});
 }
 
 /**

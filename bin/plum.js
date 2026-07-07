@@ -460,10 +460,41 @@ async function serverRestart() {
 	clack.outro(pc.green('Server restarted.'));
 }
 
+// A fresh `npm publish` can take a minute or two to fully propagate across
+// npm's CDN edges — hitting a stale one right after publishing produces an
+// ETARGET error even though the version genuinely exists. Retry a few times
+// with a short delay instead of crashing outright on what's usually transient.
+const NPM_INSTALL_RETRIES = 3;
+const NPM_INSTALL_RETRY_DELAY_MS = 5000;
+
+function npmInstallLatestWithRetry() {
+	for (let attempt = 1; attempt <= NPM_INSTALL_RETRIES; attempt++) {
+		try {
+			execSync('npm install -g plum-e2e@latest', { stdio: 'inherit' });
+			return true;
+		} catch {
+			if (attempt < NPM_INSTALL_RETRIES) {
+				clack.log.warn(
+					`npm install failed (attempt ${attempt}/${NPM_INSTALL_RETRIES}) — this is often a transient registry propagation delay right after a new release. Retrying in ${NPM_INSTALL_RETRY_DELAY_MS / 1000}s…`
+				);
+				execSync(`sleep ${NPM_INSTALL_RETRY_DELAY_MS / 1000}`);
+			}
+		}
+	}
+	return false;
+}
+
 async function serverUpdate() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Update  ')));
 	clack.log.step('Fetching latest Plum version…');
-	execSync('npm install -g plum-e2e@latest', { stdio: 'inherit' });
+	if (!npmInstallLatestWithRetry()) {
+		clack.log.error(
+			`Failed to install the latest version after ${NPM_INSTALL_RETRIES} attempts. Try again shortly, or run "npm install -g plum-e2e@latest" manually to see the full error.`
+		);
+		clack.outro(pc.red('Update failed.'));
+		process.exitCode = 1;
+		return;
+	}
 	clack.log.success('Plum CLI updated.');
 
 	const serverCfgPath = path.join(process.cwd(), '.plum-server.json');
