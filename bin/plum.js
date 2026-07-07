@@ -285,6 +285,22 @@ function applyServerConfig(cfg) {
 // 127.0.0.1 sidesteps the DNS/happy-eyeballs mismatch entirely.
 const READY_POLL_INTERVAL_MS = 2000;
 const READY_POLL_MAX_ATTEMPTS = 90; // ~3 minutes
+// Each poll attempt must itself be bounded — a single fetch() with no timeout
+// can hang on a stale/dead connection (e.g. right after a container restart)
+// and stall the whole loop indefinitely, regardless of the attempt budget
+// above. This is what caused the intermittent endless "Waiting for server to
+// be ready…" even when the server was already reachable elsewhere.
+const FETCH_ATTEMPT_TIMEOUT_MS = 3000;
+
+async function fetchWithTimeout(url, options = {}) {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), FETCH_ATTEMPT_TIMEOUT_MS);
+	try {
+		return await fetch(url, { ...options, signal: controller.signal });
+	} finally {
+		clearTimeout(timer);
+	}
+}
 
 async function waitForServerReady(apiBase) {
 	const s = clack.spinner();
@@ -293,7 +309,7 @@ async function waitForServerReady(apiBase) {
 	for (let i = 0; i < READY_POLL_MAX_ATTEMPTS; i++) {
 		await new Promise((r) => setTimeout(r, READY_POLL_INTERVAL_MS));
 		try {
-			const res = await fetch(`${apiBase}/auth/needs-setup`);
+			const res = await fetchWithTimeout(`${apiBase}/auth/needs-setup`);
 			if (res.ok) {
 				ready = true;
 				break;
@@ -316,7 +332,7 @@ async function waitForServerReady(apiBase) {
 async function runFirstUserSetup(apiBase, uiUrl) {
 	let needsSetup = false;
 	try {
-		const res = await fetch(`${apiBase}/auth/needs-setup`);
+		const res = await fetchWithTimeout(`${apiBase}/auth/needs-setup`);
 		const data = await res.json();
 		needsSetup = data.needsSetup;
 	} catch {}
@@ -349,7 +365,7 @@ async function runFirstUserSetup(apiBase, uiUrl) {
 	}
 
 	try {
-		const res = await fetch(`${apiBase}/auth/setup`, {
+		const res = await fetchWithTimeout(`${apiBase}/auth/setup`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ name, email, password })

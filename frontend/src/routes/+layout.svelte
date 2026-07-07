@@ -45,9 +45,11 @@
 
 		try {
 			const needsSetup = await checkNeedsSetup();
-			goto(needsSetup ? '/setup' : '/login');
+			await goto(needsSetup ? '/setup' : '/login');
 		} catch {
-			goto('/login');
+			await goto('/login');
+		} finally {
+			ready = true;
 		}
 	});
 </script>

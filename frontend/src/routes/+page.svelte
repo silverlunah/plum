@@ -91,7 +91,9 @@
 	$: filtered = suites
 		.map((suite) => {
 			if (!q) return suite;
-			const suiteMatches = suite.suiteName.toLowerCase().includes(q);
+			const suiteMatches =
+				suite.suiteName.toLowerCase().includes(q) ||
+				suiteIds(suite).some((id) => id.toLowerCase().includes(q));
 			const matchedTests = suite.tests.filter(
 				(t) =>
 					t.testCase.toLowerCase().includes(q) ||
