@@ -334,13 +334,34 @@ async function runFirstUserSetup(apiBase, frontendPort) {
 	}
 }
 
+// docker compose failures (port conflicts, daemon not running, etc.) must not
+// crash the process with a raw stack trace — that would abort serverStart()
+// before it ever reaches the first-user prompt, with no indication why.
+function runDockerComposeUp(cfg) {
+	try {
+		execSync('docker compose up --build -d', { cwd: plumRoot, stdio: 'inherit' });
+		return true;
+	} catch {
+		clack.log.error(
+			`Docker failed to start the stack — see the output above for the cause.\n` +
+				`A common cause is another process already using port ${cfg.backendPort} or ${cfg.frontendPort}; ` +
+				`try ${pc.cyan('plum server reconfig')} to pick different ports.`
+		);
+		return false;
+	}
+}
+
 async function serverStart() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Server  ')));
 	const cfg = await configureServer({ force: false });
 	applyServerConfig(cfg);
 	clack.log.info(`UI: ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
 
-	execSync('docker compose up --build -d', { cwd: plumRoot, stdio: 'inherit' });
+	if (!runDockerComposeUp(cfg)) {
+		clack.outro(pc.red('Plum did not start.'));
+		process.exitCode = 1;
+		return;
+	}
 
 	const apiBase = `http://127.0.0.1:${cfg.backendPort}`;
 	const ready = await waitForServerReady(apiBase);
@@ -366,7 +387,11 @@ async function serverRestart() {
 	applyServerConfig(cfg);
 	clack.log.info(`UI: ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
 
-	execSync('docker compose up --build -d', { cwd: plumRoot, stdio: 'inherit' });
+	if (!runDockerComposeUp(cfg)) {
+		clack.outro(pc.red('Server did not restart.'));
+		process.exitCode = 1;
+		return;
+	}
 
 	const apiBase = `http://127.0.0.1:${cfg.backendPort}`;
 	const ready = await waitForServerReady(apiBase);
