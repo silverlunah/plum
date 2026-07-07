@@ -247,6 +247,93 @@ function applyServerConfig(cfg) {
 	clack.log.success('docker-compose.override.yml written');
 }
 
+// Node's fetch resolves "localhost" to ::1 first on many Linux distros (Debian
+// included). If Docker only published the port on IPv4, that first attempt hangs
+// until it times out on every poll, eating the whole budget even though the port
+// is reachable — and reachable fine from a browser, which races both families.
+// 127.0.0.1 sidesteps the DNS/happy-eyeballs mismatch entirely.
+const READY_POLL_INTERVAL_MS = 2000;
+const READY_POLL_MAX_ATTEMPTS = 90; // ~3 minutes
+
+async function waitForServerReady(apiBase) {
+	const s = clack.spinner();
+	s.start('Waiting for server to be ready…');
+	let ready = false;
+	for (let i = 0; i < READY_POLL_MAX_ATTEMPTS; i++) {
+		await new Promise((r) => setTimeout(r, READY_POLL_INTERVAL_MS));
+		try {
+			const res = await fetch(`${apiBase}/auth/needs-setup`);
+			if (res.ok) {
+				ready = true;
+				break;
+			}
+		} catch {}
+		if (i > 0 && i % 15 === 0) {
+			s.message(
+				`Still waiting for server to be ready… (${Math.round((i * READY_POLL_INTERVAL_MS) / 1000)}s — check "docker compose logs -f backend" if this feels stuck)`
+			);
+		}
+	}
+	s.stop(
+		ready
+			? pc.green('✓ Server is ready')
+			: pc.yellow('Server did not respond in time — it may still be starting')
+	);
+	return ready;
+}
+
+async function runFirstUserSetup(apiBase, frontendPort) {
+	let needsSetup = false;
+	try {
+		const res = await fetch(`${apiBase}/auth/needs-setup`);
+		const data = await res.json();
+		needsSetup = data.needsSetup;
+	} catch {}
+
+	if (!needsSetup) return;
+
+	if (!interactiveAllowed()) {
+		clack.log.info(
+			`No users found. Open ${pc.cyan(`http://localhost:${frontendPort}/setup`)} to create your first account.`
+		);
+		return;
+	}
+
+	clack.log.info('No users found — create your first account to get started.');
+
+	const name = await clack.text({ message: 'Your name', placeholder: 'Jane Smith' });
+	if (clack.isCancel(name)) {
+		clack.log.warn('Skipped. Create a user at /setup in the UI.');
+		return;
+	}
+	const email = await clack.text({ message: 'Email address', placeholder: 'jane@example.com' });
+	if (clack.isCancel(email)) {
+		clack.log.warn('Skipped. Create a user at /setup in the UI.');
+		return;
+	}
+	const password = await clack.password({ message: 'Password (min 8 characters)' });
+	if (clack.isCancel(password)) {
+		clack.log.warn('Skipped. Create a user at /setup in the UI.');
+		return;
+	}
+
+	try {
+		const res = await fetch(`${apiBase}/auth/setup`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ name, email, password })
+		});
+		if (res.ok) {
+			clack.log.success(`Account created for ${email}. You can now log in.`);
+		} else {
+			const err = await res.json();
+			clack.log.error(`Failed to create account: ${err.error ?? 'unknown error'}`);
+		}
+	} catch (e) {
+		clack.log.error(`Failed to create account: ${e.message}`);
+	}
+}
+
 async function serverStart() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Server  ')));
 	const cfg = await configureServer({ force: false });
@@ -255,67 +342,16 @@ async function serverStart() {
 
 	execSync('docker compose up --build -d', { cwd: plumRoot, stdio: 'inherit' });
 
-	const apiBase = `http://localhost:${cfg.backendPort}`;
-	const s = clack.spinner();
-	s.start('Waiting for server to be ready…');
-	let ready = false;
-	for (let i = 0; i < 40; i++) {
-		await new Promise((r) => setTimeout(r, 1500));
-		try {
-			const res = await fetch(`${apiBase}/auth/needs-setup`);
-			if (res.ok) {
-				ready = true;
-				break;
-			}
-		} catch {}
-	}
-	s.stop(ready ? pc.green('✓ Server is ready') : pc.yellow('Server may still be starting'));
+	const apiBase = `http://127.0.0.1:${cfg.backendPort}`;
+	const ready = await waitForServerReady(apiBase);
 
 	if (ready) {
-		let needsSetup = false;
-		try {
-			const res = await fetch(`${apiBase}/auth/needs-setup`);
-			const data = await res.json();
-			needsSetup = data.needsSetup;
-		} catch {}
-
-		if (needsSetup) {
-			clack.log.info('No users found — create your first account to get started.');
-
-			const name = await clack.text({ message: 'Your name', placeholder: 'Jane Smith' });
-			if (clack.isCancel(name)) {
-				clack.log.warn('Skipped. Create a user at /setup in the UI.');
-			} else {
-				const email = await clack.text({
-					message: 'Email address',
-					placeholder: 'jane@example.com'
-				});
-				if (clack.isCancel(email)) {
-					clack.log.warn('Skipped. Create a user at /setup in the UI.');
-				} else {
-					const password = await clack.password({ message: 'Password (min 8 characters)' });
-					if (clack.isCancel(password)) {
-						clack.log.warn('Skipped. Create a user at /setup in the UI.');
-					} else {
-						try {
-							const res = await fetch(`${apiBase}/auth/setup`, {
-								method: 'POST',
-								headers: { 'Content-Type': 'application/json' },
-								body: JSON.stringify({ name, email, password })
-							});
-							if (res.ok) {
-								clack.log.success(`Account created for ${email}. You can now log in.`);
-							} else {
-								const err = await res.json();
-								clack.log.error(`Failed to create account: ${err.error ?? 'unknown error'}`);
-							}
-						} catch (e) {
-							clack.log.error(`Failed to create account: ${e.message}`);
-						}
-					}
-				}
-			}
-		}
+		await runFirstUserSetup(apiBase, cfg.frontendPort);
+	} else {
+		clack.log.warn(
+			`Could not confirm the backend is ready. Check ${pc.cyan('docker compose logs -f backend')}.\n` +
+				`Once it responds, open ${pc.cyan(`http://localhost:${cfg.frontendPort}/setup`)} to create your first account (if this is a fresh install).`
+		);
 	}
 
 	clack.log.info(`UI:  ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
@@ -332,21 +368,13 @@ async function serverRestart() {
 
 	execSync('docker compose up --build -d', { cwd: plumRoot, stdio: 'inherit' });
 
-	const apiBase = `http://localhost:${cfg.backendPort}`;
-	const s = clack.spinner();
-	s.start('Waiting for server to be ready…');
-	let ready = false;
-	for (let i = 0; i < 40; i++) {
-		await new Promise((r) => setTimeout(r, 1500));
-		try {
-			const res = await fetch(`${apiBase}/auth/needs-setup`);
-			if (res.ok) {
-				ready = true;
-				break;
-			}
-		} catch {}
+	const apiBase = `http://127.0.0.1:${cfg.backendPort}`;
+	const ready = await waitForServerReady(apiBase);
+	if (!ready) {
+		clack.log.warn(
+			`Could not confirm the backend is ready. Check ${pc.cyan('docker compose logs -f backend')}.`
+		);
 	}
-	s.stop(ready ? pc.green('✓ Server is ready') : pc.yellow('Server may still be starting'));
 	clack.log.info(`UI:  ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
 	clack.log.info(`API: ${pc.cyan(`http://localhost:${cfg.backendPort}`)}`);
 	clack.outro(pc.green('Server restarted.'));

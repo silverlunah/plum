@@ -15,12 +15,23 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-import { API_BASE } from '$lib/constants';
+import { API_BASE, REPORTS_PER_PAGE } from '$lib/constants';
 
-export async function fetchReports() {
-	const res = await fetch(`${API_BASE}/reports`);
-	const { reports } = await res.json();
-	return reports.map((r) => ({ ...r, date: new Date(r.createdAt).toLocaleString() }));
+function withDate(r) {
+	return { ...r, date: new Date(r.createdAt).toLocaleString() };
+}
+
+export async function fetchReports({ page = 1, limit = REPORTS_PER_PAGE } = {}) {
+	const params = new URLSearchParams({ page, limit });
+	const res = await fetch(`${API_BASE}/reports?${params}`);
+	const { reports, total, passCount, failCount, trend } = await res.json();
+	return {
+		reports: reports.map(withDate),
+		total,
+		passCount,
+		failCount,
+		trend: trend.map(withDate)
+	};
 }
 
 export async function fetchLatestReportId() {

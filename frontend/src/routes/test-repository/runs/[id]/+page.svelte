@@ -174,13 +174,18 @@
 				(tc) =>
 					!runCaseIds.has(tc.id) &&
 					(!search ||
+						suite.displayId.toLowerCase().includes(search.toLowerCase()) ||
+						suite.name.toLowerCase().includes(search.toLowerCase()) ||
 						tc.title.toLowerCase().includes(search.toLowerCase()) ||
 						tc.displayId.toLowerCase().includes(search.toLowerCase()))
 			)
 		}))
 		.filter(
 			(suite) =>
-				!search || suite.cases.length > 0 || suite.name.toLowerCase().includes(search.toLowerCase())
+				!search ||
+				suite.cases.length > 0 ||
+				suite.displayId.toLowerCase().includes(search.toLowerCase()) ||
+				suite.name.toLowerCase().includes(search.toLowerCase())
 		);
 
 	function addCase(tc) {
