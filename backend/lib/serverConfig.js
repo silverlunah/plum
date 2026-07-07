@@ -32,7 +32,12 @@ function defaults() {
 	return {
 		headless: false,
 		backendPort: '3001',
-		frontendPort: '5173'
+		frontendPort: '5173',
+		// Public URLs the browser actually uses. Left blank until the user sets
+		// them (e.g. behind a reverse proxy) — resolved to a localhost default
+		// at the call site otherwise.
+		apiUrl: '',
+		uiUrl: ''
 	};
 }
 
@@ -63,10 +68,10 @@ function loadServerConfig(dir) {
 }
 
 function saveServerConfig(dir, cfg) {
-	const { headless, backendPort, frontendPort } = cfg;
+	const { headless, backendPort, frontendPort, apiUrl, uiUrl } = cfg;
 	fs.writeFileSync(
 		configPath(dir),
-		JSON.stringify({ headless, backendPort, frontendPort }, null, 2) + '\n',
+		JSON.stringify({ headless, backendPort, frontendPort, apiUrl, uiUrl }, null, 2) + '\n',
 		'utf8'
 	);
 }
@@ -92,7 +97,7 @@ function writeEnvFile(dir, { headless }) {
  * (3001/5173); only the host side is remapped. The frontend is told where to
  * reach the backend via VITE_API_URL (read by Vite at dev runtime).
  */
-function buildOverrideYaml({ testsAbs, reportsAbs, backendPort, frontendPort }) {
+function buildOverrideYaml({ testsAbs, reportsAbs, backendPort, frontendPort, apiUrl }) {
 	return (
 		[
 			'services:',
@@ -106,7 +111,7 @@ function buildOverrideYaml({ testsAbs, reportsAbs, backendPort, frontendPort }) 
 			'    ports:',
 			`      - "${frontendPort}:5173"`,
 			'    environment:',
-			`      VITE_API_URL: "http://localhost:${backendPort}"`
+			`      VITE_API_URL: "${apiUrl || `http://localhost:${backendPort}`}"`
 		].join('\n') + '\n'
 	);
 }

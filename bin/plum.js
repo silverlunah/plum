@@ -188,13 +188,23 @@ async function configureServer({ force }) {
 	const overrides = {
 		headless: getFlag(args, '--headless'),
 		backendPort: getFlag(args, '--backend-port'),
-		frontendPort: getFlag(args, '--frontend-port')
+		frontendPort: getFlag(args, '--frontend-port'),
+		apiUrl: getFlag(args, '--api-url'),
+		uiUrl: getFlag(args, '--ui-url')
 	};
 	if (overrides.headless !== undefined) cfg.headless = overrides.headless === 'true';
 	if (overrides.backendPort !== undefined) cfg.backendPort = overrides.backendPort;
 	if (overrides.frontendPort !== undefined) cfg.frontendPort = overrides.frontendPort;
+	if (overrides.apiUrl !== undefined) cfg.apiUrl = overrides.apiUrl;
+	if (overrides.uiUrl !== undefined) cfg.uiUrl = overrides.uiUrl;
 
-	const hasFlags = anyFlags(args, ['--headless', '--backend-port', '--frontend-port']);
+	const hasFlags = anyFlags(args, [
+		'--headless',
+		'--backend-port',
+		'--frontend-port',
+		'--api-url',
+		'--ui-url'
+	]);
 	const interactive = force || (interactiveAllowed() && !hasFlags);
 
 	if (interactive) {
@@ -220,6 +230,27 @@ async function configureServer({ force }) {
 		});
 		if (clack.isCancel(frontendPort)) cancelAndExit();
 		cfg.frontendPort = frontendPort || cfg.frontendPort;
+
+		const defaultApiUrl = `http://localhost:${cfg.backendPort}`;
+		const apiUrl = await clack.text({
+			message: 'Public URL for the API (only if reverse-proxying behind a domain)',
+			placeholder: cfg.apiUrl || defaultApiUrl,
+			defaultValue: cfg.apiUrl || defaultApiUrl
+		});
+		if (clack.isCancel(apiUrl)) cancelAndExit();
+		cfg.apiUrl = apiUrl || defaultApiUrl;
+
+		const defaultUiUrl = `http://localhost:${cfg.frontendPort}`;
+		const uiUrl = await clack.text({
+			message: 'Public URL for the UI (only if reverse-proxying behind a domain)',
+			placeholder: cfg.uiUrl || defaultUiUrl,
+			defaultValue: cfg.uiUrl || defaultUiUrl
+		});
+		if (clack.isCancel(uiUrl)) cancelAndExit();
+		cfg.uiUrl = uiUrl || defaultUiUrl;
+	} else {
+		if (!cfg.apiUrl) cfg.apiUrl = `http://localhost:${cfg.backendPort}`;
+		if (!cfg.uiUrl) cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
 	}
 
 	saveServerConfig(cwd, cfg);
@@ -240,7 +271,8 @@ function applyServerConfig(cfg) {
 			testsAbs,
 			reportsAbs,
 			backendPort: cfg.backendPort,
-			frontendPort: cfg.frontendPort
+			frontendPort: cfg.frontendPort,
+			apiUrl: cfg.apiUrl
 		}),
 		'utf8'
 	);
@@ -282,7 +314,7 @@ async function waitForServerReady(apiBase) {
 	return ready;
 }
 
-async function runFirstUserSetup(apiBase, frontendPort) {
+async function runFirstUserSetup(apiBase, uiUrl) {
 	let needsSetup = false;
 	try {
 		const res = await fetch(`${apiBase}/auth/needs-setup`);
@@ -294,7 +326,7 @@ async function runFirstUserSetup(apiBase, frontendPort) {
 
 	if (!interactiveAllowed()) {
 		clack.log.info(
-			`No users found. Open ${pc.cyan(`http://localhost:${frontendPort}/setup`)} to create your first account.`
+			`No users found. Open ${pc.cyan(`${uiUrl}/setup`)} to create your first account.`
 		);
 		return;
 	}
@@ -355,7 +387,7 @@ async function serverStart() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Server  ')));
 	const cfg = await configureServer({ force: false });
 	applyServerConfig(cfg);
-	clack.log.info(`UI: ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
+	clack.log.info(`UI: ${pc.cyan(cfg.uiUrl)}`);
 
 	if (!runDockerComposeUp(cfg)) {
 		clack.outro(pc.red('Plum did not start.'));
@@ -367,16 +399,16 @@ async function serverStart() {
 	const ready = await waitForServerReady(apiBase);
 
 	if (ready) {
-		await runFirstUserSetup(apiBase, cfg.frontendPort);
+		await runFirstUserSetup(apiBase, cfg.uiUrl);
 	} else {
 		clack.log.warn(
 			`Could not confirm the backend is ready. Check ${pc.cyan('docker compose logs -f backend')}.\n` +
-				`Once it responds, open ${pc.cyan(`http://localhost:${cfg.frontendPort}/setup`)} to create your first account (if this is a fresh install).`
+				`Once it responds, open ${pc.cyan(`${cfg.uiUrl}/setup`)} to create your first account (if this is a fresh install).`
 		);
 	}
 
-	clack.log.info(`UI:  ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
-	clack.log.info(`API: ${pc.cyan(`http://localhost:${cfg.backendPort}`)}`);
+	clack.log.info(`UI:  ${pc.cyan(cfg.uiUrl)}`);
+	clack.log.info(`API: ${pc.cyan(cfg.apiUrl)}`);
 	clack.outro(pc.green('Plum is running. Use "plum server stop" to shut down.'));
 }
 
@@ -385,7 +417,7 @@ async function serverRestart() {
 	const { loadServerConfig } = serverConfigLib();
 	const cfg = loadServerConfig(process.cwd());
 	applyServerConfig(cfg);
-	clack.log.info(`UI: ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
+	clack.log.info(`UI: ${pc.cyan(cfg.uiUrl)}`);
 
 	if (!runDockerComposeUp(cfg)) {
 		clack.outro(pc.red('Server did not restart.'));
@@ -400,8 +432,8 @@ async function serverRestart() {
 			`Could not confirm the backend is ready. Check ${pc.cyan('docker compose logs -f backend')}.`
 		);
 	}
-	clack.log.info(`UI:  ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
-	clack.log.info(`API: ${pc.cyan(`http://localhost:${cfg.backendPort}`)}`);
+	clack.log.info(`UI:  ${pc.cyan(cfg.uiUrl)}`);
+	clack.log.info(`API: ${pc.cyan(cfg.apiUrl)}`);
 	clack.outro(pc.green('Server restarted.'));
 }
 
@@ -444,7 +476,7 @@ async function serverReconfig() {
 	const cfg = await configureServer({ force: true });
 	applyServerConfig(cfg);
 	clack.log.success("Saved. Run 'plum server start' to apply.");
-	clack.outro(`UI: ${pc.cyan(`http://localhost:${cfg.frontendPort}`)}`);
+	clack.outro(`UI: ${pc.cyan(cfg.uiUrl)}`);
 }
 
 /* -----------------------------------------------------
@@ -1135,6 +1167,12 @@ switch (command) {
 		console.log('    --headless <bool>  Run browsers headless (true/false)');
 		console.log('    --backend-port <n> Host port for the backend/API (default: 3001)');
 		console.log('    --frontend-port <n> Host port for the UI (default: 5173)');
+		console.log(
+			'    --api-url <url>    Public URL for the API (only if reverse-proxying; default: http://localhost:<backend-port>)'
+		);
+		console.log(
+			'    --ui-url <url>     Public URL for the UI (only if reverse-proxying; default: http://localhost:<frontend-port>)'
+		);
 		console.log('  server restart       Rebuild Docker images and restart the server (no prompts)');
 		console.log('  server stop          Stop the server (data preserved)');
 		console.log('  server reconfig      Re-enter server settings without starting');
