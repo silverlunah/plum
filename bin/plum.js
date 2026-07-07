@@ -731,6 +731,14 @@ async function openManageRunnersMenu(primaryUrl) {
  * 		"plum <command>" to run the desired command.
  * ------------------------------------------------------ */
 switch (command) {
+	case '--version':
+	case '-v':
+	case 'version': {
+		const pkg = JSON.parse(fs.readFileSync(path.join(plumRoot, 'package.json'), 'utf8'));
+		console.log(pkg.version);
+		break;
+	}
+
 	case 'init': {
 		clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Init  ')));
 
@@ -1190,6 +1198,7 @@ switch (command) {
 	default:
 		console.log('--------------------------------------\n');
 		console.log('Usage: plum <command>\n');
+		console.log('  --version, -v        Print the installed Plum version');
 		console.log('  init                 Set up a new Plum project');
 		console.log('  server start         Start the full UI stack (interactive)');
 		console.log('    --headless <bool>  Run browsers headless (true/false)');
