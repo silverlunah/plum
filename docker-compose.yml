@@ -35,7 +35,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - '3001:3001'
+      - '${BACKEND_PORT:-3001}:3001'
     environment:
       DATABASE_URL: 'postgresql://plum:plum@postgres:5432/plum'
     extra_hosts:
@@ -52,7 +52,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - '5173:5173'
+      - '${FRONTEND_PORT:-5173}:5173'
     depends_on:
       - backend
     networks:
