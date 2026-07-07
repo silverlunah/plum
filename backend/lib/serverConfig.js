@@ -93,23 +93,24 @@ function writeEnvFile(dir, { headless }) {
 }
 
 /**
- * Builds docker-compose.override.yml. Containers keep their internal ports
- * (3001/5173); only the host side is remapped. The frontend is told where to
- * reach the backend via VITE_API_URL (read by Vite at dev runtime).
+ * Builds docker-compose.override.yml. Host port remapping is handled by
+ * BACKEND_PORT/FRONTEND_PORT env vars read by docker-compose.yml itself
+ * (${BACKEND_PORT:-3001} etc) — NOT here, because Compose merges `ports:`
+ * lists across files by concatenation rather than replacing them. Defining
+ * ports in both the base file and this override would publish both values
+ * simultaneously, and fail to start if the base file's default port happens
+ * to already be taken. This override only adds volumes and tells the
+ * frontend where to reach the backend via VITE_API_URL.
  */
-function buildOverrideYaml({ testsAbs, reportsAbs, backendPort, frontendPort, apiUrl }) {
+function buildOverrideYaml({ testsAbs, reportsAbs, backendPort, apiUrl }) {
 	return (
 		[
 			'services:',
 			'  backend:',
-			'    ports:',
-			`      - "${backendPort}:3001"`,
 			'    volumes:',
 			`      - "${reportsAbs}:/app/reports"`,
 			`      - "${testsAbs}:/app/tests"`,
 			'  frontend:',
-			'    ports:',
-			`      - "${frontendPort}:5173"`,
 			'    environment:',
 			`      VITE_API_URL: "${apiUrl || `http://localhost:${backendPort}`}"`
 		].join('\n') + '\n'

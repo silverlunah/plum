@@ -271,7 +271,6 @@ function applyServerConfig(cfg) {
 			testsAbs,
 			reportsAbs,
 			backendPort: cfg.backendPort,
-			frontendPort: cfg.frontendPort,
 			apiUrl: cfg.apiUrl
 		}),
 		'utf8'
@@ -371,7 +370,15 @@ async function runFirstUserSetup(apiBase, uiUrl) {
 // before it ever reaches the first-user prompt, with no indication why.
 function runDockerComposeUp(cfg) {
 	try {
-		execSync('docker compose up --build -d', { cwd: plumRoot, stdio: 'inherit' });
+		execSync('docker compose up --build -d', {
+			cwd: plumRoot,
+			stdio: 'inherit',
+			env: {
+				...process.env,
+				BACKEND_PORT: String(cfg.backendPort),
+				FRONTEND_PORT: String(cfg.frontendPort)
+			}
+		});
 		return true;
 	} catch {
 		clack.log.error(
