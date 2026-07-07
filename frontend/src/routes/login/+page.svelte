@@ -60,7 +60,9 @@
 <svelte:head><title>Sign in — Plum</title></svelte:head>
 
 <div class="page" data-theme={$theme}>
-	{#if !checking}
+	{#if checking}
+		<p class="checking">Checking server…</p>
+	{:else}
 		<div class="card">
 			<div class="brand">
 				<span class="brand-serif">Pl</span><span class="brand-sans">um</span>
@@ -114,6 +116,11 @@
 		align-items: center;
 		justify-content: center;
 		padding: 1rem;
+	}
+
+	.checking {
+		color: var(--text-muted);
+		font-size: 0.875rem;
 	}
 
 	.card {

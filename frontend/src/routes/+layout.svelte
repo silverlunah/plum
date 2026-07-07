@@ -62,4 +62,18 @@
 		</PageShell>
 		<RunnerPanel />
 	{/if}
+{:else}
+	<div class="boot-loading">Loading…</div>
 {/if}
+
+<style>
+	.boot-loading {
+		min-height: 100vh;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--bg);
+		color: var(--text-muted);
+		font-size: 0.875rem;
+	}
+</style>
