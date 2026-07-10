@@ -51,6 +51,8 @@
 	--radius-pill: 100px;
 
 	--white: #ffffff;
+
+	--bottom-bar-height: 55px;
 }
 
 @keyframes fadeUp {

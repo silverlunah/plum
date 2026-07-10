@@ -16,7 +16,7 @@
  -->
 
 <script>
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { fly } from 'svelte/transition';
 	import {
@@ -36,7 +36,7 @@
 	import PriorityBadge from '$lib/components/ui/PriorityBadge.svelte';
 	import CaseIdChip from '$lib/components/ui/CaseIdChip.svelte';
 	import ResultChip from '$lib/components/ui/ResultChip.svelte';
-	import { TOAST_TIMEOUT_MS, RUN_REFRESH_MS } from '$lib/constants';
+	import { TOAST_TIMEOUT_MS } from '$lib/constants';
 
 	const runId = $page.params.id;
 
@@ -117,8 +117,6 @@
 		setTimeout(() => (toast = null), TOAST_TIMEOUT_MS);
 	}
 
-	let refreshInterval = null;
-
 	onMount(async () => {
 		try {
 			[run, suites, members] = await Promise.all([
@@ -133,16 +131,6 @@
 		} finally {
 			loading = false;
 		}
-		refreshInterval = setInterval(async () => {
-			try {
-				const fresh = await fetchRun(runId);
-				run = fresh;
-			} catch {}
-		}, RUN_REFRESH_MS);
-	});
-
-	onDestroy(() => {
-		if (refreshInterval) clearInterval(refreshInterval);
 	});
 
 	async function handleAssignEntry(entryId, userId) {
@@ -188,8 +176,9 @@
 				suite.name.toLowerCase().includes(search.toLowerCase())
 		);
 
-	function addCase(tc) {
+	async function addCase(tc) {
 		if (!run || runCaseIds.has(tc.id)) return;
+		const previous = run;
 		const entry = {
 			id: `tmp-${tc.id}`,
 			order: run.entries.length,
@@ -200,6 +189,14 @@
 			case: tc
 		};
 		run = { ...run, entries: [...run.entries, entry] };
+		try {
+			const caseIds = run.entries.map((e) => e.case.id);
+			await updateRun(runId, { caseIds });
+			run = await fetchRun(runId);
+		} catch (e) {
+			run = previous;
+			showToast('error', 'Failed to add case.');
+		}
 	}
 
 	function removeEntry(entryId) {

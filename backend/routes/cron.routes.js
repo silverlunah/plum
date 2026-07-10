@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
 	try {
 		const { cronExpression, taskName, tags } = req.body;
-		if (!cronExpression || !taskName || !tags) {
+		if (!cronExpression || !taskName) {
 			return res.status(400).json({ error: 'Missing required fields' });
 		}
 		await cronService.addCronJob(req.body);
@@ -51,7 +51,7 @@ router.put('/:taskName', async (req, res) => {
 	try {
 		const { taskName } = req.params;
 		const { cronExpression, tags } = req.body;
-		if (!cronExpression || !tags) {
+		if (!cronExpression) {
 			return res.status(400).json({ error: 'Missing required fields' });
 		}
 		await cronService.updateCronJob(taskName, req.body);

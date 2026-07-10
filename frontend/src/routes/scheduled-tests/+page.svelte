@@ -175,7 +175,7 @@
 	}
 
 	async function handleSave() {
-		if (!form.taskName || !form.cronExpression || !form.tags) {
+		if (!form.taskName || !form.cronExpression) {
 			formError = 'All fields are required.';
 			return;
 		}
@@ -306,14 +306,13 @@
 		<div class="field">
 			<div class="field-label">
 				<span>Tags</span>
-				<span class="field-hint">Multiple: @test-1 or @test-2</span>
+				<span class="field-hint">Multiple: @test-1 or @test-2. Leave blank to run all tests</span>
 			</div>
 			<input
 				type="text"
 				class="field-input"
 				bind:value={form.tags}
-				placeholder="@suite-login"
-				required
+				placeholder="@suite-login (optional)"
 			/>
 		</div>
 
