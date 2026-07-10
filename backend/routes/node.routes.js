@@ -47,7 +47,7 @@ router.post('/shutdown', authGuard, (req, res) => {
 
 // Start a remote test job
 router.post('/execute', authGuard, (req, res) => {
-	const { tags, browser = 'chromium', workers = 1, tests = null } = req.body;
+	const { tags, browser = 'chromium', workers = 1, tests = null, env: userEnv = {} } = req.body;
 	const jobId = crypto.randomUUID();
 
 	// path.resolve ensures absolute even if TMPDIR env var is set to a relative path
@@ -84,6 +84,11 @@ router.post('/execute', authGuard, (req, res) => {
 
 	const env = {
 		...process.env,
+		// User/test vars (BASE_URL, IS_HEADLESS, custom secrets) forwarded from the
+		// primary's own .env — nodes are stateless runners and shouldn't need their
+		// own copy. Spread before the job-control vars below so a stray same-named
+		// var in the user's .env can never override how this job actually runs.
+		...userEnv,
 		TAG: tags || '',
 		TRIGGER: TRIGGER_REMOTE,
 		BROWSER: browser,

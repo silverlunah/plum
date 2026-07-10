@@ -18,6 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const prisma = require('./prisma');
+const { loadTestEnv } = require('../lib/testEnv');
 
 // ---------------------------------------------------------------------------
 // Runner CRUD
@@ -170,7 +171,13 @@ async function dispatchAndPoll(
 				'Content-Type': 'application/json',
 				Authorization: `Bearer ${runner.token}`
 			},
-			body: JSON.stringify({ tags, browser, workers, tests: collectTestFiles() }),
+			body: JSON.stringify({
+				tags,
+				browser,
+				workers,
+				tests: collectTestFiles(),
+				env: loadTestEnv(process.cwd())
+			}),
 			signal: AbortSignal.timeout(10000)
 		});
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
