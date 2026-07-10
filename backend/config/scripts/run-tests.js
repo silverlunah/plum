@@ -69,18 +69,13 @@ try {
 
 		// hooks.ts calls dotenv.config() with no path, which defaults to process.cwd().
 		// When running from a temp dir there is no .env there, so vars like BASE_URL
-		// would be undefined. Pre-load BACKEND_DIR's .env so they are already in
-		// process.env before dotenv.config() runs (dotenv never overwrites existing vars).
-		const backendEnvPath = path.resolve(__dirname, '..', '..', '.env');
-		if (fs.existsSync(backendEnvPath)) {
-			for (const line of fs.readFileSync(backendEnvPath, 'utf8').split(/\r?\n/)) {
-				const m = line.match(/^([A-Za-z_]\w*)\s*=\s*(.*?)(\s*#.*)?$/);
-				if (m) {
-					const key = m[1];
-					const val = m[2].trim().replace(/^(['"])(.*)\1$/, '$2');
-					if (!(key in process.env)) process.env[key] = val;
-				}
-			}
+		// would be undefined. A dispatched node job already has these injected into
+		// process.env by node.routes.js from the primary's payload; this is just a
+		// fallback for local/standalone runs, so it never overwrites what's already set.
+		const { loadTestEnv } = require('../../lib/testEnv');
+		const backendEnv = loadTestEnv(path.resolve(__dirname, '..', '..'));
+		for (const [key, val] of Object.entries(backendEnv)) {
+			if (!(key in process.env)) process.env[key] = val;
 		}
 
 		fs.writeFileSync(
