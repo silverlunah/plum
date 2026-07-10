@@ -513,7 +513,6 @@ async function serverUpdate() {
 	// `plum update` happens to be run from.
 	const { getInstalls } = globalRegistryLib();
 	const { loadNodeConfig } = nodeRegisterLib();
-	const { loadRegistry, isAlive } = runnerProcessLib();
 
 	let restartedAnything = false;
 
@@ -533,15 +532,16 @@ async function serverUpdate() {
 		}
 	}
 
-	const registry = loadRegistry();
 	for (const dir of getInstalls('node')) {
 		const nodeCfg = loadNodeConfig(dir);
-		const running = !!(
-			nodeCfg.id &&
-			registry[String(nodeCfg.id)]?.pid &&
-			isAlive(registry[String(nodeCfg.id)].pid)
-		);
-		if (!running) continue;
+		if (!nodeCfg.id) continue;
+		// Always attempt the restart rather than gating on the local PID
+		// registry: that registry goes stale (manager restarts, pre-existing
+		// installs from before this tracking existed, etc.), and skipping the
+		// restart in those cases silently leaves the OLD node process running
+		// mismatched code — it still answers /api/ping so it looks "online"
+		// while actually being unreachable. `plum node restart` itself falls
+		// back to port-based PID discovery, so it's safe to call unconditionally.
 		clack.log.step(`Restarting node runner at ${dir}…`);
 		try {
 			execSync('plum node restart', { stdio: 'inherit', cwd: dir });
@@ -757,7 +757,11 @@ async function nodeRestart() {
 		return;
 	}
 
-	const stopped = stopNode(String(cfg.id));
+	// Passing the port lets stopNode fall back to port-based PID discovery when
+	// the local registry entry is missing or stale (e.g. after `plum update`
+	// reinstalls in a fresh process) — otherwise a still-running old process is
+	// left bound to the port while a new one starts up alongside it.
+	const stopped = stopNode(String(cfg.id), Number(cfg.port));
 	if (stopped) {
 		clack.log.success(`Stopped runner "${cfg.name ?? cfg.id}".`);
 	} else {
@@ -1179,7 +1183,7 @@ switch (command) {
 			const cfg = loadNodeConfig(process.cwd());
 
 			if (cfg.id) {
-				const stopped = stopNode(String(cfg.id));
+				const stopped = stopNode(String(cfg.id), Number(cfg.port));
 				if (stopped) {
 					clack.log.success(`Stopped runner "${cfg.name ?? cfg.id}".`);
 				} else if (cfg.pid) {
