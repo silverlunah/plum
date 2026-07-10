@@ -105,10 +105,27 @@ async function update(id, { title, status, caseIds }) {
 	if (status !== undefined) data.status = status;
 
 	if (caseIds !== undefined) {
-		await prisma.testRunEntry.deleteMany({ where: { runId: id } });
+		// Diff against existing entries instead of delete-all/recreate, so cases that
+		// remain in the run keep their recorded status, notes, and assignment.
+		const existing = await prisma.testRunEntry.findMany({
+			where: { runId: id },
+			select: { id: true, caseId: true }
+		});
+		const existingIdByCaseId = new Map(existing.map((e) => [e.caseId, e.id]));
+		const keepCaseIds = new Set(caseIds);
+		const removedIds = existing.filter((e) => !keepCaseIds.has(e.caseId)).map((e) => e.id);
+
+		if (removedIds.length > 0) {
+			await prisma.testRunEntry.deleteMany({ where: { id: { in: removedIds } } });
+		}
 		await prisma.$transaction(
 			caseIds.map((caseId, i) =>
-				prisma.testRunEntry.create({ data: { runId: id, caseId, order: i } })
+				existingIdByCaseId.has(caseId)
+					? prisma.testRunEntry.update({
+							where: { id: existingIdByCaseId.get(caseId) },
+							data: { order: i }
+						})
+					: prisma.testRunEntry.create({ data: { runId: id, caseId, order: i } })
 			)
 		);
 	}

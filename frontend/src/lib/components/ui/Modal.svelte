@@ -82,7 +82,10 @@
 <style>
 	.backdrop {
 		position: fixed;
-		inset: 0;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: var(--bottom-bar-height);
 		background: rgba(0, 0, 0, 0.45);
 		display: flex;
 		align-items: center;
@@ -90,6 +93,7 @@
 		z-index: 50;
 		padding: 1rem;
 		backdrop-filter: blur(2px);
+		overflow-y: auto;
 	}
 
 	.panel {
@@ -99,6 +103,8 @@
 		padding: 1.75rem;
 		width: 100%;
 		max-width: 480px;
+		max-height: 100%;
+		overflow-y: auto;
 		box-shadow:
 			0 4px 6px rgba(0, 0, 0, 0.04),
 			0 24px 64px rgba(0, 0, 0, 0.14);

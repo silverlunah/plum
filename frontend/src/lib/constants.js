@@ -37,7 +37,6 @@ export const TOAST_TIMEOUT_MS = 4000;
 
 export const REPLAY_STEP_MS = 900;
 export const REDIRECT_DELAY_MS = 3000;
-export const RUN_REFRESH_MS = 15000;
 
 export const WORKERS_MIN = 1;
 export const WORKERS_MAX = 10;

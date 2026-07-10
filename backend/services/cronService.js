@@ -284,7 +284,7 @@ const addCronJob = async ({
 	notifyDiscord,
 	notifySlack
 }) => {
-	if (!cronExpression || !taskName || !tags) {
+	if (!cronExpression || !taskName) {
 		return { status: 400, message: 'Missing required parameters' };
 	}
 	const runnerIdsStr =
@@ -294,7 +294,7 @@ const addCronJob = async ({
 		data: {
 			taskName,
 			cronExpression,
-			tags,
+			tags: tags ?? '',
 			workers: workers ?? 1,
 			browser: browser ?? 'chromium',
 			runnerIds: runnerIdsStr,
