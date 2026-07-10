@@ -138,6 +138,7 @@ const backendLib = path.join(plumRoot, 'backend', 'lib');
 const serverConfigLib = () => require(path.join(backendLib, 'serverConfig.js'));
 const nodeRegisterLib = () => require(path.join(backendLib, 'nodeRegister.js'));
 const runnerProcessLib = () => require(path.join(backendLib, 'runnerProcess.js'));
+const globalRegistryLib = () => require(path.join(backendLib, 'globalRegistry.js'));
 
 /* -----------------------------------------------------
  *                 Interactive prompts
@@ -254,6 +255,7 @@ async function configureServer({ force }) {
 	}
 
 	saveServerConfig(cwd, cfg);
+	globalRegistryLib().registerInstall('server', cwd);
 	return cfg;
 }
 
@@ -484,9 +486,15 @@ function npmInstallLatestWithRetry() {
 	return false;
 }
 
+function readPlumVersion() {
+	return JSON.parse(fs.readFileSync(path.join(plumRoot, 'package.json'), 'utf8')).version;
+}
+
 async function serverUpdate() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Update  ')));
-	clack.log.step('Fetching latest Plum version…');
+
+	const fromVersion = readPlumVersion();
+	clack.log.step(`Fetching latest Plum version… (currently ${fromVersion})`);
 	if (!npmInstallLatestWithRetry()) {
 		clack.log.error(
 			`Failed to install the latest version after ${NPM_INSTALL_RETRIES} attempts. Try again shortly, or run "npm install -g plum-e2e@latest" manually to see the full error.`
@@ -495,39 +503,61 @@ async function serverUpdate() {
 		process.exitCode = 1;
 		return;
 	}
-	clack.log.success('Plum CLI updated.');
 
-	const serverCfgPath = path.join(process.cwd(), '.plum-server.json');
-	const hasServerCfg = fs.existsSync(serverCfgPath);
+	// Re-read from disk (not require-cached) so this reflects what npm just installed.
+	const toVersion = readPlumVersion();
+	clack.log.success(`Plum CLI updated: ${fromVersion} → ${toVersion}`);
 
+	// Every install registers its directory here when configured (see
+	// configureServer/configureNode), so this finds them regardless of the cwd
+	// `plum update` happens to be run from.
+	const { getInstalls } = globalRegistryLib();
 	const { loadNodeConfig } = nodeRegisterLib();
 	const { loadRegistry, isAlive } = runnerProcessLib();
-	const nodeCfg = loadNodeConfig(process.cwd());
+
+	let restartedAnything = false;
+
+	// Re-exec `plum` as a fresh process (cwd set to each install dir) for the
+	// restart steps rather than calling serverRestart()/nodeRestart() directly —
+	// this same process already loaded the OLD code into memory before npm
+	// install ran above, so calling them in-process would rebuild using stale
+	// logic no matter how new the just-installed files on disk actually are.
+	for (const dir of getInstalls('server')) {
+		if (!fs.existsSync(path.join(dir, '.plum-server.json'))) continue;
+		clack.log.step(`Rebuilding server at ${dir}…`);
+		try {
+			execSync('plum server restart', { stdio: 'inherit', cwd: dir });
+			restartedAnything = true;
+		} catch (e) {
+			clack.log.warn(`Could not restart server at ${dir}: ${e.message}`);
+		}
+	}
+
 	const registry = loadRegistry();
-	const nodeRunning = !!(
-		nodeCfg.id &&
-		registry[String(nodeCfg.id)]?.pid &&
-		isAlive(registry[String(nodeCfg.id)].pid)
-	);
-
-	// Re-exec `plum` as a fresh process for the restart steps rather than
-	// calling serverRestart()/nodeRestart() directly — this same process
-	// already loaded the OLD code into memory before npm install ran above,
-	// so calling them in-process would rebuild using stale logic no matter
-	// how new the just-installed files on disk actually are.
-	if (hasServerCfg) {
-		clack.log.step('Rebuilding server with the newly installed version…');
-		execSync('plum server restart', { stdio: 'inherit' });
+	for (const dir of getInstalls('node')) {
+		const nodeCfg = loadNodeConfig(dir);
+		const running = !!(
+			nodeCfg.id &&
+			registry[String(nodeCfg.id)]?.pid &&
+			isAlive(registry[String(nodeCfg.id)].pid)
+		);
+		if (!running) continue;
+		clack.log.step(`Restarting node runner at ${dir}…`);
+		try {
+			execSync('plum node restart', { stdio: 'inherit', cwd: dir });
+			restartedAnything = true;
+		} catch (e) {
+			clack.log.warn(`Could not restart node at ${dir}: ${e.message}`);
+		}
 	}
 
-	if (nodeRunning) {
-		clack.log.step('Restarting node runner with the newly installed version…');
-		execSync('plum node restart', { stdio: 'inherit' });
+	if (!restartedAnything) {
+		clack.log.info(
+			'No running server or node found — run `plum server start` or `plum node start` when ready.'
+		);
 	}
 
-	if (!hasServerCfg && !nodeRunning) {
-		clack.outro(pc.green('Plum updated. Run `plum server start` or `plum node start` to launch.'));
-	}
+	clack.outro(pc.green(`Plum updated: ${fromVersion} → ${toVersion}`));
 }
 
 async function serverReconfig() {
@@ -610,6 +640,7 @@ async function configureNode({ force }) {
 		port,
 		pid: saved.pid ?? null
 	});
+	globalRegistryLib().registerInstall('node', cwd);
 	return { primary, port, browser, token, name, url };
 }
 
@@ -664,6 +695,23 @@ async function registerNode({ primary, name, url, token, browser, port }) {
 async function nodeStart({ reconfig }) {
 	const backendDir = path.join(plumRoot, 'backend');
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Runner  ')));
+
+	const { loadNodeConfig } = nodeRegisterLib();
+	const { statusOf } = runnerProcessLib();
+	const existing = loadNodeConfig(process.cwd());
+
+	// Re-running `node start` on an already-running node used to spawn a second
+	// process on the same port (orphaning the first) and re-register a duplicate
+	// runner on the primary. Route to the same menu this command ends on anyway
+	// instead of repeating the whole configure/register/spawn dance.
+	if (!reconfig && existing.id && statusOf(String(existing.id)) === 'running') {
+		clack.log.info(
+			`Node "${existing.name ?? existing.id}" is already running from this folder — opening the runner menu instead of starting a new one.`
+		);
+		await openManageRunnersMenu(existing.primary);
+		clack.outro(`Manage runners anytime: ${pc.cyan('plum manage-runners')}`);
+		return;
+	}
 
 	const cfg = await configureNode({ force: reconfig });
 	const registeredId = await registerNode(cfg);
