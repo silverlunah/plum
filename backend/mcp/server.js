@@ -67,6 +67,7 @@ async function api(method, path, body) {
 const get = (path) => api('GET', path);
 const post = (path, body) => api('POST', path, body);
 const put = (path, body) => api('PUT', path, body);
+const del = (path) => api('DELETE', path);
 
 // ---------------------------------------------------------------------------
 // Polling helper for test runs
@@ -176,6 +177,33 @@ server.tool(
 	}
 );
 
+server.tool(
+	'update_test_suite',
+	"Update a test suite's name, description, or priority. Only the fields provided are changed.",
+	{
+		suiteId: z.string().describe('UUID of the suite to update'),
+		name: z.string().min(1).optional(),
+		description: z.string().optional(),
+		priority: z.enum(['Critical', 'High', 'Medium', 'Low']).optional()
+	},
+	async ({ suiteId, name, description, priority }) => {
+		const data = await put(`/test-suites/${suiteId}`, { name, description, priority });
+		return { content: [{ type: 'text', text: JSON.stringify(data.suite, null, 2) }] };
+	}
+);
+
+server.tool(
+	'delete_test_suite',
+	'Permanently delete a test suite and all of its test cases. This cannot be undone.',
+	{
+		suiteId: z.string().describe('UUID of the suite to delete')
+	},
+	async ({ suiteId }) => {
+		await del(`/test-suites/${suiteId}`);
+		return { content: [{ type: 'text', text: `Suite ${suiteId} deleted.` }] };
+	}
+);
+
 // -- Test Repository: Cases -------------------------------------------------
 
 server.tool(
@@ -190,6 +218,45 @@ server.tool(
 	async ({ suiteId, title, description, priority }) => {
 		const data = await post('/test-cases', { suiteId, title, description, priority });
 		return { content: [{ type: 'text', text: JSON.stringify(data.testCase, null, 2) }] };
+	}
+);
+
+server.tool(
+	'get_test_case',
+	'Get a test case by ID, including its manual steps and recent execution history.',
+	{
+		caseId: z.string().describe('UUID of the test case')
+	},
+	async ({ caseId }) => {
+		const data = await get(`/test-cases/${caseId}`);
+		return { content: [{ type: 'text', text: JSON.stringify(data.testCase, null, 2) }] };
+	}
+);
+
+server.tool(
+	'update_test_case',
+	"Update a test case's title, description, or priority. Only the fields provided are changed.",
+	{
+		caseId: z.string().describe('UUID of the test case to update'),
+		title: z.string().min(1).optional(),
+		description: z.string().optional(),
+		priority: z.enum(['Critical', 'High', 'Medium', 'Low']).optional()
+	},
+	async ({ caseId, title, description, priority }) => {
+		const data = await put(`/test-cases/${caseId}`, { title, description, priority });
+		return { content: [{ type: 'text', text: JSON.stringify(data.testCase, null, 2) }] };
+	}
+);
+
+server.tool(
+	'delete_test_case',
+	'Permanently delete a test case and its steps. This cannot be undone.',
+	{
+		caseId: z.string().describe('UUID of the test case to delete')
+	},
+	async ({ caseId }) => {
+		await del(`/test-cases/${caseId}`);
+		return { content: [{ type: 'text', text: `Test case ${caseId} deleted.` }] };
 	}
 );
 
