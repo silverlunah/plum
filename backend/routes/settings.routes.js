@@ -33,8 +33,8 @@ router.get('/project', async (req, res, next) => {
 
 router.post('/project', async (req, res, next) => {
 	try {
-		const { name, logoUrl } = req.body;
-		const project = await settingsService.updateProject({ name, logoUrl });
+		const { name, logoUrl, timezone } = req.body;
+		const project = await settingsService.updateProject({ name, logoUrl, timezone });
 		res.json(project);
 	} catch (e) {
 		next(e);

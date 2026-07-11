@@ -52,6 +52,7 @@ const exportAll = async () => {
 			? {
 					name: project.name,
 					logoUrl: project.logoUrl,
+					timezone: project.timezone,
 					testCasePrefix: project.testCasePrefix,
 					testSuitePrefix: project.testSuitePrefix,
 					discordWebhookUrl: project.discordWebhookUrl,

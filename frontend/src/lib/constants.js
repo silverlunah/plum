@@ -42,6 +42,7 @@ export const WORKERS_MIN = 1;
 export const WORKERS_MAX = 10;
 export const RUN_PICKER_LIMIT = 200;
 export const RUN_TAG_DISPLAY_LIMIT = 5;
+export const CASE_HISTORY_BARS_MAX = 20;
 
 export const BUILTIN_RUNNER_ID = 'built-in';
 export const BUILTIN_RUNNER_LABEL = 'Built-in';

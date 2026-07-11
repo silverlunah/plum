@@ -34,7 +34,7 @@
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
-	import { TOAST_TIMEOUT_MS, SUITE_CASES_PER_PAGE } from '$lib/constants';
+	import { TOAST_TIMEOUT_MS, SUITE_CASES_PER_PAGE, CASE_HISTORY_BARS_MAX } from '$lib/constants';
 
 	const suiteId = $page.params.id;
 
@@ -256,6 +256,12 @@
 		if (r === 'fail') return 'fail';
 		if (r === 'blocked') return 'warn';
 		return 'muted';
+	}
+
+	// selectedCase.history arrives newest-first; bars read oldest → newest, left → right.
+	function recentHistory(history) {
+		if (!history || history.length === 0) return [];
+		return history.slice(0, CASE_HISTORY_BARS_MAX).slice().reverse();
 	}
 </script>
 
@@ -623,6 +629,16 @@
 								<p class="detail-case-desc">{selectedCase.description}</p>
 							{/if}
 							<p class="detail-meta">Created by {selectedCase.createdBy.name}</p>
+							{#if selectedCase.history && selectedCase.history.length > 0}
+								<div class="case-history-bars">
+									{#each recentHistory(selectedCase.history) as h (h.id)}
+										<span
+											class="history-bar {resultClass(h.result)}"
+											title="{h.result} — {new Date(h.executedAt).toLocaleString()}"
+										></span>
+									{/each}
+								</div>
+							{/if}
 						{/if}
 					</div>
 
@@ -1110,6 +1126,37 @@
 	.detail-meta {
 		font-size: 0.75rem;
 		color: var(--text-muted);
+	}
+
+	.case-history-bars {
+		display: flex;
+		align-items: flex-end;
+		gap: 2px;
+		height: 16px;
+		margin-top: 0.5rem;
+	}
+
+	.history-bar {
+		width: 4px;
+		height: 100%;
+		border-radius: 1px;
+		background: var(--border);
+	}
+
+	.history-bar.pass {
+		background: var(--pass);
+	}
+
+	.history-bar.fail {
+		background: var(--fail);
+	}
+
+	.history-bar.warn {
+		background: var(--warn);
+	}
+
+	.history-bar.muted {
+		background: var(--text-muted);
 	}
 
 	.detail-tabs {

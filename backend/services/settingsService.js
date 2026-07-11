@@ -26,12 +26,26 @@ const getProject = async () => {
 	return project;
 };
 
-const updateProject = async ({ name, logoUrl }) => {
-	return prisma.project.upsert({
+const updateProject = async ({ name, logoUrl, timezone }) => {
+	const data = {
+		name: name ?? '',
+		logoUrl: logoUrl ?? '',
+		...(timezone !== undefined && { timezone })
+	};
+	const project = await prisma.project.upsert({
 		where: { id: 1 },
-		create: { id: 1, name: name ?? '', logoUrl: logoUrl ?? '' },
-		update: { name: name ?? '', logoUrl: logoUrl ?? '' }
+		create: { id: 1, ...data },
+		update: data
 	});
+
+	if (timezone !== undefined) {
+		// Cron jobs read the timezone at schedule time, so a change here must
+		// re-schedule everything for the new offset to take effect immediately.
+		await require('./cronService').reload();
+		await require('./backupCronService').reload();
+	}
+
+	return project;
 };
 
 const getTestPrefixes = async () => {

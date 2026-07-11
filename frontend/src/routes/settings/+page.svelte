@@ -68,9 +68,17 @@
 		} catch {}
 	}
 
-	let project = { name: '', logoUrl: '' };
+	let project = { name: '', logoUrl: '', timezone: 'UTC' };
 	let projectSaving = false;
 	let toast = null;
+
+	const TIMEZONES = (() => {
+		try {
+			return Intl.supportedValuesOf('timeZone');
+		} catch {
+			return ['UTC'];
+		}
+	})();
 
 	let prefixes = { testCasePrefix: 'TC', testSuitePrefix: 'TS' };
 	let prefixesSaving = false;
@@ -678,6 +686,18 @@
 							/>
 						</div>
 					{/if}
+
+					<div class="field">
+						<label class="field-label" for="project-timezone">
+							<span>Timezone</span>
+							<span class="field-hint">Used to schedule cron jobs and backups</span>
+						</label>
+						<select id="project-timezone" class="field-input" bind:value={project.timezone}>
+							{#each TIMEZONES as tz}
+								<option value={tz}>{tz}</option>
+							{/each}
+						</select>
+					</div>
 
 					<!-- Dark mode toggle -->
 					<div class="toggle-row">

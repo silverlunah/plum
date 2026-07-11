@@ -58,20 +58,20 @@ const runBackup = async () => {
 	}
 };
 
-const schedule = (cronExpr, enabled) => {
+const schedule = (cronExpr, enabled, timezone) => {
 	if (scheduledJob) {
 		scheduledJob.stop();
 		scheduledJob = null;
 	}
 	if (!enabled || !cronExpr || !cron.validate(cronExpr)) return;
-	scheduledJob = cron.schedule(cronExpr, runBackup);
-	console.log(`⏰ Backup scheduled: ${cronExpr}`);
+	scheduledJob = cron.schedule(cronExpr, runBackup, { timezone: timezone || 'UTC' });
+	console.log(`⏰ Backup scheduled: ${cronExpr} (${timezone || 'UTC'})`);
 };
 
 const init = async () => {
 	try {
 		const project = await prisma.project.findUnique({ where: { id: 1 } });
-		schedule(project?.backupCron, project?.backupEnabled);
+		schedule(project?.backupCron, project?.backupEnabled, project?.timezone);
 	} catch (err) {
 		console.error('Failed to initialize backup cron:', err.message);
 	}
