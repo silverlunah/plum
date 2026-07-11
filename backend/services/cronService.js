@@ -244,19 +244,22 @@ async function runCronJob(job) {
 // Public: scheduling
 // ---------------------------------------------------------------------------
 
-function scheduleJob(job) {
+async function scheduleJob(job) {
 	const { taskName, cronExpression } = job;
 	if (scheduledJobs[taskName]) {
 		scheduledJobs[taskName].stop();
 		delete scheduledJobs[taskName];
 	}
 	if (job.enabled === false) return; // disabled jobs are not scheduled
-	scheduledJobs[taskName] = cron.schedule(cronExpression, () => runCronJob(job));
+	const project = await prisma.project.findUnique({ where: { id: 1 } });
+	scheduledJobs[taskName] = cron.schedule(cronExpression, () => runCronJob(job), {
+		timezone: project?.timezone || 'UTC'
+	});
 }
 
 const init = async () => {
 	const jobs = await prisma.cronJob.findMany();
-	for (const job of jobs) scheduleJob(job);
+	for (const job of jobs) await scheduleJob(job);
 	console.log(`⏰ Scheduled ${jobs.length} cron job(s) from database`);
 };
 
@@ -303,7 +306,7 @@ const addCronJob = async ({
 			runnerId: null
 		}
 	});
-	scheduleJob(job);
+	await scheduleJob(job);
 	return { status: 201, message: `Cron job "${taskName}" added` };
 };
 
@@ -359,7 +362,7 @@ const updateCronJob = async (
 		}
 	});
 
-	scheduleJob(updated);
+	await scheduleJob(updated);
 	return { status: 200, message: 'Cron job updated' };
 };
 
@@ -379,7 +382,7 @@ const toggleCronJob = async (taskName, enabled) => {
 		data: { enabled }
 	});
 
-	scheduleJob(updated); // re-schedules if enabled, stops and removes if disabled
+	await scheduleJob(updated); // re-schedules if enabled, stops and removes if disabled
 	return { status: 200, enabled: updated.enabled };
 };
 

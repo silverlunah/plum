@@ -82,6 +82,7 @@ model Project {
   id                 Int       @id @default(autoincrement())
   name               String    @default("")
   logoUrl            String    @default("")
+  timezone           String    @default("UTC")
   testCasePrefix     String    @default("TC")
   testSuitePrefix    String    @default("TS")
   caseSeqNext        Int       @default(0)
