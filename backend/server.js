@@ -48,6 +48,7 @@ if (!isNodeMode) {
 	backupCronService = require('./services/backupCronService');
 	socketHandler(io);
 	cronService.setSocketIO(io);
+	require('./routes/trigger.routes').setSocketIO(io);
 }
 
 async function start() {

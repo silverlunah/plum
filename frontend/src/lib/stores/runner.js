@@ -46,8 +46,11 @@ export const testsVersion = writable(0);
 export const reportsVersion = writable(0);
 export const runsVersion = writable(0);
 
-// Map of taskName → true for every cron job currently executing
-export const activeCronJobs = writable({});
+// Map of runId → runnerState-shaped object (plus kind/label) for every
+// non-manual run currently executing (scheduled cron jobs, REST/MCP-triggered
+// runs) — these are spawned server-side with no single browser socket to
+// stream to, so they're tracked separately from `runnerState`.
+export const backgroundRuns = writable({});
 
 export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 	const s = get(socket);

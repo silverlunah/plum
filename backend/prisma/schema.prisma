@@ -68,6 +68,7 @@ model Report {
   testRun     TestRun?          @relation(fields: [testRunId], references: [id], onDelete: SetNull)
   content     Json
   logs        String?
+  duration    Int?
   createdAt   DateTime          @default(now())
   testHistory TestCaseHistory[]
 

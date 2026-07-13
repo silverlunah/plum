@@ -51,10 +51,11 @@
 	import { builtInEnabled } from '$lib/stores/runner';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
-	import { BROWSERS, TOAST_TIMEOUT_MS } from '$lib/constants';
+	import { API_BASE, BROWSERS, TOAST_TIMEOUT_MS } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
+	import Badge from '$lib/components/ui/Badge.svelte';
 
 	/** @type {'project' | 'runners' | 'repository' | 'integrations' | 'mcp' | 'account' | 'users' | 'backup'} */
 	let section =
@@ -114,6 +115,7 @@
 	let mcpGenerating = false;
 	let mcpKeyCopied = false;
 	let mcpSnippetCopied = false;
+	let ciSnippetCopied = false;
 
 	let backupConfig = {
 		backupEnabled: false,
@@ -497,6 +499,13 @@
 		});
 	}
 
+	function handleCopyCiSnippet() {
+		navigator.clipboard.writeText(ciWorkflowSnippet).then(() => {
+			ciSnippetCopied = true;
+			setTimeout(() => (ciSnippetCopied = false), 1500);
+		});
+	}
+
 	async function handleSaveIntegrations() {
 		integrationsSaving = true;
 		try {
@@ -585,6 +594,15 @@
 		null,
 		2
 	);
+
+	$: ciWorkflowSnippet = [
+		'- name: Run Plum tests',
+		'  run: |',
+		`    curl -X POST ${API_BASE}/trigger \\`,
+		'      -H "Authorization: ApiKey ${{ secrets.PLUM_API_KEY }}" \\',
+		'      -H "Content-Type: application/json" \\',
+		'      -d \'{"tag": "@smoke", "baseUrl": "https://your-pr-preview-url"}\''
+	].join('\n');
 
 	const ADMIN_SECTIONS = new Set([
 		'project',
@@ -1095,6 +1113,27 @@
 					<Button on:click={handleSaveIntegrations} disabled={integrationsSaving}>
 						{integrationsSaving ? 'Saving…' : 'Save Integrations'}
 					</Button>
+				</div>
+
+				<div class="card settings-card">
+					<p class="card-title">CI / External Triggers</p>
+					<p class="content-desc">
+						Trigger a Plum run from GitHub Actions (e.g. on a pull request, against its preview
+						deployment) or any other external script by calling <code class="code-sample"
+							>POST {API_BASE}/trigger</code
+						>
+						with an
+						<code class="code-sample">Authorization: ApiKey …</code> header. Generate a key on the
+						<button class="link-btn" on:click={() => setSection('mcp')}>MCP tab</button>
+						and store it as a repo secret — never commit it directly. Runs triggered this way show up
+						in Reports tagged <Badge variant="external">External</Badge>.
+					</p>
+					<pre class="mcp-snippet">{ciWorkflowSnippet}</pre>
+					<div class="card-footer">
+						<Button variant="ghost" on:click={handleCopyCiSnippet}>
+							{ciSnippetCopied ? 'Copied!' : 'Copy Workflow Step'}
+						</Button>
+					</div>
 				</div>
 			</div>
 
@@ -2199,6 +2238,16 @@
 		background: var(--bg-subtle);
 		padding: 0.1em 0.3em;
 		border-radius: 3px;
+	}
+
+	.link-btn {
+		font: inherit;
+		color: var(--accent);
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		text-decoration: underline;
 	}
 
 	.account-info {

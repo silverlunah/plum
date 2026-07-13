@@ -26,7 +26,7 @@
 	} from '$lib/api/schedules';
 	import { fetchRunners } from '$lib/api/runners';
 	import { fetchIntegrations } from '$lib/api/settings';
-	import { activeCronJobs } from '$lib/stores/runner';
+	import { backgroundRuns } from '$lib/stores/runner';
 	import { BROWSERS, TOAST_TIMEOUT_MS } from '$lib/constants';
 	import { stagger } from '$lib/utils/format';
 	import Button from '$lib/components/ui/Button.svelte';
@@ -479,7 +479,7 @@
 								</button>
 							</td>
 							<td class="job-name">
-								{#if $activeCronJobs[job.taskName]}
+								{#if $backgroundRuns[job.taskName]?.running}
 									<span class="running-dot" title="Running now"></span>
 								{/if}
 								{job.taskName}

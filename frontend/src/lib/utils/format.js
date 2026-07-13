@@ -21,6 +21,7 @@ const NON_SCHEDULED = new Set([
 	TRIGGER_TYPES.MANUAL,
 	TRIGGER_TYPES.CLI,
 	TRIGGER_TYPES.MCP,
+	TRIGGER_TYPES.EXTERNAL,
 	'undefined'
 ]);
 
@@ -32,6 +33,7 @@ export function triggerLabel(type) {
 	if (type === TRIGGER_TYPES.MANUAL) return 'Manual';
 	if (type === TRIGGER_TYPES.CLI || type === 'undefined') return 'CLI';
 	if (type === TRIGGER_TYPES.MCP) return 'MCP';
+	if (type === TRIGGER_TYPES.EXTERNAL) return 'External';
 	return 'Scheduled';
 }
 
@@ -39,6 +41,7 @@ export function triggerVariant(type) {
 	if (type === TRIGGER_TYPES.MANUAL) return 'tag';
 	if (type === TRIGGER_TYPES.CLI || type === 'undefined') return 'neutral';
 	if (type === TRIGGER_TYPES.MCP) return 'mcp';
+	if (type === TRIGGER_TYPES.EXTERNAL) return 'external';
 	return 'schedule';
 }
 

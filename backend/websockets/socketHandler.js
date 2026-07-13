@@ -22,6 +22,7 @@ const path = require('path');
 const runnerService = require('../services/runnerService');
 const reportService = require('../services/reportService');
 const notificationService = require('../services/notificationService');
+const { startSsPoller } = require('../lib/screenshotPoller');
 const { TRIGGER_TYPE, BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { readCucumberReportFile } = require('../lib/reportFilename');
@@ -166,28 +167,6 @@ function makeSyntheticFailReport(laneName, testIds, reason) {
 // Single built-in runner
 // ---------------------------------------------------------------------------
 
-function startSsPoller(ssDir, onScreenshot) {
-	const seenFiles = new Set();
-	return setInterval(() => {
-		try {
-			const files = fs
-				.readdirSync(ssDir)
-				.filter((f) => f.endsWith('.ss.json'))
-				.sort();
-			for (const f of files) {
-				if (seenFiles.has(f)) continue;
-				seenFiles.add(f);
-				const filePath = path.join(ssDir, f);
-				const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-				onScreenshot(data);
-				try {
-					fs.unlinkSync(filePath);
-				} catch {}
-			}
-		} catch {}
-	}, 400);
-}
-
 function runBuiltIn(
 	io,
 	socket,
@@ -201,6 +180,7 @@ function runBuiltIn(
 ) {
 	const ssDir = path.join(os.tmpdir(), `plum-ss-${Date.now()}`);
 	fs.mkdirSync(ssDir, { recursive: true });
+	const startedAt = Date.now();
 
 	const env = {
 		...process.env,
@@ -250,7 +230,7 @@ function runBuiltIn(
 			if (latest) {
 				await prisma.report.update({
 					where: { id: latest.id },
-					data: { logs: logBuffer || null }
+					data: { logs: logBuffer || null, duration: Date.now() - startedAt }
 				});
 			}
 		} catch (e) {
@@ -298,6 +278,7 @@ async function runDistributed(
 	notifyDiscord,
 	notifySlack
 ) {
+	const dispatchStartedAt = Date.now();
 	const allIds = getTestIdsForTag(tag);
 	const chunks = chunkTests(allIds, runnerIds.length);
 
@@ -357,7 +338,8 @@ async function runDistributed(
 					triggerType: TRIGGER_TYPE.MANUAL,
 					browser,
 					testRunId: testRunId ?? null,
-					laneLogs
+					laneLogs,
+					duration: Date.now() - dispatchStartedAt
 				})
 				.then((saved) => {
 					// Result is authoritative from the merged report, not the exit code —

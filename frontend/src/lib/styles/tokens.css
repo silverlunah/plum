@@ -34,6 +34,8 @@
 	--warn-soft: #fef3c7;
 	--node: #0284c7;
 	--node-soft: #e0f2fe;
+	--external: #0d9488;
+	--external-soft: #ccfbf1;
 	--terminal-bg: #0d0c08;
 	--terminal-text: #d6d0c8;
 
@@ -97,6 +99,8 @@
 	--warn-soft: #2a1f06;
 	--node: #38bdf8;
 	--node-soft: #082032;
+	--external: #2dd4bf;
+	--external-soft: #0f2e2b;
 	--terminal-bg: #080807;
 	--terminal-text: #cbc5bd;
 }
