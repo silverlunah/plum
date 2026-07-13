@@ -60,7 +60,7 @@ router.post('/execute', authGuard, (req, res) => {
 		for (const [rel, content] of Object.entries(tests)) {
 			const dest = path.join(tempTestsDir, rel);
 			fs.mkdirSync(path.dirname(dest), { recursive: true });
-			fs.writeFileSync(dest, content, 'utf8');
+			fs.writeFileSync(dest, Buffer.from(content, 'base64'));
 		}
 	}
 

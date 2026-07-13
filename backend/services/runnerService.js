@@ -100,7 +100,9 @@ function collectTestFiles() {
 			if (entry.isDirectory()) {
 				walk(fullPath, relPath);
 			} else {
-				files[relPath] = fs.readFileSync(fullPath, 'utf8');
+				// base64, not utf8 — utf8 mangles non-text fixtures (e.g. upload test images)
+				// because arbitrary binary bytes aren't valid UTF-8 and get replaced on read.
+				files[relPath] = fs.readFileSync(fullPath).toString('base64');
 			}
 		}
 	}

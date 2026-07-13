@@ -88,7 +88,9 @@ async function pollJob(jobId, { maxMs = 600_000, intervalMs = 5_000 } = {}) {
 // ---------------------------------------------------------------------------
 
 function summariseReport(report) {
-	const features = report.content?.features ?? [];
+	// GET /reports/:id hoists content.features to a top-level `features` key
+	// and strips `content` entirely — see reportService.getReportDetail.
+	const features = report.features ?? report.content?.features ?? [];
 	const allScenarios = features.flatMap((f) => f.scenarios ?? []);
 	const total = allScenarios.length;
 	const passed = allScenarios.filter((s) => s.status === 'passed').length;
@@ -116,6 +118,18 @@ function summariseReport(report) {
 		failures: failedDetails
 	};
 }
+
+// ---------------------------------------------------------------------------
+// Screenshots
+// ---------------------------------------------------------------------------
+
+const SCREENSHOT_FILENAME_RE = /^[\w.-]+\.(png|jpg|jpeg)$/i;
+
+function screenshotUrl(filename) {
+	return `${API_URL}/screenshots/${filename}`;
+}
+
+const SCREENSHOT_MIME_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
 
 // ---------------------------------------------------------------------------
 // Server setup
@@ -434,6 +448,103 @@ server.tool(
 			lines.push('All scenarios passed.');
 		}
 		return { content: [{ type: 'text', text: lines.join('\n') }] };
+	}
+);
+
+server.tool(
+	'get_report_scenario_detail',
+	[
+		'Get full per-scenario, per-step detail for a Plum test report — the data needed to diagnose',
+		"and self-heal a failing test: every step's status, duration, full error message, and",
+		'screenshot URL (if one was captured for that step).',
+		'',
+		'Use get_report_screenshot to fetch the actual screenshot image for a filename returned here,',
+		'and get_report_logs for the raw test-run stdout/stderr.'
+	].join('\n'),
+	{
+		reportId: z.number().int().describe('Numeric report ID'),
+		onlyFailed: z
+			.boolean()
+			.optional()
+			.describe('Only include scenarios with a failed step (default true)')
+	},
+	async ({ reportId, onlyFailed = true }) => {
+		const data = await get(`/reports/${reportId}`);
+		const features = data.features ?? data.content?.features ?? [];
+
+		const scenarios = features.flatMap((feature) =>
+			(feature.scenarios ?? [])
+				.filter((s) => !onlyFailed || s.status === 'failed')
+				.map((s) => ({
+					feature: feature.name,
+					scenario: s.name,
+					tags: s.tags ?? [],
+					status: s.status,
+					duration: s.duration,
+					steps: (s.steps ?? []).map((st) => ({
+						keyword: st.keyword,
+						name: st.name,
+						status: st.status,
+						duration: st.duration,
+						error: st.error ?? null,
+						screenshot: st.screenshot ?? null,
+						screenshotUrl: st.screenshot ? screenshotUrl(st.screenshot) : null
+					}))
+				}))
+		);
+
+		return { content: [{ type: 'text', text: JSON.stringify({ reportId, scenarios }, null, 2) }] };
+	}
+);
+
+server.tool(
+	'get_report_screenshot',
+	'Fetch a screenshot captured during a test step and return it as an image, so it can be viewed ' +
+		"directly. Get the filename from get_report_scenario_detail's step.screenshot field.",
+	{
+		filename: z.string().describe('Screenshot filename, e.g. "3f9c1e2a-....png"')
+	},
+	async ({ filename }) => {
+		if (!SCREENSHOT_FILENAME_RE.test(filename)) {
+			throw new Error(`Invalid screenshot filename: ${filename}`);
+		}
+		const res = await fetch(screenshotUrl(filename));
+		if (!res.ok) throw new Error(`Screenshot not found: ${filename}`);
+		const buffer = Buffer.from(await res.arrayBuffer());
+		const ext = filename.split('.').pop().toLowerCase();
+
+		return {
+			content: [
+				{
+					type: 'image',
+					data: buffer.toString('base64'),
+					mimeType: SCREENSHOT_MIME_TYPES[ext]
+				}
+			]
+		};
+	}
+);
+
+server.tool(
+	'get_report_logs',
+	'Get the raw stdout/stderr log output captured during a Plum test run, tagged per runner. ' +
+		'Useful for diagnosing failures with no clear step-level error (crashes, timeouts, setup errors).',
+	{
+		reportId: z.number().int().describe('Numeric report ID'),
+		tail: z
+			.number()
+			.int()
+			.positive()
+			.optional()
+			.describe('Only return the last N lines (default: full log)')
+	},
+	async ({ reportId, tail }) => {
+		const data = await get(`/reports/${reportId}`);
+		let logs = data.logs ?? '';
+		if (tail) {
+			logs = logs.split('\n').slice(-tail).join('\n');
+		}
+		return { content: [{ type: 'text', text: logs || '(no logs captured for this report)' }] };
 	}
 );
 
