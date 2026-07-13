@@ -17,10 +17,14 @@
 
 const cron = require('node-cron');
 const { spawn } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const prisma = require('./prisma');
 const runnerService = require('./runnerService');
 const reportService = require('./reportService');
 const notificationService = require('./notificationService');
+const { startSsPoller } = require('../lib/screenshotPoller');
 const { BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { readCucumberReportFile } = require('../lib/reportFilename');
@@ -65,30 +69,47 @@ async function resolveLaneInfos(runnerIds) {
  * TRIGGER is set to taskName so generate-report.js can persist it correctly.
  */
 function runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscord, notifySlack }) {
+	const ssDir = path.join(os.tmpdir(), `plum-cron-ss-${Date.now()}`);
+	fs.mkdirSync(ssDir, { recursive: true });
+
 	const env = {
 		...process.env,
 		TAG: tags,
 		TRIGGER: taskName,
-		BROWSER: browser
+		BROWSER: browser,
+		PLUM_SS_DIR: ssDir
 	};
 	if (workers > 1) env.PARALLEL = String(workers);
 
 	const task = spawn('npm', ['run', 'test'], { env, shell: true });
-	task.stdout.on('data', (d) => process.stdout.write(d));
-	task.stderr.on('data', (d) => process.stderr.write(d));
-	task.on('close', (code) => {
-		console.log(`Task "${taskName}" finished with code ${code}`);
-		if (_io) _io.emit('cron-done', { taskName, code });
 
-		if (notifyDiscord || notifySlack) {
-			prisma.report
-				.findFirst({
-					where: { triggerType: taskName },
-					orderBy: { createdAt: 'desc' },
-					select: { id: true, status: true, content: true }
-				})
-				.then((report) => {
-					if (!report) return;
+	const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
+		if (_io) _io.emit('bg-run-screenshot', { runId: taskName, stepName, data });
+	});
+
+	task.stdout.on('data', (d) => {
+		process.stdout.write(d);
+		if (_io) _io.emit('bg-run-log', { runId: taskName, log: d.toString() });
+	});
+	task.stderr.on('data', (d) => {
+		process.stderr.write(d);
+		if (_io) _io.emit('bg-run-log', { runId: taskName, log: `[ERROR] ${d.toString()}` });
+	});
+	task.on('close', (code) => {
+		clearInterval(ssPoller);
+		fs.rm(ssDir, { recursive: true, force: true }, () => {});
+		console.log(`Task "${taskName}" finished with code ${code}`);
+
+		prisma.report
+			.findFirst({
+				where: { triggerType: taskName },
+				orderBy: { createdAt: 'desc' },
+				select: { id: true, status: true, content: true }
+			})
+			.then((report) => {
+				if (_io) _io.emit('bg-run-done', { runId: taskName, code, reportId: report?.id ?? null });
+
+				if (report && (notifyDiscord || notifySlack)) {
 					return notificationService.send({
 						jobName: taskName,
 						status: report.status,
@@ -99,9 +120,12 @@ function runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscord, not
 						notifyDiscord,
 						notifySlack
 					});
-				})
-				.catch((e) => console.error(`[cron] Notification failed: ${e.message}`));
-		}
+				}
+			})
+			.catch((e) => {
+				console.error(`[cron] Notification failed: ${e.message}`);
+				if (_io) _io.emit('bg-run-done', { runId: taskName, code, reportId: null });
+			});
 	});
 }
 
@@ -127,24 +151,37 @@ async function runDistributed({
 
 	if (activeRunnerIds.length === 0) {
 		console.log(`Task "${taskName}" — no tests found, skipping.`);
-		if (_io) _io.emit('cron-done', { taskName, code: 0 });
+		if (_io) _io.emit('bg-run-done', { runId: taskName, code: 0, reportId: null });
 		return;
 	}
 
 	const laneInfos = await resolveLaneInfos(activeRunnerIds);
 
+	if (_io) {
+		_io.emit('bg-run-lanes-init', {
+			runId: taskName,
+			lanes: laneInfos.map((l, i) => ({ id: l.id, name: l.name, testCount: chunks[i].length }))
+		});
+	}
+
 	const collectedReports = new Array(activeRunnerIds.length).fill(null);
 	let doneCount = 0;
 	let overallCode = 0;
 
-	function onLaneDone(idx, code, reportContent) {
+	function onLaneDone(idx, laneId, code, reportContent) {
 		if (code !== 0) overallCode = code;
 		collectedReports[idx] = reportContent;
 		doneCount++;
+		if (_io) {
+			_io.emit('bg-run-lane-status', {
+				runId: taskName,
+				laneId,
+				status: code === 0 ? 'done' : 'error'
+			});
+		}
 
 		if (doneCount === activeRunnerIds.length) {
 			console.log(`Task "${taskName}" — all runners done (exit ${overallCode})`);
-			if (_io) _io.emit('cron-done', { taskName, code: overallCode });
 
 			reportService
 				.saveCombinedReport({
@@ -156,6 +193,13 @@ async function runDistributed({
 					browser
 				})
 				.then((saved) => {
+					if (_io) {
+						_io.emit('bg-run-done', {
+							runId: taskName,
+							code: overallCode,
+							reportId: saved?.id ?? null
+						});
+					}
 					if (saved && (notifyDiscord || notifySlack)) {
 						return notificationService.send({
 							jobName: taskName,
@@ -169,36 +213,66 @@ async function runDistributed({
 						});
 					}
 				})
-				.catch((e) => console.error(`[cron] Failed to save combined report: ${e.message}`));
+				.catch((e) => {
+					console.error(`[cron] Failed to save combined report: ${e.message}`);
+					if (_io) _io.emit('bg-run-done', { runId: taskName, code: overallCode, reportId: null });
+				});
 		}
 	}
 
 	for (let i = 0; i < activeRunnerIds.length; i++) {
 		const lane = laneInfos[i];
+		const laneId = lane.id;
 		const chunkTag = buildTagExpression(chunks[i]);
 
 		if (lane.id === BUILT_IN_RUNNER_ID) {
+			const ssDir = path.join(os.tmpdir(), `plum-cron-ss-${Date.now()}-${i}`);
+			fs.mkdirSync(ssDir, { recursive: true });
+
 			const env = {
 				...process.env,
 				TAG: chunkTag,
 				TRIGGER: TRIGGER_REMOTE, // node-mode: file naming only, not persisted to DB
 				BROWSER: browser,
-				PLUM_MODE: 'node'
+				PLUM_MODE: 'node',
+				PLUM_SS_DIR: ssDir
 			};
 			if (workers > 1) env.PARALLEL = String(workers);
 
 			const task = spawn('npm', ['run', 'test'], { env, shell: true });
-			task.stdout.on('data', (d) => process.stdout.write(d));
-			task.stderr.on('data', (d) => process.stderr.write(d));
+
+			const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
+				if (_io) _io.emit('bg-run-lane-screenshot', { runId: taskName, laneId, stepName, data });
+			});
+
+			task.stdout.on('data', (d) => {
+				process.stdout.write(d);
+				if (_io) _io.emit('bg-run-lane-log', { runId: taskName, laneId, log: d.toString() });
+			});
+			task.stderr.on('data', (d) => {
+				const text = `[ERROR] ${d.toString()}`;
+				process.stderr.write(d);
+				if (_io) _io.emit('bg-run-lane-log', { runId: taskName, laneId, log: text });
+			});
 			const idx = i;
-			task.on('close', (code) => onLaneDone(idx, code, readCucumberReportFile()));
+			task.on('close', (code) => {
+				clearInterval(ssPoller);
+				fs.rm(ssDir, { recursive: true, force: true }, () => {});
+				onLaneDone(idx, laneId, code, readCucumberReportFile());
+			});
 		} else {
 			const idx = i;
 			runnerService.dispatchAndPoll(
 				lane.id,
 				{ tags: chunkTag, browser, workers },
-				(log) => process.stdout.write(log),
-				(code, content) => onLaneDone(idx, code, content)
+				(log) => {
+					process.stdout.write(log);
+					if (_io) _io.emit('bg-run-lane-log', { runId: taskName, laneId, log });
+				},
+				(code, content) => onLaneDone(idx, laneId, code, content),
+				({ stepName, data }) => {
+					if (_io) _io.emit('bg-run-lane-screenshot', { runId: taskName, laneId, stepName, data });
+				}
 			);
 		}
 	}
@@ -220,7 +294,14 @@ async function runCronJob(job) {
 	} = job;
 	const runnerIds = parseRunnerIds(runnerIdsStr);
 
-	if (_io) _io.emit('cron-start', { taskName });
+	if (_io) {
+		_io.emit('bg-run-start', {
+			runId: taskName,
+			kind: 'cron',
+			label: taskName,
+			meta: { tag: tags, browser, workers }
+		});
+	}
 	console.log(`Running scheduled task: "${taskName}" → runners: ${runnerIds.join(', ')}`);
 
 	const isSingleBuiltIn = runnerIds.length === 1 && runnerIds[0] === BUILT_IN_RUNNER_ID;

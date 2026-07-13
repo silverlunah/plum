@@ -18,12 +18,25 @@
 <script>
 	import { afterUpdate, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { fly, fade } from 'svelte/transition';
-	import { runnerState, cancelRun, activeCronJobs } from '$lib/stores/runner';
+	import { runnerState, cancelRun, backgroundRuns } from '$lib/stores/runner';
 	import { reportUrl } from '$lib/api/reports';
 	import { REDIRECT_DELAY_MS, ALL_TESTS_LABEL } from '$lib/constants';
+	import { triggerLabel } from '$lib/utils/format';
 	import BackLink from '$lib/components/ui/BackLink.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
+
+	const EMPTY_BG_STATE = {
+		output: '',
+		running: false,
+		testCompleted: false,
+		latestReportId: null,
+		status: 'idle',
+		lanes: [],
+		currentRun: null,
+		latestScreenshot: null
+	};
 
 	let terminalEl;
 	let laneTerminalEl;
@@ -32,10 +45,16 @@
 	let countdownInterval = null;
 	let activeTab = null;
 
-	$: state = $runnerState;
+	$: bgRunId = $page.url.searchParams.get('run');
+	$: state = bgRunId ? ($backgroundRuns[bgRunId] ?? EMPTY_BG_STATE) : $runnerState;
 	$: isMulti = state.lanes.length > 0;
-	$: cronJobs = Object.keys($activeCronJobs);
-	$: anyCronRunning = cronJobs.length > 0;
+	$: runningBgList = Object.entries($backgroundRuns).filter(([, r]) => r.running);
+	$: showPicker = !bgRunId && !state.running && !state.testCompleted && runningBgList.length > 0;
+	$: showIdle = !state.running && !state.testCompleted && !showPicker;
+
+	$: if (showPicker && runningBgList.length === 1) {
+		goto(`/reports/live?run=${runningBgList[0][0]}`);
+	}
 
 	// Keep active tab pointing at a valid lane
 	$: {
@@ -47,15 +66,9 @@
 	}
 	$: activeLane = state.lanes.find((l) => l.id === activeTab) ?? null;
 
-	let wasAnyCronRunning = false;
-
 	afterUpdate(() => {
 		if (terminalEl) terminalEl.scrollTop = terminalEl.scrollHeight;
 		if (laneTerminalEl) laneTerminalEl.scrollTop = laneTerminalEl.scrollHeight;
-		if (wasAnyCronRunning && !anyCronRunning && !state.running && !state.testCompleted) {
-			goto('/reports');
-		}
-		wasAnyCronRunning = anyCronRunning;
 	});
 
 	$: if (state.testCompleted && state.latestReportId && !redirectTimer) {
@@ -83,7 +96,7 @@
 
 <BackLink href="/reports" label="Reports" />
 
-{#if !state.running && !state.testCompleted && !anyCronRunning}
+{#if showIdle}
 	<div class="idle-state">
 		<div class="idle-icon">
 			<svg
@@ -104,16 +117,18 @@
 		<p>Start a test from the panel below, then come back here to watch it live.</p>
 		<a href="/reports" class="idle-link">View past reports →</a>
 	</div>
-{:else if anyCronRunning && !state.running && !state.testCompleted}
+{:else if showPicker}
 	<div class="cron-running-state">
 		<div class="cron-running-icon"><span class="cron-pulse-dot"></span></div>
-		<h2>Scheduled {cronJobs.length === 1 ? 'run' : 'runs'} in progress</h2>
+		<h2>{runningBgList.length === 1 ? 'A run' : `${runningBgList.length} runs`} in progress</h2>
 		<div class="cron-task-list">
-			{#each cronJobs as name}
-				<span class="cron-task-chip">{name}</span>
+			{#each runningBgList as [runId, run] (runId)}
+				<a href="/reports/live?run={runId}" class="cron-task-chip"
+					>{run.label} · {triggerLabel(run.kind)}</a
+				>
 			{/each}
 		</div>
-		<p>The report will open automatically when the run finishes.</p>
+		<p>Select a run above, or wait — the report opens automatically when it finishes.</p>
 	</div>
 {:else}
 	<!-- ── Run header ── -->
@@ -152,7 +167,7 @@
 			{/if}
 		</div>
 
-		{#if state.running}
+		{#if state.running && !bgRunId}
 			<button class="cancel-btn" on:click={cancelRun}>
 				<svg
 					width="12"
@@ -433,6 +448,12 @@
 		border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
 		border-radius: var(--radius-pill);
 		padding: 0.2rem 0.65rem;
+		text-decoration: none;
+		cursor: pointer;
+		transition: background var(--duration-fast);
+	}
+	.cron-task-chip:hover {
+		background: color-mix(in srgb, var(--accent) 15%, var(--accent-soft));
 	}
 	.cron-running-state p {
 		font-size: 0.9375rem;

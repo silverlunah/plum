@@ -16,7 +16,7 @@
  -->
 
 <script>
-	/** @type {'pass' | 'fail' | 'tag' | 'schedule' | 'neutral' | 'node' | 'mcp'} */
+	/** @type {'pass' | 'fail' | 'tag' | 'schedule' | 'neutral' | 'node' | 'mcp' | 'external'} */
 	export let variant = 'neutral';
 </script>
 
@@ -69,5 +69,10 @@
 	.mcp {
 		background: var(--accent-soft);
 		color: var(--accent);
+	}
+
+	.external {
+		background: var(--external-soft);
+		color: var(--external);
 	}
 </style>

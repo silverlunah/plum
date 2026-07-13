@@ -24,7 +24,8 @@
 const TRIGGER_TYPE = Object.freeze({
 	MANUAL: 'manual-trigger',
 	CLI: 'command-line-trigger',
-	MCP: 'mcp-trigger'
+	MCP: 'mcp-trigger',
+	EXTERNAL: 'external-trigger'
 });
 
 /**
@@ -45,6 +46,7 @@ const NON_SCHEDULED_TRIGGERS = new Set([
 	TRIGGER_TYPE.MANUAL,
 	TRIGGER_TYPE.CLI,
 	TRIGGER_TYPE.MCP,
+	TRIGGER_TYPE.EXTERNAL,
 	TRIGGER_REMOTE,
 	'undefined'
 ]);

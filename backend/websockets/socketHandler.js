@@ -22,6 +22,7 @@ const path = require('path');
 const runnerService = require('../services/runnerService');
 const reportService = require('../services/reportService');
 const notificationService = require('../services/notificationService');
+const { startSsPoller } = require('../lib/screenshotPoller');
 const { TRIGGER_TYPE, BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { readCucumberReportFile } = require('../lib/reportFilename');
@@ -165,28 +166,6 @@ function makeSyntheticFailReport(laneName, testIds, reason) {
 // ---------------------------------------------------------------------------
 // Single built-in runner
 // ---------------------------------------------------------------------------
-
-function startSsPoller(ssDir, onScreenshot) {
-	const seenFiles = new Set();
-	return setInterval(() => {
-		try {
-			const files = fs
-				.readdirSync(ssDir)
-				.filter((f) => f.endsWith('.ss.json'))
-				.sort();
-			for (const f of files) {
-				if (seenFiles.has(f)) continue;
-				seenFiles.add(f);
-				const filePath = path.join(ssDir, f);
-				const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-				onScreenshot(data);
-				try {
-					fs.unlinkSync(filePath);
-				} catch {}
-			}
-		} catch {}
-	}, 400);
-}
 
 function runBuiltIn(
 	io,

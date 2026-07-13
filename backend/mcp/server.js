@@ -340,7 +340,14 @@ server.tool(
 			)
 	},
 	async ({ tag, browser, workers, baseUrl, testRunId }) => {
-		const { jobId } = await post('/trigger', { tag, browser, workers, baseUrl, testRunId });
+		const { jobId } = await post('/trigger', {
+			tag,
+			browser,
+			workers,
+			baseUrl,
+			testRunId,
+			source: 'mcp'
+		});
 
 		const job = await pollJob(jobId);
 

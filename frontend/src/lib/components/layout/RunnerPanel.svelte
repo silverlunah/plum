@@ -29,7 +29,7 @@
 		testsVersion,
 		reportsVersion,
 		runsVersion,
-		activeCronJobs
+		backgroundRuns
 	} from '$lib/stores/runner';
 	import { fetchLatestReportId, reportUrl } from '$lib/api/reports';
 	import { fetchRunners } from '$lib/api/runners';
@@ -44,8 +44,10 @@
 		WORKERS_MAX,
 		RUN_PICKER_LIMIT,
 		RUN_TAG_DISPLAY_LIMIT,
-		ALL_TESTS_LABEL
+		ALL_TESTS_LABEL,
+		REDIRECT_DELAY_MS
 	} from '$lib/constants';
+	import { triggerLabel, triggerVariant } from '$lib/utils/format';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 
@@ -202,16 +204,94 @@
 		s.on('tests-changed', () => testsVersion.update((v) => v + 1));
 		s.on('report-ready', () => reportsVersion.update((v) => v + 1));
 
-		s.on('cron-start', ({ taskName }) => {
-			activeCronJobs.update((j) => ({ ...j, [taskName]: true }));
-		});
-		s.on('cron-done', ({ taskName }) => {
-			activeCronJobs.update((j) => {
-				const next = { ...j };
-				delete next[taskName];
-				return next;
+		function updateBgRun(runId, updater) {
+			backgroundRuns.update((r) => {
+				if (!r[runId]) return r;
+				return { ...r, [runId]: updater(r[runId]) };
 			});
+		}
+
+		s.on('bg-run-start', ({ runId, kind, label, meta }) => {
+			backgroundRuns.update((r) => ({
+				...r,
+				[runId]: {
+					kind,
+					label,
+					output: '',
+					running: true,
+					testCompleted: false,
+					latestReportId: null,
+					status: 'running',
+					lanes: [],
+					currentRun: {
+						tag: meta?.tag,
+						workers: meta?.workers,
+						browser: meta?.browser,
+						runTitle: label
+					},
+					latestScreenshot: null
+				}
+			}));
+			panelExpanded.set(true);
+		});
+
+		s.on('bg-run-log', ({ runId, log }) => {
+			updateBgRun(runId, (run) => ({ ...run, output: run.output + log }));
+		});
+
+		s.on('bg-run-lanes-init', ({ runId, lanes }) => {
+			updateBgRun(runId, (run) => ({
+				...run,
+				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '', latestScreenshot: null }))
+			}));
+		});
+
+		s.on('bg-run-lane-log', ({ runId, laneId, log }) => {
+			updateBgRun(runId, (run) => ({
+				...run,
+				lanes: run.lanes.map((l) => (l.id === laneId ? { ...l, logs: l.logs + log } : l))
+			}));
+		});
+
+		s.on('bg-run-lane-status', ({ runId, laneId, status }) => {
+			updateBgRun(runId, (run) => ({
+				...run,
+				lanes: run.lanes.map((l) => (l.id === laneId ? { ...l, status } : l))
+			}));
+		});
+
+		s.on('bg-run-screenshot', ({ runId, stepName, data }) => {
+			updateBgRun(runId, (run) => ({ ...run, latestScreenshot: { stepName, data } }));
+		});
+
+		s.on('bg-run-lane-screenshot', ({ runId, laneId, stepName, data }) => {
+			updateBgRun(runId, (run) => ({
+				...run,
+				lanes: run.lanes.map((l) =>
+					l.id === laneId ? { ...l, latestScreenshot: { stepName, data } } : l
+				)
+			}));
+		});
+
+		s.on('bg-run-done', ({ runId, code, reportId }) => {
+			const passed = code === 0 || code === null;
+			updateBgRun(runId, (run) => ({
+				...run,
+				running: false,
+				testCompleted: true,
+				latestReportId: reportId,
+				status: passed ? 'pass' : 'fail'
+			}));
 			reportsVersion.update((v) => v + 1);
+			// Keep the finished entry around briefly so a viewer on /reports/live?run=
+			// still sees the completion bar/redirect, then drop it from the bottom bar.
+			setTimeout(() => {
+				backgroundRuns.update((r) => {
+					const next = { ...r };
+					delete next[runId];
+					return next;
+				});
+			}, REDIRECT_DELAY_MS + 5000);
 		});
 	});
 
@@ -234,9 +314,10 @@
 			` +${parts.length - RUN_TAG_DISPLAY_LIMIT} more`
 		);
 	})();
-	$: cronJobs = Object.keys($activeCronJobs);
-	$: anyCronRunning = cronJobs.length > 0;
-	$: anyRunning = state.running || anyCronRunning;
+	$: runningBgEntries = Object.entries($backgroundRuns).filter(([, r]) => r.running);
+	$: anyBgRunning = runningBgEntries.length > 0;
+	$: anyBgCronRunning = runningBgEntries.some(([, r]) => r.kind === 'cron');
+	$: anyRunning = state.running || anyBgRunning;
 
 	$: if ($runsVersion >= 0)
 		fetchRuns({ limit: RUN_PICKER_LIMIT })
@@ -250,7 +331,7 @@
 				? 'var(--fail)'
 				: state.running
 					? 'var(--accent)'
-					: anyCronRunning
+					: anyBgRunning
 						? 'var(--pass)'
 						: 'var(--border)';
 
@@ -260,9 +341,11 @@
 			? 'Passed'
 			: state.status === 'fail'
 				? 'Failed'
-				: anyCronRunning
+				: anyBgCronRunning
 					? 'Scheduled'
-					: 'Ready';
+					: anyBgRunning
+						? 'Running'
+						: 'Ready';
 
 	$: currentBrowser = BROWSERS.find((b) => b.id === cfg.browser) ?? BROWSERS[0];
 
@@ -749,14 +832,18 @@
 				</a>
 			{/if}
 
-			{#each cronJobs as name}
-				<a href="/reports/live" class="run-card cron-run" transition:fly={{ x: -4, duration: 160 }}>
+			{#each runningBgEntries as [runId, run] (runId)}
+				<a
+					href="/reports/live?run={runId}"
+					class="run-card cron-run"
+					transition:fly={{ x: -4, duration: 160 }}
+				>
 					<span class="run-card-dot pulse-pass"></span>
 					<div class="run-card-info">
-						<span class="run-card-label">{name}</span>
-						<span class="run-card-meta">Scheduled run</span>
+						<span class="run-card-label">{run.label}</span>
+						<span class="run-card-meta">{triggerLabel(run.kind)} run</span>
 					</div>
-					<Badge variant="schedule">Scheduled</Badge>
+					<Badge variant={triggerVariant(run.kind)}>{triggerLabel(run.kind)}</Badge>
 					<svg
 						width="13"
 						height="13"
