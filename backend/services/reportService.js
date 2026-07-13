@@ -291,6 +291,7 @@ const getReportDetail = async (id) => {
 			createdAt: true,
 			content: true,
 			logs: true,
+			duration: true,
 			testRun: { select: { id: true, title: true } }
 		}
 	});
@@ -327,7 +328,8 @@ const saveReport = async ({
 	runnerId,
 	testRunId,
 	forceFail = false,
-	logs = null
+	logs = null,
+	duration = null
 }) => {
 	const normTrigger = normaliseTrigger(triggerType);
 	const { features, status: derivedStatus } = processCucumberJson(rawCucumberJson);
@@ -346,7 +348,8 @@ const saveReport = async ({
 			cronJobId,
 			testRunId: testRunId ?? null,
 			content: { features },
-			logs: logs || null
+			logs: logs || null,
+			duration
 		}
 	});
 	syncAutomatedTags(report.id, features, testRunId ?? null);
@@ -364,6 +367,7 @@ const saveReport = async ({
  *   tag: string,
  *   triggerType: string,
  *   browser: string,
+ *   duration: number,
  * }} opts
  */
 const saveCombinedReport = async ({
@@ -374,7 +378,8 @@ const saveCombinedReport = async ({
 	triggerType,
 	browser,
 	testRunId,
-	laneLogs = null
+	laneLogs = null,
+	duration = null
 }) => {
 	const featureMap = new Map();
 	for (const content of reports) {
@@ -418,7 +423,8 @@ const saveCombinedReport = async ({
 		runnerId: null,
 		testRunId: testRunId ?? null,
 		forceFail: reports.some((r) => r === null),
-		logs: combinedLogs
+		logs: combinedLogs,
+		duration
 	});
 };
 

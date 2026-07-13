@@ -180,6 +180,7 @@ function runBuiltIn(
 ) {
 	const ssDir = path.join(os.tmpdir(), `plum-ss-${Date.now()}`);
 	fs.mkdirSync(ssDir, { recursive: true });
+	const startedAt = Date.now();
 
 	const env = {
 		...process.env,
@@ -229,7 +230,7 @@ function runBuiltIn(
 			if (latest) {
 				await prisma.report.update({
 					where: { id: latest.id },
-					data: { logs: logBuffer || null }
+					data: { logs: logBuffer || null, duration: Date.now() - startedAt }
 				});
 			}
 		} catch (e) {
@@ -277,6 +278,7 @@ async function runDistributed(
 	notifyDiscord,
 	notifySlack
 ) {
+	const dispatchStartedAt = Date.now();
 	const allIds = getTestIdsForTag(tag);
 	const chunks = chunkTests(allIds, runnerIds.length);
 
@@ -336,7 +338,8 @@ async function runDistributed(
 					triggerType: TRIGGER_TYPE.MANUAL,
 					browser,
 					testRunId: testRunId ?? null,
-					laneLogs
+					laneLogs,
+					duration: Date.now() - dispatchStartedAt
 				})
 				.then((saved) => {
 					// Result is authoritative from the merged report, not the exit code —

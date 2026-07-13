@@ -71,6 +71,7 @@ async function resolveLaneInfos(runnerIds) {
 function runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscord, notifySlack }) {
 	const ssDir = path.join(os.tmpdir(), `plum-cron-ss-${Date.now()}`);
 	fs.mkdirSync(ssDir, { recursive: true });
+	const startedAt = Date.now();
 
 	const env = {
 		...process.env,
@@ -109,6 +110,12 @@ function runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscord, not
 			.then((report) => {
 				if (_io) _io.emit('bg-run-done', { runId: taskName, code, reportId: report?.id ?? null });
 
+				if (report) {
+					prisma.report
+						.update({ where: { id: report.id }, data: { duration: Date.now() - startedAt } })
+						.catch(() => {});
+				}
+
 				if (report && (notifyDiscord || notifySlack)) {
 					return notificationService.send({
 						jobName: taskName,
@@ -142,6 +149,7 @@ async function runDistributed({
 	notifyDiscord,
 	notifySlack
 }) {
+	const dispatchStartedAt = Date.now();
 	const allIds = getTestIdsForTag(tags);
 	const chunks = chunkTests(allIds, runnerIds.length);
 
@@ -190,7 +198,8 @@ async function runDistributed({
 					overallCode,
 					tag: tags,
 					triggerType: taskName,
-					browser
+					browser,
+					duration: Date.now() - dispatchStartedAt
 				})
 				.then((saved) => {
 					if (_io) {

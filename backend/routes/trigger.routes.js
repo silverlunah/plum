@@ -106,6 +106,12 @@ router.post('/', jwtAuth, async (req, res, next) => {
 					select: { id: true, status: true }
 				});
 				reportId = report?.id ?? null;
+				if (reportId) {
+					await prisma.report.update({
+						where: { id: reportId },
+						data: { duration: Date.now() - startedAt }
+					});
+				}
 				jobs.set(jobId, {
 					status: code === 130 ? 'cancelled' : 'done',
 					exitCode: code,

@@ -145,7 +145,11 @@
 	$: passed = allScenarios.filter((s) => s.status === 'passed').length;
 	$: failed = allScenarios.filter((s) => s.status === 'failed').length;
 	$: skipped = allScenarios.filter((s) => s.status === 'skipped' || s.status === 'pending').length;
-	$: totalDuration = allScenarios.reduce((s, sc) => s + sc.duration, 0);
+	// detail.duration is real wall-clock time (recorded by the orchestrator, start to
+	// combined-report-save). Summed scenario durations overcount when scenarios ran in
+	// parallel (multiple workers/runners) — only used as a fallback for reports saved
+	// before this field existed.
+	$: totalDuration = detail?.duration ?? allScenarios.reduce((s, sc) => s + sc.duration, 0);
 	$: groupedFeatures =
 		detail?.features.map((feature) => ({
 			...feature,
