@@ -89,6 +89,17 @@ async function deleteRunner(id) {
 }
 
 /**
+ * Stops/restarts a runner over the network via the primary's control routes,
+ * which hit the runner's own /api/shutdown|restart endpoints — works for any
+ * reachable runner, not just ones whose process this manager owns by PID.
+ */
+async function controlRunner(id, action) {
+	const res = await fetch(`${API_URL}/runners/${id}/${action}`, { method: 'POST' });
+	const body = await res.json().catch(() => ({}));
+	if (!res.ok || body.ok === false) throw new Error(body.error || `HTTP ${res.status}`);
+}
+
+/**
  * Resolves the display + control state for every runner: reachability (ping),
  * whether we own a live process for it, and whether we can control it at all.
  *
@@ -156,12 +167,8 @@ function prepareNodeEnv() {
 async function runAction(r) {
 	const options = [];
 
-	if (!r.local) {
-		clack.log.info(
-			pc.dim(`"${r.name}" runs on another machine — it can be pinged but not controlled here.`)
-		);
-		options.push({ value: 'ping', label: 'Ping' });
-	} else if (r.managed) {
+	if (r.managed) {
+		// Local, and this manager owns its process — control it directly by PID.
 		options.push(
 			{ value: 'stop', label: pc.red('Stop') },
 			{ value: 'restart', label: pc.yellow('Restart') },
@@ -169,14 +176,18 @@ async function runAction(r) {
 			{ value: 'ping', label: 'Ping' }
 		);
 	} else if (r.online) {
-		clack.log.info(
-			pc.dim(
-				`"${r.name}" is up but was not started by this manager — stop it from its own terminal.`
-			)
+		// Remote, or local but started outside this manager (no PID to own) —
+		// either way the runner's own /api/shutdown|restart endpoints are
+		// reachable over the network via the primary's control routes.
+		options.push(
+			{ value: 'stop', label: pc.red('Stop') },
+			{ value: 'restart', label: pc.yellow('Restart') },
+			{ value: 'ping', label: 'Ping' }
 		);
-		options.push({ value: 'ping', label: 'Ping' });
-	} else {
+	} else if (r.local) {
 		options.push({ value: 'start', label: pc.green('Start') }, { value: 'ping', label: 'Ping' });
+	} else {
+		options.push({ value: 'ping', label: 'Ping' });
 	}
 
 	options.push(
@@ -194,15 +205,39 @@ async function runAction(r) {
 		const entry = startNode({ id: r.id, port, token: r.token });
 		clack.log.success(pc.green(`Started "${r.name}" on port ${port} (pid ${entry.pid})`));
 	} else if (action === 'stop') {
-		const ok = stopNode(r.id);
-		clack.log.success(ok ? pc.green(`Stopped "${r.name}"`) : pc.dim(`"${r.name}" was not running`));
+		if (r.managed) {
+			const ok = stopNode(r.id);
+			clack.log.success(
+				ok ? pc.green(`Stopped "${r.name}"`) : pc.dim(`"${r.name}" was not running`)
+			);
+		} else {
+			const s = clack.spinner();
+			s.start(`Stopping "${r.name}"...`);
+			try {
+				await controlRunner(r.id, 'stop');
+				s.stop(pc.green(`Stopped "${r.name}"`));
+			} catch (e) {
+				s.stop(pc.red(`Could not stop "${r.name}": ${e.message}`));
+			}
+		}
 	} else if (action === 'restart') {
-		const s = clack.spinner();
-		s.start(`Restarting "${r.name}"...`);
-		stopNode(r.id);
-		await new Promise((resolve) => setTimeout(resolve, 600));
-		const entry = startNode({ id: r.id, port, token: r.token });
-		s.stop(pc.green(`Restarted "${r.name}" (pid ${entry.pid})`));
+		if (r.managed) {
+			const s = clack.spinner();
+			s.start(`Restarting "${r.name}"...`);
+			stopNode(r.id);
+			await new Promise((resolve) => setTimeout(resolve, 600));
+			const entry = startNode({ id: r.id, port, token: r.token });
+			s.stop(pc.green(`Restarted "${r.name}" (pid ${entry.pid})`));
+		} else {
+			const s = clack.spinner();
+			s.start(`Restarting "${r.name}"...`);
+			try {
+				await controlRunner(r.id, 'restart');
+				s.stop(pc.green(`Restarted "${r.name}"`));
+			} catch (e) {
+				s.stop(pc.red(`Could not restart "${r.name}": ${e.message}`));
+			}
+		}
 	} else if (action === 'log') {
 		const entry = runnerProcess.loadRegistry()[r.id];
 		clack.note(entry?.logFile ?? '(no log file)', 'Log file');
