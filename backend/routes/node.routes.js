@@ -45,6 +45,26 @@ router.post('/shutdown', authGuard, (req, res) => {
 	setTimeout(() => process.exit(0), 200);
 });
 
+// Self-restart for node-mode processes: spawns a replacement using this
+// process's own env (RUNNER_ID/PORT/NODE_TOKEN), then exits. The replacement
+// binds the same port, retrying past the brief EADDRINUSE window left by this
+// process shutting down (see the listen retry in server.js).
+router.post('/restart', authGuard, (req, res) => {
+	if (process.env.PLUM_MODE !== 'node') {
+		return res.status(403).json({ error: 'Not a node runner' });
+	}
+	const id = process.env.RUNNER_ID;
+	if (!id) {
+		return res.status(400).json({ error: 'Runner has no RUNNER_ID — cannot self-restart' });
+	}
+	res.json({ ok: true });
+	setTimeout(() => {
+		const { startNode } = require('../lib/runnerProcess');
+		startNode({ id, port: process.env.PORT || '3001', token: process.env.NODE_TOKEN });
+		process.exit(0);
+	}, 200);
+});
+
 // Start a remote test job
 router.post('/execute', authGuard, (req, res) => {
 	const { tags, browser = 'chromium', workers = 1, tests = null, env: userEnv = {} } = req.body;

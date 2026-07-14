@@ -24,15 +24,15 @@ function authHeaders() {
 
 export async function fetchProject() {
 	const res = await fetch(`${API_BASE}/settings/project`);
-	if (!res.ok) return { name: '', logoUrl: '', timezone: 'UTC' };
+	if (!res.ok) return { name: '', logoUrl: '', timezone: 'UTC', maxRetries: 0 };
 	return res.json();
 }
 
-export async function saveProject({ name, logoUrl, timezone }) {
+export async function saveProject({ name, logoUrl, timezone, maxRetries }) {
 	const res = await fetch(`${API_BASE}/settings/project`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ name, logoUrl, timezone })
+		body: JSON.stringify({ name, logoUrl, timezone, maxRetries })
 	});
 	return res.json();
 }

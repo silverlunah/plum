@@ -41,6 +41,7 @@ export const REDIRECT_DELAY_MS = 3000;
 
 export const WORKERS_MIN = 1;
 export const WORKERS_MAX = 10;
+export const MAX_TEST_RETRIES = 5;
 export const RUN_PICKER_LIMIT = 200;
 export const RUN_TAG_DISPLAY_LIMIT = 5;
 export const CASE_HISTORY_BARS_MAX = 20;

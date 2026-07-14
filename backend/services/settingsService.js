@@ -26,11 +26,12 @@ const getProject = async () => {
 	return project;
 };
 
-const updateProject = async ({ name, logoUrl, timezone }) => {
+const updateProject = async ({ name, logoUrl, timezone, maxRetries }) => {
 	const data = {
 		name: name ?? '',
 		logoUrl: logoUrl ?? '',
-		...(timezone !== undefined && { timezone })
+		...(timezone !== undefined && { timezone }),
+		...(maxRetries !== undefined && { maxRetries: Number(maxRetries) || 0 })
 	};
 	const project = await prisma.project.upsert({
 		where: { id: 1 },

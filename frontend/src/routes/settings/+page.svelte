@@ -39,7 +39,9 @@
 		updateRunner,
 		deleteRunner,
 		pingRunner,
-		probeRunner
+		probeRunner,
+		stopRunner,
+		restartRunner
 	} from '$lib/api/runners';
 	import { fetchPrefixes, savePrefixes, migratePrefixes } from '$lib/api/repository';
 	import { updateProfile, changePassword } from '$lib/api/auth';
@@ -51,7 +53,7 @@
 	import { builtInEnabled } from '$lib/stores/runner';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
-	import { API_BASE, BROWSERS, TOAST_TIMEOUT_MS } from '$lib/constants';
+	import { API_BASE, BROWSERS, TOAST_TIMEOUT_MS, MAX_TEST_RETRIES } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
@@ -69,7 +71,7 @@
 		} catch {}
 	}
 
-	let project = { name: '', logoUrl: '', timezone: 'UTC' };
+	let project = { name: '', logoUrl: '', timezone: 'UTC', maxRetries: 0 };
 	let projectSaving = false;
 	let toast = null;
 
@@ -142,6 +144,8 @@
 	let runnerFormSaving = false;
 	let runnerFormOpen = false;
 	let pingResults = {};
+	let stoppingId = null;
+	let restartingId = null;
 	let editingId = null;
 	let editForm = { name: '', url: '', token: '', browser: 'chromium' };
 	let editFormError = '';
@@ -277,6 +281,51 @@
 			showToast('success', `Runner "${name}" removed.`);
 		} catch {
 			showToast('error', 'Failed to remove runner.');
+		}
+	}
+
+	async function refreshPing(id) {
+		pingResults = { ...pingResults, [id]: { loading: true } };
+		try {
+			const result = await pingRunner(id);
+			pingResults = { ...pingResults, [id]: { ...result, loading: false } };
+		} catch {
+			pingResults = { ...pingResults, [id]: { ok: false, error: 'Network error', loading: false } };
+		}
+	}
+
+	async function handleStopRunner(id, name) {
+		stoppingId = id;
+		try {
+			const result = await stopRunner(id);
+			if (result.ok) {
+				showToast('success', `Runner "${name}" stopped.`);
+			} else {
+				showToast('error', `Could not stop "${name}": ${result.error ?? 'unknown error'}`);
+			}
+		} catch {
+			showToast('error', `Could not stop "${name}".`);
+		} finally {
+			stoppingId = null;
+			refreshPing(id);
+		}
+	}
+
+	async function handleRestartRunner(id, name) {
+		restartingId = id;
+		try {
+			const result = await restartRunner(id);
+			if (result.ok) {
+				showToast('success', `Runner "${name}" restarting…`);
+			} else {
+				showToast('error', `Could not restart "${name}": ${result.error ?? 'unknown error'}`);
+			}
+		} catch {
+			showToast('error', `Could not restart "${name}".`);
+		} finally {
+			restartingId = null;
+			// Give the replacement process a moment to bind before checking on it.
+			setTimeout(() => refreshPing(id), 2000);
 		}
 	}
 
@@ -717,6 +766,24 @@
 						</select>
 					</div>
 
+					<div class="field">
+						<label class="field-label" for="project-max-retries">
+							<span>Retry failed tests</span>
+							<span class="field-hint">
+								Automatically re-run failed scenarios up to this many times before finalizing the
+								report. 0 disables retries.
+							</span>
+						</label>
+						<input
+							id="project-max-retries"
+							type="number"
+							class="field-input"
+							min="0"
+							max={MAX_TEST_RETRIES}
+							bind:value={project.maxRetries}
+						/>
+					</div>
+
 					<!-- Dark mode toggle -->
 					<div class="toggle-row">
 						<div class="toggle-info">
@@ -878,6 +945,20 @@
 										<p class="runner-card-url">{r.url}</p>
 										<div class="runner-card-actions">
 											<Button variant="ghost" size="sm" on:click={() => startEdit(r)}>Edit</Button>
+											<Button
+												variant="ghost"
+												size="sm"
+												disabled={restartingId === r.id}
+												on:click={() => handleRestartRunner(r.id, r.name)}
+												>{restartingId === r.id ? 'Restarting…' : 'Restart'}</Button
+											>
+											<Button
+												variant="ghost"
+												size="sm"
+												disabled={stoppingId === r.id}
+												on:click={() => handleStopRunner(r.id, r.name)}
+												>{stoppingId === r.id ? 'Stopping…' : 'Stop'}</Button
+											>
 											<Button
 												variant="danger"
 												size="sm"
@@ -1985,6 +2066,7 @@
 	.runner-card-actions {
 		display: flex;
 		align-items: center;
+		flex-wrap: wrap;
 		gap: 0.375rem;
 		padding-left: calc(13px + 0.5rem);
 		margin-top: 0.125rem;

@@ -430,6 +430,14 @@
 									{#if group.scenarios.length > 1}
 										<span class="scenario-count">{group.scenarios.length} cases</span>
 									{/if}
+									{#if group.scenarios[0]?.attempts > 1}
+										<span
+											class="scenario-count"
+											title="Failed and was automatically retried before the final result"
+										>
+											{group.scenarios[0].attempts} attempts
+										</span>
+									{/if}
 								</span>
 
 								<div class="scenario-tags">

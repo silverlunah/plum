@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Project" ADD COLUMN "maxRetries" INTEGER NOT NULL DEFAULT 0;

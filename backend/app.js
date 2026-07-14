@@ -22,7 +22,10 @@ const { SCREENSHOTS_DIR } = require('./lib/reportFilename');
 const app = express();
 
 app.use(cors({ origin: '*' }));
-app.use(express.json());
+// Dispatching a run to a node ships the whole tests/ tree (base64-encoded,
+// fixtures included) as one JSON body — Express's 100kb default 413s well
+// before a real test suite does.
+app.use(express.json({ limit: '500mb' }));
 
 // Serve screenshot files written during report processing
 app.use('/screenshots', express.static(SCREENSHOTS_DIR));
