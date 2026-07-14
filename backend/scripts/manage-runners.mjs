@@ -204,7 +204,12 @@ async function runAction(r) {
 	const action = await clack.select({ message: `${r.name} — ${r.url}`, options });
 	if (cancelled(action) || action === 'back') return;
 
-	const port = parsePort(r.url);
+	// Prefer the port this runner actually last ran on (remembered in the
+	// local registry even after being stopped) over parsing the URL — the URL
+	// may not carry an explicit port at all, and would otherwise silently fall
+	// back to the primary's own default port.
+	const remembered = runnerProcess.loadRegistry()[r.id]?.port;
+	const port = remembered || parsePort(r.url);
 
 	if (action === 'start') {
 		const s = clack.spinner();
