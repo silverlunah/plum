@@ -77,12 +77,17 @@ function findPidOnPort(port) {
 		if (process.platform === 'win32') {
 			const out = execSync('netstat -ano', { encoding: 'utf8' });
 			for (const line of out.split('\n')) {
-				const upper = line.toUpperCase();
-				if (upper.includes(`:${portStr}`) && upper.includes('LISTENING')) {
-					const parts = line.trim().split(/\s+/);
-					const pid = parseInt(parts[parts.length - 1], 10);
-					if (!isNaN(pid) && pid > 0) return pid;
-				}
+				if (!line.toUpperCase().includes('LISTENING')) continue;
+				const parts = line.trim().split(/\s+/);
+				// Columns: Proto, Local Address, Foreign Address, State, PID.
+				// Match the port exactly off the local address (e.g. "0.0.0.0:3002"
+				// or "[::]:3002") — a substring check would false-positive port
+				// "300" against "3002", "13000", etc.
+				const localAddress = parts[1] ?? '';
+				const localPort = localAddress.slice(localAddress.lastIndexOf(':') + 1);
+				if (localPort !== portStr) continue;
+				const pid = parseInt(parts[parts.length - 1], 10);
+				if (!isNaN(pid) && pid > 0) return pid;
 			}
 		} else {
 			const out = execSync(`lsof -i :${portStr} -t -sTCP:LISTEN`, { encoding: 'utf8' }).trim();
@@ -122,12 +127,18 @@ function parsePort(url) {
 	}
 }
 
-/** Drops registry entries whose process has died and persists the result. */
+/**
+ * Clears the pid of registry entries whose process has died, and persists the
+ * result. Keeps the entry itself (with its `port`) rather than deleting it —
+ * that's the only place the last-used port for a runner is remembered, so a
+ * later Start can reuse it instead of falling back to whatever's in the
+ * runner's URL (or a hardcoded default, if the URL has no explicit port).
+ */
 function pruneDead(registry = loadRegistry()) {
 	let changed = false;
 	for (const [id, entry] of Object.entries(registry)) {
-		if (!entry?.pid || !isAlive(entry.pid)) {
-			delete registry[id];
+		if (entry?.pid && !isAlive(entry.pid)) {
+			registry[id] = { ...entry, pid: null };
 			changed = true;
 		}
 	}
@@ -233,10 +244,10 @@ function stopNode(id, fallbackPort = null) {
 	let signalled = false;
 
 	let pid = entry?.pid && isAlive(entry.pid) ? entry.pid : null;
+	const port = fallbackPort ?? (entry?.port ? Number(entry.port) : null);
 
-	if (!pid) {
-		const port = fallbackPort ?? (entry?.port ? Number(entry.port) : null);
-		if (port) pid = findPidOnPort(port);
+	if (!pid && port) {
+		pid = findPidOnPort(port);
 	}
 
 	if (pid) {
@@ -245,7 +256,15 @@ function stopNode(id, fallbackPort = null) {
 			signalled = true;
 		} catch {}
 	}
-	delete registry[id];
+
+	// Keep the port on record (clearing only the pid) so a later Start reuses
+	// the same port instead of falling back to the runner's URL — which may
+	// not even have an explicit port — or a hardcoded default.
+	if (port) {
+		registry[id] = { ...entry, pid: null, port: String(port) };
+	} else {
+		delete registry[id];
+	}
 	saveRegistry(registry);
 	return signalled;
 }

@@ -92,16 +92,30 @@ async function start() {
 					try {
 						const reg = loadRegistry();
 						// A self-restart already wrote the replacement's pid under this
-						// id before this process exits — only clear the entry if it's
-						// still ours, so we don't erase the new process's registration.
+						// id before this process exits — only touch the entry if it's
+						// still ours, so we don't clobber the new process's registration.
+						// Keep the entry (with its port) rather than deleting it — that's
+						// the only place a later manual Start can find the port this
+						// runner was last running on.
 						if (reg[runnerId]?.pid === process.pid) {
-							delete reg[runnerId];
+							reg[runnerId] = { ...reg[runnerId], pid: null };
 							saveRegistry(reg);
 						}
 					} catch {}
 				};
-				process.once('SIGTERM', cleanup);
-				process.once('SIGINT', cleanup);
+				// Adding a SIGTERM/SIGINT listener suppresses Node's default
+				// "terminate immediately" behavior — the handler must exit itself,
+				// or the process (and the port it's bound to) lives on forever
+				// after a plain `kill`/SIGTERM with nothing left to stop it short
+				// of SIGKILL.
+				process.once('SIGTERM', () => {
+					cleanup();
+					process.exit(0);
+				});
+				process.once('SIGINT', () => {
+					cleanup();
+					process.exit(0);
+				});
 				process.once('exit', cleanup);
 			}
 			return;
