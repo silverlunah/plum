@@ -1096,6 +1096,23 @@ switch (command) {
 		break;
 
 	case 'run-test': {
+		const runHelpArgs = process.argv.slice(3);
+		if (anyFlags(runHelpArgs, ['--help', '-h'])) {
+			console.log(
+				[
+					'',
+					`${pc.bold('Usage:')} plum run-test [tag] [options]`,
+					'',
+					`  ${pc.cyan('plum run-test')}                    run all tests`,
+					`  ${pc.cyan('plum run-test @tag')}               run tests matching a tag`,
+					`  ${pc.cyan('plum run-test --parallel N')}       run tests across N parallel workers`,
+					`  ${pc.cyan('plum run-test --browser firefox')}  run in a specific browser (chromium/firefox)`,
+					''
+				].join('\n')
+			);
+			break;
+		}
+
 		console.log('--------------------------------------\n');
 		console.log('🚀 Running tests locally...');
 
