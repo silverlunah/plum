@@ -53,7 +53,7 @@
 	import { builtInEnabled } from '$lib/stores/runner';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
-	import { API_BASE, BROWSERS, TOAST_TIMEOUT_MS } from '$lib/constants';
+	import { API_BASE, BROWSERS, TOAST_TIMEOUT_MS, MAX_TEST_RETRIES } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
@@ -71,7 +71,7 @@
 		} catch {}
 	}
 
-	let project = { name: '', logoUrl: '', timezone: 'UTC' };
+	let project = { name: '', logoUrl: '', timezone: 'UTC', maxRetries: 0 };
 	let projectSaving = false;
 	let toast = null;
 
@@ -764,6 +764,24 @@
 								<option value={tz}>{tz}</option>
 							{/each}
 						</select>
+					</div>
+
+					<div class="field">
+						<label class="field-label" for="project-max-retries">
+							<span>Retry failed tests</span>
+							<span class="field-hint">
+								Automatically re-run failed scenarios up to this many times before finalizing the
+								report. 0 disables retries.
+							</span>
+						</label>
+						<input
+							id="project-max-retries"
+							type="number"
+							class="field-input"
+							min="0"
+							max={MAX_TEST_RETRIES}
+							bind:value={project.maxRetries}
+						/>
 					</div>
 
 					<!-- Dark mode toggle -->

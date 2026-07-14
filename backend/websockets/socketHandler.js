@@ -21,8 +21,10 @@ const os = require('os');
 const path = require('path');
 const runnerService = require('../services/runnerService');
 const reportService = require('../services/reportService');
+const settingsService = require('../services/settingsService');
 const notificationService = require('../services/notificationService');
 const { startSsPoller } = require('../lib/screenshotPoller');
+const { runWithRetries } = require('../lib/retryRunner');
 const { TRIGGER_TYPE, BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { readCucumberReportFile } = require('../lib/reportFilename');
@@ -167,7 +169,59 @@ function makeSyntheticFailReport(laneName, testIds, reason) {
 // Single built-in runner
 // ---------------------------------------------------------------------------
 
-function runBuiltIn(
+/**
+ * Spawns one `npm run test` attempt for the built-in (local) runner and
+ * resolves once it exits. When `suppressSave` is set, PLUM_MODE=node is
+ * forced so generate-report.js skips its own DB save — used by the retry
+ * path, which persists exactly one merged report itself once every attempt
+ * is done, instead of one row per attempt.
+ */
+function runBuiltInAttempt({
+	activeProcs,
+	socket,
+	currentTag,
+	workers,
+	browser,
+	testRunId,
+	suppressSave,
+	onLog
+}) {
+	return new Promise((resolve) => {
+		const ssDir = path.join(os.tmpdir(), `plum-ss-${Date.now()}`);
+		fs.mkdirSync(ssDir, { recursive: true });
+
+		const env = {
+			...process.env,
+			TAG: currentTag,
+			TRIGGER: TRIGGER_TYPE.MANUAL,
+			REPORT_RUNNERS: String(workers),
+			BROWSER: browser,
+			PLUM_SS_DIR: ssDir
+		};
+		if (workers > 1) env.PARALLEL = String(workers);
+		if (testRunId) env.TEST_RUN_ID = testRunId;
+		if (suppressSave) env.PLUM_MODE = 'node';
+
+		const proc = spawn('npm', ['run', 'test'], { env, shell: true });
+		activeProcs.add(proc);
+
+		const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
+			socket.emit('step-screenshot', { stepName, data });
+		});
+
+		proc.stdout.on('data', (d) => onLog(d.toString()));
+		proc.stderr.on('data', (d) => onLog(`[ERROR] ${d.toString()}`));
+
+		proc.on('close', (code) => {
+			clearInterval(ssPoller);
+			fs.rm(ssDir, { recursive: true, force: true }, () => {});
+			activeProcs.delete(proc);
+			resolve({ code, raw: suppressSave ? readCucumberReportFile() : null });
+		});
+	});
+}
+
+async function runBuiltIn(
 	io,
 	socket,
 	activeProcs,
@@ -178,44 +232,26 @@ function runBuiltIn(
 	notifyDiscord,
 	notifySlack
 ) {
-	const ssDir = path.join(os.tmpdir(), `plum-ss-${Date.now()}`);
-	fs.mkdirSync(ssDir, { recursive: true });
 	const startedAt = Date.now();
-
-	const env = {
-		...process.env,
-		TAG: tag,
-		TRIGGER: TRIGGER_TYPE.MANUAL,
-		REPORT_RUNNERS: String(workers),
-		BROWSER: browser,
-		PLUM_SS_DIR: ssDir
-	};
-	if (workers > 1) env.PARALLEL = String(workers);
-	if (testRunId) env.TEST_RUN_ID = testRunId;
-
-	const proc = spawn('npm', ['run', 'test'], { env, shell: true });
-	activeProcs.add(proc);
-
-	const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-		socket.emit('step-screenshot', { stepName, data });
-	});
+	const { maxRetries } = await settingsService.getProject();
 
 	let logBuffer = '';
-	proc.stdout.on('data', (d) => {
-		const text = d.toString();
+	const onLog = (text) => {
 		logBuffer += text;
 		socket.emit('log', text);
-	});
-	proc.stderr.on('data', (d) => {
-		const text = `[ERROR] ${d.toString()}`;
-		logBuffer += text;
-		socket.emit('log', text);
-	});
+	};
 
-	proc.on('close', async (code) => {
-		clearInterval(ssPoller);
-		fs.rm(ssDir, { recursive: true, force: true }, () => {});
-		activeProcs.delete(proc);
+	if (maxRetries === 0) {
+		const { code } = await runBuiltInAttempt({
+			activeProcs,
+			socket,
+			currentTag: tag,
+			workers,
+			browser,
+			testRunId,
+			suppressSave: false,
+			onLog
+		});
 		socket.emit('log', `\nTest finished with code ${code}`);
 		socket.emit('done', code);
 		io.emit('report-ready');
@@ -259,7 +295,57 @@ function runBuiltIn(
 				})
 				.catch((e) => console.error(`[socket] Notification failed: ${e.message}`));
 		}
+		return;
+	}
+
+	const { code, rawJson, attempts } = await runWithRetries({
+		maxRetries,
+		spawnAttempt: async (tagOverride) => {
+			const { code, raw } = await runBuiltInAttempt({
+				activeProcs,
+				socket,
+				currentTag: tagOverride ?? tag,
+				workers,
+				browser,
+				testRunId,
+				suppressSave: true,
+				onLog
+			});
+			return { code, rawJson: raw ? JSON.parse(raw) : [] };
+		},
+		onLog
 	});
+
+	socket.emit('log', `\nTest finished with code ${code}`);
+
+	const report = await reportService.saveReport({
+		rawCucumberJson: rawJson,
+		tags: tag,
+		triggerType: TRIGGER_TYPE.MANUAL,
+		browser,
+		testRunId: testRunId ?? null,
+		logs: logBuffer || null,
+		duration: Date.now() - startedAt,
+		attempts
+	});
+
+	socket.emit('done', code);
+	io.emit('report-ready');
+
+	if (notifyDiscord || notifySlack) {
+		notificationService
+			.send({
+				jobName: 'Manual Run',
+				status: report.status,
+				content: report.content,
+				browser,
+				tags: tag,
+				reportId: report.id,
+				notifyDiscord,
+				notifySlack
+			})
+			.catch((e) => console.error(`[socket] Notification failed: ${e.message}`));
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -279,6 +365,7 @@ async function runDistributed(
 	notifySlack
 ) {
 	const dispatchStartedAt = Date.now();
+	const { maxRetries } = await settingsService.getProject();
 	const allIds = getTestIdsForTag(tag);
 	const chunks = chunkTests(allIds, runnerIds.length);
 
@@ -315,14 +402,16 @@ async function runDistributed(
 
 	const total = activeRunnerIds.length;
 	const collectedReports = new Array(total).fill(null);
+	const laneAttempts = new Array(total).fill(null);
 	const laneLogs = {};
 	for (const l of laneInfos) laneLogs[l.id] = '';
 	let doneCount = 0;
 	let overallCode = 0;
 
-	function onLaneDone(idx, laneId, code, reportContent) {
+	function onLaneDone(idx, laneId, code, reportContent, attempts = null) {
 		if (code !== 0) overallCode = code;
 		collectedReports[idx] = reportContent;
+		laneAttempts[idx] = attempts;
 		socket.emit('runner-lane-status', { id: laneId, status: code === 0 ? 'done' : 'error' });
 		doneCount++;
 
@@ -339,7 +428,8 @@ async function runDistributed(
 					browser,
 					testRunId: testRunId ?? null,
 					laneLogs,
-					duration: Date.now() - dispatchStartedAt
+					duration: Date.now() - dispatchStartedAt,
+					attemptsByLane: laneAttempts
 				})
 				.then((saved) => {
 					// Result is authoritative from the merged report, not the exit code —
@@ -376,70 +466,89 @@ async function runDistributed(
 		const chunkIds = chunks[i];
 
 		if (lane.id === BUILT_IN_RUNNER_ID) {
-			const laneId = lane.id;
-			const ssDir = path.join(os.tmpdir(), `plum-ss-${Date.now()}-${i}`);
-			fs.mkdirSync(ssDir, { recursive: true });
-
-			const env = {
-				...process.env,
-				TAG: chunkTag,
-				TRIGGER: TRIGGER_REMOTE,
-				BROWSER: browser,
-				REPORT_RUNNERS: String(workers),
-				PLUM_MODE: 'node',
-				PLUM_SS_DIR: ssDir
-			};
-			if (workers > 1) env.PARALLEL = String(workers);
-
-			const proc = spawn('npm', ['run', 'test'], { env, shell: true });
-			activeProcs.add(proc);
-
-			const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-				socket.emit('runner-lane-screenshot', { id: laneId, stepName, data });
-			});
-
-			proc.stdout.on('data', (d) => {
-				const text = d.toString();
-				laneLogs[laneId] += text;
-				socket.emit('runner-lane-log', { id: laneId, log: text });
-			});
-			proc.stderr.on('data', (d) => {
-				const text = `[ERROR] ${d.toString()}`;
-				laneLogs[laneId] += text;
-				socket.emit('runner-lane-log', { id: laneId, log: text });
-			});
-
 			const idx = i;
-			proc.on('close', (code) => {
-				clearInterval(ssPoller);
-				fs.rm(ssDir, { recursive: true, force: true }, () => {});
-				activeProcs.delete(proc);
-				const content =
-					readCucumberReportFile() ??
-					makeSyntheticFailReport(lane.name, chunkIds, 'process exited with error');
-				onLaneDone(idx, laneId, code, content);
-			});
+			const laneId = lane.id;
+			const onLog = (text) => {
+				laneLogs[laneId] += text;
+				socket.emit('runner-lane-log', { id: laneId, log: text });
+			};
+
+			const spawnBuiltInLaneAttempt = (currentTag) =>
+				new Promise((resolve) => {
+					const ssDir = path.join(os.tmpdir(), `plum-ss-${Date.now()}-${idx}`);
+					fs.mkdirSync(ssDir, { recursive: true });
+
+					const env = {
+						...process.env,
+						TAG: currentTag,
+						TRIGGER: TRIGGER_REMOTE,
+						BROWSER: browser,
+						REPORT_RUNNERS: String(workers),
+						PLUM_MODE: 'node',
+						PLUM_SS_DIR: ssDir
+					};
+					if (workers > 1) env.PARALLEL = String(workers);
+
+					const proc = spawn('npm', ['run', 'test'], { env, shell: true });
+					activeProcs.add(proc);
+
+					const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
+						socket.emit('runner-lane-screenshot', { id: laneId, stepName, data });
+					});
+
+					proc.stdout.on('data', (d) => onLog(d.toString()));
+					proc.stderr.on('data', (d) => onLog(`[ERROR] ${d.toString()}`));
+
+					proc.on('close', (code) => {
+						clearInterval(ssPoller);
+						fs.rm(ssDir, { recursive: true, force: true }, () => {});
+						activeProcs.delete(proc);
+						const content =
+							readCucumberReportFile() ??
+							makeSyntheticFailReport(lane.name, chunkIds, 'process exited with error');
+						resolve({ code, rawJson: JSON.parse(content) });
+					});
+				});
+
+			runWithRetries({
+				maxRetries,
+				spawnAttempt: (t) => spawnBuiltInLaneAttempt(t ?? chunkTag),
+				onLog
+			}).then(({ code, rawJson, attempts }) =>
+				onLaneDone(idx, laneId, code, JSON.stringify(rawJson), attempts)
+			);
 		} else {
 			const idx = i;
 			const laneId = lane.id;
-			runnerService.dispatchAndPoll(
-				laneId,
-				{ tags: chunkTag, browser, workers },
-				(log) => {
-					laneLogs[laneId] += log;
-					socket.emit('runner-lane-log', { id: laneId, log });
-				},
-				(code, content) =>
-					onLaneDone(
-						idx,
+			const onLog = (log) => {
+				laneLogs[laneId] += log;
+				socket.emit('runner-lane-log', { id: laneId, log });
+			};
+
+			const spawnRemoteLaneAttempt = (currentTag) =>
+				new Promise((resolve) => {
+					runnerService.dispatchAndPoll(
 						laneId,
-						code,
-						content ??
-							makeSyntheticFailReport(lane.name, chunkIds, 'could not fetch report from runner')
-					),
-				({ stepName, data }) => {
-					socket.emit('runner-lane-screenshot', { id: laneId, stepName, data });
-				}
+						{ tags: currentTag, browser, workers },
+						onLog,
+						(code, content) => {
+							const raw =
+								content ??
+								makeSyntheticFailReport(lane.name, chunkIds, 'could not fetch report from runner');
+							resolve({ code, rawJson: JSON.parse(raw) });
+						},
+						({ stepName, data }) => {
+							socket.emit('runner-lane-screenshot', { id: laneId, stepName, data });
+						}
+					);
+				});
+
+			runWithRetries({
+				maxRetries,
+				spawnAttempt: (t) => spawnRemoteLaneAttempt(t ?? chunkTag),
+				onLog
+			}).then(({ code, rawJson, attempts }) =>
+				onLaneDone(idx, laneId, code, JSON.stringify(rawJson), attempts)
 			);
 		}
 	}

@@ -139,6 +139,64 @@ function featureMergeKey(feature) {
 	return uri || feature.id || feature.name;
 }
 
+// Mirrors frontend's isTestCaseTag (frontend/src/lib/utils/format.js) — keep in
+// sync so retry-attempt counts line up with how the report page groups scenarios.
+function isTestCaseTag(tag) {
+	return /^@test[\w-]*/i.test(tag) || /^@tc-?\d+/i.test(tag);
+}
+
+function scenarioIdTag(scenario) {
+	return (scenario.tags ?? []).map((t) => t.name).find(isTestCaseTag) ?? null;
+}
+
+function scenarioFailed(scenario) {
+	return (scenario.steps ?? []).some((s) => s.result?.status === 'failed');
+}
+
+/**
+ * Test-ID tags (see scenarioIdTag) of every failed scenario in a raw Cucumber
+ * JSON payload, deduped. Used to scope the next retry attempt to just the
+ * scenarios that need re-running.
+ */
+function getFailedIdTags(rawJson) {
+	const tags = new Set();
+	for (const feature of rawJson) {
+		for (const scenario of feature.elements ?? []) {
+			if (scenarioFailed(scenario)) {
+				const idTag = scenarioIdTag(scenario);
+				if (idTag) tags.add(idTag);
+			}
+		}
+	}
+	return [...tags];
+}
+
+/**
+ * Folds one retry attempt's raw Cucumber JSON into the accumulated result,
+ * replacing each retried scenario's prior-round entry with this round's
+ * outcome (matched by Cucumber's own stable scenario id). Mutates
+ * `attemptsMap` in place, recording the highest round number each scenario
+ * appeared in — that number *is* its total attempt count, since a scenario
+ * only reappears in a later round if it failed every round before it.
+ */
+function mergeRawAttempt(accumulated, attemptRawJson, round, attemptsMap) {
+	for (const feature of attemptRawJson) {
+		const key = featureMergeKey(feature);
+		let accFeature = accumulated.find((f) => featureMergeKey(f) === key);
+		if (!accFeature) {
+			accFeature = { ...feature, elements: [] };
+			accumulated.push(accFeature);
+		}
+		for (const scenario of feature.elements ?? []) {
+			accFeature.elements = accFeature.elements.filter((e) => e.id !== scenario.id);
+			accFeature.elements.push(scenario);
+			const idTag = scenarioIdTag(scenario);
+			if (idTag) attemptsMap[idTag] = round;
+		}
+	}
+	return accumulated;
+}
+
 function deleteScreenshotFiles(content) {
 	for (const file of collectScreenshotFiles(content)) {
 		const p = path.join(SCREENSHOTS_DIR, file);
@@ -156,7 +214,7 @@ function deleteScreenshotFiles(content) {
  *
  * Returns { features, status } where status is 'PASS' | 'FAIL'.
  */
-function processCucumberJson(raw) {
+function processCucumberJson(raw, attempts = {}) {
 	fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
 
 	const features = raw.map((feature) => {
@@ -215,6 +273,7 @@ function processCucumberJson(raw) {
 				tags: (scenario.tags ?? []).map((t) => t.name),
 				status: worstStatus,
 				duration: steps.reduce((s, st) => s + st.duration, 0),
+				attempts: attempts[scenarioIdTag(scenario)] ?? 1,
 				steps
 			};
 		});
@@ -329,10 +388,11 @@ const saveReport = async ({
 	testRunId,
 	forceFail = false,
 	logs = null,
-	duration = null
+	duration = null,
+	attempts = {}
 }) => {
 	const normTrigger = normaliseTrigger(triggerType);
-	const { features, status: derivedStatus } = processCucumberJson(rawCucumberJson);
+	const { features, status: derivedStatus } = processCucumberJson(rawCucumberJson, attempts);
 	const status = forceFail ? 'FAIL' : derivedStatus;
 	const cronJobId = await resolveCronJobId(normTrigger);
 
@@ -379,7 +439,8 @@ const saveCombinedReport = async ({
 	browser,
 	testRunId,
 	laneLogs = null,
-	duration = null
+	duration = null,
+	attemptsByLane = null
 }) => {
 	const featureMap = new Map();
 	for (const content of reports) {
@@ -413,6 +474,10 @@ const saveCombinedReport = async ({
 		if (parts.length > 0) combinedLogs = parts.join('\n\n');
 	}
 
+	// Chunked lanes run disjoint sets of tests, so their attempt maps never
+	// collide — a plain merge is safe.
+	const attempts = attemptsByLane ? Object.assign({}, ...attemptsByLane.filter(Boolean)) : {};
+
 	return saveReport({
 		rawCucumberJson: combined,
 		tags: tag,
@@ -424,7 +489,8 @@ const saveCombinedReport = async ({
 		testRunId: testRunId ?? null,
 		forceFail: reports.some((r) => r === null),
 		logs: combinedLogs,
-		duration
+		duration,
+		attempts
 	});
 };
 
@@ -475,5 +541,7 @@ module.exports = {
 	saveCombinedReport,
 	syncAutomatedFromFeatures,
 	deleteReport,
-	deleteReports
+	deleteReports,
+	getFailedIdTags,
+	mergeRawAttempt
 };

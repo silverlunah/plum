@@ -102,6 +102,7 @@ model Project {
   backupLastRunAt    DateTime?
   backupLastStatus   String    @default("")
   mcpKey             String    @default("")
+  maxRetries         Int       @default(0)
 }
 
 model User {

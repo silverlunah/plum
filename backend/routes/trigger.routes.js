@@ -26,6 +26,10 @@ const { jwtAuth } = require('../middleware/jwtAuth');
 const prisma = require('../services/prisma');
 const { startSsPoller } = require('../lib/screenshotPoller');
 const { TRIGGER_TYPE } = require('../constants/triggers');
+const settingsService = require('../services/settingsService');
+const reportService = require('../services/reportService');
+const { readCucumberReportFile } = require('../lib/reportFilename');
+const { runWithRetries } = require('../lib/retryRunner');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
 const JOB_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -51,27 +55,11 @@ router.post('/', jwtAuth, async (req, res, next) => {
 
 		const { tag = '', browser = 'chromium', workers = 1, baseUrl, testRunId, source } = req.body;
 		const trigger = source === 'mcp' ? TRIGGER_TYPE.MCP : TRIGGER_TYPE.EXTERNAL;
+		const { maxRetries } = await settingsService.getProject();
 
 		const jobId = randomUUID();
 		const startedAt = Date.now();
 		jobs.set(jobId, { status: 'running', exitCode: null, reportId: null, startedAt });
-
-		const ssDir = path.join(os.tmpdir(), `plum-trigger-ss-${jobId}`);
-		fs.mkdirSync(ssDir, { recursive: true });
-
-		const env = {
-			...process.env,
-			TAG: tag,
-			TRIGGER: trigger,
-			BROWSER: browser,
-			REPORT_RUNNERS: String(workers),
-			PLUM_SS_DIR: ssDir
-		};
-		if (Number(workers) > 1) env.PARALLEL = String(workers);
-		if (testRunId) env.TEST_RUN_ID = testRunId;
-		if (baseUrl) env.BASE_URL = baseUrl;
-
-		const proc = spawn('npm', ['run', 'test'], { env, shell: true, cwd: BACKEND_DIR });
 
 		if (_io) {
 			_io.emit('bg-run-start', {
@@ -82,48 +70,108 @@ router.post('/', jwtAuth, async (req, res, next) => {
 			});
 		}
 
-		const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-			if (_io) _io.emit('bg-run-screenshot', { runId: jobId, stepName, data });
-		});
+		const onLog = (text) => {
+			if (_io) _io.emit('bg-run-log', { runId: jobId, log: text });
+		};
 
-		proc.stdout.on('data', (d) => {
-			if (_io) _io.emit('bg-run-log', { runId: jobId, log: d.toString() });
-		});
-		proc.stderr.on('data', (d) => {
-			if (_io) _io.emit('bg-run-log', { runId: jobId, log: `[ERROR] ${d.toString()}` });
-		});
+		function runAttempt(currentTag, suppressSave) {
+			return new Promise((resolve) => {
+				const ssDir = path.join(os.tmpdir(), `plum-trigger-ss-${jobId}-${Date.now()}`);
+				fs.mkdirSync(ssDir, { recursive: true });
 
-		proc.on('close', async (code) => {
-			clearInterval(ssPoller);
-			fs.rm(ssDir, { recursive: true, force: true }, () => {});
+				const env = {
+					...process.env,
+					TAG: currentTag,
+					TRIGGER: trigger,
+					BROWSER: browser,
+					REPORT_RUNNERS: String(workers),
+					PLUM_SS_DIR: ssDir
+				};
+				if (Number(workers) > 1) env.PARALLEL = String(workers);
+				if (testRunId) env.TEST_RUN_ID = testRunId;
+				if (baseUrl) env.BASE_URL = baseUrl;
+				if (suppressSave) env.PLUM_MODE = 'node';
 
-			let reportId = null;
-			try {
-				// Find the latest report created after this job started
-				const report = await prisma.report.findFirst({
-					where: { createdAt: { gte: new Date(startedAt) } },
-					orderBy: { createdAt: 'desc' },
-					select: { id: true, status: true }
+				const proc = spawn('npm', ['run', 'test'], { env, shell: true, cwd: BACKEND_DIR });
+
+				const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
+					if (_io) _io.emit('bg-run-screenshot', { runId: jobId, stepName, data });
 				});
-				reportId = report?.id ?? null;
-				if (reportId) {
-					await prisma.report.update({
-						where: { id: reportId },
-						data: { duration: Date.now() - startedAt }
+
+				proc.stdout.on('data', (d) => onLog(d.toString()));
+				proc.stderr.on('data', (d) => onLog(`[ERROR] ${d.toString()}`));
+
+				proc.on('close', (code) => {
+					clearInterval(ssPoller);
+					fs.rm(ssDir, { recursive: true, force: true }, () => {});
+					resolve({ code, raw: suppressSave ? readCucumberReportFile() : null });
+				});
+			});
+		}
+
+		if (maxRetries === 0) {
+			runAttempt(tag, false).then(async ({ code }) => {
+				let reportId = null;
+				try {
+					// Find the latest report created after this job started
+					const report = await prisma.report.findFirst({
+						where: { createdAt: { gte: new Date(startedAt) } },
+						orderBy: { createdAt: 'desc' },
+						select: { id: true, status: true }
 					});
+					reportId = report?.id ?? null;
+					if (reportId) {
+						await prisma.report.update({
+							where: { id: reportId },
+							data: { duration: Date.now() - startedAt }
+						});
+					}
+					jobs.set(jobId, {
+						status: code === 130 ? 'cancelled' : 'done',
+						exitCode: code,
+						reportId,
+						startedAt
+					});
+				} catch {
+					jobs.set(jobId, { status: 'done', exitCode: code, reportId: null, startedAt });
 				}
-				jobs.set(jobId, {
-					status: code === 130 ? 'cancelled' : 'done',
-					exitCode: code,
-					reportId,
-					startedAt
-				});
-			} catch {
-				jobs.set(jobId, { status: 'done', exitCode: code, reportId: null, startedAt });
-			}
 
-			if (_io) _io.emit('bg-run-done', { runId: jobId, code, reportId });
-		});
+				if (_io) _io.emit('bg-run-done', { runId: jobId, code, reportId });
+			});
+		} else {
+			runWithRetries({
+				maxRetries,
+				spawnAttempt: async (tagOverride) => {
+					const { code, raw } = await runAttempt(tagOverride ?? tag, true);
+					return { code, rawJson: raw ? JSON.parse(raw) : [] };
+				},
+				onLog
+			}).then(async ({ code, rawJson, attempts }) => {
+				let reportId = null;
+				try {
+					const report = await reportService.saveReport({
+						rawCucumberJson: rawJson,
+						tags: tag,
+						triggerType: trigger,
+						browser,
+						testRunId: testRunId ?? null,
+						duration: Date.now() - startedAt,
+						attempts
+					});
+					reportId = report.id;
+					jobs.set(jobId, {
+						status: code === 130 ? 'cancelled' : 'done',
+						exitCode: code,
+						reportId,
+						startedAt
+					});
+				} catch {
+					jobs.set(jobId, { status: 'done', exitCode: code, reportId: null, startedAt });
+				}
+
+				if (_io) _io.emit('bg-run-done', { runId: jobId, code, reportId });
+			});
+		}
 
 		res.status(202).json({ jobId, status: 'running' });
 	} catch (e) {
