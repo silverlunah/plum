@@ -191,6 +191,7 @@ async function runAction(r) {
 	}
 
 	options.push(
+		{ value: 'token', label: 'Show token' },
 		{ value: 'delete', label: pc.red('Delete') },
 		{ value: 'back', label: pc.dim('← Back') }
 	);
@@ -241,6 +242,8 @@ async function runAction(r) {
 	} else if (action === 'log') {
 		const entry = runnerProcess.loadRegistry()[r.id];
 		clack.note(entry?.logFile ?? '(no log file)', 'Log file');
+	} else if (action === 'token') {
+		clack.note(r.token, 'Auth token');
 	} else if (action === 'ping') {
 		const s = clack.spinner();
 		s.start(`Pinging "${r.name}"...`);
