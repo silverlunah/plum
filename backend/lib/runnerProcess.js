@@ -250,6 +250,40 @@ function stopNode(id, fallbackPort = null) {
 	return signalled;
 }
 
+/**
+ * Frees a TCP port by killing whatever process is bound to it, so Start can't
+ * fail with EADDRINUSE against a stale/orphaned process this manager lost
+ * track of (e.g. one that ignored SIGTERM from a previous stop, or was never
+ * in the registry to begin with). SIGTERM first, escalating to SIGKILL if the
+ * process is still alive after a short grace period.
+ *
+ * Returns true if a process was found (and signalled), false if the port was
+ * already free.
+ */
+async function killPort(port) {
+	let pid = findPidOnPort(port);
+	if (!pid) return false;
+
+	try {
+		process.kill(pid, 'SIGTERM');
+	} catch {}
+
+	const deadline = Date.now() + 2000;
+	while (Date.now() < deadline && isAlive(pid)) {
+		await new Promise((resolve) => setTimeout(resolve, 150));
+	}
+
+	pid = findPidOnPort(port);
+	if (pid && isAlive(pid)) {
+		try {
+			process.kill(pid, 'SIGKILL');
+		} catch {}
+		await new Promise((resolve) => setTimeout(resolve, 200));
+	}
+
+	return true;
+}
+
 module.exports = {
 	BACKEND_DIR,
 	LOGS_DIR,
@@ -260,6 +294,7 @@ module.exports = {
 	isLocalUrl,
 	parsePort,
 	findPidOnPort,
+	killPort,
 	pruneDead,
 	statusOf,
 	prepareEnv,

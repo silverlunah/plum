@@ -40,7 +40,8 @@ const {
 	prepareEnv,
 	startNode,
 	stopNode,
-	findPidOnPort
+	findPidOnPort,
+	killPort
 } = runnerProcess;
 const { generateToken, registerWithPrimary, detectLanIp } = nodeRegister;
 
@@ -206,12 +207,18 @@ async function runAction(r) {
 	const port = parsePort(r.url);
 
 	if (action === 'start') {
+		const s = clack.spinner();
+		s.start(`Freeing port ${port}...`);
+		const killed = await killPort(Number(port));
+		s.stop(killed ? pc.dim(`Freed port ${port}`) : pc.dim(`Port ${port} was already free`));
+
 		prepareNodeEnv();
 		const entry = startNode({ id: r.id, port, token: r.token });
 		clack.log.success(pc.green(`Started "${r.name}" on port ${port} (pid ${entry.pid})`));
 	} else if (action === 'stop') {
 		if (r.managed) {
 			const ok = stopNode(r.id);
+			await killPort(Number(port));
 			clack.log.success(
 				ok ? pc.green(`Stopped "${r.name}"`) : pc.dim(`"${r.name}" was not running`)
 			);
@@ -223,6 +230,11 @@ async function runAction(r) {
 				s.stop(pc.green(`Stopped "${r.name}"`));
 			} catch (e) {
 				s.stop(pc.red(`Could not stop "${r.name}": ${e.message}`));
+			} finally {
+				// Belt-and-suspenders: if this runner happens to be local (or
+				// the network shutdown call above silently failed), make sure
+				// nothing is left bound to its port.
+				await killPort(Number(port));
 			}
 		}
 	} else if (action === 'restart') {
@@ -230,7 +242,7 @@ async function runAction(r) {
 			const s = clack.spinner();
 			s.start(`Restarting "${r.name}"...`);
 			stopNode(r.id);
-			await new Promise((resolve) => setTimeout(resolve, 600));
+			await killPort(Number(port));
 			const entry = startNode({ id: r.id, port, token: r.token });
 			s.stop(pc.green(`Restarted "${r.name}" (pid ${entry.pid})`));
 		} else {
