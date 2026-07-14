@@ -69,6 +69,7 @@ Full documentation is available at:
 | [Initializing the Project](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/initializing-the-project-ilfc8LUyO7) | What `plum init` generates, config files explained            |
 | [Writing Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/writing-tests-XeHJQdtH49)                       | Feature files, page objects, step definitions, best practices |
 | [Running Tests Locally](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/running-tests-locally-GGhFcqaAQ8)       | `plum run-test` flags, parallel runs, debugging tips          |
+| [Retrying Flaky Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/retrying-flaky-tests-NXwRF5SXru)         | Auto-retry failed scenarios, global setting, report badges    |
 | [Setting Up the Server](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-the-server-vj0Ab1kJVs)       | Production server setup, reverse proxy (Nginx/Caddy), Docker  |
 | [Setting Up Nodes](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-nodes-dtmekJGJia)                 | Runner nodes, systemd service, managing nodes                 |
 | [Integrations](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/integrations-qfiqfmdP0j)                         | Discord & Slack webhook notifications, CI/external triggers   |
