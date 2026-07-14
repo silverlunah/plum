@@ -27,6 +27,7 @@
  */
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
 
@@ -36,6 +37,23 @@ const REGISTRY_PATH = path.join(BACKEND_DIR, '.runners.local.json');
 const LOGS_DIR = path.join(BACKEND_DIR, 'logs');
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'host.docker.internal']);
+
+/**
+ * Runners default to this machine's own LAN IP (see nodeRegister's
+ * detectLanIp), not a loopback hostname — so isLocalUrl must also recognise
+ * this machine's actual interface addresses, or a runner started and later
+ * stopped on this same box gets misclassified as remote and loses its
+ * "Start" option (nothing else can restart a fully-stopped process for it).
+ */
+function localAddresses() {
+	const addrs = new Set(LOCAL_HOSTS);
+	for (const ifaces of Object.values(os.networkInterfaces())) {
+		for (const iface of ifaces ?? []) {
+			if (iface.family === 'IPv4' || iface.family === 4) addrs.add(iface.address);
+		}
+	}
+	return addrs;
+}
 
 function loadRegistry() {
 	try {
@@ -90,7 +108,7 @@ function isAlive(pid) {
 
 function isLocalUrl(url) {
 	try {
-		return LOCAL_HOSTS.has(new URL(url).hostname);
+		return localAddresses().has(new URL(url).hostname);
 	} catch {
 		return false;
 	}
