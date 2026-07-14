@@ -30,6 +30,7 @@
 	import { runsVersion } from '$lib/stores/runner';
 	import { auth } from '$lib/stores/auth';
 	import Button from '$lib/components/ui/Button.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import AutomatedBadge from '$lib/components/ui/AutomatedBadge.svelte';
@@ -105,6 +106,10 @@
 	let executingEntryId = null;
 	let entryNote = '';
 	let expandedExecEntries = new Set();
+
+	let editRunOpen = false;
+	let editRunForm = {};
+	let editRunSaving = false;
 
 	function toggleExecSteps(entryId) {
 		if (expandedExecEntries.has(entryId)) expandedExecEntries.delete(entryId);
@@ -201,6 +206,20 @@
 
 	function removeEntry(entryId) {
 		run = { ...run, entries: run.entries.filter((e) => e.id !== entryId) };
+	}
+
+	async function handleUpdateRun() {
+		editRunSaving = true;
+		try {
+			const updated = await updateRun(runId, editRunForm);
+			run = { ...run, ...updated };
+			editRunOpen = false;
+			showToast('success', 'Run updated.');
+		} catch (e) {
+			showToast('error', e.message);
+		} finally {
+			editRunSaving = false;
+		}
 	}
 
 	async function handleSaveRun() {
@@ -309,6 +328,21 @@
 
 <Toast {toast} />
 
+<Modal bind:open={editRunOpen} title="Edit Run">
+	<div class="form-fields">
+		<div class="field">
+			<label class="field-label" for="er-title">Title</label>
+			<input id="er-title" type="text" class="field-input" bind:value={editRunForm.title} />
+		</div>
+		<div class="modal-actions">
+			<Button on:click={handleUpdateRun} disabled={editRunSaving}>
+				{editRunSaving ? 'Saving…' : 'Save'}
+			</Button>
+			<Button variant="ghost" on:click={() => (editRunOpen = false)}>Cancel</Button>
+		</div>
+	</div>
+</Modal>
+
 <div class="breadcrumb">
 	<a href="/test-repository" class="bc-link">Test Repository</a>
 	<span class="bc-sep">›</span>
@@ -322,6 +356,28 @@
 		<div class="run-header-left">
 			<h1 class="run-title">{run.title}</h1>
 			<span class="run-status-badge {run.status}">{run.status}</span>
+			<button
+				class="icon-btn"
+				title="Edit run"
+				on:click={() => {
+					editRunForm = { title: run.title };
+					editRunOpen = true;
+				}}
+			>
+				<svg
+					width="14"
+					height="14"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path
+						d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+					/></svg
+				>
+			</button>
 		</div>
 		<div class="run-header-actions">
 			{#if isLocked}
@@ -1426,5 +1482,16 @@
 		.right-panel {
 			display: none;
 		}
+	}
+
+	.form-fields {
+		display: flex;
+		flex-direction: column;
+		gap: 0.875rem;
+	}
+	.modal-actions {
+		display: flex;
+		gap: 0.5rem;
+		padding-top: 0.25rem;
 	}
 </style>

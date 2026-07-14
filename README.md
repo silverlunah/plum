@@ -95,6 +95,7 @@ Full documentation is available at:
 | `plum run-test @tag`          | Run tests matching a tag                                           |
 | `plum run-test --parallel N`  | Run tests across N parallel workers                                |
 | `plum run-test --browser <b>` | Run in `chromium` (default) or `firefox`                           |
+| `plum run-test --help`        | Show usage for `run-test`                                          |
 | `plum create-step`            | Interactively scaffold a new step definition                       |
 | `plum manage-runners`         | Open the interactive runner management menu                        |
 
