@@ -86,6 +86,29 @@ async function ping(id) {
 }
 
 // ---------------------------------------------------------------------------
+// Remote control
+// ---------------------------------------------------------------------------
+
+async function callControlEndpoint(id, endpoint, timeoutMs) {
+	const runner = await getById(id);
+	if (!runner) return { ok: false, error: 'Runner not found' };
+	try {
+		const res = await fetch(`${runner.url}/api/${endpoint}`, {
+			method: 'POST',
+			headers: { Authorization: `Bearer ${runner.token}` },
+			signal: AbortSignal.timeout(timeoutMs)
+		});
+		if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+		return { ok: true };
+	} catch (e) {
+		return { ok: false, error: e.message };
+	}
+}
+
+const stop = (id) => callControlEndpoint(id, 'shutdown', 5000);
+const restart = (id) => callControlEndpoint(id, 'restart', 5000);
+
+// ---------------------------------------------------------------------------
 // Remote execution
 // ---------------------------------------------------------------------------
 
@@ -235,5 +258,7 @@ module.exports = {
 	getById,
 	probe,
 	ping,
+	stop,
+	restart,
 	dispatchAndPoll
 };

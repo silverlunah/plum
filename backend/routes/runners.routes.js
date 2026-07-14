@@ -64,16 +64,7 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
 	try {
-		const runner = await runnerService.getById(req.params.id);
-		if (runner) {
-			try {
-				await fetch(`${runner.url}/api/shutdown`, {
-					method: 'POST',
-					headers: { Authorization: `Bearer ${runner.token}` },
-					signal: AbortSignal.timeout(3000)
-				});
-			} catch {}
-		}
+		await runnerService.stop(req.params.id);
 		await runnerService.remove(req.params.id);
 		res.json({ message: 'Runner deleted' });
 	} catch (e) {
@@ -84,6 +75,24 @@ router.delete('/:id', async (req, res) => {
 router.post('/:id/ping', async (req, res) => {
 	try {
 		const result = await runnerService.ping(req.params.id);
+		res.json(result);
+	} catch (e) {
+		res.status(500).json({ ok: false, error: e.message });
+	}
+});
+
+router.post('/:id/stop', async (req, res) => {
+	try {
+		const result = await runnerService.stop(req.params.id);
+		res.json(result);
+	} catch (e) {
+		res.status(500).json({ ok: false, error: e.message });
+	}
+});
+
+router.post('/:id/restart', async (req, res) => {
+	try {
+		const result = await runnerService.restart(req.params.id);
 		res.json(result);
 	} catch (e) {
 		res.status(500).json({ ok: false, error: e.message });

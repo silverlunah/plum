@@ -51,6 +51,16 @@ export async function pingRunner(id) {
 	return res.json();
 }
 
+export async function stopRunner(id) {
+	const res = await fetch(`${API_BASE}/runners/${id}/stop`, { method: 'POST' });
+	return res.json();
+}
+
+export async function restartRunner(id) {
+	const res = await fetch(`${API_BASE}/runners/${id}/restart`, { method: 'POST' });
+	return res.json();
+}
+
 export async function probeRunner(url, token) {
 	const res = await fetch(`${API_BASE}/runners/probe`, {
 		method: 'POST',

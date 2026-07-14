@@ -40,6 +40,20 @@ if (!fs.existsSync(testsDir)) {
 const isNodeMode = process.env.PLUM_MODE === 'node';
 const port = parseInt(process.env.PORT || '3001', 10);
 
+// A self-restart (POST /api/restart) spawns the replacement before this
+// process has released the port, so the first bind attempt can briefly hit
+// EADDRINUSE — retry instead of dying immediately.
+let listenRetriesLeft = 20;
+server.on('error', (err) => {
+	if (err.code === 'EADDRINUSE' && listenRetriesLeft > 0) {
+		listenRetriesLeft -= 1;
+		setTimeout(() => server.listen(port), 250);
+	} else {
+		console.error(`❌ Failed to bind port ${port}:`, err.message);
+		process.exit(1);
+	}
+});
+
 let cronService = null;
 let backupCronService = null;
 if (!isNodeMode) {
@@ -77,8 +91,13 @@ async function start() {
 				const cleanup = () => {
 					try {
 						const reg = loadRegistry();
-						delete reg[runnerId];
-						saveRegistry(reg);
+						// A self-restart already wrote the replacement's pid under this
+						// id before this process exits — only clear the entry if it's
+						// still ours, so we don't erase the new process's registration.
+						if (reg[runnerId]?.pid === process.pid) {
+							delete reg[runnerId];
+							saveRegistry(reg);
+						}
 					} catch {}
 				};
 				process.once('SIGTERM', cleanup);
