@@ -32,6 +32,14 @@ if (!fs.existsSync(jsonReportFile)) {
 // and saves the combined report after all lanes finish.
 if (process.env.PLUM_MODE === 'node') process.exit(0);
 
+// `run-test` runs on the host without Docker/Postgres, so DATABASE_URL is
+// never set there — skip the DB save instead of letting Prisma's connection
+// attempt surface as an unhandled-looking stack trace after tests already ran.
+if (!process.env.DATABASE_URL) {
+	console.log('No DATABASE_URL configured — skipping report save to database.');
+	process.exit(0);
+}
+
 (async () => {
 	try {
 		const raw = JSON.parse(fs.readFileSync(jsonReportFile, 'utf8'));
