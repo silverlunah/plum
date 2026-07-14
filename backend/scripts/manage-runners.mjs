@@ -139,9 +139,8 @@ async function describeRunners() {
 function statusBadge(r) {
 	const dot = r.online ? pc.green('●') : pc.dim('○');
 	let detail;
-	if (!r.local) detail = pc.dim('remote');
-	else if (r.managed) detail = pc.green('running');
-	else if (r.online) detail = pc.yellow('running (unmanaged)');
+	if (r.managed) detail = pc.green('running');
+	else if (r.online) detail = pc.yellow(r.local ? 'running (unmanaged)' : 'running (remote)');
 	else detail = pc.dim('stopped');
 	return `${dot} ${detail}`;
 }
@@ -184,10 +183,15 @@ async function runAction(r) {
 			{ value: 'restart', label: pc.yellow('Restart') },
 			{ value: 'ping', label: 'Ping' }
 		);
-	} else if (r.local) {
-		options.push({ value: 'start', label: pc.green('Start') }, { value: 'ping', label: 'Ping' });
 	} else {
-		options.push({ value: 'ping', label: 'Ping' });
+		// Offline and nothing is listening to control remotely — offer Start
+		// unconditionally rather than gating on address-based "is this local"
+		// detection. That heuristic breaks the moment this machine's address
+		// differs from what was registered (DHCP renewal, VPN, multiple NICs),
+		// permanently trapping an offline runner with no way back. Starting
+		// here is always safe to attempt: it spawns a managed process this menu
+		// can immediately Stop again if the address guess was wrong.
+		options.push({ value: 'start', label: pc.green('Start') }, { value: 'ping', label: 'Ping' });
 	}
 
 	options.push(
