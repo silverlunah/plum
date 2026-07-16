@@ -494,6 +494,19 @@ const saveCombinedReport = async ({
 	});
 };
 
+// Finds the report a no-retry run just produced (the most recent one created
+// after the run started) and patches in its wall-clock duration.
+const attachDurationToLatestReport = async ({ afterTimestamp, duration }) => {
+	const report = await prisma.report.findFirst({
+		where: { createdAt: { gte: new Date(afterTimestamp) } },
+		orderBy: { createdAt: 'desc' },
+		select: { id: true, status: true }
+	});
+	if (!report) return null;
+	await prisma.report.update({ where: { id: report.id }, data: { duration } });
+	return report;
+};
+
 // ---------------------------------------------------------------------------
 // Delete operations
 // ---------------------------------------------------------------------------
@@ -539,6 +552,7 @@ module.exports = {
 	getReportDetail,
 	saveReport,
 	saveCombinedReport,
+	attachDurationToLatestReport,
 	syncAutomatedFromFeatures,
 	deleteReport,
 	deleteReports,

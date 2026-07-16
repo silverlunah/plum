@@ -16,158 +16,52 @@
  */
 
 const http = require('http');
+const path = require('path');
 const { Server } = require('socket.io');
 const app = require('./app');
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
-const path = require('path');
-const fs = require('fs');
+const {
+	ensureTestsDir,
+	attachListenRetry,
+	wireRealtimeServices,
+	initCronServices,
+	bootstrapMcpKey,
+	onServerListening
+} = require('./lib/serverBootstrap');
 
-// Always point to the mounted tests directory
+// Runner nodes receive their test files from dispatched jobs; the main
+// server expects them to already be mounted on disk.
 const testsDir = path.resolve(process.cwd(), 'tests');
 
-if (!fs.existsSync(testsDir)) {
-	if (process.env.PLUM_MODE === 'node') {
-		console.warn('⚠️  No tests folder found — will be populated when a job is received');
-	} else {
-		console.error('❌ No tests folder found at /app/tests');
-		process.exit(1);
-	}
-} else {
-	console.log('📂 Loading tests from:', testsDir);
-}
-
+// Node/runner mode strips out everything that only makes sense on the main
+// server (cron, MCP, socket.io, file watching).
 const isNodeMode = process.env.PLUM_MODE === 'node';
+
 const port = parseInt(process.env.PORT || '3001', 10);
 
-// A self-restart (POST /api/restart) spawns the replacement before this
-// process has released the port, so the first bind attempt can briefly hit
-// EADDRINUSE — retry instead of dying immediately.
-let listenRetriesLeft = 20;
-server.on('error', (err) => {
-	if (err.code === 'EADDRINUSE' && listenRetriesLeft > 0) {
-		listenRetriesLeft -= 1;
-		setTimeout(() => server.listen(port), 250);
-	} else {
-		console.error(`❌ Failed to bind port ${port}:`, err.message);
-		process.exit(1);
-	}
-});
+// The underlying HTTP server, shared by Express and Socket.io.
+const server = http.createServer(app);
 
-let cronService = null;
-let backupCronService = null;
-if (!isNodeMode) {
-	const socketHandler = require('./websockets/socketHandler.js');
-	cronService = require('./services/cronService');
-	backupCronService = require('./services/backupCronService');
-	socketHandler(io);
-	cronService.setSocketIO(io);
-	require('./routes/trigger.routes').setSocketIO(io);
-}
+// Real-time transport for live test output, screenshots, and run status.
+const io = new Server(server, { cors: { origin: '*' } });
 
 async function start() {
-	if (cronService) await cronService.init();
-	if (backupCronService) await backupCronService.init();
+	// Confirm the tests directory is in place before doing anything else.
+	ensureTestsDir(testsDir, isNodeMode);
 
-	if (!isNodeMode && !process.env.PLUM_MCP_KEY) {
-		try {
-			const settingsService = require('./services/settingsService');
-			const { mcpKey } = await settingsService.getMcpConfig();
-			if (mcpKey) process.env.PLUM_MCP_KEY = mcpKey;
-		} catch {}
-	}
+	// Survive the brief EADDRINUSE window a self-restart can hit.
+	attachListenRetry(server, port);
 
-	server.listen(port, async () => {
-		console.log(`Backend running on port ${port}${isNodeMode ? ' (node/runner mode)' : ''}`);
-		if (isNodeMode) {
-			// Self-register PID so manage-runners can track and stop this process.
-			const runnerId = process.env.RUNNER_ID;
-			if (runnerId) {
-				const { loadRegistry, saveRegistry } = require('./lib/runnerProcess');
-				const registry = loadRegistry();
-				registry[runnerId] = { pid: process.pid, port: String(port), startedAt: Date.now() };
-				saveRegistry(registry);
+	// Connect socket.io to the runner/cron services (a no-op in node mode).
+	const { cronService, backupCronService } = wireRealtimeServices(io, isNodeMode);
 
-				const cleanup = () => {
-					try {
-						const reg = loadRegistry();
-						// A self-restart already wrote the replacement's pid under this
-						// id before this process exits — only touch the entry if it's
-						// still ours, so we don't clobber the new process's registration.
-						// Keep the entry (with its port) rather than deleting it — that's
-						// the only place a later manual Start can find the port this
-						// runner was last running on.
-						if (reg[runnerId]?.pid === process.pid) {
-							reg[runnerId] = { ...reg[runnerId], pid: null };
-							saveRegistry(reg);
-						}
-					} catch {}
-				};
-				// Adding a SIGTERM/SIGINT listener suppresses Node's default
-				// "terminate immediately" behavior — the handler must exit itself,
-				// or the process (and the port it's bound to) lives on forever
-				// after a plain `kill`/SIGTERM with nothing left to stop it short
-				// of SIGKILL.
-				process.once('SIGTERM', () => {
-					cleanup();
-					process.exit(0);
-				});
-				process.once('SIGINT', () => {
-					cleanup();
-					process.exit(0);
-				});
-				process.once('exit', cleanup);
-			}
-			return;
-		}
+	// Start the scheduled test and backup cron jobs.
+	await initCronServices(cronService, backupCronService);
 
-		// Sync automated flags from feature files on every startup
-		require('./services/reportService')
-			.syncAutomatedFromFeatures()
-			.catch(() => {});
+	// Load the saved MCP API key into the environment for the MCP server.
+	await bootstrapMcpKey(isNodeMode);
 
-		// chokidar v5+ is ESM-only — use dynamic import to stay compatible with CJS
-		let chokidar;
-		try {
-			chokidar = (await import('chokidar')).default;
-		} catch {
-			console.warn('⚠️  chokidar unavailable — file watching disabled');
-			return;
-		}
-
-		const watchOpts = { usePolling: true, interval: 800, ignoreInitial: true };
-
-		// Watch tests/features/ — notify UI when feature files are added/changed/removed
-		const featuresDir = path.join(testsDir, 'features');
-		if (fs.existsSync(featuresDir)) {
-			let debounce = null;
-			chokidar.watch(featuresDir, watchOpts).on('all', (event, filePath) => {
-				clearTimeout(debounce);
-				debounce = setTimeout(() => {
-					console.log(
-						`📝 Tests changed (${event}: ${path.basename(filePath)}) — notifying clients`
-					);
-					io.emit('tests-changed');
-					require('./services/reportService')
-						.syncAutomatedFromFeatures()
-						.catch(() => {});
-				}, 300);
-			});
-			console.log('👀 Watching for test file changes...');
-		}
-
-		// Watch reports/ — notify UI when a new report file lands
-		const reportsDir = path.resolve(process.cwd(), 'reports');
-		fs.mkdirSync(reportsDir, { recursive: true });
-		chokidar.watch(reportsDir, { ...watchOpts, interval: 1200 }).on('add', (filePath) => {
-			const name = path.basename(filePath);
-			if ((name.startsWith('PASS_') || name.startsWith('FAIL_')) && name.endsWith('.json')) {
-				console.log(`📊 New report: ${name} — notifying clients`);
-				io.emit('report-ready');
-			}
-		});
-		console.log('👀 Watching for new reports...');
-	});
+	// Begin accepting connections, then run mode-specific startup work.
+	server.listen(port, () => onServerListening({ port, io, testsDir, isNodeMode }));
 }
 
 start().catch((err) => {

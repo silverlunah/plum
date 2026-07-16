@@ -18,10 +18,11 @@
 <script>
 	import { createEventDispatcher } from 'svelte';
 	import Modal from './Modal.svelte';
+	import { CONFIRM_TITLE, CONFIRM_LABEL, CANCEL_LABEL, WORKING_LABEL } from '$lib/copy/common';
 
 	export let open = false;
-	export let title = 'Confirm';
-	export let confirmLabel = 'Delete';
+	export let title = CONFIRM_TITLE;
+	export let confirmLabel = CONFIRM_LABEL;
 	export let loading = false;
 
 	const dispatch = createEventDispatcher();
@@ -33,9 +34,11 @@
 	</div>
 	<div class="actions">
 		<button class="btn-danger" on:click={() => dispatch('confirm')} disabled={loading}>
-			{loading ? 'Working…' : confirmLabel}
+			{loading ? WORKING_LABEL : confirmLabel}
 		</button>
-		<button class="btn-cancel" on:click={() => (open = false)} disabled={loading}>Cancel</button>
+		<button class="btn-cancel" on:click={() => (open = false)} disabled={loading}
+			>{CANCEL_LABEL}</button
+		>
 	</div>
 </Modal>
 

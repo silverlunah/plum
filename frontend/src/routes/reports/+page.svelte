@@ -19,12 +19,30 @@
 	import { onMount, tick } from 'svelte';
 	import { fetchReports, deleteReport, deleteReports, reportUrl } from '$lib/api/reports';
 	import { reportsVersion } from '$lib/stores/runner';
-	import { REPORTS_PER_PAGE } from '$lib/constants';
+	import { REPORTS_PER_PAGE, BROWSERS } from '$lib/constants';
 	import { isScheduled, triggerLabel, triggerVariant, stagger } from '$lib/utils/format';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import {
+		LIST_PAGE_TITLE,
+		HEADING,
+		PASSING_LABEL,
+		RECENT_LABEL,
+		TREND_HINT,
+		NO_REPORTS_MESSAGE,
+		SELECT_ALL_TITLE,
+		SELECT_ROW_TITLE,
+		DELETE_REPORT_TITLE,
+		deleteReportsTitle,
+		deleteReportsBody,
+		runsRecorded,
+		passedCountLabel,
+		failedCountLabel,
+		trendDotTitle,
+		deleteSelectedLabel
+	} from '$lib/copy/reports';
 
 	let reports = [];
 	let total = 0;
@@ -122,30 +140,23 @@
 	}
 </script>
 
-<svelte:head><title>Reports — Plum</title></svelte:head>
+<svelte:head><title>{LIST_PAGE_TITLE}</title></svelte:head>
 
 <ConfirmModal
 	bind:open={deleteModal.open}
-	title={deleteModal.targets.length === 1
-		? 'Delete report?'
-		: `Delete ${deleteModal.targets.length} reports?`}
-	confirmLabel="Delete"
+	title={deleteReportsTitle(deleteModal.targets.length)}
 	loading={deleting}
 	on:confirm={confirmDelete}
 >
-	{#if deleteModal.targets.length === 1}
-		This will permanently remove the report and its data file.
-	{:else}
-		This will permanently remove {deleteModal.targets.length} reports and their data files.
-	{/if}
+	{deleteReportsBody(deleteModal.targets.length)}
 </ConfirmModal>
 
 <div class="page-header">
 	<div class="header-top">
 		<div>
-			<h1>Reports</h1>
+			<h1>{HEADING}</h1>
 			<p class="subtitle">
-				{total} run{total !== 1 ? 's' : ''} recorded
+				{runsRecorded(total)}
 			</p>
 		</div>
 
@@ -159,7 +170,7 @@
 				>
 					{passRate}%
 				</span>
-				<span class="rate-label">passing</span>
+				<span class="rate-label">{PASSING_LABEL}</span>
 			</div>
 		{/if}
 	</div>
@@ -170,13 +181,13 @@
 				<div class="pass-bar-fill" style="width: {animateBar ? passRate + '%' : '0'}"></div>
 			</div>
 			<div class="bar-legend">
-				<span class="legend-pass">{passCount} passed</span>
-				<span class="legend-fail">{failCount} failed</span>
+				<span class="legend-pass">{passedCountLabel(passCount)}</span>
+				<span class="legend-fail">{failedCountLabel(failCount)}</span>
 			</div>
 		</div>
 
 		<div class="trend-row">
-			<span class="trend-label">Recent</span>
+			<span class="trend-label">{RECENT_LABEL}</span>
 			<div class="trend-dots">
 				{#each trendDots as r, i}
 					<span
@@ -184,20 +195,20 @@
 						class:pass={r.status === 'PASS'}
 						class:fail={r.status !== 'PASS'}
 						style={stagger(i, 35)}
-						title="{r.status} · {r.tags} · {r.date}"
+						title={trendDotTitle(r.status, r.tags, r.date)}
 					></span>
 				{/each}
 			</div>
-			<span class="trend-hint">← older · newer →</span>
+			<span class="trend-hint">{TREND_HINT}</span>
 		</div>
 	{/if}
 </div>
 
 {#if total === 0}
-	<EmptyState message="No reports yet. Run a test to generate one." />
+	<EmptyState message={NO_REPORTS_MESSAGE} />
 {:else}
 	<div class="list-header">
-		<label class="select-all-wrap" title="Select all on this page">
+		<label class="select-all-wrap" title={SELECT_ALL_TITLE}>
 			<input
 				type="checkbox"
 				class="checkbox"
@@ -208,7 +219,7 @@
 		</label>
 		{#if someSelected}
 			<button class="btn-delete-selected" on:click={() => openDeleteModal([...selected])}>
-				Delete ({selected.size})
+				{deleteSelectedLabel(selected.size)}
 			</button>
 		{/if}
 	</div>
@@ -216,7 +227,7 @@
 	<div class="report-list">
 		{#each reports as report, i}
 			<div class="report-row" class:is-selected={selected.has(report.id)} style={stagger(i)}>
-				<label class="row-check-wrap" title="Select">
+				<label class="row-check-wrap" title={SELECT_ROW_TITLE}>
 					<input
 						type="checkbox"
 						class="checkbox"
@@ -248,7 +259,7 @@
 								<Badge variant={triggerVariant(report.triggerType)}>
 									{triggerLabel(report.triggerType)}
 								</Badge>
-								{#if report.browser && report.browser !== 'chromium'}
+								{#if report.browser && report.browser !== BROWSERS[0].id}
 									<Badge variant="neutral">{report.browser}</Badge>
 								{/if}
 							</div>
@@ -274,7 +285,7 @@
 
 				<button
 					class="row-delete-btn"
-					title="Delete report"
+					title={DELETE_REPORT_TITLE}
 					on:click={(e) => openSingleDelete(report.id, e)}
 				>
 					<svg

@@ -35,6 +35,72 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import { TOAST_TIMEOUT_MS, SUITE_CASES_PER_PAGE, CASE_HISTORY_BARS_MAX } from '$lib/constants';
+	import {
+		CANCEL_LABEL,
+		SAVE_LABEL,
+		CLOSE_LABEL,
+		CLEAR_LABEL,
+		SAVING_LABEL,
+		CREATING_LABEL,
+		LOADING_LABEL,
+		AUTOMATED_LABEL,
+		CANNOT_BE_UNDONE_SUFFIX,
+		DELETE_LABEL
+	} from '$lib/copy/common';
+	import {
+		TEST_REPOSITORY_BREADCRUMB,
+		NAME_LABEL,
+		DESCRIPTION_LABEL,
+		PRIORITY_LABEL,
+		TITLE_LABEL,
+		TITLE_REQUIRED_ERROR,
+		DELETE_TEST_CASE_TITLE,
+		NEW_TEST_CASE_MODAL_TITLE,
+		CREATE_CASE_LABEL,
+		TC_TITLE_PLACEHOLDER,
+		TC_DESC_PLACEHOLDER,
+		EDIT_SUITE_MODAL_TITLE,
+		EDIT_SUITE_TITLE,
+		EDIT_CASE_TITLE,
+		TEST_CASES_LABEL,
+		ADD_CASE_LABEL,
+		FILTER_PLACEHOLDER,
+		NO_CASES_YET_TITLE,
+		NO_CASES_YET_DESC,
+		NO_CASES_MATCH_PREFIX,
+		DATE_LABEL,
+		STEP_LABEL,
+		ACTION_COL_LABEL,
+		TEST_DATA_LABEL,
+		EXPECTED_OUTPUT_LABEL,
+		STEP_ACTION_PLACEHOLDER,
+		OPTIONAL_PLACEHOLDER,
+		EXPECTED_OUTPUT_PLACEHOLDER,
+		NO_STEPS_MESSAGE,
+		ADD_STEP_LABEL,
+		EDIT_STEPS_LABEL,
+		NO_STEPS_DEFINED_MESSAGE,
+		STEPS_TAB_LABEL,
+		HISTORY_TAB_LABEL,
+		NO_HISTORY_MESSAGE,
+		AUTOMATED_RUN_LINK,
+		REPORT_NOT_FOUND,
+		RUN_NOT_FOUND,
+		FAILED_TO_LOAD_SUITE,
+		FAILED_TO_LOAD_CASE,
+		FAILED_TO_DELETE_CASE,
+		TEST_CASE_UPDATED_TOAST,
+		STEPS_SAVED_TOAST,
+		SUITE_UPDATED_TOAST,
+		suiteDetailTitle,
+		createdByCapitalized,
+		caseCreatedToast,
+		caseDeletedToast,
+		caseCount,
+		stepCount,
+		saveStepsLabel,
+		runLinkLabel
+	} from '$lib/copy/repository';
 
 	const suiteId = $page.params.id;
 
@@ -123,7 +189,7 @@
 		try {
 			suite = await fetchSuite(suiteId);
 		} catch {
-			showToast('error', 'Failed to load suite');
+			showToast('error', FAILED_TO_LOAD_SUITE);
 		} finally {
 			loading = false;
 		}
@@ -131,7 +197,7 @@
 
 	async function handleCreateCase() {
 		if (!caseForm.title.trim()) {
-			caseFormError = 'Title is required.';
+			caseFormError = TITLE_REQUIRED_ERROR;
 			return;
 		}
 		caseFormError = '';
@@ -142,7 +208,7 @@
 			casesPage = Math.ceil(suite.cases.length / SUITE_CASES_PER_PAGE);
 			caseModalOpen = false;
 			caseForm = { title: '', description: '', priority: 'Medium' };
-			showToast('success', `${tc.displayId} created.`);
+			showToast('success', caseCreatedToast(tc.displayId));
 		} catch (e) {
 			caseFormError = e.message;
 		} finally {
@@ -160,7 +226,7 @@
 			selectedCase = await fetchTestCase(tc.id);
 			stepsForm = (selectedCase.steps ?? []).map((s) => ({ ...s }));
 		} catch {
-			showToast('error', 'Failed to load case');
+			showToast('error', FAILED_TO_LOAD_CASE);
 		} finally {
 			selectedCaseLoading = false;
 		}
@@ -185,7 +251,7 @@
 				cases: suite.cases.map((c) => (c.id === selectedCase.id ? { ...c, ...updated } : c))
 			};
 			editingCase = false;
-			showToast('success', 'Test case updated.');
+			showToast('success', TEST_CASE_UPDATED_TOAST);
 		} catch (e) {
 			showToast('error', e.message);
 		} finally {
@@ -208,7 +274,7 @@
 			selectedCase = { ...selectedCase, steps: saved };
 			stepsForm = saved.map((s) => ({ ...s }));
 			editingSteps = false;
-			showToast('success', 'Steps saved.');
+			showToast('success', STEPS_SAVED_TOAST);
 		} catch (e) {
 			showToast('error', e.message);
 		} finally {
@@ -225,9 +291,9 @@
 				_count: { cases: suite._count.cases - 1 }
 			};
 			if (selectedCase?.id === id) selectedCase = null;
-			showToast('success', `${displayId} deleted.`);
+			showToast('success', caseDeletedToast(displayId));
 		} catch {
-			showToast('error', 'Failed to delete case.');
+			showToast('error', FAILED_TO_DELETE_CASE);
 		}
 		confirmDeleteCase = null;
 		confirmDeleteCaseOpen = false;
@@ -239,7 +305,7 @@
 			const updated = await updateSuite(suiteId, editSuiteForm);
 			suite = { ...suite, ...updated };
 			editSuiteOpen = false;
-			showToast('success', 'Suite updated.');
+			showToast('success', SUITE_UPDATED_TOAST);
 		} catch (e) {
 			showToast('error', e.message);
 		} finally {
@@ -265,48 +331,46 @@
 	}
 </script>
 
-<svelte:head
-	><title>{suite ? `${suite.displayId} — ${suite.name}` : 'Suite'} — Plum</title></svelte:head
->
+<svelte:head><title>{suiteDetailTitle(suite)}</title></svelte:head>
 
 <Toast {toast} />
 
 <ConfirmModal
 	bind:open={confirmDeleteCaseOpen}
-	title="Delete Test Case"
-	confirmLabel="Delete"
+	title={DELETE_TEST_CASE_TITLE}
 	on:confirm={() => handleDeleteCase(confirmDeleteCase?.id, confirmDeleteCase?.displayId)}
 >
 	{#if confirmDeleteCase}
-		Delete <strong>{confirmDeleteCase.displayId} — {confirmDeleteCase.title}</strong>? This cannot
-		be undone.
+		{DELETE_LABEL}
+		<strong>{confirmDeleteCase.displayId} — {confirmDeleteCase.title}</strong
+		>{CANNOT_BE_UNDONE_SUFFIX}
 	{/if}
 </ConfirmModal>
 
-<Modal bind:open={caseModalOpen} title="New Test Case">
+<Modal bind:open={caseModalOpen} title={NEW_TEST_CASE_MODAL_TITLE}>
 	<div class="form-fields">
 		<div class="field">
-			<label class="field-label" for="tc-title">Title</label>
+			<label class="field-label" for="tc-title">{TITLE_LABEL}</label>
 			<input
 				id="tc-title"
 				type="text"
 				class="field-input"
 				bind:value={caseForm.title}
-				placeholder="User can log in with valid credentials"
+				placeholder={TC_TITLE_PLACEHOLDER}
 			/>
 		</div>
 		<div class="field">
-			<label class="field-label" for="tc-desc">Description</label>
+			<label class="field-label" for="tc-desc">{DESCRIPTION_LABEL}</label>
 			<textarea
 				id="tc-desc"
 				class="field-input field-textarea"
 				bind:value={caseForm.description}
-				placeholder="What this case verifies…"
+				placeholder={TC_DESC_PLACEHOLDER}
 				rows="2"
 			></textarea>
 		</div>
 		<div class="field">
-			<label class="field-label" for="tc-prio">Priority</label>
+			<label class="field-label" for="tc-prio">{PRIORITY_LABEL}</label>
 			<select id="tc-prio" class="field-input" bind:value={caseForm.priority}>
 				{#each PRIORITIES as p}<option value={p}>{p}</option>{/each}
 			</select>
@@ -314,27 +378,27 @@
 		{#if caseFormError}<p class="form-error">{caseFormError}</p>{/if}
 		<div class="modal-actions">
 			<Button on:click={handleCreateCase} disabled={caseFormSaving}>
-				{caseFormSaving ? 'Creating…' : 'Create Case'}
+				{caseFormSaving ? CREATING_LABEL : CREATE_CASE_LABEL}
 			</Button>
 			<Button
 				variant="ghost"
 				on:click={() => {
 					caseModalOpen = false;
 					caseFormError = '';
-				}}>Cancel</Button
+				}}>{CANCEL_LABEL}</Button
 			>
 		</div>
 	</div>
 </Modal>
 
-<Modal bind:open={editSuiteOpen} title="Edit Suite">
+<Modal bind:open={editSuiteOpen} title={EDIT_SUITE_MODAL_TITLE}>
 	<div class="form-fields">
 		<div class="field">
-			<label class="field-label" for="es-name">Name</label>
+			<label class="field-label" for="es-name">{NAME_LABEL}</label>
 			<input id="es-name" type="text" class="field-input" bind:value={editSuiteForm.name} />
 		</div>
 		<div class="field">
-			<label class="field-label" for="es-desc">Description</label>
+			<label class="field-label" for="es-desc">{DESCRIPTION_LABEL}</label>
 			<textarea
 				id="es-desc"
 				class="field-input field-textarea"
@@ -343,25 +407,25 @@
 			></textarea>
 		</div>
 		<div class="field">
-			<label class="field-label" for="es-prio">Priority</label>
+			<label class="field-label" for="es-prio">{PRIORITY_LABEL}</label>
 			<select id="es-prio" class="field-input" bind:value={editSuiteForm.priority}>
 				{#each PRIORITIES as p}<option value={p}>{p}</option>{/each}
 			</select>
 		</div>
 		<div class="modal-actions">
 			<Button on:click={handleUpdateSuite} disabled={editSuiteSaving}>
-				{editSuiteSaving ? 'Saving…' : 'Save'}
+				{editSuiteSaving ? SAVING_LABEL : SAVE_LABEL}
 			</Button>
-			<Button variant="ghost" on:click={() => (editSuiteOpen = false)}>Cancel</Button>
+			<Button variant="ghost" on:click={() => (editSuiteOpen = false)}>{CANCEL_LABEL}</Button>
 		</div>
 	</div>
 </Modal>
 
 {#if loading}
-	<div class="loading-state">Loading…</div>
+	<div class="loading-state">{LOADING_LABEL}</div>
 {:else if suite}
 	<div class="breadcrumb">
-		<a href="/test-repository" class="bc-link">Test Repository</a>
+		<a href="/test-repository" class="bc-link">{TEST_REPOSITORY_BREADCRUMB}</a>
 		<span class="bc-sep">›</span>
 		<span class="bc-current">{suite.displayId} — {suite.name}</span>
 	</div>
@@ -373,7 +437,7 @@
 			<h1 class="suite-title">{suite.name}</h1>
 			<button
 				class="icon-btn"
-				title="Edit suite"
+				title={EDIT_SUITE_TITLE}
 				on:click={() => {
 					editSuiteForm = {
 						name: suite.name,
@@ -402,9 +466,9 @@
 			<p class="suite-desc">{suite.description}</p>
 		{/if}
 		<div class="suite-meta">
-			<span>{suite._count.cases} case{suite._count.cases !== 1 ? 's' : ''}</span>
+			<span>{caseCount(suite._count.cases)}</span>
 			<span class="meta-sep">·</span>
-			<span>Created by {suite.createdBy.name}</span>
+			<span>{createdByCapitalized(suite.createdBy.name)}</span>
 		</div>
 	</div>
 
@@ -412,8 +476,8 @@
 		<!-- Cases list -->
 		<div class="cases-panel">
 			<div class="panel-toolbar">
-				<h2 class="panel-title">Test Cases</h2>
-				<Button size="sm" on:click={() => (caseModalOpen = true)}>+ Add Case</Button>
+				<h2 class="panel-title">{TEST_CASES_LABEL}</h2>
+				<Button size="sm" on:click={() => (caseModalOpen = true)}>{ADD_CASE_LABEL}</Button>
 			</div>
 
 			{#if suite.cases.length > 0}
@@ -434,11 +498,15 @@
 					<input
 						type="search"
 						class="case-search-input"
-						placeholder="Filter by ID or name…"
+						placeholder={FILTER_PLACEHOLDER}
 						bind:value={caseSearch}
 					/>
 					{#if caseSearch}
-						<button class="case-search-clear" on:click={() => (caseSearch = '')} aria-label="Clear">
+						<button
+							class="case-search-clear"
+							on:click={() => (caseSearch = '')}
+							aria-label={CLEAR_LABEL}
+						>
 							<svg
 								width="10"
 								height="10"
@@ -455,7 +523,7 @@
 
 			{#if suite.cases.length > 0}
 				<div class="case-sort-bar">
-					{#each [['createdAt', 'Date'], ['displayId', 'ID'], ['name', 'Name'], ['priority', 'Priority']] as [val, label]}
+					{#each [['createdAt', DATE_LABEL], ['displayId', 'ID'], ['name', NAME_LABEL], ['priority', PRIORITY_LABEL]] as [val, label]}
 						<button
 							class="case-sort-chip"
 							class:active={casesSort.by === val}
@@ -471,9 +539,9 @@
 			{/if}
 
 			{#if suite.cases.length === 0}
-				<EmptyState title="No cases yet" description="Add your first test case to this suite." />
+				<EmptyState title={NO_CASES_YET_TITLE} description={NO_CASES_YET_DESC} />
 			{:else if filteredCases.length === 0}
-				<div class="case-no-results">No cases match "<strong>{caseSearch}</strong>"</div>
+				<div class="case-no-results">{NO_CASES_MATCH_PREFIX} "<strong>{caseSearch}</strong>"</div>
 			{:else}
 				<div class="case-list">
 					{#each pagedCases as tc (tc.id)}
@@ -489,7 +557,7 @@
 								<span class="id-chip small">{tc.displayId}</span>
 								<span class="priority-badge small {priorityClass(tc.priority)}">{tc.priority}</span>
 								{#if tc.isAutomated}
-									<span class="auto-badge">Automated</span>
+									<span class="auto-badge">{AUTOMATED_LABEL}</span>
 								{/if}
 								<div class="case-row-actions" on:click|stopPropagation>
 									<button
@@ -517,9 +585,7 @@
 								</div>
 							</div>
 							<p class="case-title">{tc.title}</p>
-							<span class="case-steps"
-								>{tc._count.steps} step{tc._count.steps !== 1 ? 's' : ''}</span
-							>
+							<span class="case-steps">{stepCount(tc._count.steps)}</span>
 						</div>
 					{/each}
 				</div>
@@ -539,7 +605,7 @@
 		{#if selectedCase || selectedCaseLoading}
 			<div class="detail-panel" transition:fly={{ x: 20, duration: 200 }}>
 				{#if selectedCaseLoading}
-					<div class="detail-loading">Loading…</div>
+					<div class="detail-loading">{LOADING_LABEL}</div>
 				{:else if selectedCase}
 					<div class="detail-header">
 						<div class="detail-title-row">
@@ -548,11 +614,11 @@
 								>{selectedCase.priority}</span
 							>
 							{#if selectedCase.isAutomated}
-								<span class="auto-badge">Automated</span>
+								<span class="auto-badge">{AUTOMATED_LABEL}</span>
 							{/if}
 							<div class="detail-header-actions">
 								{#if !editingCase}
-									<button class="icon-btn" title="Edit case" on:click={startEditCase}>
+									<button class="icon-btn" title={EDIT_CASE_TITLE} on:click={startEditCase}>
 										<svg
 											width="13"
 											height="13"
@@ -570,7 +636,7 @@
 								{/if}
 								<button
 									class="icon-btn"
-									title="Close"
+									title={CLOSE_LABEL}
 									on:click={() => {
 										selectedCase = null;
 										editingCase = false;
@@ -591,7 +657,7 @@
 						{#if editingCase}
 							<div class="edit-case-form" transition:fly={{ y: -4, duration: 150 }}>
 								<div class="field">
-									<label class="field-label" for="edit-title">Title</label>
+									<label class="field-label" for="edit-title">{TITLE_LABEL}</label>
 									<input
 										id="edit-title"
 										type="text"
@@ -600,7 +666,7 @@
 									/>
 								</div>
 								<div class="field">
-									<label class="field-label" for="edit-desc">Description</label>
+									<label class="field-label" for="edit-desc">{DESCRIPTION_LABEL}</label>
 									<textarea
 										id="edit-desc"
 										class="field-input field-textarea"
@@ -609,17 +675,17 @@
 									></textarea>
 								</div>
 								<div class="field">
-									<label class="field-label" for="edit-prio">Priority</label>
+									<label class="field-label" for="edit-prio">{PRIORITY_LABEL}</label>
 									<select id="edit-prio" class="field-input" bind:value={editCaseForm.priority}>
 										{#each PRIORITIES as p}<option value={p}>{p}</option>{/each}
 									</select>
 								</div>
 								<div class="modal-actions">
 									<Button size="sm" on:click={handleUpdateCase} disabled={editCaseSaving}>
-										{editCaseSaving ? 'Saving…' : 'Save'}
+										{editCaseSaving ? SAVING_LABEL : SAVE_LABEL}
 									</Button>
 									<Button size="sm" variant="ghost" on:click={() => (editingCase = false)}
-										>Cancel</Button
+										>{CANCEL_LABEL}</Button
 									>
 								</div>
 							</div>
@@ -628,7 +694,7 @@
 							{#if selectedCase.description}
 								<p class="detail-case-desc">{selectedCase.description}</p>
 							{/if}
-							<p class="detail-meta">Created by {selectedCase.createdBy.name}</p>
+							<p class="detail-meta">{createdByCapitalized(selectedCase.createdBy.name)}</p>
 							{#if selectedCase.history && selectedCase.history.length > 0}
 								<div class="case-history-bars">
 									{#each recentHistory(selectedCase.history) as h (h.id)}
@@ -647,12 +713,12 @@
 						<button
 							class="detail-tab"
 							class:active={!historyTab}
-							on:click={() => (historyTab = false)}>Steps</button
+							on:click={() => (historyTab = false)}>{STEPS_TAB_LABEL}</button
 						>
 						<button
 							class="detail-tab"
 							class:active={historyTab}
-							on:click={() => (historyTab = true)}>History</button
+							on:click={() => (historyTab = true)}>{HISTORY_TAB_LABEL}</button
 						>
 					</div>
 
@@ -661,11 +727,11 @@
 							<div class="steps-toolbar">
 								{#if !editingSteps}
 									<Button size="sm" variant="ghost" on:click={() => (editingSteps = true)}
-										>Edit Steps</Button
+										>{EDIT_STEPS_LABEL}</Button
 									>
 								{:else}
 									<Button size="sm" on:click={handleSaveSteps} disabled={stepsSaving}>
-										{stepsSaving ? 'Saving…' : 'Save Steps'}
+										{saveStepsLabel(stepsSaving)}
 									</Button>
 									<Button
 										size="sm"
@@ -673,48 +739,48 @@
 										on:click={() => {
 											editingSteps = false;
 											stepsForm = (selectedCase.steps ?? []).map((s) => ({ ...s }));
-										}}>Cancel</Button
+										}}>{CANCEL_LABEL}</Button
 									>
 								{/if}
 								{#if editingSteps}
-									<button class="add-step-btn" on:click={addStep}>+ Add step</button>
+									<button class="add-step-btn" on:click={addStep}>{ADD_STEP_LABEL}</button>
 								{/if}
 							</div>
 
 							{#if editingSteps}
 								<div class="steps-editor">
 									{#if stepsForm.length === 0}
-										<p class="no-steps">No steps. Click "+ Add step" to begin.</p>
+										<p class="no-steps">{NO_STEPS_MESSAGE}</p>
 									{:else}
 										{#each stepsForm as step, i (i)}
 											<div class="step-editor-row">
 												<span class="step-num">{i + 1}</span>
 												<div class="step-editor-fields">
 													<div class="step-field">
-														<label class="step-field-label">Step</label>
+														<label class="step-field-label">{STEP_LABEL}</label>
 														<input
 															type="text"
 															class="field-input"
 															bind:value={step.action}
-															placeholder="Describe the action…"
+															placeholder={STEP_ACTION_PLACEHOLDER}
 														/>
 													</div>
 													<div class="step-field">
-														<label class="step-field-label">Test Data</label>
+														<label class="step-field-label">{TEST_DATA_LABEL}</label>
 														<input
 															type="text"
 															class="field-input"
 															bind:value={step.testData}
-															placeholder="Optional"
+															placeholder={OPTIONAL_PLACEHOLDER}
 														/>
 													</div>
 													<div class="step-field">
-														<label class="step-field-label">Expected Output</label>
+														<label class="step-field-label">{EXPECTED_OUTPUT_LABEL}</label>
 														<input
 															type="text"
 															class="field-input"
 															bind:value={step.expectedOutput}
-															placeholder="What should happen…"
+															placeholder={EXPECTED_OUTPUT_PLACEHOLDER}
 														/>
 													</div>
 												</div>
@@ -736,9 +802,9 @@
 								<div class="steps-table">
 									<div class="steps-table-head">
 										<span class="col-num">#</span>
-										<span class="col-action">Action</span>
-										<span class="col-data">Test Data</span>
-										<span class="col-expected">Expected Output</span>
+										<span class="col-action">{ACTION_COL_LABEL}</span>
+										<span class="col-data">{TEST_DATA_LABEL}</span>
+										<span class="col-expected">{EXPECTED_OUTPUT_LABEL}</span>
 									</div>
 									{#each selectedCase.steps as step, i}
 										<div class="steps-table-row">
@@ -750,14 +816,14 @@
 									{/each}
 								</div>
 							{:else}
-								<p class="no-steps">No steps defined. Click "Edit Steps" to add them.</p>
+								<p class="no-steps">{NO_STEPS_DEFINED_MESSAGE}</p>
 							{/if}
 						</div>
 					{:else}
 						<div class="history-section" transition:fly={{ y: 4, duration: 140 }}>
 							{#if !selectedCase.history || selectedCase.history.length === 0}
 								<p class="no-steps">
-									No history yet. Results appear after test runs or automated builds.
+									{NO_HISTORY_MESSAGE}
 								</p>
 							{:else}
 								<div class="history-list">
@@ -770,19 +836,19 @@
 														href="/reports/{h.report.id}"
 														target="_blank"
 														rel="noopener noreferrer"
-														class="history-source history-link">Automated run ↗</a
+														class="history-source history-link">{AUTOMATED_RUN_LINK}</a
 													>
 												{:else if h.source === 'automated'}
-													<span class="history-source history-missing">Report not found</span>
+													<span class="history-source history-missing">{REPORT_NOT_FOUND}</span>
 												{:else if h.run?.id}
 													<a
 														href="/test-repository/runs/{h.run.id}"
 														target="_blank"
 														rel="noopener noreferrer"
-														class="history-source history-link">{h.run.title} ↗</a
+														class="history-source history-link">{runLinkLabel(h.run.title)}</a
 													>
 												{:else}
-													<span class="history-source history-missing">Run not found</span>
+													<span class="history-source history-missing">{RUN_NOT_FOUND}</span>
 												{/if}
 												<span class="history-by">{h.executedBy?.name ?? '—'}</span>
 												<span class="history-date">{new Date(h.executedAt).toLocaleString()}</span>

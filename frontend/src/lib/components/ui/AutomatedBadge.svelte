@@ -33,7 +33,7 @@
 -->
 
 <script>
-	import { AUTOMATED_LABEL } from '$lib/constants';
+	import { AUTOMATED_LABEL } from '$lib/copy/common';
 </script>
 
 <span class="auto-badge">{AUTOMATED_LABEL}</span>

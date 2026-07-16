@@ -18,12 +18,22 @@
 const crypto = require('crypto');
 const prisma = require('./prisma');
 
-const getProject = async () => {
+// Raw accessor — includes secret fields (backupS3SecretKey, mcpKey). Only for
+// internal use by this file's own functions and other trusted internal
+// callers (e.g. backup.routes.js needs the real S3 secret for a connection
+// test). Never expose this return value directly over HTTP.
+const getProjectRaw = async () => {
 	let project = await prisma.project.findUnique({ where: { id: 1 } });
 	if (!project) {
 		project = await prisma.project.create({ data: { id: 1 } });
 	}
 	return project;
+};
+
+// Public accessor — strips secret fields. This is what routes should use.
+const getProject = async () => {
+	const { backupS3SecretKey, mcpKey, ...safe } = await getProjectRaw();
+	return safe;
 };
 
 const updateProject = async ({ name, logoUrl, timezone, maxRetries }) => {
@@ -46,11 +56,12 @@ const updateProject = async ({ name, logoUrl, timezone, maxRetries }) => {
 		await require('./backupCronService').reload();
 	}
 
-	return project;
+	const { backupS3SecretKey, mcpKey, ...safe } = project;
+	return safe;
 };
 
 const getTestPrefixes = async () => {
-	const project = await getProject();
+	const project = await getProjectRaw();
 	return { testCasePrefix: project.testCasePrefix, testSuitePrefix: project.testSuitePrefix };
 };
 
@@ -66,7 +77,7 @@ const updateTestPrefixes = async ({ testCasePrefix, testSuitePrefix }) => {
 };
 
 const getWebhooks = async () => {
-	const project = await getProject();
+	const project = await getProjectRaw();
 	return {
 		discordWebhookUrl: project.discordWebhookUrl ?? '',
 		slackWebhookUrl: project.slackWebhookUrl ?? '',
@@ -87,7 +98,7 @@ const updateWebhooks = async ({ discordWebhookUrl, slackWebhookUrl, notifyPublic
 };
 
 const getBackupConfig = async () => {
-	const project = await getProject();
+	const project = await getProjectRaw();
 	return {
 		backupEnabled: project.backupEnabled,
 		backupCron: project.backupCron,
@@ -130,7 +141,7 @@ const updateBackupConfig = async ({
 };
 
 const getMcpConfig = async () => {
-	const project = await getProject();
+	const project = await getProjectRaw();
 	return { mcpKeySet: project.mcpKey.length > 0, mcpKey: project.mcpKey };
 };
 
@@ -147,6 +158,7 @@ const generateMcpKey = async () => {
 
 module.exports = {
 	getProject,
+	getProjectRaw,
 	updateProject,
 	getTestPrefixes,
 	updateTestPrefixes,

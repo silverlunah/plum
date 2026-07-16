@@ -15,7 +15,7 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const pc = require('picocolors');
@@ -132,7 +132,7 @@ try {
 	console.error(pc.red('✗') + ' Tests failed: ' + error.message);
 } finally {
 	try {
-		execSync('node config/scripts/generate-report.js', {
+		execFileSync(process.execPath, [path.resolve(__dirname, 'generate-report.js')], {
 			stdio: 'inherit',
 			env: { ...process.env, REPORT_RUNNERS: runners }
 		});

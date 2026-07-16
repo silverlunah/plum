@@ -21,8 +21,9 @@ const settingsService = require('../services/settingsService');
 const testSuiteService = require('../services/testSuiteService');
 const testCaseService = require('../services/testCaseService');
 const { jwtAuth } = require('../middleware/jwtAuth');
+const { requireAdmin } = require('../middleware/requireAdmin');
 
-router.get('/project', async (req, res, next) => {
+router.get('/project', jwtAuth, requireAdmin, async (req, res, next) => {
 	try {
 		const project = await settingsService.getProject();
 		res.json(project);
@@ -31,7 +32,7 @@ router.get('/project', async (req, res, next) => {
 	}
 });
 
-router.post('/project', async (req, res, next) => {
+router.post('/project', jwtAuth, requireAdmin, async (req, res, next) => {
 	try {
 		const { name, logoUrl, timezone, maxRetries } = req.body;
 		const project = await settingsService.updateProject({ name, logoUrl, timezone, maxRetries });
@@ -76,7 +77,7 @@ router.post('/test-prefixes/migrate', jwtAuth, async (req, res, next) => {
 	}
 });
 
-router.get('/integrations', async (req, res, next) => {
+router.get('/integrations', jwtAuth, requireAdmin, async (req, res, next) => {
 	try {
 		const webhooks = await settingsService.getWebhooks();
 		res.json(webhooks);
@@ -85,7 +86,7 @@ router.get('/integrations', async (req, res, next) => {
 	}
 });
 
-router.post('/integrations', async (req, res, next) => {
+router.post('/integrations', jwtAuth, requireAdmin, async (req, res, next) => {
 	try {
 		const { discordWebhookUrl, slackWebhookUrl, notifyPublicUrl } = req.body;
 		const project = await settingsService.updateWebhooks({

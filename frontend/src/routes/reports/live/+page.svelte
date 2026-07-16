@@ -22,7 +22,35 @@
 	import { fly, fade } from 'svelte/transition';
 	import { runnerState, cancelRun, backgroundRuns } from '$lib/stores/runner';
 	import { reportUrl } from '$lib/api/reports';
-	import { REDIRECT_DELAY_MS, ALL_TESTS_LABEL } from '$lib/constants';
+	import { REDIRECT_DELAY_MS } from '$lib/constants';
+	import { ALL_TESTS_LABEL, pluralize } from '$lib/copy/common';
+	import {
+		REPORTS_BACK_LABEL,
+		PASSED_LABEL,
+		FAILED_LABEL,
+		LIVE_PAGE_TITLE,
+		NO_TESTS_RUNNING_HEADING,
+		NO_TESTS_RUNNING_BODY,
+		VIEW_PAST_REPORTS_LINK,
+		SELECT_RUN_HINT,
+		LIVE_BADGE_LABEL,
+		CANCEL_RUN_LABEL,
+		ALL_TESTS_PASSED,
+		SOME_TESTS_FAILED,
+		VIEW_REPORT_NOW_LABEL,
+		LIVE_STEP_LABEL,
+		LIVE_BROWSER_VIEW_ALT,
+		AWAITING_STREAM_LABEL,
+		NO_STREAM_LABEL,
+		RUNNER_LABEL,
+		RUNNING_LABEL,
+		FINISHED_LABEL,
+		WAITING_FOR_OUTPUT,
+		runsInProgressHeading,
+		workersCountLabel,
+		redirectingIn,
+		runnersBadge
+	} from '$lib/copy/reports';
 	import { triggerLabel } from '$lib/utils/format';
 	import BackLink from '$lib/components/ui/BackLink.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
@@ -92,9 +120,9 @@
 	}
 </script>
 
-<svelte:head><title>Live Run — Plum</title></svelte:head>
+<svelte:head><title>{LIVE_PAGE_TITLE}</title></svelte:head>
 
-<BackLink href="/reports" label="Reports" />
+<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
 
 {#if showIdle}
 	<div class="idle-state">
@@ -113,14 +141,14 @@
 				<polyline points="12 6 12 12 16 14" />
 			</svg>
 		</div>
-		<h2>No tests currently running</h2>
-		<p>Start a test from the panel below, then come back here to watch it live.</p>
-		<a href="/reports" class="idle-link">View past reports →</a>
+		<h2>{NO_TESTS_RUNNING_HEADING}</h2>
+		<p>{NO_TESTS_RUNNING_BODY}</p>
+		<a href="/reports" class="idle-link">{VIEW_PAST_REPORTS_LINK}</a>
 	</div>
 {:else if showPicker}
 	<div class="cron-running-state">
 		<div class="cron-running-icon"><span class="cron-pulse-dot"></span></div>
-		<h2>{runningBgList.length === 1 ? 'A run' : `${runningBgList.length} runs`} in progress</h2>
+		<h2>{runsInProgressHeading(runningBgList.length)}</h2>
 		<div class="cron-task-list">
 			{#each runningBgList as [runId, run] (runId)}
 				<a href="/reports/live?run={runId}" class="cron-task-chip"
@@ -128,7 +156,7 @@
 				>
 			{/each}
 		</div>
-		<p>Select a run above, or wait — the report opens automatically when it finishes.</p>
+		<p>{SELECT_RUN_HINT}</p>
 	</div>
 {:else}
 	<!-- ── Run header ── -->
@@ -139,11 +167,11 @@
 	>
 		<div class="header-left">
 			{#if state.running}
-				<span class="live-badge"><span class="live-dot"></span>Live</span>
+				<span class="live-badge"><span class="live-dot"></span>{LIVE_BADGE_LABEL}</span>
 			{:else if state.status === 'pass'}
-				<Badge variant="pass">Passed</Badge>
+				<Badge variant="pass">{PASSED_LABEL}</Badge>
 			{:else}
-				<Badge variant="fail">Failed</Badge>
+				<Badge variant="fail">{FAILED_LABEL}</Badge>
 			{/if}
 
 			{#if state.currentRun}
@@ -154,14 +182,12 @@
 					{/if}
 					<span class="run-tag-label">{state.currentRun.tag || ALL_TESTS_LABEL}</span>
 					<span class="run-sep">·</span>
-					<span class="run-detail"
-						>{state.currentRun.workers} worker{state.currentRun.workers !== 1 ? 's' : ''}</span
-					>
+					<span class="run-detail">{workersCountLabel(state.currentRun.workers)}</span>
 					<span class="run-sep">·</span>
 					<span class="run-detail">{state.currentRun.browser}</span>
 					{#if state.lanes.length > 1}
 						<span class="run-sep">·</span>
-						<span class="run-detail">{state.lanes.length} runners</span>
+						<span class="run-detail">{runnersBadge(state.lanes.length)}</span>
 					{/if}
 				</div>
 			{/if}
@@ -183,7 +209,7 @@
 					<line x1="9" y1="9" x2="15" y2="15" />
 					<line x1="15" y1="9" x2="9" y2="15" />
 				</svg>
-				Cancel run
+				{CANCEL_RUN_LABEL}
 			</button>
 		{/if}
 	</div>
@@ -208,7 +234,7 @@
 						stroke-linecap="round"
 						stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg
 					>
-					All tests passed
+					{ALL_TESTS_PASSED}
 				{:else}
 					<svg
 						width="16"
@@ -221,13 +247,13 @@
 						stroke-linejoin="round"
 						><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
 					>
-					Some tests failed
+					{SOME_TESTS_FAILED}
 				{/if}
 			</div>
 			<div class="completion-right">
-				<span class="redirect-hint">Redirecting in {redirectCountdown}s…</span>
+				<span class="redirect-hint">{redirectingIn(redirectCountdown)}</span>
 				<button class="view-now-btn" on:click={goNow}>
-					View Report Now
+					{VIEW_REPORT_NOW_LABEL}
 					<svg
 						width="12"
 						height="12"
@@ -278,12 +304,12 @@
 						<img
 							src="data:image/jpeg;base64,{activeLane.latestScreenshot.data}"
 							class="live-shot"
-							alt="Live browser view"
+							alt={LIVE_BROWSER_VIEW_ALT}
 							in:fade={{ duration: 120 }}
 						/>
 					{/key}
 					<div class="step-overlay">
-						<span class="step-keyword">Step</span>
+						<span class="step-keyword">{LIVE_STEP_LABEL}</span>
 						<span class="step-name">{activeLane.latestScreenshot.stepName}</span>
 					</div>
 				{:else}
@@ -302,7 +328,8 @@
 							<rect x="2" y="5" width="20" height="14" rx="2" />
 							<circle cx="12" cy="12" r="3" />
 						</svg>
-						<span>{activeLane?.status === 'running' ? 'Awaiting stream...' : 'No stream...'}</span>
+						<span>{activeLane?.status === 'running' ? AWAITING_STREAM_LABEL : NO_STREAM_LABEL}</span
+						>
 					</div>
 				{/if}
 			{:else if state.latestScreenshot}
@@ -310,12 +337,12 @@
 					<img
 						src="data:image/jpeg;base64,{state.latestScreenshot.data}"
 						class="live-shot"
-						alt="Live browser view"
+						alt={LIVE_BROWSER_VIEW_ALT}
 						in:fade={{ duration: 120 }}
 					/>
 				{/key}
 				<div class="step-overlay">
-					<span class="step-keyword">Step</span>
+					<span class="step-keyword">{LIVE_STEP_LABEL}</span>
 					<span class="step-name">{state.latestScreenshot.stepName}</span>
 				</div>
 			{:else}
@@ -334,7 +361,7 @@
 						<rect x="2" y="5" width="20" height="14" rx="2" />
 						<circle cx="12" cy="12" r="3" />
 					</svg>
-					<span>{state.running ? 'Awaiting stream...' : 'No stream'}</span>
+					<span>{state.running ? AWAITING_STREAM_LABEL : NO_STREAM_LABEL}</span>
 				</div>
 			{/if}
 		</div>
@@ -347,15 +374,15 @@
 				<span class="dot green"></span>
 				<span class="terminal-label">
 					{#if isMulti}
-						{activeLane?.name ?? 'Runner'}
+						{activeLane?.name ?? RUNNER_LABEL}
 					{:else}
-						{state.running ? 'Running…' : 'Finished'}
+						{state.running ? RUNNING_LABEL : FINISHED_LABEL}
 					{/if}
 				</span>
 			</div>
 			{#if isMulti}
 				<pre class="terminal" bind:this={laneTerminalEl}>{activeLane?.logs ||
-						'(waiting for output…)'}</pre>
+						WAITING_FOR_OUTPUT}</pre>
 			{:else}
 				<pre class="terminal" bind:this={terminalEl}>{state.output}</pre>
 			{/if}

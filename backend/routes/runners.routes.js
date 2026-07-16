@@ -18,8 +18,10 @@
 const express = require('express');
 const router = express.Router();
 const runnerService = require('../services/runnerService');
+const { jwtAuth } = require('../middleware/jwtAuth');
+const { requireAdmin } = require('../middleware/requireAdmin');
 
-router.get('/', async (req, res) => {
+router.get('/', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		const runners = await runnerService.getAll();
 		res.json({ runners });
@@ -28,7 +30,7 @@ router.get('/', async (req, res) => {
 	}
 });
 
-router.post('/probe', async (req, res) => {
+router.post('/probe', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		const { url, token } = req.body;
 		if (!url || !token)
@@ -40,7 +42,7 @@ router.post('/probe', async (req, res) => {
 	}
 });
 
-router.post('/', async (req, res) => {
+router.post('/', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		const { name, url, token, browser } = req.body;
 		if (!name || !url || !token)
@@ -52,7 +54,7 @@ router.post('/', async (req, res) => {
 	}
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		const { name, url, token, browser } = req.body;
 		const runner = await runnerService.update(req.params.id, { name, url, token, browser });
@@ -62,7 +64,7 @@ router.put('/:id', async (req, res) => {
 	}
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		await runnerService.stop(req.params.id);
 		await runnerService.remove(req.params.id);
@@ -72,7 +74,7 @@ router.delete('/:id', async (req, res) => {
 	}
 });
 
-router.post('/:id/ping', async (req, res) => {
+router.post('/:id/ping', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		const result = await runnerService.ping(req.params.id);
 		res.json(result);
@@ -81,7 +83,7 @@ router.post('/:id/ping', async (req, res) => {
 	}
 });
 
-router.post('/:id/stop', async (req, res) => {
+router.post('/:id/stop', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		const result = await runnerService.stop(req.params.id);
 		res.json(result);
@@ -90,7 +92,7 @@ router.post('/:id/stop', async (req, res) => {
 	}
 });
 
-router.post('/:id/restart', async (req, res) => {
+router.post('/:id/restart', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		const result = await runnerService.restart(req.params.id);
 		res.json(result);

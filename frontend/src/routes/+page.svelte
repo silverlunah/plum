@@ -23,6 +23,26 @@
 	import { COPY_TIMEOUT_MS } from '$lib/constants';
 	import { stagger } from '$lib/utils/format';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import { CLEAR_SEARCH_LABEL } from '$lib/copy/common';
+	import {
+		PAGE_TITLE,
+		HEADING,
+		SEARCH_PLACEHOLDER,
+		NO_SUITES_MESSAGE,
+		RUN_SUITE_LABEL,
+		OUTLINE_BADGE,
+		HIDE_LABEL,
+		STEPS_LABEL,
+		EXAMPLES_LABEL,
+		noMatchMessage,
+		copiedTitle,
+		copyTitle,
+		runIdTitle,
+		runTestLabel,
+		visibleOfTotal,
+		testCountLabel,
+		suiteSummary
+	} from '$lib/copy/dashboard';
 
 	let suites = [];
 	let search = '';
@@ -108,19 +128,17 @@
 	$: visibleTests = filtered.reduce((n, s) => n + s.tests.length, 0);
 </script>
 
-<svelte:head><title>Automated Tests — Plum</title></svelte:head>
+<svelte:head><title>{PAGE_TITLE}</title></svelte:head>
 
 <div class="page-header">
 	<div class="header-top">
 		<div>
-			<h1>Tests</h1>
+			<h1>{HEADING}</h1>
 			<p class="subtitle">
 				{#if q}
-					{visibleTests} of {totalTests} tests
+					{visibleOfTotal(visibleTests, totalTests)}
 				{:else}
-					{suites.length} suite{suites.length !== 1 ? 's' : ''} · {totalTests} test{totalTests !== 1
-						? 's'
-						: ''}
+					{suiteSummary(suites.length, totalTests)}
 				{/if}
 			</p>
 		</div>
@@ -145,10 +163,10 @@
 				type="text"
 				class="search-input"
 				bind:value={search}
-				placeholder="Search suites or tests…"
+				placeholder={SEARCH_PLACEHOLDER}
 			/>
 			{#if search}
-				<button class="search-clear" on:click={() => (search = '')} aria-label="Clear search">
+				<button class="search-clear" on:click={() => (search = '')} aria-label={CLEAR_SEARCH_LABEL}>
 					<svg width="12" height="12" viewBox="0 0 14 14" fill="none">
 						<path
 							d="M1 1l12 12M13 1L1 13"
@@ -164,7 +182,7 @@
 </div>
 
 {#if filtered.length === 0}
-	<EmptyState message={q ? `No tests matching "${search}"` : 'No test suites found.'} />
+	<EmptyState message={q ? noMatchMessage(search) : NO_SUITES_MESSAGE} />
 {:else}
 	<div class="suites">
 		{#each filtered as suite, si}
@@ -177,23 +195,25 @@
 									class="id-pill"
 									class:copied={copiedIds.has(id)}
 									on:click={() => copyId(id)}
-									title={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
-									aria-label={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
+									title={copiedIds.has(id) ? copiedTitle(id) : copyTitle(id)}
+									aria-label={copiedIds.has(id) ? copiedTitle(id) : copyTitle(id)}
 								>
 									{id}
 								</button>
 							{/each}
 						</div>
 						<span class="suite-name">{suite.suiteName}</span>
-						<span class="suite-count"
-							>{suite.tests.length} test{suite.tests.length !== 1 ? 's' : ''}</span
-						>
+						<span class="suite-count">{testCountLabel(suite.tests.length)}</span>
 					</div>
-					<button class="run-btn suite-run" on:click={() => runSuite(suite)} title="Run suite">
+					<button
+						class="run-btn suite-run"
+						on:click={() => runSuite(suite)}
+						title={RUN_SUITE_LABEL}
+					>
 						<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none">
 							<polygon points="5,3 19,12 5,21" />
 						</svg>
-						Run suite
+						{RUN_SUITE_LABEL}
 					</button>
 				</div>
 
@@ -206,8 +226,8 @@
 								<button
 									class="run-icon-btn"
 									on:click={() => run(pid)}
-									title="Run {pid}"
-									aria-label="Run {test.testCase}"
+									title={runIdTitle(pid)}
+									aria-label={runTestLabel(test.testCase)}
 								>
 									<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none">
 										<polygon points="5,3 19,12 5,21" />
@@ -231,7 +251,7 @@
 								<span class="test-name">
 									{test.testCase}
 									{#if test.type === 'outline'}
-										<span class="outline-badge">outline</span>
+										<span class="outline-badge">{OUTLINE_BADGE}</span>
 									{/if}
 								</span>
 
@@ -253,7 +273,7 @@
 										>
 											<polyline points="9 18 15 12 9 6" />
 										</svg>
-										{stepsOpen ? 'Hide' : 'Steps'}
+										{stepsOpen ? HIDE_LABEL : STEPS_LABEL}
 									</button>
 								{/if}
 							</div>
@@ -268,7 +288,7 @@
 
 									{#if test.examples}
 										<div class="examples">
-											<span class="examples-label">Examples</span>
+											<span class="examples-label">{EXAMPLES_LABEL}</span>
 											<div class="examples-table-wrap">
 												<table class="examples-table">
 													<thead>

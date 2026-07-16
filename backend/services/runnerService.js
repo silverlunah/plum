@@ -19,17 +19,34 @@ const fs = require('fs');
 const path = require('path');
 const prisma = require('./prisma');
 const { loadTestEnv } = require('../lib/testEnv');
+const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 
 // ---------------------------------------------------------------------------
 // Runner CRUD
 // ---------------------------------------------------------------------------
 
-const getAll = () => prisma.runner.findMany({ orderBy: { createdAt: 'asc' } });
+// Strips the auth token before a runner row crosses the HTTP boundary — the
+// token is only ever needed internally (ping/stop/restart/dispatch below all
+// read it via getById, whose result never reaches a client directly).
+function toPublicRunner(runner) {
+	if (!runner) return runner;
+	const { token, ...safe } = runner;
+	return { ...safe, tokenSet: Boolean(token) };
+}
+
+const getAll = async () => {
+	const runners = await prisma.runner.findMany({ orderBy: { createdAt: 'asc' } });
+	return runners.map(toPublicRunner);
+};
 
 const normaliseUrl = (url) => (url ?? '').replace(/\/+$/, '');
 
-const create = ({ name, url, token, browser = 'chromium' }) =>
-	prisma.runner.create({ data: { name, url: normaliseUrl(url), token, browser } });
+const create = async ({ name, url, token, browser = 'chromium' }) => {
+	const runner = await prisma.runner.create({
+		data: { name, url: normaliseUrl(url), token, browser }
+	});
+	return toPublicRunner(runner);
+};
 
 async function remove(id) {
 	// Scrub the deleted runner from any cron job's runnerIds string before
@@ -42,18 +59,29 @@ async function remove(id) {
 			.filter((s) => s && s !== id);
 		await prisma.cronJob.update({
 			where: { id: job.id },
-			data: { runnerIds: ids.length > 0 ? ids.join(',') : 'built-in' }
+			data: { runnerIds: ids.length > 0 ? ids.join(',') : BUILT_IN_RUNNER_ID }
 		});
 	}
 	return prisma.runner.delete({ where: { id } });
 }
 
-const update = (id, data) =>
-	prisma.runner.update({
+// Leaving `token` blank keeps the existing one (same pattern as the S3 backup
+// secret key) instead of clearing a runner's auth on an unrelated edit.
+const update = async (id, { name, url, token, browser }) => {
+	const runner = await prisma.runner.update({
 		where: { id },
-		data: { ...data, ...(data.url && { url: normaliseUrl(data.url) }) }
+		data: {
+			...(name !== undefined && { name }),
+			...(url !== undefined && { url: normaliseUrl(url) }),
+			...(token && { token }),
+			...(browser !== undefined && { browser })
+		}
 	});
+	return toPublicRunner(runner);
+};
 
+// Raw accessor (includes token) — internal use only, for authenticating
+// outbound requests to the runner node (ping/stop/restart/dispatch below).
 const getById = (id) => prisma.runner.findUnique({ where: { id } });
 
 // ---------------------------------------------------------------------------

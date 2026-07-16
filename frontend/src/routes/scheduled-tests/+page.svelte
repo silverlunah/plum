@@ -27,7 +27,66 @@
 	import { fetchRunners } from '$lib/api/runners';
 	import { fetchIntegrations } from '$lib/api/settings';
 	import { backgroundRuns } from '$lib/stores/runner';
-	import { BROWSERS, TOAST_TIMEOUT_MS } from '$lib/constants';
+	import { BROWSERS, BUILTIN_RUNNER_ID, TOAST_TIMEOUT_MS } from '$lib/constants';
+	import {
+		BUILTIN_RUNNER_LABEL,
+		EDIT_LABEL,
+		DELETE_LABEL,
+		DISCORD_LABEL,
+		SLACK_LABEL,
+		CANNOT_BE_UNDONE_SUFFIX
+	} from '$lib/copy/common';
+	import {
+		PAGE_TITLE,
+		HEADING,
+		SUBTITLE,
+		NEW_JOB_LABEL,
+		NO_JOBS_MESSAGE,
+		TASK_NAME_LABEL,
+		TASK_NAME_HINT,
+		TASK_NAME_PLACEHOLDER,
+		SCHEDULE_LABEL,
+		SELECT_SCHEDULE_PLACEHOLDER,
+		CUSTOM_OPTION_LABEL,
+		CRON_PLACEHOLDER,
+		INVALID_CRON_MESSAGE,
+		TAGS_LABEL,
+		TAGS_HINT,
+		TAGS_PLACEHOLDER,
+		WORKERS_LABEL,
+		WORKERS_HINT,
+		BROWSER_LABEL,
+		RUNNERS_LABEL,
+		RUNNERS_HINT,
+		THIS_SERVER_HINT,
+		NOTIFICATIONS_LABEL,
+		ALL_FIELDS_REQUIRED,
+		INVALID_CRON_EXPRESSION_ERROR,
+		SAVE_FAILED_MESSAGE,
+		NETWORK_ERROR,
+		COULD_NOT_UPDATE_SCHEDULE,
+		COULD_NOT_TRIGGER_RUN,
+		COULD_NOT_DELETE_JOB,
+		DELETE_CRON_JOB_TITLE,
+		DELETE_CONFIRM_PREFIX,
+		RUNNING_NOW_TITLE,
+		TH_NAME,
+		TH_SCHEDULE,
+		TH_TAGS,
+		TH_WORKERS,
+		TH_BROWSER,
+		TH_RUNNER,
+		TH_ACTIONS,
+		modalTitle,
+		saveChangesLabel,
+		toggleTitle,
+		runNowTitle,
+		multiNodeLabel,
+		savedToast,
+		startedToast,
+		deletedToast,
+		describeCron
+	} from '$lib/copy/schedules';
 	import { stagger } from '$lib/utils/format';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
@@ -40,7 +99,6 @@
 		/^(\*|([0-5]?[0-9])|\*\/[0-9]+) (\*|([01]?[0-9]|2[0-3])) (\*|([01]?[0-9]|3[01])) (\*|([1-9]|1[0-2])) (\*|[0-6](-[0-6])?)$/;
 
 	const CUSTOM_SENTINEL = '__custom__';
-	const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 	const scheduleOptions = [
 		{ label: 'Every minute', value: '* * * * *' },
@@ -65,47 +123,14 @@
 		cronExpression: '',
 		tags: '',
 		workers: 1,
-		browser: 'chromium',
-		runnerIds: ['built-in'],
+		browser: BROWSERS[0].id,
+		runnerIds: [BUILTIN_RUNNER_ID],
 		notifyDiscord: false,
 		notifySlack: false
 	};
 	let selectedSchedule = '';
 	let useCustomCron = false;
 	let formError = '';
-
-	function describeCron(expr) {
-		if (!expr) return '';
-		const parts = expr.trim().split(/\s+/);
-		if (parts.length !== 5) return '';
-		const [min, hour, dom, month, dow] = parts;
-		const fmt = (h, m) => {
-			const ap = h >= 12 ? 'PM' : 'AM';
-			return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ap}`;
-		};
-		const isNum = (s) => /^\d+$/.test(s);
-		const h = isNum(hour) ? +hour : null;
-		const m = isNum(min) ? +min : null;
-
-		if (expr === '* * * * *') return 'Every minute';
-		const everyN = min.match(/^\*\/(\d+)$/);
-		if (everyN && hour === '*' && dom === '*' && month === '*' && dow === '*')
-			return `Every ${everyN[1]} minutes`;
-		if (m !== null && hour === '*' && dom === '*' && month === '*' && dow === '*')
-			return `Every hour at :${String(m).padStart(2, '0')}`;
-		if (m !== null && h !== null && dom === '*' && month === '*' && dow === '1-5')
-			return `Weekdays at ${fmt(h, m)}`;
-		if (m !== null && h !== null && dom === '*' && month === '*' && dow === '*')
-			return `Daily at ${fmt(h, m)}`;
-		if (m !== null && h !== null && dom === '*' && month === '*' && /^\d$/.test(dow))
-			return `Every ${DAYS[+dow]} at ${fmt(h, m)}`;
-		const d = isNum(dom) ? +dom : null;
-		if (m !== null && h !== null && d !== null && month === '*' && dow === '*') {
-			const sfx = d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th';
-			return `Monthly on the ${d}${sfx} at ${fmt(h, m)}`;
-		}
-		return '';
-	}
 
 	function showToast(type, message) {
 		toast = { type, message };
@@ -140,8 +165,8 @@
 			cronExpression: '',
 			tags: '',
 			workers: 1,
-			browser: 'chromium',
-			runnerIds: ['built-in'],
+			browser: BROWSERS[0].id,
+			runnerIds: [BUILTIN_RUNNER_ID],
 			notifyDiscord: false,
 			notifySlack: false
 		};
@@ -154,16 +179,18 @@
 	function openEditModal(job) {
 		isEditing = true;
 		editTaskName = job.taskName;
-		const validIds = new Set(['built-in', ...availableRunners.map((r) => r.id)]);
-		const storedIds = job.runnerIds ? job.runnerIds.split(',').map((s) => s.trim()) : ['built-in'];
+		const validIds = new Set([BUILTIN_RUNNER_ID, ...availableRunners.map((r) => r.id)]);
+		const storedIds = job.runnerIds
+			? job.runnerIds.split(',').map((s) => s.trim())
+			: [BUILTIN_RUNNER_ID];
 		const prunedIds = storedIds.filter((id) => validIds.has(id));
 		form = {
 			taskName: job.taskName,
 			cronExpression: job.cronExpression,
 			tags: job.tags,
 			workers: job.workers ?? 1,
-			browser: job.browser ?? 'chromium',
-			runnerIds: prunedIds.length > 0 ? prunedIds : ['built-in'],
+			browser: job.browser ?? BROWSERS[0].id,
+			runnerIds: prunedIds.length > 0 ? prunedIds : [BUILTIN_RUNNER_ID],
 			notifyDiscord: job.notifyDiscord ?? false,
 			notifySlack: job.notifySlack ?? false
 		};
@@ -176,25 +203,25 @@
 
 	async function handleSave() {
 		if (!form.taskName || !form.cronExpression) {
-			formError = 'All fields are required.';
+			formError = ALL_FIELDS_REQUIRED;
 			return;
 		}
 		if (!CRON_REGEX.test(form.cronExpression)) {
-			formError = 'Invalid cron expression.';
+			formError = INVALID_CRON_EXPRESSION_ERROR;
 			return;
 		}
 		formError = '';
 		try {
 			const data = await saveCronJob({ ...form, isEditing, editTaskName });
 			if (data.message) {
-				showToast('success', `${isEditing ? 'Updated' : 'Added'}: ${form.taskName}`);
+				showToast('success', savedToast(isEditing, form.taskName));
 				modalOpen = false;
 				cronJobs = await fetchCronJobs();
 			} else {
-				formError = 'Failed to save. Please try again.';
+				formError = SAVE_FAILED_MESSAGE;
 			}
 		} catch {
-			formError = 'Network error.';
+			formError = NETWORK_ERROR;
 		}
 	}
 
@@ -205,16 +232,16 @@
 			await toggleCronJob(job.taskName, next);
 		} catch {
 			cronJobs = cronJobs.map((j) => (j.taskName === job.taskName ? { ...j, enabled: !next } : j));
-			showToast('error', 'Could not update schedule.');
+			showToast('error', COULD_NOT_UPDATE_SCHEDULE);
 		}
 	}
 
 	async function handleRunNow(taskName) {
 		try {
 			await runCronJobNow(taskName);
-			showToast('success', `Started: ${taskName}`);
+			showToast('success', startedToast(taskName));
 		} catch {
-			showToast('error', 'Could not trigger run.');
+			showToast('error', COULD_NOT_TRIGGER_RUN);
 		}
 	}
 
@@ -222,13 +249,13 @@
 		try {
 			const data = await deleteCronJob(taskToDelete);
 			if (data.message) {
-				showToast('success', `Deleted: ${taskToDelete}`);
+				showToast('success', deletedToast(taskToDelete));
 				cronJobs = await fetchCronJobs();
 			} else {
-				showToast('error', 'Could not delete cron job.');
+				showToast('error', COULD_NOT_DELETE_JOB);
 			}
 		} catch {
-			showToast('error', 'Network error.');
+			showToast('error', NETWORK_ERROR);
 		}
 		deleteModalOpen = false;
 		taskToDelete = '';
@@ -251,38 +278,38 @@
 	});
 </script>
 
-<svelte:head><title>Scheduled Tests — Plum</title></svelte:head>
+<svelte:head><title>{PAGE_TITLE}</title></svelte:head>
 
 <!-- Add/Edit modal -->
-<Modal bind:open={modalOpen} title={isEditing ? 'Edit Cron Job' : 'New Cron Job'}>
+<Modal bind:open={modalOpen} title={modalTitle(isEditing)}>
 	<form on:submit|preventDefault={handleSave} class="modal-form">
 		<div class="field">
 			<div class="field-label">
-				<span>Task Name</span>
-				<span class="field-hint">Use a unique, meaningful name</span>
+				<span>{TASK_NAME_LABEL}</span>
+				<span class="field-hint">{TASK_NAME_HINT}</span>
 			</div>
 			<input
 				type="text"
 				class="field-input"
 				bind:value={form.taskName}
-				placeholder="nightly-login-suite"
+				placeholder={TASK_NAME_PLACEHOLDER}
 				required
 			/>
 		</div>
 
 		<div class="field">
-			<div class="field-label"><span>Schedule</span></div>
+			<div class="field-label"><span>{SCHEDULE_LABEL}</span></div>
 			<select
 				class="field-input"
 				bind:value={selectedSchedule}
 				on:change={handleScheduleChange}
 				required
 			>
-				<option value="" disabled>Select a schedule</option>
+				<option value="" disabled>{SELECT_SCHEDULE_PLACEHOLDER}</option>
 				{#each scheduleOptions as opt}
 					<option value={opt.value}>{opt.label}</option>
 				{/each}
-				<option value={CUSTOM_SENTINEL}>Custom…</option>
+				<option value={CUSTOM_SENTINEL}>{CUSTOM_OPTION_LABEL}</option>
 			</select>
 
 			{#if useCustomCron}
@@ -290,14 +317,14 @@
 					type="text"
 					class="field-input cron-input"
 					bind:value={form.cronExpression}
-					placeholder="0 9 * * 1-5"
+					placeholder={CRON_PLACEHOLDER}
 					spellcheck="false"
 				/>
 				{#if form.cronExpression}
 					<p class="cron-desc" class:cron-invalid={!CRON_REGEX.test(form.cronExpression)}>
 						{CRON_REGEX.test(form.cronExpression)
 							? describeCron(form.cronExpression) || form.cronExpression
-							: 'Invalid cron expression'}
+							: INVALID_CRON_MESSAGE}
 					</p>
 				{/if}
 			{/if}
@@ -305,21 +332,21 @@
 
 		<div class="field">
 			<div class="field-label">
-				<span>Tags</span>
-				<span class="field-hint">Multiple: @test-1 or @test-2. Leave blank to run all tests</span>
+				<span>{TAGS_LABEL}</span>
+				<span class="field-hint">{TAGS_HINT}</span>
 			</div>
 			<input
 				type="text"
 				class="field-input"
 				bind:value={form.tags}
-				placeholder="@suite-login (optional)"
+				placeholder={TAGS_PLACEHOLDER}
 			/>
 		</div>
 
 		<div class="field">
 			<div class="field-label">
-				<span>Workers</span>
-				<span class="field-hint">Parallel workers for this job</span>
+				<span>{WORKERS_LABEL}</span>
+				<span class="field-hint">{WORKERS_HINT}</span>
 			</div>
 			<div class="stepper">
 				<button
@@ -339,7 +366,7 @@
 		</div>
 
 		<div class="field">
-			<div class="field-label"><span>Browser</span></div>
+			<div class="field-label"><span>{BROWSER_LABEL}</span></div>
 			<div class="seg-control">
 				{#each BROWSERS as b}
 					<button
@@ -356,19 +383,19 @@
 
 		<div class="field">
 			<div class="field-label">
-				<span>Runners</span>
-				<span class="field-hint">Select one or more nodes</span>
+				<span>{RUNNERS_LABEL}</span>
+				<span class="field-hint">{RUNNERS_HINT}</span>
 			</div>
 			<div class="runner-checks">
 				<label class="runner-check-option">
 					<input
 						type="checkbox"
-						checked={form.runnerIds.includes('built-in')}
-						on:change={() => toggleFormRunner('built-in')}
+						checked={form.runnerIds.includes(BUILTIN_RUNNER_ID)}
+						on:change={() => toggleFormRunner(BUILTIN_RUNNER_ID)}
 					/>
 					<span class="runner-check-dot built-in"></span>
-					<span>Built-in</span>
-					<span class="runner-check-hint">this server</span>
+					<span>{BUILTIN_RUNNER_LABEL}</span>
+					<span class="runner-check-hint">{THIS_SERVER_HINT}</span>
 				</label>
 				{#each availableRunners as r}
 					<label class="runner-check-option">
@@ -387,18 +414,18 @@
 
 		{#if integrations.discordWebhookUrl || integrations.slackWebhookUrl}
 			<div class="field">
-				<div class="field-label"><span>Notifications</span></div>
+				<div class="field-label"><span>{NOTIFICATIONS_LABEL}</span></div>
 				<div class="notify-checks">
 					{#if integrations.discordWebhookUrl}
 						<label class="notify-check-option">
 							<input type="checkbox" bind:checked={form.notifyDiscord} />
-							<span>Discord</span>
+							<span>{DISCORD_LABEL}</span>
 						</label>
 					{/if}
 					{#if integrations.slackWebhookUrl}
 						<label class="notify-check-option">
 							<input type="checkbox" bind:checked={form.notifySlack} />
-							<span>Slack</span>
+							<span>{SLACK_LABEL}</span>
 						</label>
 					{/if}
 				</div>
@@ -409,13 +436,13 @@
 			<p class="form-error">{formError}</p>
 		{/if}
 
-		<Button type="submit" size="md">{isEditing ? 'Save Changes' : 'Add Cron Job'}</Button>
+		<Button type="submit" size="md">{saveChangesLabel(isEditing)}</Button>
 	</form>
 </Modal>
 
 <!-- Delete confirmation -->
-<ConfirmModal bind:open={deleteModalOpen} title="Delete Cron Job" on:confirm={handleDelete}>
-	Are you sure you want to delete <strong>{taskToDelete}</strong>? This cannot be undone.
+<ConfirmModal bind:open={deleteModalOpen} title={DELETE_CRON_JOB_TITLE} on:confirm={handleDelete}>
+	{DELETE_CONFIRM_PREFIX} <strong>{taskToDelete}</strong>{CANNOT_BE_UNDONE_SUFFIX}
 </ConfirmModal>
 
 <Toast {toast} />
@@ -423,16 +450,16 @@
 <div class="page-header">
 	<div class="header-row">
 		<div>
-			<h1>Scheduled Tests</h1>
-			<p class="subtitle">Manage recurring test runs via cron jobs</p>
+			<h1>{HEADING}</h1>
+			<p class="subtitle">{SUBTITLE}</p>
 		</div>
-		<Button on:click={openAddModal}>+ New Job</Button>
+		<Button on:click={openAddModal}>{NEW_JOB_LABEL}</Button>
 	</div>
 </div>
 
 <div class="card" style="padding: 0; overflow: hidden;">
 	{#if cronJobs.length === 0}
-		<EmptyState message="No scheduled tests yet. Create one to get started." size="sm" />
+		<EmptyState message={NO_JOBS_MESSAGE} size="sm" />
 	{:else}
 		<div class="table-wrap">
 			<table class="data-table">
@@ -440,28 +467,28 @@
 					<tr>
 						<th class="th-toggle"></th>
 						<th class="th-run"></th>
-						<th>Name</th>
-						<th>Schedule</th>
-						<th>Tags</th>
-						<th>Workers</th>
-						<th>Browser</th>
-						<th>Runner</th>
-						<th>Actions</th>
+						<th>{TH_NAME}</th>
+						<th>{TH_SCHEDULE}</th>
+						<th>{TH_TAGS}</th>
+						<th>{TH_WORKERS}</th>
+						<th>{TH_BROWSER}</th>
+						<th>{TH_RUNNER}</th>
+						<th>{TH_ACTIONS}</th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each cronJobs as job, i}
 						{@const ids = job.runnerIds
 							? job.runnerIds.split(',').map((s) => s.trim())
-							: ['built-in']}
+							: [BUILTIN_RUNNER_ID]}
 						<tr style={stagger(i)} class="job-row" class:disabled={!job.enabled}>
 							<td class="td-toggle">
 								<button
 									class="toggle-btn"
 									class:on={job.enabled}
 									on:click={() => handleToggle(job)}
-									title={job.enabled ? 'Disable schedule' : 'Enable schedule'}
-									aria-label={job.enabled ? 'Disable schedule' : 'Enable schedule'}
+									title={toggleTitle(job.enabled)}
+									aria-label={toggleTitle(job.enabled)}
 									aria-pressed={job.enabled}
 								>
 									<span class="toggle-knob"></span>
@@ -471,7 +498,7 @@
 								<button
 									class="run-icon-btn"
 									on:click={() => handleRunNow(job.taskName)}
-									title="Run {job.taskName} now"
+									title={runNowTitle(job.taskName)}
 								>
 									<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none">
 										<polygon points="5,3 19,12 5,21" />
@@ -480,7 +507,7 @@
 							</td>
 							<td class="job-name">
 								{#if $backgroundRuns[job.taskName]?.running}
-									<span class="running-dot" title="Running now"></span>
+									<span class="running-dot" title={RUNNING_NOW_TITLE}></span>
 								{/if}
 								{job.taskName}
 							</td>
@@ -489,27 +516,29 @@
 							<td>
 								<span class="workers-badge" class:multi={job.workers > 1}>×{job.workers}</span>
 							</td>
-							<td><span class="browser-badge">{job.browser ?? 'chromium'}</span></td>
+							<td><span class="browser-badge">{job.browser ?? BROWSERS[0].id}</span></td>
 							<td>
 								<span class="runner-badge" class:multi-node={ids.length > 1}>
-									{#if ids.length === 1 && ids[0] === 'built-in'}
-										built-in
+									{#if ids.length === 1 && ids[0] === BUILTIN_RUNNER_ID}
+										{BUILTIN_RUNNER_LABEL}
 									{:else if ids.length === 1}
 										{availableRunners.find((r) => r.id === ids[0])?.name ?? ids[0]}
 									{:else}
-										{ids.length} nodes
+										{multiNodeLabel(ids.length)}
 									{/if}
 								</span>
 							</td>
 							<td class="actions-cell">
-								<Button variant="ghost" size="sm" on:click={() => openEditModal(job)}>Edit</Button>
+								<Button variant="ghost" size="sm" on:click={() => openEditModal(job)}
+									>{EDIT_LABEL}</Button
+								>
 								<Button
 									variant="danger"
 									size="sm"
 									on:click={() => {
 										taskToDelete = job.taskName;
 										deleteModalOpen = true;
-									}}>Delete</Button
+									}}>{DELETE_LABEL}</Button
 								>
 							</td>
 						</tr>

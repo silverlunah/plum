@@ -16,6 +16,7 @@
  */
 
 const prisma = require('./prisma');
+const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 
 // ---------------------------------------------------------------------------
 // Export — all data except reports (reports are too large; use pg_dump instead)
@@ -120,7 +121,7 @@ const importAll = async (
 						workers: job.workers ?? 1,
 						browser: job.browser ?? 'chromium',
 						enabled: job.enabled ?? true,
-						runnerIds: job.runnerIds ?? 'built-in',
+						runnerIds: job.runnerIds ?? BUILT_IN_RUNNER_ID,
 						notifyDiscord: job.notifyDiscord ?? false,
 						notifySlack: job.notifySlack ?? false
 					},
@@ -129,7 +130,7 @@ const importAll = async (
 						tags: job.tags,
 						workers: job.workers ?? 1,
 						browser: job.browser ?? 'chromium',
-						runnerIds: job.runnerIds ?? 'built-in',
+						runnerIds: job.runnerIds ?? BUILT_IN_RUNNER_ID,
 						notifyDiscord: job.notifyDiscord ?? false,
 						notifySlack: job.notifySlack ?? false
 					}

@@ -47,6 +47,3 @@ export const RUN_TAG_DISPLAY_LIMIT = 5;
 export const CASE_HISTORY_BARS_MAX = 20;
 
 export const BUILTIN_RUNNER_ID = 'built-in';
-export const BUILTIN_RUNNER_LABEL = 'Built-in';
-export const ALL_TESTS_LABEL = 'all tests';
-export const AUTOMATED_LABEL = 'Automated';

@@ -29,6 +29,64 @@
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import { TOAST_TIMEOUT_MS } from '$lib/constants';
+	import {
+		CLEAR_SEARCH_LABEL,
+		CANCEL_LABEL,
+		SEARCHING_LABEL,
+		LOADING_LABEL
+	} from '$lib/copy/common';
+	import {
+		TEST_REPOSITORY_BREADCRUMB,
+		NAME_LABEL,
+		DESCRIPTION_LABEL,
+		PRIORITY_LABEL,
+		TITLE_LABEL,
+		NAME_REQUIRED_ERROR,
+		TITLE_REQUIRED_ERROR,
+		PAGE_TITLE,
+		HEADING,
+		HEADER_DESC,
+		NEW_SUITE_LABEL,
+		NEW_RUN_LABEL,
+		SUITES_TAB_LABEL,
+		RUNS_TAB_LABEL,
+		SEARCH_PLACEHOLDER,
+		SORT_BY_LABEL,
+		NO_RESULTS_TITLE,
+		CASES_LABEL,
+		SUITES_LABEL,
+		RUNS_LABEL,
+		AUTOMATED_TAG_LABEL,
+		DELETE_SUITE_TITLE,
+		DELETE_RUN_TITLE,
+		DUPLICATE_RUN_ACTION_TITLE,
+		NO_SUITES_YET_TITLE,
+		NO_SUITES_YET_DESC,
+		NO_RUNS_YET_TITLE,
+		NO_RUNS_YET_DESC,
+		NEW_SUITE_MODAL_TITLE,
+		NEW_RUN_MODAL_TITLE,
+		SUITE_NAME_PLACEHOLDER,
+		SUITE_DESC_PLACEHOLDER,
+		RUN_TITLE_PLACEHOLDER,
+		DUPLICATE_RUN_MODAL_TITLE,
+		DUPLICATE_LABEL,
+		DUPLICATE_CONFIRM_SUFFIX,
+		FAILED_TO_LOAD_DATA,
+		FAILED_TO_DELETE_SUITE,
+		FAILED_TO_DUPLICATE_RUN,
+		FAILED_TO_DELETE_RUN,
+		noResultsDescription,
+		createdByLabel,
+		caseCount,
+		createSuiteLabel,
+		createRunLabel,
+		deleteEntityTitle,
+		suiteCreatedToast,
+		suiteDeletedToast,
+		duplicatedAsToast,
+		runDeletedToast
+	} from '$lib/copy/repository';
 
 	/** @type {'suites' | 'runs'} */
 	let tab =
@@ -176,7 +234,7 @@
 		try {
 			await Promise.all([loadSuites(1), loadRuns(1)]);
 		} catch (e) {
-			showToast('error', 'Failed to load data');
+			showToast('error', FAILED_TO_LOAD_DATA);
 		} finally {
 			loading = false;
 		}
@@ -184,7 +242,7 @@
 
 	async function handleCreateSuite() {
 		if (!suiteForm.name.trim()) {
-			suiteFormError = 'Name is required.';
+			suiteFormError = NAME_REQUIRED_ERROR;
 			return;
 		}
 		suiteFormError = '';
@@ -195,7 +253,7 @@
 			suitesTotal += 1;
 			suiteModalOpen = false;
 			suiteForm = { name: '', description: '', priority: 'Medium' };
-			showToast('success', `Suite "${suite.name}" created.`);
+			showToast('success', suiteCreatedToast(suite.name));
 		} catch (e) {
 			suiteFormError = e.message;
 		} finally {
@@ -208,9 +266,9 @@
 			await deleteSuite(id);
 			suites = suites.filter((s) => s.id !== id);
 			suitesTotal -= 1;
-			showToast('success', `Suite "${name}" deleted.`);
+			showToast('success', suiteDeletedToast(name));
 		} catch {
-			showToast('error', 'Failed to delete suite.');
+			showToast('error', FAILED_TO_DELETE_SUITE);
 		}
 		confirmDelete = null;
 		confirmDeleteOpen = false;
@@ -218,7 +276,7 @@
 
 	async function handleCreateRun() {
 		if (!runForm.title.trim()) {
-			runFormError = 'Title is required.';
+			runFormError = TITLE_REQUIRED_ERROR;
 			return;
 		}
 		runFormError = '';
@@ -251,9 +309,9 @@
 			runs = [copy, ...runs];
 			runsTotal += 1;
 			runsVersion.update((v) => v + 1);
-			showToast('success', `Duplicated as "${copy.title}".`);
+			showToast('success', duplicatedAsToast(copy.title));
 		} catch {
-			showToast('error', 'Failed to duplicate run.');
+			showToast('error', FAILED_TO_DUPLICATE_RUN);
 		}
 	}
 
@@ -263,9 +321,9 @@
 			runs = runs.filter((r) => r.id !== id);
 			runsTotal -= 1;
 			runsVersion.update((v) => v + 1);
-			showToast('success', `Run "${title}" deleted.`);
+			showToast('success', runDeletedToast(title));
 		} catch {
-			showToast('error', 'Failed to delete run.');
+			showToast('error', FAILED_TO_DELETE_RUN);
 		}
 		confirmDelete = null;
 		confirmDeleteOpen = false;
@@ -280,14 +338,13 @@
 	}
 </script>
 
-<svelte:head><title>Test Repository — Plum</title></svelte:head>
+<svelte:head><title>{PAGE_TITLE}</title></svelte:head>
 
 <Toast {toast} />
 
 <ConfirmModal
 	bind:open={confirmDeleteOpen}
-	title="Delete {confirmDelete?.type === 'suite' ? 'Suite' : 'Run'}"
-	confirmLabel="Delete"
+	title={deleteEntityTitle(confirmDelete?.type)}
 	on:confirm={() =>
 		confirmDelete?.type === 'suite'
 			? handleDeleteSuite(confirmDelete.id, confirmDelete.name)
@@ -300,40 +357,39 @@
 
 <ConfirmModal
 	bind:open={confirmDuplicateOpen}
-	title="Duplicate Run"
-	confirmLabel="Duplicate"
+	title={DUPLICATE_RUN_MODAL_TITLE}
+	confirmLabel={DUPLICATE_LABEL}
 	on:confirm={executeDuplicate}
 >
 	{#if confirmDuplicate}
-		Duplicate <strong>"{confirmDuplicate.title}"</strong>? A copy will be added at the top of the
-		list.
+		{DUPLICATE_LABEL} <strong>"{confirmDuplicate.title}"</strong>{DUPLICATE_CONFIRM_SUFFIX}
 	{/if}
 </ConfirmModal>
 
-<Modal bind:open={suiteModalOpen} title="New Test Suite">
+<Modal bind:open={suiteModalOpen} title={NEW_SUITE_MODAL_TITLE}>
 	<div class="form-fields">
 		<div class="field">
-			<label class="field-label" for="suite-name">Name</label>
+			<label class="field-label" for="suite-name">{NAME_LABEL}</label>
 			<input
 				id="suite-name"
 				type="text"
 				class="field-input"
 				bind:value={suiteForm.name}
-				placeholder="Login flows"
+				placeholder={SUITE_NAME_PLACEHOLDER}
 			/>
 		</div>
 		<div class="field">
-			<label class="field-label" for="suite-desc">Description</label>
+			<label class="field-label" for="suite-desc">{DESCRIPTION_LABEL}</label>
 			<textarea
 				id="suite-desc"
 				class="field-input field-textarea"
 				bind:value={suiteForm.description}
-				placeholder="What this suite covers…"
+				placeholder={SUITE_DESC_PLACEHOLDER}
 				rows="3"
 			></textarea>
 		</div>
 		<div class="field">
-			<label class="field-label" for="suite-prio">Priority</label>
+			<label class="field-label" for="suite-prio">{PRIORITY_LABEL}</label>
 			<select id="suite-prio" class="field-input" bind:value={suiteForm.priority}>
 				{#each PRIORITIES as p}<option value={p}>{p}</option>{/each}
 			</select>
@@ -341,42 +397,42 @@
 		{#if suiteFormError}<p class="form-error">{suiteFormError}</p>{/if}
 		<div class="modal-actions">
 			<Button on:click={handleCreateSuite} disabled={suiteFormSaving}>
-				{suiteFormSaving ? 'Creating…' : 'Create Suite'}
+				{createSuiteLabel(suiteFormSaving)}
 			</Button>
 			<Button
 				variant="ghost"
 				on:click={() => {
 					suiteModalOpen = false;
 					suiteFormError = '';
-				}}>Cancel</Button
+				}}>{CANCEL_LABEL}</Button
 			>
 		</div>
 	</div>
 </Modal>
 
-<Modal bind:open={runModalOpen} title="New Test Run">
+<Modal bind:open={runModalOpen} title={NEW_RUN_MODAL_TITLE}>
 	<div class="form-fields">
 		<div class="field">
-			<label class="field-label" for="run-title">Title</label>
+			<label class="field-label" for="run-title">{TITLE_LABEL}</label>
 			<input
 				id="run-title"
 				type="text"
 				class="field-input"
 				bind:value={runForm.title}
-				placeholder="Sprint 12 regression"
+				placeholder={RUN_TITLE_PLACEHOLDER}
 			/>
 		</div>
 		{#if runFormError}<p class="form-error">{runFormError}</p>{/if}
 		<div class="modal-actions">
 			<Button on:click={handleCreateRun} disabled={runFormSaving}>
-				{runFormSaving ? 'Creating…' : 'Create Run'}
+				{createRunLabel(runFormSaving)}
 			</Button>
 			<Button
 				variant="ghost"
 				on:click={() => {
 					runModalOpen = false;
 					runFormError = '';
-				}}>Cancel</Button
+				}}>{CANCEL_LABEL}</Button
 			>
 		</div>
 	</div>
@@ -384,25 +440,25 @@
 
 <div class="page-header">
 	<div class="header-text">
-		<h1>Test Repository</h1>
-		<p class="header-desc">Manage test suites, cases, and track manual test runs.</p>
+		<h1>{HEADING}</h1>
+		<p class="header-desc">{HEADER_DESC}</p>
 	</div>
 	<div class="header-actions">
 		{#if tab === 'suites'}
-			<Button on:click={() => (suiteModalOpen = true)}>+ New Suite</Button>
+			<Button on:click={() => (suiteModalOpen = true)}>{NEW_SUITE_LABEL}</Button>
 		{:else}
-			<Button on:click={() => (runModalOpen = true)}>+ New Run</Button>
+			<Button on:click={() => (runModalOpen = true)}>{NEW_RUN_LABEL}</Button>
 		{/if}
 	</div>
 </div>
 
 <div class="tabs">
 	<button class="tab" class:active={tab === 'suites'} on:click={() => setTab('suites')}>
-		Suites
+		{SUITES_TAB_LABEL}
 		<span class="tab-count">{q ? filteredSuites.length + '/' : ''}{suitesTotal}</span>
 	</button>
 	<button class="tab" class:active={tab === 'runs'} on:click={() => setTab('runs')}>
-		Test Runs
+		{RUNS_TAB_LABEL}
 		<span class="tab-count">{q ? filteredRuns.length + '/' : ''}{runsTotal}</span>
 	</button>
 </div>
@@ -421,14 +477,9 @@
 	>
 		<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
 	</svg>
-	<input
-		type="search"
-		class="search-input"
-		placeholder="Search by ID or name…"
-		bind:value={search}
-	/>
+	<input type="search" class="search-input" placeholder={SEARCH_PLACEHOLDER} bind:value={search} />
 	{#if search}
-		<button class="search-clear" on:click={() => (search = '')} aria-label="Clear search">
+		<button class="search-clear" on:click={() => (search = '')} aria-label={CLEAR_SEARCH_LABEL}>
 			<svg
 				width="12"
 				height="12"
@@ -444,7 +495,7 @@
 
 {#if !q}
 	<div class="sort-bar">
-		<span class="sort-label">Sort by</span>
+		<span class="sort-label">{SORT_BY_LABEL}</span>
 		{#if tab === 'suites'}
 			{#each [['createdAt', 'Date Created'], ['displayId', 'ID'], ['name', 'Name'], ['priority', 'Priority']] as [val, label]}
 				<button
@@ -479,23 +530,23 @@
 	<!-- ── Global search results ── -->
 	<div transition:fly={{ y: 4, duration: 160 }}>
 		{#if searchLoading}
-			<div class="loading-row">Searching…</div>
+			<div class="loading-row">{SEARCHING_LABEL}</div>
 		{:else if !searchResults}
-			<div class="loading-row">Searching…</div>
+			<div class="loading-row">{SEARCHING_LABEL}</div>
 		{:else if filteredCases.length === 0 && filteredSuites.length === 0 && filteredRuns.length === 0}
-			<EmptyState title="No results" description="Nothing matches &ldquo;{search}&rdquo;." />
+			<EmptyState title={NO_RESULTS_TITLE} description={noResultsDescription(search)} />
 		{:else}
 			{#if filteredCases.length > 0}
 				<div class="search-section">
 					<h2 class="search-section-title">
-						Cases <span class="tab-count">{filteredCases.length}</span>
+						{CASES_LABEL} <span class="tab-count">{filteredCases.length}</span>
 					</h2>
 					<div class="case-results">
 						{#each filteredCases as tc (tc.id)}
 							<a href="/test-repository/suites/{tc.suite.id}" class="case-result-row">
 								<span class="id-chip small">{tc.displayId}</span>
 								<span class="case-result-title">{tc.title}</span>
-								{#if tc.isAutomated}<span class="auto-badge">automated</span>{/if}
+								{#if tc.isAutomated}<span class="auto-badge">{AUTOMATED_TAG_LABEL}</span>{/if}
 								<span class="priority-badge small {priorityClass(tc.priority)}">{tc.priority}</span>
 								<span class="case-result-suite">{tc.suite.displayId} · {tc.suite.name}</span>
 							</a>
@@ -507,7 +558,7 @@
 			{#if filteredSuites.length > 0}
 				<div class="search-section">
 					<h2 class="search-section-title">
-						Suites <span class="tab-count">{filteredSuites.length}</span>
+						{SUITES_LABEL} <span class="tab-count">{filteredSuites.length}</span>
 					</h2>
 					<div class="suite-grid">
 						{#each filteredSuites as suite (suite.id)}
@@ -525,7 +576,7 @@
 									<div class="suite-card-actions">
 										<button
 											class="icon-btn danger"
-											title="Delete suite"
+											title={DELETE_SUITE_TITLE}
 											on:click={() => {
 												confirmDelete = {
 													type: 'suite',
@@ -569,9 +620,9 @@
 												d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"
 											/></svg
 										>
-										{suite._count.cases} case{suite._count.cases !== 1 ? 's' : ''}
+										{caseCount(suite._count.cases)}
 									</span>
-									<span class="meta-item">by {suite.createdBy.name}</span>
+									<span class="meta-item">{createdByLabel(suite.createdBy.name)}</span>
 								</div>
 							</div>
 						{/each}
@@ -592,21 +643,19 @@
 								<div class="run-row-main">
 									<span class="run-status-dot {runStatusClass(run.status)}"></span>
 									<span class="run-title">{run.title}</span>
-									<span class="run-count"
-										>{run._count.entries} case{run._count.entries !== 1 ? 's' : ''}</span
-									>
+									<span class="run-count">{caseCount(run._count.entries)}</span>
 								</div>
 								<div class="run-meta">
 									<span class="run-status-label">{run.status}</span>
 									<span class="meta-sep">·</span>
-									<span>by {run.createdBy.name}</span>
+									<span>{createdByLabel(run.createdBy.name)}</span>
 									<span class="meta-sep">·</span>
 									<span>{new Date(run.createdAt).toLocaleDateString()}</span>
 								</div>
 								<div class="run-row-actions">
 									<button
 										class="icon-btn"
-										title="Duplicate run"
+										title={DUPLICATE_RUN_ACTION_TITLE}
 										on:click={() => handleDuplicateRun(run)}
 									>
 										<svg
@@ -626,7 +675,7 @@
 									</button>
 									<button
 										class="icon-btn danger"
-										title="Delete run"
+										title={DELETE_RUN_TITLE}
 										on:click={() => {
 											confirmDelete = { type: 'run', id: run.id, name: run.title };
 											confirmDeleteOpen = true;
@@ -658,12 +707,9 @@
 {:else if tab === 'suites'}
 	<div transition:fly={{ y: 4, duration: 160 }}>
 		{#if loading}
-			<div class="loading-row">Loading…</div>
+			<div class="loading-row">{LOADING_LABEL}</div>
 		{:else if suites.length === 0}
-			<EmptyState
-				title="No test suites yet"
-				description="Create your first suite to start organising test cases."
-			/>
+			<EmptyState title={NO_SUITES_YET_TITLE} description={NO_SUITES_YET_DESC} />
 		{:else}
 			<div class="suite-grid">
 				{#each suites as suite (suite.id)}
@@ -676,7 +722,7 @@
 							<div class="suite-card-actions">
 								<button
 									class="icon-btn danger"
-									title="Delete suite"
+									title={DELETE_SUITE_TITLE}
 									on:click={() => {
 										confirmDelete = { type: 'suite', id: suite.id, name: suite.name };
 										confirmDeleteOpen = true;
@@ -716,9 +762,9 @@
 										d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"
 									/></svg
 								>
-								{suite._count.cases} case{suite._count.cases !== 1 ? 's' : ''}
+								{caseCount(suite._count.cases)}
 							</span>
-							<span class="meta-item">by {suite.createdBy.name}</span>
+							<span class="meta-item">{createdByLabel(suite.createdBy.name)}</span>
 						</div>
 					</div>
 				{/each}
@@ -737,12 +783,9 @@
 {:else}
 	<div transition:fly={{ y: 4, duration: 160 }}>
 		{#if loading}
-			<div class="loading-row">Loading…</div>
+			<div class="loading-row">{LOADING_LABEL}</div>
 		{:else if runs.length === 0}
-			<EmptyState
-				title="No test runs yet"
-				description="Create a test run to start executing and tracking manual tests."
-			/>
+			<EmptyState title={NO_RUNS_YET_TITLE} description={NO_RUNS_YET_DESC} />
 		{:else}
 			<div class="runs-list">
 				{#each runs as run (run.id)}
@@ -751,21 +794,19 @@
 						<div class="run-row-main">
 							<span class="run-status-dot {runStatusClass(run.status)}"></span>
 							<span class="run-title">{run.title}</span>
-							<span class="run-count"
-								>{run._count.entries} case{run._count.entries !== 1 ? 's' : ''}</span
-							>
+							<span class="run-count">{caseCount(run._count.entries)}</span>
 						</div>
 						<div class="run-meta">
 							<span class="run-status-label">{run.status}</span>
 							<span class="meta-sep">·</span>
-							<span>by {run.createdBy.name}</span>
+							<span>{createdByLabel(run.createdBy.name)}</span>
 							<span class="meta-sep">·</span>
 							<span>{new Date(run.createdAt).toLocaleDateString()}</span>
 						</div>
 						<div class="run-row-actions">
 							<button
 								class="icon-btn"
-								title="Duplicate run"
+								title={DUPLICATE_RUN_ACTION_TITLE}
 								on:click={() => handleDuplicateRun(run)}
 							>
 								<svg
@@ -785,7 +826,7 @@
 							</button>
 							<button
 								class="icon-btn danger"
-								title="Delete run"
+								title={DELETE_RUN_TITLE}
 								on:click={() => {
 									confirmDelete = { type: 'run', id: run.id, name: run.title };
 									confirmDeleteOpen = true;
