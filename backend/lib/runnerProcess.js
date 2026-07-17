@@ -153,24 +153,22 @@ function statusOf(id, registry = loadRegistry()) {
 }
 
 /**
- * Ensures a local node can actually run tests: backend dependencies must be
- * installed and the Playwright browser binaries present. A node with neither
- * starts fine but every scenario fails at the browser-launch hook. Idempotent —
- * npm install is skipped when node_modules already exists, and `playwright
- * install` no-ops when the browser is already downloaded.
+ * Installs backend npm dependencies if missing or stale. Shared by `prepareEnv`
+ * (which additionally provisions Playwright browsers for test execution) and
+ * any caller that only needs `backend/node_modules` to exist, such as `plum
+ * mcp` — spawning the MCP server without this guard fails outright if the
+ * package was reinstalled/updated since the last time deps were installed
+ * (npm install -g wipes node_modules on upgrade) and the user never ran a
+ * command that happens to call prepareEnv first.
  *
- * npm/npx are .cmd shims on Windows, so these must run through a shell.
+ * npm is a .cmd shim on Windows, so this must run through a shell.
  *
- * stdin is left as 'ignore' (not inherited): these installers only need to
- * print progress, and letting them touch stdin corrupts the raw-mode state of
+ * stdin is left as 'ignore' (not inherited): the installer only needs to
+ * print progress, and letting it touch stdin corrupts the raw-mode state of
  * an interactive prompt running in the same terminal (the caller's menu would
  * wedge after the install finishes).
  */
-function prepareEnv() {
-	const stdio = ['ignore', 'inherit', 'inherit'];
-
-	// Re-run npm install when node_modules is missing OR when the plum package
-	// version has changed (npm install -g wipes node_modules on upgrade).
+function ensureBackendDeps() {
 	const markerPath = path.join(BACKEND_DIR, 'node_modules', '.plum-version');
 	let installedVersion = null;
 	try {
@@ -184,9 +182,24 @@ function prepareEnv() {
 		!fs.existsSync(path.join(BACKEND_DIR, 'node_modules')) ||
 		installedVersion !== currentVersion
 	) {
-		execSync('npm install', { cwd: BACKEND_DIR, stdio, shell: true });
+		execSync('npm install', {
+			cwd: BACKEND_DIR,
+			stdio: ['ignore', 'inherit', 'inherit'],
+			shell: true
+		});
 		fs.writeFileSync(markerPath, currentVersion, 'utf8');
 	}
+}
+
+/**
+ * Ensures a local node can actually run tests: backend dependencies must be
+ * installed and the Playwright browser binaries present. A node with neither
+ * starts fine but every scenario fails at the browser-launch hook. Idempotent —
+ * npm install is skipped when node_modules already exists, and `playwright
+ * install` no-ops when the browser is already downloaded.
+ */
+function prepareEnv() {
+	ensureBackendDeps();
 
 	// --with-deps also installs the OS-level shared libraries (libnss3, libatk,
 	// etc.) Chromium/Firefox need to actually launch — without it, a fresh
@@ -194,7 +207,7 @@ function prepareEnv() {
 	// "Host system is missing dependencies to run browsers."
 	execSync('npx playwright install --with-deps chromium firefox', {
 		cwd: BACKEND_DIR,
-		stdio,
+		stdio: ['ignore', 'inherit', 'inherit'],
 		shell: true
 	});
 }
@@ -316,6 +329,7 @@ module.exports = {
 	killPort,
 	pruneDead,
 	statusOf,
+	ensureBackendDeps,
 	prepareEnv,
 	startNode,
 	stopNode
