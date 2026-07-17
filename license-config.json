@@ -1,5 +1,5 @@
 {
-	"license": "./resources/gpl-3.0-license.txt",
+	"license": "./resources/mit-license.txt",
 	"ignoreDefaultIgnores": false,
 	"licenseFormats": {
 		"js|ts|mjs|css": {

@@ -20,7 +20,7 @@
 		"plum": "./bin/plum.js"
 	},
 	"author": "silverlunah",
-	"license": "ISC",
+	"license": "MIT",
 	"devDependencies": {
 		"husky": "^9.1.7",
 		"license-check-and-add": "^4.0.5",
