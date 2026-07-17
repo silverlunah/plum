@@ -1283,6 +1283,19 @@ switch (command) {
 	}
 
 	case 'mcp': {
+		// Claude launches `plum mcp` directly, skipping every other command
+		// (`server start`, `node start`, `run-test`) that would otherwise have
+		// already called ensureBackendDeps/prepareEnv. Without this guard, a
+		// stale/missing backend/node_modules (e.g. after `npm i -g plum-e2e@latest`
+		// wipes it) makes the MCP server fail outright on its own requires.
+		try {
+			const { ensureBackendDeps } = runnerProcessLib();
+			ensureBackendDeps();
+		} catch (e) {
+			console.error(`Could not verify backend dependencies: ${e.message}`);
+			process.exit(1);
+		}
+
 		const mcpScript = path.join(plumRoot, 'backend', 'mcp', 'server.js');
 		spawn(process.execPath, [mcpScript], {
 			stdio: 'inherit',

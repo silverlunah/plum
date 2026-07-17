@@ -12,6 +12,7 @@
 		"format": "prettier --write .",
 		"add-license": "npx license-check-and-add add -f license-config.json",
 		"prepare": "husky",
+		"postinstall": "node bin/postinstall.js",
 		"docker:up": "docker compose up -d --build",
 		"docker:down": "docker compose down"
 	},
