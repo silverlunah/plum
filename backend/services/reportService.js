@@ -8,6 +8,8 @@ const path = require('path');
 const crypto = require('crypto');
 const prisma = require('./prisma');
 const { isScheduledTrigger, normaliseTrigger } = require('../constants/triggers');
+const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { REPORT_STATUS } = require('../constants/jobStatus');
 const { SCREENSHOTS_DIR } = require('../lib/reportFilename');
 
 // ---------------------------------------------------------------------------
@@ -275,7 +277,7 @@ function processCucumberJson(raw, attempts = {}) {
 	});
 
 	const hasFailures = features.some((f) => f.status === 'failed');
-	return { features, status: hasFailures ? 'FAIL' : 'PASS' };
+	return { features, status: hasFailures ? REPORT_STATUS.FAIL : REPORT_STATUS.PASS };
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +308,7 @@ const getReports = async ({ page = 1, limit = 15 } = {}) => {
 			select: reportListSelect
 		}),
 		prisma.report.count(),
-		prisma.report.count({ where: { status: 'PASS' } }),
+		prisma.report.count({ where: { status: REPORT_STATUS.PASS } }),
 		prisma.report.findMany({
 			orderBy: { createdAt: 'desc' },
 			take: TREND_SIZE,
@@ -381,7 +383,7 @@ const saveReport = async ({
 }) => {
 	const normTrigger = normaliseTrigger(triggerType);
 	const { features, status: derivedStatus } = processCucumberJson(rawCucumberJson, attempts);
-	const status = forceFail ? 'FAIL' : derivedStatus;
+	const status = forceFail ? REPORT_STATUS.FAIL : derivedStatus;
 	const cronJobId = await resolveCronJobId(normTrigger);
 
 	const report = await prisma.report.create({
@@ -390,7 +392,7 @@ const saveReport = async ({
 			tags: (tags ?? '').replace(/^\(|\)$/g, '') || '@all-tests',
 			triggerType: normTrigger,
 			runners: nodeCount ?? 1,
-			browser: browser ?? 'chromium',
+			browser: browser ?? DEFAULT_BROWSER,
 			runnerName: runnerName ?? null,
 			runnerId: runnerId ?? null,
 			cronJobId,

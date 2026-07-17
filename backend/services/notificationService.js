@@ -4,6 +4,8 @@
  */
 
 const settingsService = require('./settingsService');
+const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { REPORT_STATUS } = require('../constants/jobStatus');
 
 function countScenarios(content) {
 	try {
@@ -26,7 +28,7 @@ function countScenarios(content) {
 }
 
 function buildDiscordPayload({ jobName, status, counts, browser, tags, reportUrl }) {
-	const isPass = status === 'PASS';
+	const isPass = status === REPORT_STATUS.PASS;
 	// Discord colour integers: green 3066993, red 15158332
 	const color = isPass ? 3066993 : 15158332;
 	const fields = [
@@ -36,7 +38,7 @@ function buildDiscordPayload({ jobName, status, counts, browser, tags, reportUrl
 			value: `${counts.passed} / ${counts.total} passed`,
 			inline: true
 		},
-		{ name: 'Browser', value: browser ?? 'chromium', inline: true },
+		{ name: 'Browser', value: browser ?? DEFAULT_BROWSER, inline: true },
 		{ name: 'Tags', value: tags || '(all tests)', inline: false }
 	];
 	if (reportUrl) {
@@ -49,7 +51,7 @@ function buildDiscordPayload({ jobName, status, counts, browser, tags, reportUrl
 }
 
 function buildSlackPayload({ jobName, status, counts, browser, tags, reportUrl }) {
-	const isPass = status === 'PASS';
+	const isPass = status === REPORT_STATUS.PASS;
 	const icon = isPass ? '✅' : '❌';
 	const blocks = [
 		{
@@ -62,7 +64,7 @@ function buildSlackPayload({ jobName, status, counts, browser, tags, reportUrl }
 		{
 			type: 'section',
 			fields: [
-				{ type: 'mrkdwn', text: `*Browser:*\n${browser ?? 'chromium'}` },
+				{ type: 'mrkdwn', text: `*Browser:*\n${browser ?? DEFAULT_BROWSER}` },
 				{ type: 'mrkdwn', text: `*Tags:*\n${tags || '(all tests)'}` }
 			]
 		}

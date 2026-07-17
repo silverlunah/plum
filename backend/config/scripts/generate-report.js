@@ -6,6 +6,8 @@
 const fs = require('fs');
 const path = require('path');
 const { normaliseTrigger } = require('../../constants/triggers');
+const { DEFAULT_BROWSER } = require('../../constants/defaults');
+const { isNodeMode } = require('../../constants/env');
 const { REPORTS_DIR } = require('../../lib/reportFilename');
 
 const jsonReportFile = path.join(REPORTS_DIR, 'cucumber_report.json');
@@ -18,7 +20,7 @@ if (!fs.existsSync(jsonReportFile)) {
 // Remote runner nodes (PLUM_MODE=node) have no DB access.
 // The primary server reads cucumber_report.json via readCucumberReportFile()
 // and saves the combined report after all lanes finish.
-if (process.env.PLUM_MODE === 'node') process.exit(0);
+if (isNodeMode()) process.exit(0);
 
 // `run-test` runs on the host without Docker/Postgres, so DATABASE_URL is
 // never set there — skip the DB save instead of letting Prisma's connection
@@ -44,7 +46,7 @@ if (!process.env.DATABASE_URL) {
 			tags: rawTag,
 			triggerType,
 			nodeCount,
-			browser: process.env.BROWSER || 'chromium',
+			browser: process.env.BROWSER || DEFAULT_BROWSER,
 			runnerName: process.env.RUNNER_NAME || null,
 			runnerId: process.env.RUNNER_ID || null,
 			testRunId: process.env.TEST_RUN_ID || null

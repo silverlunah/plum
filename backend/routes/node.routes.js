@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const { authGuard } = require('../middleware/auth');
+const { isNodeMode, DEFAULT_PORT } = require('../constants/env');
 const nodeExecutionService = require('../services/nodeExecutionService');
 
 // Health check — primary server uses this to confirm the node is reachable
@@ -15,7 +16,7 @@ router.get('/ping', authGuard, (req, res) => {
 
 // Graceful shutdown for node-mode processes (no-op on the primary server)
 router.post('/shutdown', authGuard, (req, res) => {
-	if (process.env.PLUM_MODE !== 'node') {
+	if (!isNodeMode()) {
 		return res.status(403).json({ error: 'Not a node runner' });
 	}
 	res.json({ ok: true });
@@ -27,7 +28,7 @@ router.post('/shutdown', authGuard, (req, res) => {
 // binds the same port, retrying past the brief EADDRINUSE window left by this
 // process shutting down (see the listen retry in server.js).
 router.post('/restart', authGuard, (req, res) => {
-	if (process.env.PLUM_MODE !== 'node') {
+	if (!isNodeMode()) {
 		return res.status(403).json({ error: 'Not a node runner' });
 	}
 	const id = process.env.RUNNER_ID;
@@ -37,7 +38,7 @@ router.post('/restart', authGuard, (req, res) => {
 	res.json({ ok: true });
 	setTimeout(() => {
 		const { startNode } = require('../lib/runnerProcess');
-		startNode({ id, port: process.env.PORT || '3001', token: process.env.NODE_TOKEN });
+		startNode({ id, port: process.env.PORT || DEFAULT_PORT, token: process.env.NODE_TOKEN });
 		process.exit(0);
 	}, 200);
 });

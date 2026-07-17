@@ -7,6 +7,7 @@ const http = require('http');
 const path = require('path');
 const { Server } = require('socket.io');
 const app = require('./app');
+const { PLUM_MODE_NODE, DEFAULT_PORT } = require('./constants/env');
 const {
 	ensureTestsDir,
 	attachListenRetry,
@@ -22,9 +23,9 @@ const testsDir = path.resolve(process.cwd(), 'tests');
 
 // Node/runner mode strips out everything that only makes sense on the main
 // server (cron, MCP, socket.io, file watching).
-const isNodeMode = process.env.PLUM_MODE === 'node';
+const isNodeMode = process.env.PLUM_MODE === PLUM_MODE_NODE;
 
-const port = parseInt(process.env.PORT || '3001', 10);
+const port = parseInt(process.env.PORT || DEFAULT_PORT, 10);
 
 // The underlying HTTP server, shared by Express and Socket.io.
 const server = http.createServer(app);

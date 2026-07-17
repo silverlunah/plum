@@ -28,6 +28,8 @@ const sdkCjs = path.resolve(
 const { McpServer } = require(path.join(sdkCjs, 'server', 'mcp.js'));
 const { StdioServerTransport } = require(path.join(sdkCjs, 'server', 'stdio.js'));
 const { z } = require('zod');
+const { AUTH_SCHEME } = require('../lib/authHeader');
+const { JOB_STATUS } = require('../constants/jobStatus');
 
 const API_URL = (process.env.PLUM_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 const API_KEY = process.env.PLUM_API_KEY || '';
@@ -41,7 +43,7 @@ async function api(method, path, body) {
 		method,
 		headers: {
 			'Content-Type': 'application/json',
-			Authorization: `ApiKey ${API_KEY}`
+			Authorization: `${AUTH_SCHEME.API_KEY} ${API_KEY}`
 		},
 		body: body !== undefined ? JSON.stringify(body) : undefined
 	});
@@ -66,7 +68,7 @@ async function pollJob(jobId, { maxMs = 600_000, intervalMs = 5_000 } = {}) {
 	while (Date.now() < deadline) {
 		await new Promise((r) => setTimeout(r, intervalMs));
 		const job = await get(`/trigger/${jobId}`);
-		if (job.status !== 'running') return job;
+		if (job.status !== JOB_STATUS.RUNNING) return job;
 	}
 	return { status: 'timeout', jobId };
 }

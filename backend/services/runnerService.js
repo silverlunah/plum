@@ -8,6 +8,9 @@ const path = require('path');
 const prisma = require('./prisma');
 const { loadTestEnv } = require('../lib/testEnv');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
+const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { bearerHeader } = require('../lib/authHeader');
+const { JOB_STATUS } = require('../constants/jobStatus');
 
 // ---------------------------------------------------------------------------
 // Runner CRUD
@@ -29,7 +32,7 @@ const getAll = async () => {
 
 const normaliseUrl = (url) => (url ?? '').replace(/\/+$/, '');
 
-const create = async ({ name, url, token, browser = 'chromium' }) => {
+const create = async ({ name, url, token, browser = DEFAULT_BROWSER }) => {
 	const runner = await prisma.runner.create({
 		data: { name, url: normaliseUrl(url), token, browser }
 	});
@@ -81,7 +84,7 @@ async function probe({ url, token }) {
 	try {
 		const res = await fetch(`${url}/api/ping`, {
 			method: 'GET',
-			headers: { Authorization: `Bearer ${token}` },
+			headers: bearerHeader(token),
 			signal: AbortSignal.timeout(5000)
 		});
 		if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
@@ -111,7 +114,7 @@ async function callControlEndpoint(id, endpoint, timeoutMs) {
 	try {
 		const res = await fetch(`${runner.url}/api/${endpoint}`, {
 			method: 'POST',
-			headers: { Authorization: `Bearer ${runner.token}` },
+			headers: bearerHeader(runner.token),
 			signal: AbortSignal.timeout(timeoutMs)
 		});
 		if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
@@ -157,7 +160,7 @@ function collectTestFiles() {
 async function fetchReportContent(runner, jobId, onLog) {
 	try {
 		const res = await fetch(`${runner.url}/api/report/${jobId}`, {
-			headers: { Authorization: `Bearer ${runner.token}` },
+			headers: bearerHeader(runner.token),
 			signal: AbortSignal.timeout(15000)
 		});
 		if (!res.ok) {
@@ -210,7 +213,7 @@ async function dispatchAndPoll(
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
-				Authorization: `Bearer ${runner.token}`
+				...bearerHeader(runner.token)
 			},
 			body: JSON.stringify({
 				tags,
@@ -238,7 +241,7 @@ async function dispatchAndPoll(
 		polling = true;
 		try {
 			const res = await fetch(`${runner.url}/api/execute/${jobId}?offset=${logOffset}`, {
-				headers: { Authorization: `Bearer ${runner.token}` },
+				headers: bearerHeader(runner.token),
 				signal: AbortSignal.timeout(8000)
 			});
 			if (!res.ok) return;
@@ -253,10 +256,10 @@ async function dispatchAndPoll(
 				for (const ss of body.screenshots) onScreenshot(ss);
 			}
 
-			if (body.status === 'done' || body.status === 'error') {
+			if (body.status === JOB_STATUS.DONE || body.status === JOB_STATUS.ERROR) {
 				clearInterval(poll);
 				const content = await fetchReportContent(runner, jobId, onLog);
-				finish(body.exitCode ?? (body.status === 'done' ? 0 : 1), content);
+				finish(body.exitCode ?? (body.status === JOB_STATUS.DONE ? 0 : 1), content);
 			}
 		} catch {
 			// transient polling error — keep trying

@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadRegistry, saveRegistry } = require('./runnerProcess');
+const { SOCKET_EVENTS } = require('../constants/socketEvents');
 
 const WATCH_OPTS = { usePolling: true, interval: 800, ignoreInitial: true };
 
@@ -158,7 +159,7 @@ function watchTestFiles(chokidar, io, testsDir) {
 		clearTimeout(debounce);
 		debounce = setTimeout(() => {
 			console.log(`📝 Tests changed (${event}: ${path.basename(filePath)}) — notifying clients`);
-			io.emit('tests-changed');
+			io.emit(SOCKET_EVENTS.TESTS_CHANGED);
 			syncAutomatedFlags();
 		}, 300);
 	});
@@ -173,7 +174,7 @@ function watchReports(chokidar, io) {
 		const name = path.basename(filePath);
 		if ((name.startsWith('PASS_') || name.startsWith('FAIL_')) && name.endsWith('.json')) {
 			console.log(`📊 New report: ${name} — notifying clients`);
-			io.emit('report-ready');
+			io.emit(SOCKET_EVENTS.REPORT_READY);
 		}
 	});
 	console.log('👀 Watching for new reports...');

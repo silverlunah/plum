@@ -7,6 +7,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { fly, slide } from 'svelte/transition';
 	import { io } from 'socket.io-client';
+	import { SOCKET_EVENTS } from '$lib/socketEvents';
 	import {
 		socket,
 		runnerState,
@@ -160,11 +161,11 @@
 		_socket = s;
 		socket.set(s);
 
-		s.on('log', (data) => {
+		s.on(SOCKET_EVENTS.LOG, (data) => {
 			runnerState.update((r) => ({ ...r, output: r.output + data + '\n' }));
 		});
 
-		s.on('done', (payload) => {
+		s.on(SOCKET_EVENTS.DONE, (payload) => {
 			// Distributed runs send { code, reportId }; the built-in path sends a bare code.
 			const code = typeof payload === 'object' && payload !== null ? payload.code : payload;
 			const providedId =
@@ -190,32 +191,32 @@
 			});
 		});
 
-		s.on('runner-lanes-init', (lanes) => {
+		s.on(SOCKET_EVENTS.RUNNER_LANES_INIT, (lanes) => {
 			runnerState.update((r) => ({
 				...r,
 				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '', latestScreenshot: null }))
 			}));
 		});
 
-		s.on('runner-lane-log', ({ id, log }) => {
+		s.on(SOCKET_EVENTS.RUNNER_LANE_LOG, ({ id, log }) => {
 			runnerState.update((r) => ({
 				...r,
 				lanes: r.lanes.map((l) => (l.id === id ? { ...l, logs: l.logs + log } : l))
 			}));
 		});
 
-		s.on('runner-lane-status', ({ id, status }) => {
+		s.on(SOCKET_EVENTS.RUNNER_LANE_STATUS, ({ id, status }) => {
 			runnerState.update((r) => ({
 				...r,
 				lanes: r.lanes.map((l) => (l.id === id ? { ...l, status } : l))
 			}));
 		});
 
-		s.on('step-screenshot', ({ stepName, data }) => {
+		s.on(SOCKET_EVENTS.STEP_SCREENSHOT, ({ stepName, data }) => {
 			runnerState.update((r) => ({ ...r, latestScreenshot: { stepName, data } }));
 		});
 
-		s.on('runner-lane-screenshot', ({ id, stepName, data }) => {
+		s.on(SOCKET_EVENTS.RUNNER_LANE_SCREENSHOT, ({ id, stepName, data }) => {
 			runnerState.update((r) => ({
 				...r,
 				lanes: r.lanes.map((l) =>
@@ -224,8 +225,8 @@
 			}));
 		});
 
-		s.on('tests-changed', () => testsVersion.update((v) => v + 1));
-		s.on('report-ready', () => reportsVersion.update((v) => v + 1));
+		s.on(SOCKET_EVENTS.TESTS_CHANGED, () => testsVersion.update((v) => v + 1));
+		s.on(SOCKET_EVENTS.REPORT_READY, () => reportsVersion.update((v) => v + 1));
 
 		function updateBgRun(runId, updater) {
 			backgroundRuns.update((r) => {
@@ -234,7 +235,7 @@
 			});
 		}
 
-		s.on('bg-run-start', ({ runId, kind, label, meta }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_START, ({ runId, kind, label, meta }) => {
 			backgroundRuns.update((r) => ({
 				...r,
 				[runId]: {
@@ -258,36 +259,36 @@
 			panelExpanded.set(true);
 		});
 
-		s.on('bg-run-log', ({ runId, log }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_LOG, ({ runId, log }) => {
 			updateBgRun(runId, (run) => ({ ...run, output: run.output + log }));
 		});
 
-		s.on('bg-run-lanes-init', ({ runId, lanes }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_LANES_INIT, ({ runId, lanes }) => {
 			updateBgRun(runId, (run) => ({
 				...run,
 				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '', latestScreenshot: null }))
 			}));
 		});
 
-		s.on('bg-run-lane-log', ({ runId, laneId, log }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_LANE_LOG, ({ runId, laneId, log }) => {
 			updateBgRun(runId, (run) => ({
 				...run,
 				lanes: run.lanes.map((l) => (l.id === laneId ? { ...l, logs: l.logs + log } : l))
 			}));
 		});
 
-		s.on('bg-run-lane-status', ({ runId, laneId, status }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_LANE_STATUS, ({ runId, laneId, status }) => {
 			updateBgRun(runId, (run) => ({
 				...run,
 				lanes: run.lanes.map((l) => (l.id === laneId ? { ...l, status } : l))
 			}));
 		});
 
-		s.on('bg-run-screenshot', ({ runId, stepName, data }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_SCREENSHOT, ({ runId, stepName, data }) => {
 			updateBgRun(runId, (run) => ({ ...run, latestScreenshot: { stepName, data } }));
 		});
 
-		s.on('bg-run-lane-screenshot', ({ runId, laneId, stepName, data }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_LANE_SCREENSHOT, ({ runId, laneId, stepName, data }) => {
 			updateBgRun(runId, (run) => ({
 				...run,
 				lanes: run.lanes.map((l) =>
@@ -296,7 +297,7 @@
 			}));
 		});
 
-		s.on('bg-run-done', ({ runId, code, reportId }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_DONE, ({ runId, code, reportId }) => {
 			const passed = code === 0 || code === null;
 			updateBgRun(runId, (run) => ({
 				...run,

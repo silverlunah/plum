@@ -5,6 +5,7 @@
 
 const prisma = require('./prisma');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
+const { DEFAULT_BROWSER } = require('../constants/defaults');
 
 // ---------------------------------------------------------------------------
 // Export — all data except reports (reports are too large; use pg_dump instead)
@@ -107,7 +108,7 @@ const importAll = async (
 						cronExpression: job.cronExpression,
 						tags: job.tags,
 						workers: job.workers ?? 1,
-						browser: job.browser ?? 'chromium',
+						browser: job.browser ?? DEFAULT_BROWSER,
 						enabled: job.enabled ?? true,
 						runnerIds: job.runnerIds ?? BUILT_IN_RUNNER_ID,
 						notifyDiscord: job.notifyDiscord ?? false,
@@ -117,7 +118,7 @@ const importAll = async (
 						cronExpression: job.cronExpression,
 						tags: job.tags,
 						workers: job.workers ?? 1,
-						browser: job.browser ?? 'chromium',
+						browser: job.browser ?? DEFAULT_BROWSER,
 						runnerIds: job.runnerIds ?? BUILT_IN_RUNNER_ID,
 						notifyDiscord: job.notifyDiscord ?? false,
 						notifySlack: job.notifySlack ?? false

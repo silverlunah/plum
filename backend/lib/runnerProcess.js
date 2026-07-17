@@ -18,6 +18,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
+const { PLUM_MODE_NODE, DEFAULT_PORT } = require('../constants/env');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
 const SERVER_PATH = path.join(BACKEND_DIR, 'server.js');
@@ -109,9 +110,9 @@ function isLocalUrl(url) {
 
 function parsePort(url) {
 	try {
-		return new URL(url).port || '3001';
+		return new URL(url).port || DEFAULT_PORT;
 	} catch {
-		return '3001';
+		return DEFAULT_PORT;
 	}
 }
 
@@ -201,7 +202,7 @@ function startNode({ id, port, token }) {
 		env: {
 			...process.env,
 			NODE_TOKEN: token,
-			PLUM_MODE: 'node',
+			PLUM_MODE: PLUM_MODE_NODE,
 			PORT: String(port),
 			RUNNER_ID: String(id)
 		},

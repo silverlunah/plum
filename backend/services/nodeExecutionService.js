@@ -10,6 +10,8 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { startSsPoller } = require('../lib/screenshotPoller');
 const { TRIGGER_REMOTE } = require('../constants/triggers');
+const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { JOB_STATUS } = require('../constants/jobStatus');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
 
@@ -24,7 +26,13 @@ function getJob(jobId) {
 // Starts a remote test job dispatched from the primary server: materializes
 // any uploaded test files, spawns `npm run test`, and tracks logs/screenshots
 // for later HTTP polling (see pollJob).
-function startJob({ tags, browser = 'chromium', workers = 1, tests = null, env: userEnv = {} }) {
+function startJob({
+	tags,
+	browser = DEFAULT_BROWSER,
+	workers = 1,
+	tests = null,
+	env: userEnv = {}
+}) {
 	const jobId = crypto.randomUUID();
 
 	// path.resolve ensures absolute even if TMPDIR env var is set to a relative path
@@ -48,7 +56,7 @@ function startJob({ tags, browser = 'chromium', workers = 1, tests = null, env: 
 	fs.mkdirSync(ssDir, { recursive: true });
 
 	jobs[jobId] = {
-		status: 'running',
+		status: JOB_STATUS.RUNNING,
 		logs: '',
 		exitCode: null,
 		startedAt: Date.now(),
@@ -89,7 +97,7 @@ function startJob({ tags, browser = 'chromium', workers = 1, tests = null, env: 
 	});
 	proc.on('close', (code) => {
 		clearInterval(ssPoller);
-		jobs[jobId].status = code === 0 ? 'done' : 'error';
+		jobs[jobId].status = code === 0 ? JOB_STATUS.DONE : JOB_STATUS.ERROR;
 		jobs[jobId].exitCode = code;
 
 		try {

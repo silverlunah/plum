@@ -7,13 +7,14 @@ const { execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const pc = require('picocolors');
+const { DEFAULT_BROWSER } = require('../../constants/defaults');
 
 const parallelIdx = process.argv.indexOf('--parallel');
 const parallel =
 	process.env.PARALLEL || (parallelIdx !== -1 ? process.argv[parallelIdx + 1] : null);
 const runners = parallel || process.env.REPORT_RUNNERS || '1';
 const tag = process.env.TAG || process.argv.slice(2).find((a) => a.startsWith('@'));
-const browser = process.env.BROWSER || 'chromium';
+const browser = process.env.BROWSER || DEFAULT_BROWSER;
 
 const reportFile =
 	process.env.CUCUMBER_REPORT_FILE ||

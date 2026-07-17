@@ -7,6 +7,7 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const { SCREENSHOTS_DIR } = require('./lib/reportFilename');
+const { isNodeMode } = require('./constants/env');
 const app = express();
 
 app.use(cors({ origin: '*' }));
@@ -23,7 +24,7 @@ const nodeRoutes = require('./routes/node.routes');
 app.use('/api', nodeRoutes);
 
 // Primary-mode routes — skipped when running as a runner node (no DB available)
-if (process.env.PLUM_MODE !== 'node') {
+if (!isNodeMode()) {
 	app.use('/tests', require('./routes/tests.routes'));
 	app.use('/reports', require('./routes/reports.routes'));
 	app.use('/cron-jobs', require('./routes/cron.routes'));

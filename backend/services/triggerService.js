@@ -10,6 +10,10 @@ const { spawn } = require('child_process');
 const { randomUUID } = require('crypto');
 const { startSsPoller } = require('../lib/screenshotPoller');
 const { TRIGGER_TYPE } = require('../constants/triggers');
+const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { PLUM_MODE_NODE } = require('../constants/env');
+const { SOCKET_EVENTS } = require('../constants/socketEvents');
+const { JOB_STATUS } = require('../constants/jobStatus');
 const { readCucumberReportFile } = require('../lib/reportFilename');
 const { runWithRetries } = require('../lib/retryRunner');
 const settingsService = require('./settingsService');
@@ -64,7 +68,7 @@ function runAttempt({
 		if (Number(workers) > 1) env.PARALLEL = String(workers);
 		if (testRunId) env.TEST_RUN_ID = testRunId;
 		if (baseUrl) env.BASE_URL = baseUrl;
-		if (suppressSave) env.PLUM_MODE = 'node';
+		if (suppressSave) env.PLUM_MODE = PLUM_MODE_NODE;
 
 		const proc = spawn('npm', ['run', 'test'], { env, shell: true, cwd: BACKEND_DIR });
 
@@ -113,15 +117,15 @@ function runNoRetry({
 			});
 			reportId = report?.id ?? null;
 			jobs.set(jobId, {
-				status: code === 130 ? 'cancelled' : 'done',
+				status: code === 130 ? JOB_STATUS.CANCELLED : JOB_STATUS.DONE,
 				exitCode: code,
 				reportId,
 				startedAt
 			});
 		} catch {
-			jobs.set(jobId, { status: 'done', exitCode: code, reportId: null, startedAt });
+			jobs.set(jobId, { status: JOB_STATUS.DONE, exitCode: code, reportId: null, startedAt });
 		}
-		if (_io) _io.emit('bg-run-done', { runId: jobId, code, reportId });
+		if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_DONE, { runId: jobId, code, reportId });
 	});
 }
 
@@ -170,15 +174,15 @@ function runWithRetriesAndSave({
 			});
 			reportId = report.id;
 			jobs.set(jobId, {
-				status: code === 130 ? 'cancelled' : 'done',
+				status: code === 130 ? JOB_STATUS.CANCELLED : JOB_STATUS.DONE,
 				exitCode: code,
 				reportId,
 				startedAt
 			});
 		} catch {
-			jobs.set(jobId, { status: 'done', exitCode: code, reportId: null, startedAt });
+			jobs.set(jobId, { status: JOB_STATUS.DONE, exitCode: code, reportId: null, startedAt });
 		}
-		if (_io) _io.emit('bg-run-done', { runId: jobId, code, reportId });
+		if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_DONE, { runId: jobId, code, reportId });
 	});
 }
 
@@ -188,7 +192,7 @@ function runWithRetriesAndSave({
 // (polled through getJob).
 async function startRun({
 	tag = '',
-	browser = 'chromium',
+	browser = DEFAULT_BROWSER,
 	workers = 1,
 	baseUrl,
 	testRunId,
@@ -199,10 +203,10 @@ async function startRun({
 
 	const jobId = randomUUID();
 	const startedAt = Date.now();
-	jobs.set(jobId, { status: 'running', exitCode: null, reportId: null, startedAt });
+	jobs.set(jobId, { status: JOB_STATUS.RUNNING, exitCode: null, reportId: null, startedAt });
 
 	if (_io) {
-		_io.emit('bg-run-start', {
+		_io.emit(SOCKET_EVENTS.BG_RUN_START, {
 			runId: jobId,
 			kind: trigger,
 			label: trigger === TRIGGER_TYPE.MCP ? 'MCP run' : 'External run',
@@ -211,10 +215,10 @@ async function startRun({
 	}
 
 	const onLog = (text) => {
-		if (_io) _io.emit('bg-run-log', { runId: jobId, log: text });
+		if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_LOG, { runId: jobId, log: text });
 	};
 	const onScreenshot = ({ stepName, data }) => {
-		if (_io) _io.emit('bg-run-screenshot', { runId: jobId, stepName, data });
+		if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_SCREENSHOT, { runId: jobId, stepName, data });
 	};
 
 	const runParams = {

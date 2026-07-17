@@ -4,6 +4,8 @@
  */
 
 import { writable, get } from 'svelte/store';
+import { BROWSERS } from '$lib/constants';
+import { SOCKET_EVENTS } from '$lib/socketEvents';
 
 export const socket = writable(null);
 
@@ -22,7 +24,7 @@ export const runnerState = writable({
 export const runnerConfig = writable({
 	workers: 1,
 	testID: '',
-	browser: 'chromium',
+	browser: BROWSERS[0].id,
 	selectedRunners: ['built-in']
 });
 
@@ -60,7 +62,7 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 	});
 	panelExpanded.set(true);
 
-	s.emit('run-test', {
+	s.emit(SOCKET_EVENTS.RUN_TEST, {
 		tag: runId,
 		workers,
 		browser,
@@ -73,5 +75,5 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 
 export function cancelRun() {
 	const s = get(socket);
-	if (s) s.emit('cancel-test');
+	if (s) s.emit(SOCKET_EVENTS.CANCEL_TEST);
 }

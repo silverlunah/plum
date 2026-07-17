@@ -5,13 +5,14 @@
 
 const { verifyToken } = require('../services/userService');
 const prisma = require('../services/prisma');
+const { AUTH_SCHEME } = require('../lib/authHeader');
 
 function jwtAuth(req, res, next) {
 	const auth = req.headers.authorization;
 
 	// MCP API key — resolves to the first admin user so createdById is always valid
 	const mcpKey = process.env.PLUM_MCP_KEY;
-	if (mcpKey && auth === `ApiKey ${mcpKey}`) {
+	if (mcpKey && auth === `${AUTH_SCHEME.API_KEY} ${mcpKey}`) {
 		prisma.user
 			.findFirst({ where: { role: 'admin' }, select: { id: true } })
 			.then((admin) => {
@@ -25,12 +26,12 @@ function jwtAuth(req, res, next) {
 		return;
 	}
 
-	if (!auth || !auth.startsWith('Bearer ')) {
+	if (!auth || !auth.startsWith(`${AUTH_SCHEME.BEARER} `)) {
 		return res.status(401).json({ error: 'Unauthorized' });
 	}
 	let payload;
 	try {
-		payload = verifyToken(auth.slice(7));
+		payload = verifyToken(auth.slice(AUTH_SCHEME.BEARER.length + 1));
 	} catch {
 		return res.status(401).json({ error: 'Invalid or expired token' });
 	}
