@@ -144,10 +144,7 @@ async function start() {
 			chokidar.watch(featuresDir, watchOpts).on('all', (event, filePath) => {
 				clearTimeout(debounce);
 				debounce = setTimeout(() => {
-					console.log(
-						`📝 Tests changed (${event}: ${path.basename(filePath)}) — notifying clients`
-					);
-					io.emit('tests-changed');
+					console.log(`📝 Tests changed (${event}: ${path.basename(filePath)})`);
 					require('./services/reportService')
 						.syncAutomatedFromFeatures()
 						.catch(() => {});

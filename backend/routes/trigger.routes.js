@@ -28,6 +28,7 @@ const { startSsPoller } = require('../lib/screenshotPoller');
 const { TRIGGER_TYPE } = require('../constants/triggers');
 const settingsService = require('../services/settingsService');
 const reportService = require('../services/reportService');
+const activeRunsService = require('../services/activeRunsService');
 const { readCucumberReportFile } = require('../lib/reportFilename');
 const { runWithRetries } = require('../lib/retryRunner');
 
@@ -61,13 +62,11 @@ router.post('/', jwtAuth, async (req, res, next) => {
 		const startedAt = Date.now();
 		jobs.set(jobId, { status: 'running', exitCode: null, reportId: null, startedAt });
 
+		const label = trigger === TRIGGER_TYPE.MCP ? 'MCP run' : 'External run';
+		const meta = { tag, browser, workers };
+		activeRunsService.registerRun(jobId, { kind: trigger, label, meta });
 		if (_io) {
-			_io.emit('bg-run-start', {
-				runId: jobId,
-				kind: trigger,
-				label: trigger === TRIGGER_TYPE.MCP ? 'MCP run' : 'External run',
-				meta: { tag, browser, workers }
-			});
+			_io.emit('bg-run-start', { runId: jobId, kind: trigger, label, meta });
 		}
 
 		const onLog = (text) => {
@@ -136,6 +135,7 @@ router.post('/', jwtAuth, async (req, res, next) => {
 					jobs.set(jobId, { status: 'done', exitCode: code, reportId: null, startedAt });
 				}
 
+				activeRunsService.unregisterRun(jobId);
 				if (_io) _io.emit('bg-run-done', { runId: jobId, code, reportId });
 			});
 		} else {
@@ -169,6 +169,7 @@ router.post('/', jwtAuth, async (req, res, next) => {
 					jobs.set(jobId, { status: 'done', exitCode: code, reportId: null, startedAt });
 				}
 
+				activeRunsService.unregisterRun(jobId);
 				if (_io) _io.emit('bg-run-done', { runId: jobId, code, reportId });
 			});
 		}
