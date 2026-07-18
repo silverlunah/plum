@@ -26,7 +26,10 @@ export const TRIGGER_TYPES = Object.freeze({
 	MANUAL: 'manual-trigger',
 	CLI: 'command-line-trigger',
 	MCP: 'mcp-trigger',
-	EXTERNAL: 'external-trigger'
+	EXTERNAL: 'external-trigger',
+	// Not a Report.triggerType value — only used as the `kind` tag on bg-run-*
+	// live-broadcast events, alongside the other values reused for that field.
+	CRON: 'cron'
 });
 
 export const REPORTS_PER_PAGE = 15;

@@ -26,7 +26,6 @@
 		panelExpanded,
 		builtInEnabled,
 		triggerRun,
-		testsVersion,
 		reportsVersion,
 		runsVersion,
 		backgroundRuns
@@ -35,6 +34,7 @@
 	import { fetchRunners } from '$lib/api/runners';
 	import { fetchRuns, fetchRun } from '$lib/api/repository';
 	import { fetchIntegrations } from '$lib/api/settings';
+	import { fetchActiveRuns } from '$lib/api/activeRuns';
 	import {
 		API_BASE,
 		BROWSERS,
@@ -45,7 +45,8 @@
 		RUN_PICKER_LIMIT,
 		RUN_TAG_DISPLAY_LIMIT,
 		ALL_TESTS_LABEL,
-		REDIRECT_DELAY_MS
+		REDIRECT_DELAY_MS,
+		TRIGGER_TYPES
 	} from '$lib/constants';
 	import { triggerLabel, triggerVariant } from '$lib/utils/format';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
@@ -77,6 +78,28 @@
 
 	let _unsubConfig, _unsubExpanded, _unsubBuiltIn, _socket;
 
+	/** Shape shared by the live `bg-run-start` socket handler and the on-mount hydration fetch below. */
+	function makeBgRunEntry(kind, label, meta) {
+		return {
+			kind,
+			label,
+			output: '',
+			running: true,
+			testCompleted: false,
+			latestReportId: null,
+			status: 'running',
+			lanes: [],
+			currentRun: {
+				tag: meta?.tag,
+				workers: meta?.workers,
+				browser: meta?.browser,
+				runTitle: label,
+				startedBy: meta?.startedBy
+			},
+			latestScreenshot: null
+		};
+	}
+
 	onMount(() => {
 		try {
 			const saved = localStorage.getItem('plum:runnerConfig');
@@ -106,6 +129,24 @@
 
 		fetchIntegrations()
 			.then((i) => (integrations = i))
+			.catch(() => {});
+
+		// Hydrate any runs already in progress on the backend (e.g. this tab just
+		// loaded/refreshed after a run had already started) so they don't appear to
+		// have vanished — live socket events alone only reach tabs connected at the
+		// moment a run begins.
+		fetchActiveRuns()
+			.then((runs) => {
+				if (runs.length === 0) return;
+				backgroundRuns.update((r) => {
+					const next = { ...r };
+					for (const { runId, kind, label, meta } of runs) {
+						if (!next[runId]) next[runId] = makeBgRunEntry(kind, label, meta);
+					}
+					return next;
+				});
+				panelExpanded.set(true);
+			})
 			.catch(() => {});
 
 		_unsubConfig = runnerConfig.subscribe((v) => {
@@ -201,7 +242,6 @@
 			}));
 		});
 
-		s.on('tests-changed', () => testsVersion.update((v) => v + 1));
 		s.on('report-ready', () => reportsVersion.update((v) => v + 1));
 
 		function updateBgRun(runId, updater) {
@@ -212,26 +252,7 @@
 		}
 
 		s.on('bg-run-start', ({ runId, kind, label, meta }) => {
-			backgroundRuns.update((r) => ({
-				...r,
-				[runId]: {
-					kind,
-					label,
-					output: '',
-					running: true,
-					testCompleted: false,
-					latestReportId: null,
-					status: 'running',
-					lanes: [],
-					currentRun: {
-						tag: meta?.tag,
-						workers: meta?.workers,
-						browser: meta?.browser,
-						runTitle: label
-					},
-					latestScreenshot: null
-				}
-			}));
+			backgroundRuns.update((r) => ({ ...r, [runId]: makeBgRunEntry(kind, label, meta) }));
 			panelExpanded.set(true);
 		});
 
@@ -275,14 +296,15 @@
 
 		s.on('bg-run-done', ({ runId, code, reportId }) => {
 			const passed = code === 0 || code === null;
+			const cancelled = code === 130;
 			updateBgRun(runId, (run) => ({
 				...run,
 				running: false,
-				testCompleted: true,
-				latestReportId: reportId,
-				status: passed ? 'pass' : 'fail'
+				testCompleted: !cancelled,
+				latestReportId: cancelled ? null : reportId,
+				status: cancelled ? 'idle' : passed ? 'pass' : 'fail'
 			}));
-			reportsVersion.update((v) => v + 1);
+			if (!cancelled) reportsVersion.update((v) => v + 1);
 			// Keep the finished entry around briefly so a viewer on /reports/live?run=
 			// still sees the completion bar/redirect, then drop it from the bottom bar.
 			setTimeout(() => {
@@ -316,7 +338,7 @@
 	})();
 	$: runningBgEntries = Object.entries($backgroundRuns).filter(([, r]) => r.running);
 	$: anyBgRunning = runningBgEntries.length > 0;
-	$: anyBgCronRunning = runningBgEntries.some(([, r]) => r.kind === 'cron');
+	$: anyBgCronRunning = runningBgEntries.some(([, r]) => r.kind === TRIGGER_TYPES.CRON);
 	$: anyRunning = state.running || anyBgRunning;
 
 	$: if ($runsVersion >= 0)
@@ -841,7 +863,12 @@
 					<span class="run-card-dot pulse-pass"></span>
 					<div class="run-card-info">
 						<span class="run-card-label">{run.label}</span>
-						<span class="run-card-meta">{triggerLabel(run.kind)} run</span>
+						<span class="run-card-meta">
+							{triggerLabel(run.kind)} run
+							{#if run.currentRun?.startedBy}
+								<span class="meta-dot">·</span> started by {run.currentRun.startedBy}
+							{/if}
+						</span>
 					</div>
 					<Badge variant={triggerVariant(run.kind)}>{triggerLabel(run.kind)}</Badge>
 					<svg

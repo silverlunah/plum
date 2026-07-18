@@ -19,7 +19,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { fetchSuites } from '$lib/api/tests';
-	import { runnerConfig, triggerRun, testsVersion } from '$lib/stores/runner';
+	import { runnerConfig, triggerRun } from '$lib/stores/runner';
 	import { COPY_TIMEOUT_MS } from '$lib/constants';
 	import { stagger } from '$lib/utils/format';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
@@ -27,8 +27,34 @@
 	let suites = [];
 	let search = '';
 	let expandedSteps = new Set();
+	// Suites are expanded by default — this tracks the exceptions (collapsed ones).
+	let collapsedSuites = new Set();
 	let copiedIds = new Set();
 	const copyTimers = new Map();
+
+	function readSort(key, fallback) {
+		try {
+			const v = sessionStorage.getItem(key);
+			if (v) return JSON.parse(v);
+		} catch {}
+		return fallback;
+	}
+
+	function writeSort(key, value) {
+		try {
+			sessionStorage.setItem(key, JSON.stringify(value));
+		} catch {}
+	}
+
+	let sort = readSort('plum:automated-tests:sort', { by: 'id', order: 'desc' });
+
+	function applySort(by) {
+		sort =
+			sort.by === by
+				? { ...sort, order: sort.order === 'asc' ? 'desc' : 'asc' }
+				: { by, order: by === 'id' ? 'desc' : 'asc' };
+		writeSort('plum:automated-tests:sort', sort);
+	}
 
 	async function loadSuites() {
 		try {
@@ -38,8 +64,9 @@
 		}
 	}
 
+	// Loads once on mount — this page is static and only reflects new suites/tests
+	// on a manual browser refresh, not via a live auto-refresh.
 	onMount(loadSuites);
-	$: if ($testsVersion) loadSuites();
 
 	function suiteIds(suite) {
 		return Array.isArray(suite.suiteId) ? suite.suiteId : [suite.suiteId];
@@ -57,6 +84,12 @@
 		if (expandedSteps.has(id)) expandedSteps.delete(id);
 		else expandedSteps.add(id);
 		expandedSteps = expandedSteps;
+	}
+
+	function toggleSuite(id) {
+		if (collapsedSuites.has(id)) collapsedSuites.delete(id);
+		else collapsedSuites.add(id);
+		collapsedSuites = collapsedSuites;
 	}
 
 	function run(id) {
@@ -102,7 +135,24 @@
 			if (!suiteMatches && matchedTests.length === 0) return null;
 			return { ...suite, tests: suiteMatches ? suite.tests : matchedTests };
 		})
-		.filter(Boolean);
+		.filter(Boolean)
+		.map((suite) => ({
+			...suite,
+			tests: [...suite.tests].sort((a, b) => {
+				const diff =
+					sort.by === 'name'
+						? a.testCase.localeCompare(b.testCase)
+						: (primaryId(a) ?? '').localeCompare(primaryId(b) ?? '');
+				return sort.order === 'asc' ? diff : -diff;
+			})
+		}))
+		.sort((a, b) => {
+			const diff =
+				sort.by === 'name'
+					? a.suiteName.localeCompare(b.suiteName)
+					: (suiteIds(a)[0] ?? '').localeCompare(suiteIds(b)[0] ?? '');
+			return sort.order === 'asc' ? diff : -diff;
+		});
 
 	$: totalTests = suites.reduce((n, s) => n + s.tests.length, 0);
 	$: visibleTests = filtered.reduce((n, s) => n + s.tests.length, 0);
@@ -163,13 +213,48 @@
 	</div>
 </div>
 
+{#if !q}
+	<div class="sort-bar">
+		<span class="sort-label">Sort by</span>
+		{#each [['id', 'ID'], ['name', 'Name']] as [val, label]}
+			<button class="sort-chip" class:active={sort.by === val} on:click={() => applySort(val)}>
+				{label}
+				{#if sort.by === val}
+					<span class="sort-dir">{sort.order === 'asc' ? '↑' : '↓'}</span>
+				{/if}
+			</button>
+		{/each}
+	</div>
+{/if}
+
 {#if filtered.length === 0}
 	<EmptyState message={q ? `No tests matching "${search}"` : 'No test suites found.'} />
 {:else}
 	<div class="suites">
 		{#each filtered as suite, si}
+			{@const suiteKey = suiteIds(suite)[0] ?? suite.suiteName}
+			{@const suiteOpen = !collapsedSuites.has(suiteKey)}
 			<div class="suite" style={stagger(si, 55)}>
 				<div class="suite-header">
+					<button
+						class="suite-toggle"
+						on:click={() => toggleSuite(suiteKey)}
+						aria-expanded={suiteOpen}
+						aria-label={suiteOpen ? 'Collapse suite' : 'Expand suite'}
+					>
+						<svg
+							width="12"
+							height="12"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							class:rotated={suiteOpen}
+						>
+							<polyline points="9 18 15 12 9 6" />
+						</svg>
+					</button>
 					<div class="suite-meta">
 						<div class="suite-badges">
 							{#each suiteIds(suite) as id}
@@ -197,101 +282,109 @@
 					</button>
 				</div>
 
-				<div class="tests">
-					{#each suite.tests as test, ti}
-						{@const pid = primaryId(test)}
-						{@const stepsOpen = expandedSteps.has(pid)}
-						<div class="test-row" style={stagger(si * 4 + ti, 30)}>
-							<div class="test-main">
-								<button
-									class="run-icon-btn"
-									on:click={() => run(pid)}
-									title="Run {pid}"
-									aria-label="Run {test.testCase}"
-								>
-									<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-										<polygon points="5,3 19,12 5,21" />
-									</svg>
-								</button>
-
-								<div class="test-ids">
-									{#each testIds(test) as id}
-										<button
-											class="id-pill"
-											class:copied={copiedIds.has(id)}
-											on:click={() => copyId(id)}
-											title={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
-											aria-label={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
-										>
-											{id}
-										</button>
-									{/each}
-								</div>
-
-								<span class="test-name">
-									{test.testCase}
-									{#if test.type === 'outline'}
-										<span class="outline-badge">outline</span>
-									{/if}
-								</span>
-
-								{#if test.steps?.length > 0}
+				{#if suiteOpen}
+					<div class="tests" transition:slide={{ duration: 180 }}>
+						{#each suite.tests as test, ti}
+							{@const pid = primaryId(test)}
+							{@const stepsOpen = expandedSteps.has(pid)}
+							<div class="test-row" style={stagger(si * 4 + ti, 30)}>
+								<div class="test-main">
 									<button
-										class="steps-toggle"
-										on:click={() => toggleSteps(pid)}
-										aria-expanded={stepsOpen}
+										class="run-icon-btn"
+										on:click={() => run(pid)}
+										title="Run {pid}"
+										aria-label="Run {test.testCase}"
 									>
 										<svg
-											width="12"
-											height="12"
+											width="10"
+											height="10"
 											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											class:rotated={stepsOpen}
+											fill="currentColor"
+											stroke="none"
 										>
-											<polyline points="9 18 15 12 9 6" />
+											<polygon points="5,3 19,12 5,21" />
 										</svg>
-										{stepsOpen ? 'Hide' : 'Steps'}
 									</button>
-								{/if}
-							</div>
 
-							{#if stepsOpen && test.steps?.length > 0}
-								<div class="steps" transition:slide={{ duration: 180 }}>
-									<ol class="step-list">
-										{#each test.steps as step}
-											<li class="step">{step}</li>
+									<div class="test-ids">
+										{#each testIds(test) as id}
+											<button
+												class="id-pill"
+												class:copied={copiedIds.has(id)}
+												on:click={() => copyId(id)}
+												title={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
+												aria-label={copiedIds.has(id) ? `Copied ${id}` : `Copy ${id}`}
+											>
+												{id}
+											</button>
 										{/each}
-									</ol>
+									</div>
 
-									{#if test.examples}
-										<div class="examples">
-											<span class="examples-label">Examples</span>
-											<div class="examples-table-wrap">
-												<table class="examples-table">
-													<thead>
-														<tr
-															>{#each test.examples.headers as h}<th>{h}</th>{/each}</tr
-														>
-													</thead>
-													<tbody>
-														{#each test.examples.rows as row}
-															<tr
-																>{#each row as cell}<td>{cell}</td>{/each}</tr
-															>
-														{/each}
-													</tbody>
-												</table>
-											</div>
-										</div>
+									<span class="test-name">
+										{test.testCase}
+										{#if test.type === 'outline'}
+											<span class="outline-badge">outline</span>
+										{/if}
+									</span>
+
+									{#if test.steps?.length > 0}
+										<button
+											class="steps-toggle"
+											on:click={() => toggleSteps(pid)}
+											aria-expanded={stepsOpen}
+										>
+											<svg
+												width="12"
+												height="12"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												class:rotated={stepsOpen}
+											>
+												<polyline points="9 18 15 12 9 6" />
+											</svg>
+											{stepsOpen ? 'Hide' : 'Steps'}
+										</button>
 									{/if}
 								</div>
-							{/if}
-						</div>
-					{/each}
-				</div>
+
+								{#if stepsOpen && test.steps?.length > 0}
+									<div class="steps" transition:slide={{ duration: 180 }}>
+										<ol class="step-list">
+											{#each test.steps as step}
+												<li class="step">{step}</li>
+											{/each}
+										</ol>
+
+										{#if test.examples}
+											<div class="examples">
+												<span class="examples-label">Examples</span>
+												<div class="examples-table-wrap">
+													<table class="examples-table">
+														<thead>
+															<tr
+																>{#each test.examples.headers as h}<th>{h}</th>{/each}</tr
+															>
+														</thead>
+														<tbody>
+															{#each test.examples.rows as row}
+																<tr
+																	>{#each row as cell}<td>{cell}</td>{/each}</tr
+																>
+															{/each}
+														</tbody>
+													</table>
+												</div>
+											</div>
+										{/if}
+									</div>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
 			</div>
 		{/each}
 	</div>
@@ -365,6 +458,56 @@
 		background: var(--bg-elevated);
 	}
 
+	/* ── Sort bar ── */
+	.sort-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		margin: 1.25rem 0;
+		flex-wrap: wrap;
+	}
+
+	.sort-label {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		margin-right: 0.25rem;
+	}
+
+	.sort-chip {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		height: 28px;
+		padding: 0 0.625rem;
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-pill);
+		cursor: pointer;
+		transition:
+			color var(--duration-fast),
+			border-color var(--duration-fast),
+			background var(--duration-fast);
+	}
+
+	.sort-chip:hover {
+		color: var(--text);
+		border-color: var(--accent);
+	}
+
+	.sort-chip.active {
+		color: var(--accent);
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+
+	.sort-dir {
+		font-size: 0.7rem;
+		opacity: 0.8;
+	}
+
 	.search-input::placeholder {
 		color: var(--text-muted);
 	}
@@ -418,6 +561,35 @@
 		background: var(--bg-subtle);
 		border-bottom: 1px solid var(--border);
 		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+	}
+
+	.suite-toggle {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 22px;
+		height: 22px;
+		border: none;
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		flex-shrink: 0;
+		border-radius: var(--radius-sm);
+		transition:
+			background var(--duration-fast),
+			color var(--duration-fast);
+	}
+
+	.suite-toggle:hover {
+		background: var(--bg-elevated);
+		color: var(--text);
+	}
+
+	.suite-toggle svg {
+		transition: transform var(--duration-fast) var(--ease-out);
+	}
+	.suite-toggle svg.rotated {
+		transform: rotate(90deg);
 	}
 
 	.suite-meta {
