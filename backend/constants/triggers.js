@@ -13,7 +13,11 @@ const TRIGGER_TYPE = Object.freeze({
 	MANUAL: 'manual-trigger',
 	CLI: 'command-line-trigger',
 	MCP: 'mcp-trigger',
-	EXTERNAL: 'external-trigger'
+	EXTERNAL: 'external-trigger',
+	// Not a Report.triggerType value (cron jobs store their taskName there instead) —
+	// only used as the `kind` tag on bg-run-* live-broadcast events, alongside the
+	// other TRIGGER_TYPE values reused for that same field.
+	CRON: 'cron'
 });
 
 /**

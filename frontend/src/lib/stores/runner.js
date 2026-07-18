@@ -6,6 +6,7 @@
 import { writable, get } from 'svelte/store';
 import { BROWSERS } from '$lib/constants';
 import { SOCKET_EVENTS } from '$lib/socketEvents';
+import { auth } from './auth';
 
 export const socket = writable(null);
 
@@ -32,7 +33,6 @@ export const panelExpanded = writable(false);
 
 export const builtInEnabled = writable(true);
 
-export const testsVersion = writable(0);
 export const reportsVersion = writable(0);
 export const runsVersion = writable(0);
 
@@ -69,7 +69,9 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 		runners: selectedRunners,
 		testRunId: testRunId ?? null,
 		notifyDiscord: notify.notifyDiscord ?? false,
-		notifySlack: notify.notifySlack ?? false
+		notifySlack: notify.notifySlack ?? false,
+		runTitle,
+		startedBy: get(auth).user?.name ?? null
 	});
 }
 

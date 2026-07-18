@@ -18,6 +18,7 @@ const { readCucumberReportFile } = require('../lib/reportFilename');
 const { runWithRetries } = require('../lib/retryRunner');
 const settingsService = require('./settingsService');
 const reportService = require('./reportService');
+const activeRunsService = require('./activeRunsService');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
 const JOB_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -125,6 +126,7 @@ function runNoRetry({
 		} catch {
 			jobs.set(jobId, { status: JOB_STATUS.DONE, exitCode: code, reportId: null, startedAt });
 		}
+		activeRunsService.unregisterRun(jobId);
 		if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_DONE, { runId: jobId, code, reportId });
 	});
 }
@@ -182,6 +184,7 @@ function runWithRetriesAndSave({
 		} catch {
 			jobs.set(jobId, { status: JOB_STATUS.DONE, exitCode: code, reportId: null, startedAt });
 		}
+		activeRunsService.unregisterRun(jobId);
 		if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_DONE, { runId: jobId, code, reportId });
 	});
 }
@@ -205,13 +208,11 @@ async function startRun({
 	const startedAt = Date.now();
 	jobs.set(jobId, { status: JOB_STATUS.RUNNING, exitCode: null, reportId: null, startedAt });
 
+	const label = trigger === TRIGGER_TYPE.MCP ? 'MCP run' : 'External run';
+	const meta = { tag, browser, workers };
+	activeRunsService.registerRun(jobId, { kind: trigger, label, meta });
 	if (_io) {
-		_io.emit(SOCKET_EVENTS.BG_RUN_START, {
-			runId: jobId,
-			kind: trigger,
-			label: trigger === TRIGGER_TYPE.MCP ? 'MCP run' : 'External run',
-			meta: { tag, browser, workers }
-		});
+		_io.emit(SOCKET_EVENTS.BG_RUN_START, { runId: jobId, kind: trigger, label, meta });
 	}
 
 	const onLog = (text) => {

@@ -32,6 +32,5 @@ export const SOCKET_EVENTS = Object.freeze({
 	BG_RUN_LANE_SCREENSHOT: 'bg-run-lane-screenshot',
 
 	// Global notifications (any client, not tied to a specific run)
-	TESTS_CHANGED: 'tests-changed',
 	REPORT_READY: 'report-ready'
 });

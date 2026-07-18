@@ -7,10 +7,12 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { randomUUID } = require('crypto');
 const runnerService = require('../services/runnerService');
 const reportService = require('../services/reportService');
 const settingsService = require('../services/settingsService');
 const notificationService = require('../services/notificationService');
+const activeRunsService = require('../services/activeRunsService');
 const { startSsPoller } = require('../lib/screenshotPoller');
 const { runWithRetries } = require('../lib/retryRunner');
 const { TRIGGER_TYPE, BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
@@ -29,9 +31,20 @@ const socketHandler = (io) => {
 
 		// Track processes spawned for this socket connection so we can cancel them
 		const activeProcs = new Set();
+		// The in-progress manual run's id started from this connection, if any — used so
+		// 'cancel-test' can unregister/broadcast without a second run-id handshake.
+		let currentManualRunId = null;
 
 		socket.on(SOCKET_EVENTS.RUN_TEST, async (payload, legacyWorkers) => {
-			let tag, workers, browser, runners, testRunId, notifyDiscord, notifySlack;
+			let tag,
+				workers,
+				browser,
+				runners,
+				testRunId,
+				notifyDiscord,
+				notifySlack,
+				runTitle,
+				startedBy;
 			if (typeof payload === 'string') {
 				tag = payload;
 				workers = Number(legacyWorkers) > 1 ? Number(legacyWorkers) : 1;
@@ -40,6 +53,8 @@ const socketHandler = (io) => {
 				testRunId = null;
 				notifyDiscord = false;
 				notifySlack = false;
+				runTitle = null;
+				startedBy = null;
 			} else {
 				tag = payload.tag ?? '';
 				workers = Number(payload.workers) > 1 ? Number(payload.workers) : 1;
@@ -51,7 +66,24 @@ const socketHandler = (io) => {
 				testRunId = payload.testRunId ?? null;
 				notifyDiscord = payload.notifyDiscord === true;
 				notifySlack = payload.notifySlack === true;
+				runTitle = payload.runTitle ?? null;
+				startedBy = payload.startedBy ?? null;
 			}
+
+			const runId = randomUUID();
+			const label = runTitle || tag || 'Manual run';
+			const meta = { tag, workers, browser, startedBy };
+			activeRunsService.registerRun(runId, { kind: TRIGGER_TYPE.MANUAL, label, meta });
+			currentManualRunId = runId;
+			// Broadcast to every OTHER connected client so coworkers see this run live —
+			// the initiating tab already has full detail via its own runnerState/socket.emit
+			// events below, so it's deliberately excluded to avoid a duplicate bottom-bar entry.
+			socket.broadcast.emit(SOCKET_EVENTS.BG_RUN_START, {
+				runId,
+				kind: TRIGGER_TYPE.MANUAL,
+				label,
+				meta
+			});
 
 			// Drop runner ids that no longer exist (e.g. a deleted runner still
 			// referenced by a stale client selection) so they can't wedge the run.
@@ -77,7 +109,8 @@ const socketHandler = (io) => {
 					browser,
 					testRunId,
 					notifyDiscord,
-					notifySlack
+					notifySlack,
+					runId
 				);
 			} else {
 				runDistributed(
@@ -90,7 +123,8 @@ const socketHandler = (io) => {
 					runners,
 					testRunId,
 					notifyDiscord,
-					notifySlack
+					notifySlack,
+					runId
 				);
 			}
 		});
@@ -105,6 +139,10 @@ const socketHandler = (io) => {
 			activeProcs.clear();
 			socket.emit(SOCKET_EVENTS.LOG, '\n[CANCELLED] Test run cancelled by user.\n');
 			socket.emit(SOCKET_EVENTS.DONE, 130);
+			if (currentManualRunId) {
+				finishManualRun(socket, currentManualRunId, 130);
+				currentManualRunId = null;
+			}
 		});
 	});
 };
@@ -112,6 +150,14 @@ const socketHandler = (io) => {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function finishManualRun(socket, runId, code, reportId) {
+	// unregisterRun returns false if this runId was already unregistered (e.g. a cancel
+	// already fired) — skip the broadcast so a cancelled-then-still-completing run doesn't
+	// send two conflicting bg-run-done events to every other connected client.
+	if (!activeRunsService.unregisterRun(runId)) return;
+	socket.broadcast.emit(SOCKET_EVENTS.BG_RUN_DONE, { runId, code, reportId: reportId ?? null });
+}
 
 function makeSyntheticFailReport(laneName, testIds, reason) {
 	// Build id → scenario title from local feature files so names match the real report.
@@ -222,7 +268,8 @@ async function runBuiltIn(
 	browser,
 	testRunId,
 	notifyDiscord,
-	notifySlack
+	notifySlack,
+	runId
 ) {
 	const startedAt = Date.now();
 	const { maxRetries } = await settingsService.getProject();
@@ -247,6 +294,7 @@ async function runBuiltIn(
 		socket.emit(SOCKET_EVENTS.LOG, `\nTest finished with code ${code}`);
 		socket.emit(SOCKET_EVENTS.DONE, code);
 		io.emit(SOCKET_EVENTS.REPORT_READY);
+		finishManualRun(socket, runId, code, null);
 
 		// Attach accumulated logs to the report generate-report.js just saved
 		try {
@@ -323,6 +371,7 @@ async function runBuiltIn(
 
 	socket.emit(SOCKET_EVENTS.DONE, code);
 	io.emit(SOCKET_EVENTS.REPORT_READY);
+	finishManualRun(socket, runId, code, report.id);
 
 	if (notifyDiscord || notifySlack) {
 		notificationService
@@ -354,7 +403,8 @@ async function runDistributed(
 	runnerIds,
 	testRunId,
 	notifyDiscord,
-	notifySlack
+	notifySlack,
+	runId
 ) {
 	const dispatchStartedAt = Date.now();
 	const { maxRetries } = await settingsService.getProject();
@@ -368,6 +418,7 @@ async function runDistributed(
 	if (activeRunnerIds.length === 0) {
 		socket.emit(SOCKET_EVENTS.LOG, '\nNo tests found matching the selected tag.\n');
 		socket.emit(SOCKET_EVENTS.DONE, 0);
+		finishManualRun(socket, runId, 0, null);
 		return;
 	}
 
@@ -435,6 +486,7 @@ async function runDistributed(
 						reportId: saved.id
 					});
 					io.emit(SOCKET_EVENTS.REPORT_READY);
+					finishManualRun(socket, runId, saved.status === REPORT_STATUS.PASS ? 0 : 1, saved.id);
 
 					if (notifyDiscord || notifySlack) {
 						notificationService
@@ -454,6 +506,7 @@ async function runDistributed(
 				.catch((e) => {
 					console.error('[runner] Failed to save combined report:', e.message);
 					socket.emit(SOCKET_EVENTS.DONE, { code: overallCode, reportId: null });
+					finishManualRun(socket, runId, overallCode, null);
 				});
 		}
 	}

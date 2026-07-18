@@ -20,6 +20,8 @@ export const copiedTitle = (id) => `Copied ${id}`;
 export const copyTitle = (id) => `Copy ${id}`;
 export const runIdTitle = (pid) => `Run ${pid}`;
 export const runTestLabel = (name) => `Run ${name}`;
+export const collapseOrExpandSuiteLabel = (expanded) =>
+	expanded ? 'Collapse suite' : 'Expand suite';
 export const visibleOfTotal = (visible, total) => `${visible} of ${total} tests`;
 export const testCountLabel = (count) => `${count} ${pluralize(count, 'test')}`;
 export const suiteSummary = (suiteCount, testCount) =>

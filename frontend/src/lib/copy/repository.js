@@ -22,7 +22,6 @@ export const NEW_RUN_LABEL = '+ New Run';
 export const SUITES_TAB_LABEL = 'Suites';
 export const RUNS_TAB_LABEL = 'Test Runs';
 export const SEARCH_PLACEHOLDER = 'Search by ID or name…';
-export const SORT_BY_LABEL = 'Sort by';
 export const NO_RESULTS_TITLE = 'No results';
 export const CASES_LABEL = 'Cases';
 export const SUITES_LABEL = 'Suites';

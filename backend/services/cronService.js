@@ -13,8 +13,9 @@ const runnerService = require('./runnerService');
 const reportService = require('./reportService');
 const settingsService = require('./settingsService');
 const notificationService = require('./notificationService');
+const activeRunsService = require('./activeRunsService');
 const { startSsPoller } = require('../lib/screenshotPoller');
-const { BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
+const { BUILT_IN_RUNNER_ID, TRIGGER_REMOTE, TRIGGER_TYPE } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { PLUM_MODE_NODE } = require('../constants/env');
 const { SOCKET_EVENTS } = require('../constants/socketEvents');
@@ -131,6 +132,7 @@ async function runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscor
 				select: { id: true, status: true, content: true }
 			})
 			.then((report) => {
+				activeRunsService.unregisterRun(taskName);
 				if (_io)
 					_io.emit(SOCKET_EVENTS.BG_RUN_DONE, {
 						runId: taskName,
@@ -159,6 +161,7 @@ async function runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscor
 			})
 			.catch((e) => {
 				console.error(`[cron] Notification failed: ${e.message}`);
+				activeRunsService.unregisterRun(taskName);
 				if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_DONE, { runId: taskName, code, reportId: null });
 			});
 		return;
@@ -196,6 +199,7 @@ async function runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscor
 		console.error(`[cron] Failed to save report: ${e.message}`);
 	}
 
+	activeRunsService.unregisterRun(taskName);
 	if (_io)
 		_io.emit(SOCKET_EVENTS.BG_RUN_DONE, { runId: taskName, code, reportId: report?.id ?? null });
 
@@ -239,6 +243,7 @@ async function runDistributed({
 
 	if (activeRunnerIds.length === 0) {
 		console.log(`Task "${taskName}" — no tests found, skipping.`);
+		activeRunsService.unregisterRun(taskName);
 		if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_DONE, { runId: taskName, code: 0, reportId: null });
 		return;
 	}
@@ -285,6 +290,7 @@ async function runDistributed({
 					attemptsByLane: laneAttempts
 				})
 				.then((saved) => {
+					activeRunsService.unregisterRun(taskName);
 					if (_io) {
 						_io.emit(SOCKET_EVENTS.BG_RUN_DONE, {
 							runId: taskName,
@@ -307,6 +313,7 @@ async function runDistributed({
 				})
 				.catch((e) => {
 					console.error(`[cron] Failed to save combined report: ${e.message}`);
+					activeRunsService.unregisterRun(taskName);
 					if (_io)
 						_io.emit(SOCKET_EVENTS.BG_RUN_DONE, {
 							runId: taskName,
@@ -431,13 +438,11 @@ async function runCronJob(job) {
 	} = job;
 	const runnerIds = parseRunnerIds(runnerIdsStr);
 
+	const label = taskName;
+	const meta = { tag: tags, browser, workers };
+	activeRunsService.registerRun(taskName, { kind: TRIGGER_TYPE.CRON, label, meta });
 	if (_io) {
-		_io.emit(SOCKET_EVENTS.BG_RUN_START, {
-			runId: taskName,
-			kind: 'cron',
-			label: taskName,
-			meta: { tag: tags, browser, workers }
-		});
+		_io.emit(SOCKET_EVENTS.BG_RUN_START, { runId: taskName, kind: TRIGGER_TYPE.CRON, label, meta });
 	}
 	console.log(`Running scheduled task: "${taskName}" → runners: ${runnerIds.join(', ')}`);
 

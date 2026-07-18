@@ -129,7 +129,7 @@ async function handleFullModeStartup(io, testsDir) {
 	const chokidar = await loadChokidar();
 	if (!chokidar) return;
 
-	watchTestFiles(chokidar, io, testsDir);
+	watchTestFiles(chokidar, testsDir);
 	watchReports(chokidar, io);
 }
 
@@ -150,7 +150,7 @@ async function loadChokidar() {
 	}
 }
 
-function watchTestFiles(chokidar, io, testsDir) {
+function watchTestFiles(chokidar, testsDir) {
 	const featuresDir = path.join(testsDir, 'features');
 	if (!fs.existsSync(featuresDir)) return;
 
@@ -158,8 +158,7 @@ function watchTestFiles(chokidar, io, testsDir) {
 	chokidar.watch(featuresDir, WATCH_OPTS).on('all', (event, filePath) => {
 		clearTimeout(debounce);
 		debounce = setTimeout(() => {
-			console.log(`📝 Tests changed (${event}: ${path.basename(filePath)}) — notifying clients`);
-			io.emit(SOCKET_EVENTS.TESTS_CHANGED);
+			console.log(`📝 Tests changed (${event}: ${path.basename(filePath)})`);
 			syncAutomatedFlags();
 		}, 300);
 	});

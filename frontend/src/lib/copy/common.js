@@ -27,6 +27,7 @@ export const EMAIL_LABEL = 'Email';
 export const PASSWORD_LABEL = 'Password';
 
 export const CLEAR_SEARCH_LABEL = 'Clear search';
+export const SORT_BY_LABEL = 'Sort by';
 export const LOADING_LABEL = 'Loading…';
 export const SAVING_LABEL = 'Saving…';
 export const CREATING_LABEL = 'Creating…';
