@@ -8,8 +8,13 @@ const router = express.Router();
 const runnerService = require('../services/runnerService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireAdmin } = require('../middleware/requireAdmin');
+const { runnerOrAdmin } = require('../middleware/runnerOrAdmin');
 
-router.get('/', jwtAuth, requireAdmin, async (req, res) => {
+// List/create are hit by headless CLI tools (manage-runners.mjs, node
+// self-registration) with no session to present — same as before the
+// runner-management routes were locked down. The response never includes
+// runner tokens (toPublicRunner strips them), so listing isn't a secret leak.
+router.get('/', async (req, res) => {
 	try {
 		const runners = await runnerService.getAll();
 		res.json({ runners });
@@ -30,7 +35,7 @@ router.post('/probe', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/', async (req, res) => {
 	try {
 		const { name, url, token, browser } = req.body;
 		if (!name || !url || !token)
@@ -52,7 +57,7 @@ router.put('/:id', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.delete('/:id', jwtAuth, requireAdmin, async (req, res) => {
+router.delete('/:id', runnerOrAdmin, async (req, res) => {
 	try {
 		await runnerService.stop(req.params.id);
 		await runnerService.remove(req.params.id);
@@ -62,7 +67,7 @@ router.delete('/:id', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/:id/ping', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/:id/ping', runnerOrAdmin, async (req, res) => {
 	try {
 		const result = await runnerService.ping(req.params.id);
 		res.json(result);
@@ -71,7 +76,7 @@ router.post('/:id/ping', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/:id/stop', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/:id/stop', runnerOrAdmin, async (req, res) => {
 	try {
 		const result = await runnerService.stop(req.params.id);
 		res.json(result);
@@ -80,7 +85,7 @@ router.post('/:id/stop', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/:id/restart', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/:id/restart', runnerOrAdmin, async (req, res) => {
 	try {
 		const result = await runnerService.restart(req.params.id);
 		res.json(result);

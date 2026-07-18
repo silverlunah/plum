@@ -75,6 +75,16 @@ const update = async (id, { name, url, token, browser }) => {
 // outbound requests to the runner node (ping/stop/restart/dispatch below).
 const getById = (id) => prisma.runner.findUnique({ where: { id } });
 
+// A runner's own token (generated once at registration) doubles as its
+// credential for calling back into the primary's control routes — no separate
+// secret to configure. Any currently-registered token is accepted, not just
+// the target runner's own, since one CLI session manages the whole fleet.
+async function isValidToken(token) {
+	if (!token) return false;
+	const runner = await prisma.runner.findFirst({ where: { token }, select: { id: true } });
+	return Boolean(runner);
+}
+
 // ---------------------------------------------------------------------------
 // Connectivity
 // ---------------------------------------------------------------------------
@@ -275,6 +285,7 @@ module.exports = {
 	remove,
 	update,
 	getById,
+	isValidToken,
 	probe,
 	ping,
 	stop,
