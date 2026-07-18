@@ -31,18 +31,19 @@ const {
 	findPidOnPort,
 	killPort
 } = runnerProcess;
-const { generateToken, registerWithPrimary, detectLanIp } = nodeRegister;
+const { generateToken, registerWithPrimary, detectLanIp, loadNodeConfig } = nodeRegister;
 
 const API_URL = process.env.PLUM_API_URL || 'http://localhost:3001';
 
 const cancelled = (v) => clack.isCancel(v);
 
-// The /runners routes require an authenticated admin session, which this
-// headless CLI has no browser/JWT to provide — PLUM_NODE_KEY is the shared
-// secret that stands in for one (see backend/middleware/jwtAuth.js).
+// The mutating /runners routes accept a registered runner's own token in place
+// of an admin session — this manager has no browser/JWT to present, but a node
+// already gets a token at registration time (see backend/middleware/jwtAuth.js
+// / runnerOrAdmin.js), so reuse that instead of a separate credential.
+const localToken = loadNodeConfig(process.cwd()).token;
 function authHeaders() {
-	const nodeKey = process.env.PLUM_NODE_KEY;
-	return nodeKey ? { Authorization: `ApiKey ${nodeKey}` } : {};
+	return localToken ? { Authorization: `Bearer ${localToken}` } : {};
 }
 
 /**
