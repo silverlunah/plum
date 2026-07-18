@@ -26,6 +26,7 @@ services:
       - '${BACKEND_PORT:-3001}:3001'
     environment:
       DATABASE_URL: 'postgresql://plum:plum@postgres:5432/plum'
+      PLUM_NODE_KEY: '${PLUM_NODE_KEY:-}'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     volumes:

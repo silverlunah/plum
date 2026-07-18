@@ -58,9 +58,17 @@ function saveNodeConfig(dir, cfg) {
  */
 async function registerWithPrimary({ primary, name, url, token, browser }) {
 	const base = primary.replace(/\/$/, '');
+	// The /runners routes require an authenticated admin session, which this
+	// headless flow has no browser/JWT to provide — PLUM_NODE_KEY is the shared
+	// secret that stands in for one (see backend/middleware/jwtAuth.js).
+	const nodeKey = process.env.PLUM_NODE_KEY;
+	const authHeaders = nodeKey ? { Authorization: `ApiKey ${nodeKey}` } : {};
 
 	let existing = null;
-	const listRes = await fetch(`${base}/runners`, { signal: AbortSignal.timeout(10000) });
+	const listRes = await fetch(`${base}/runners`, {
+		headers: authHeaders,
+		signal: AbortSignal.timeout(10000)
+	});
 	if (!listRes.ok) throw new Error(`primary returned HTTP ${listRes.status} listing runners`);
 	const { runners = [] } = await listRes.json();
 	existing = runners.find((r) => r.name === name && r.url === url) ?? null;
@@ -68,7 +76,7 @@ async function registerWithPrimary({ primary, name, url, token, browser }) {
 
 	const res = await fetch(`${base}/runners`, {
 		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
+		headers: { 'Content-Type': 'application/json', ...authHeaders },
 		body: JSON.stringify({ name, url, token, browser }),
 		signal: AbortSignal.timeout(10000)
 	});

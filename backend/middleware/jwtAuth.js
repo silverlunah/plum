@@ -16,14 +16,23 @@ function jwtAuth(req, res, next) {
 		prisma.user
 			.findFirst({ where: { role: 'admin' }, select: { id: true } })
 			.then((admin) => {
-				req.user = { userId: admin?.id ?? null };
+				req.user = { userId: admin?.id ?? null, role: 'admin' };
 				next();
 			})
 			.catch(() => {
-				req.user = { userId: null };
+				req.user = { userId: null, role: 'admin' };
 				next();
 			});
 		return;
+	}
+
+	// Node/CLI shared secret — grants admin-equivalent access to headless tools
+	// (manage-runners.mjs, node self-registration) that have no browser session
+	// or JWT to present. Distributed manually to node machines as PLUM_NODE_KEY.
+	const nodeKey = process.env.PLUM_NODE_KEY;
+	if (nodeKey && auth === `${AUTH_SCHEME.API_KEY} ${nodeKey}`) {
+		req.user = { userId: null, role: 'admin' };
+		return next();
 	}
 
 	if (!auth || !auth.startsWith(`${AUTH_SCHEME.BEARER} `)) {

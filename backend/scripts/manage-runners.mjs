@@ -37,6 +37,14 @@ const API_URL = process.env.PLUM_API_URL || 'http://localhost:3001';
 
 const cancelled = (v) => clack.isCancel(v);
 
+// The /runners routes require an authenticated admin session, which this
+// headless CLI has no browser/JWT to provide — PLUM_NODE_KEY is the shared
+// secret that stands in for one (see backend/middleware/jwtAuth.js).
+function authHeaders() {
+	const nodeKey = process.env.PLUM_NODE_KEY;
+	return nodeKey ? { Authorization: `ApiKey ${nodeKey}` } : {};
+}
+
 /**
  * When the primary runs in Docker it cannot reach `localhost` on the host —
  * only substitute when the user explicitly enters localhost/127.0.0.1.
@@ -53,7 +61,7 @@ function resolveNodeUrl(url) {
 }
 
 async function fetchRunners() {
-	const res = await fetch(`${API_URL}/runners`);
+	const res = await fetch(`${API_URL}/runners`, { headers: authHeaders() });
 	if (!res.ok) throw new Error(`HTTP ${res.status}`);
 	const body = await res.json();
 	return body.runners ?? [];
@@ -61,7 +69,10 @@ async function fetchRunners() {
 
 async function pingRunner(id) {
 	try {
-		const res = await fetch(`${API_URL}/runners/${id}/ping`, { method: 'POST' });
+		const res = await fetch(`${API_URL}/runners/${id}/ping`, {
+			method: 'POST',
+			headers: authHeaders()
+		});
 		const body = await res.json().catch(() => ({}));
 		return body.ok === true;
 	} catch {
@@ -70,7 +81,7 @@ async function pingRunner(id) {
 }
 
 async function deleteRunner(id) {
-	const res = await fetch(`${API_URL}/runners/${id}`, { method: 'DELETE' });
+	const res = await fetch(`${API_URL}/runners/${id}`, { method: 'DELETE', headers: authHeaders() });
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({}));
 		throw new Error(body.error || `HTTP ${res.status}`);
@@ -83,7 +94,10 @@ async function deleteRunner(id) {
  * reachable runner, not just ones whose process this manager owns by PID.
  */
 async function controlRunner(id, action) {
-	const res = await fetch(`${API_URL}/runners/${id}/${action}`, { method: 'POST' });
+	const res = await fetch(`${API_URL}/runners/${id}/${action}`, {
+		method: 'POST',
+		headers: authHeaders()
+	});
 	const body = await res.json().catch(() => ({}));
 	if (!res.ok || body.ok === false) throw new Error(body.error || `HTTP ${res.status}`);
 }
