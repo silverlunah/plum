@@ -1,31 +1,20 @@
 /*
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const pc = require('picocolors');
+const { DEFAULT_BROWSER } = require('../../constants/defaults');
 
 const parallelIdx = process.argv.indexOf('--parallel');
 const parallel =
 	process.env.PARALLEL || (parallelIdx !== -1 ? process.argv[parallelIdx + 1] : null);
 const runners = parallel || process.env.REPORT_RUNNERS || '1';
 const tag = process.env.TAG || process.argv.slice(2).find((a) => a.startsWith('@'));
-const browser = process.env.BROWSER || 'chromium';
+const browser = process.env.BROWSER || DEFAULT_BROWSER;
 
 const reportFile =
 	process.env.CUCUMBER_REPORT_FILE ||
@@ -132,7 +121,7 @@ try {
 	console.error(pc.red('✗') + ' Tests failed: ' + error.message);
 } finally {
 	try {
-		execSync('node config/scripts/generate-report.js', {
+		execFileSync(process.execPath, [path.resolve(__dirname, 'generate-report.js')], {
 			stdio: 'inherit',
 			env: { ...process.env, REPORT_RUNNERS: runners }
 		});

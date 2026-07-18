@@ -1,18 +1,6 @@
 /*
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
 const fs = require('fs');
@@ -20,6 +8,8 @@ const path = require('path');
 const crypto = require('crypto');
 const prisma = require('./prisma');
 const { isScheduledTrigger, normaliseTrigger } = require('../constants/triggers');
+const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { REPORT_STATUS } = require('../constants/jobStatus');
 const { SCREENSHOTS_DIR } = require('../lib/reportFilename');
 
 // ---------------------------------------------------------------------------
@@ -287,7 +277,7 @@ function processCucumberJson(raw, attempts = {}) {
 	});
 
 	const hasFailures = features.some((f) => f.status === 'failed');
-	return { features, status: hasFailures ? 'FAIL' : 'PASS' };
+	return { features, status: hasFailures ? REPORT_STATUS.FAIL : REPORT_STATUS.PASS };
 }
 
 // ---------------------------------------------------------------------------
@@ -318,7 +308,7 @@ const getReports = async ({ page = 1, limit = 15 } = {}) => {
 			select: reportListSelect
 		}),
 		prisma.report.count(),
-		prisma.report.count({ where: { status: 'PASS' } }),
+		prisma.report.count({ where: { status: REPORT_STATUS.PASS } }),
 		prisma.report.findMany({
 			orderBy: { createdAt: 'desc' },
 			take: TREND_SIZE,
@@ -393,7 +383,7 @@ const saveReport = async ({
 }) => {
 	const normTrigger = normaliseTrigger(triggerType);
 	const { features, status: derivedStatus } = processCucumberJson(rawCucumberJson, attempts);
-	const status = forceFail ? 'FAIL' : derivedStatus;
+	const status = forceFail ? REPORT_STATUS.FAIL : derivedStatus;
 	const cronJobId = await resolveCronJobId(normTrigger);
 
 	const report = await prisma.report.create({
@@ -402,7 +392,7 @@ const saveReport = async ({
 			tags: (tags ?? '').replace(/^\(|\)$/g, '') || '@all-tests',
 			triggerType: normTrigger,
 			runners: nodeCount ?? 1,
-			browser: browser ?? 'chromium',
+			browser: browser ?? DEFAULT_BROWSER,
 			runnerName: runnerName ?? null,
 			runnerId: runnerId ?? null,
 			cronJobId,
@@ -494,6 +484,19 @@ const saveCombinedReport = async ({
 	});
 };
 
+// Finds the report a no-retry run just produced (the most recent one created
+// after the run started) and patches in its wall-clock duration.
+const attachDurationToLatestReport = async ({ afterTimestamp, duration }) => {
+	const report = await prisma.report.findFirst({
+		where: { createdAt: { gte: new Date(afterTimestamp) } },
+		orderBy: { createdAt: 'desc' },
+		select: { id: true, status: true }
+	});
+	if (!report) return null;
+	await prisma.report.update({ where: { id: report.id }, data: { duration } });
+	return report;
+};
+
 // ---------------------------------------------------------------------------
 // Delete operations
 // ---------------------------------------------------------------------------
@@ -539,6 +542,7 @@ module.exports = {
 	getReportDetail,
 	saveReport,
 	saveCombinedReport,
+	attachDurationToLatestReport,
 	syncAutomatedFromFeatures,
 	deleteReport,
 	deleteReports,

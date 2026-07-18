@@ -1,24 +1,13 @@
 /*
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const { SCREENSHOTS_DIR } = require('./lib/reportFilename');
+const { isNodeMode } = require('./constants/env');
 const app = express();
 
 app.use(cors({ origin: '*' }));
@@ -35,7 +24,7 @@ const nodeRoutes = require('./routes/node.routes');
 app.use('/api', nodeRoutes);
 
 // Primary-mode routes — skipped when running as a runner node (no DB available)
-if (process.env.PLUM_MODE !== 'node') {
+if (!isNodeMode()) {
 	app.use('/tests', require('./routes/tests.routes'));
 	app.use('/reports', require('./routes/reports.routes'));
 	app.use('/cron-jobs', require('./routes/cron.routes'));

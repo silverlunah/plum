@@ -1,18 +1,6 @@
 <!--
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  -->
 
 <script>
@@ -21,6 +9,17 @@
 	import { auth } from '$lib/stores/auth';
 	import { login, checkNeedsSetup } from '$lib/api/auth';
 	import { theme } from '$lib/stores/theme';
+	import { EMAIL_LABEL, PASSWORD_LABEL } from '$lib/copy/common';
+	import {
+		CHECKING_SERVER,
+		EMAIL_PLACEHOLDER,
+		LOGIN_PAGE_TITLE,
+		SIGN_IN_TITLE,
+		SIGN_IN_SUBTITLE,
+		PASSWORD_PLACEHOLDER,
+		LOGIN_FAILED_FALLBACK,
+		signInLabel
+	} from '$lib/copy/auth';
 
 	let email = '';
 	let password = '';
@@ -46,7 +45,7 @@
 			auth.login(token, user);
 			window.location.href = '/';
 		} catch (e) {
-			error = e.message || 'Login failed';
+			error = e.message || LOGIN_FAILED_FALLBACK;
 		} finally {
 			loading = false;
 		}
@@ -57,40 +56,40 @@
 	}
 </script>
 
-<svelte:head><title>Sign in — Plum</title></svelte:head>
+<svelte:head><title>{LOGIN_PAGE_TITLE}</title></svelte:head>
 
 <div class="page" data-theme={$theme}>
 	{#if checking}
-		<p class="checking">Checking server…</p>
+		<p class="checking">{CHECKING_SERVER}</p>
 	{:else}
 		<div class="card">
 			<div class="brand">
 				<span class="brand-serif">Pl</span><span class="brand-sans">um</span>
 			</div>
-			<h1 class="title">Sign in</h1>
-			<p class="subtitle">Access your test workspace</p>
+			<h1 class="title">{SIGN_IN_TITLE}</h1>
+			<p class="subtitle">{SIGN_IN_SUBTITLE}</p>
 
 			<div class="fields">
 				<div class="field">
-					<label class="label" for="email">Email</label>
+					<label class="label" for="email">{EMAIL_LABEL}</label>
 					<input
 						id="email"
 						type="email"
 						class="input"
 						bind:value={email}
-						placeholder="jane@example.com"
+						placeholder={EMAIL_PLACEHOLDER}
 						autocomplete="email"
 						on:keydown={onKeydown}
 					/>
 				</div>
 				<div class="field">
-					<label class="label" for="password">Password</label>
+					<label class="label" for="password">{PASSWORD_LABEL}</label>
 					<input
 						id="password"
 						type="password"
 						class="input"
 						bind:value={password}
-						placeholder="••••••••"
+						placeholder={PASSWORD_PLACEHOLDER}
 						autocomplete="current-password"
 						on:keydown={onKeydown}
 					/>
@@ -102,7 +101,7 @@
 			{/if}
 
 			<button class="submit-btn" on:click={handleSubmit} disabled={loading || !email || !password}>
-				{loading ? 'Signing in…' : 'Sign in'}
+				{signInLabel(loading)}
 			</button>
 		</div>
 	{/if}

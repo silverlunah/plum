@@ -1,18 +1,6 @@
 /*
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
 const { spawn } = require('child_process');
@@ -28,6 +16,10 @@ const activeRunsService = require('../services/activeRunsService');
 const { startSsPoller } = require('../lib/screenshotPoller');
 const { runWithRetries } = require('../lib/retryRunner');
 const { TRIGGER_TYPE, BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
+const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { PLUM_MODE_NODE } = require('../constants/env');
+const { SOCKET_EVENTS } = require('../constants/socketEvents');
+const { JOB_STATUS, REPORT_STATUS } = require('../constants/jobStatus');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { readCucumberReportFile } = require('../lib/reportFilename');
 const { getTestSuites } = require('../services/testService');
@@ -43,7 +35,7 @@ const socketHandler = (io) => {
 		// 'cancel-test' can unregister/broadcast without a second run-id handshake.
 		let currentManualRunId = null;
 
-		socket.on('run-test', async (payload, legacyWorkers) => {
+		socket.on(SOCKET_EVENTS.RUN_TEST, async (payload, legacyWorkers) => {
 			let tag,
 				workers,
 				browser,
@@ -56,7 +48,7 @@ const socketHandler = (io) => {
 			if (typeof payload === 'string') {
 				tag = payload;
 				workers = Number(legacyWorkers) > 1 ? Number(legacyWorkers) : 1;
-				browser = 'chromium';
+				browser = DEFAULT_BROWSER;
 				runners = [BUILT_IN_RUNNER_ID];
 				testRunId = null;
 				notifyDiscord = false;
@@ -66,7 +58,7 @@ const socketHandler = (io) => {
 			} else {
 				tag = payload.tag ?? '';
 				workers = Number(payload.workers) > 1 ? Number(payload.workers) : 1;
-				browser = payload.browser ?? 'chromium';
+				browser = payload.browser ?? DEFAULT_BROWSER;
 				runners =
 					Array.isArray(payload.runners) && payload.runners.length > 0
 						? payload.runners
@@ -86,7 +78,12 @@ const socketHandler = (io) => {
 			// Broadcast to every OTHER connected client so coworkers see this run live —
 			// the initiating tab already has full detail via its own runnerState/socket.emit
 			// events below, so it's deliberately excluded to avoid a duplicate bottom-bar entry.
-			socket.broadcast.emit('bg-run-start', { runId, kind: TRIGGER_TYPE.MANUAL, label, meta });
+			socket.broadcast.emit(SOCKET_EVENTS.BG_RUN_START, {
+				runId,
+				kind: TRIGGER_TYPE.MANUAL,
+				label,
+				meta
+			});
 
 			// Drop runner ids that no longer exist (e.g. a deleted runner still
 			// referenced by a stale client selection) so they can't wedge the run.
@@ -95,7 +92,7 @@ const socketHandler = (io) => {
 				if (id === BUILT_IN_RUNNER_ID || (await runnerService.getById(id))) {
 					validatedRunners.push(id);
 				} else {
-					socket.emit('log', `[WARN] Runner ${id} no longer exists — skipping.\n`);
+					socket.emit(SOCKET_EVENTS.LOG, `[WARN] Runner ${id} no longer exists — skipping.\n`);
 				}
 			}
 			runners = validatedRunners.length > 0 ? validatedRunners : [BUILT_IN_RUNNER_ID];
@@ -132,7 +129,7 @@ const socketHandler = (io) => {
 			}
 		});
 
-		socket.on('cancel-test', () => {
+		socket.on(SOCKET_EVENTS.CANCEL_TEST, () => {
 			if (activeProcs.size === 0) return;
 			for (const proc of activeProcs) {
 				try {
@@ -140,8 +137,8 @@ const socketHandler = (io) => {
 				} catch {}
 			}
 			activeProcs.clear();
-			socket.emit('log', '\n[CANCELLED] Test run cancelled by user.\n');
-			socket.emit('done', 130);
+			socket.emit(SOCKET_EVENTS.LOG, '\n[CANCELLED] Test run cancelled by user.\n');
+			socket.emit(SOCKET_EVENTS.DONE, 130);
 			if (currentManualRunId) {
 				finishManualRun(socket, currentManualRunId, 130);
 				currentManualRunId = null;
@@ -159,7 +156,7 @@ function finishManualRun(socket, runId, code, reportId) {
 	// already fired) — skip the broadcast so a cancelled-then-still-completing run doesn't
 	// send two conflicting bg-run-done events to every other connected client.
 	if (!activeRunsService.unregisterRun(runId)) return;
-	socket.broadcast.emit('bg-run-done', { runId, code, reportId: reportId ?? null });
+	socket.broadcast.emit(SOCKET_EVENTS.BG_RUN_DONE, { runId, code, reportId: reportId ?? null });
 }
 
 function makeSyntheticFailReport(laneName, testIds, reason) {
@@ -241,13 +238,13 @@ function runBuiltInAttempt({
 		};
 		if (workers > 1) env.PARALLEL = String(workers);
 		if (testRunId) env.TEST_RUN_ID = testRunId;
-		if (suppressSave) env.PLUM_MODE = 'node';
+		if (suppressSave) env.PLUM_MODE = PLUM_MODE_NODE;
 
 		const proc = spawn('npm', ['run', 'test'], { env, shell: true });
 		activeProcs.add(proc);
 
 		const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-			socket.emit('step-screenshot', { stepName, data });
+			socket.emit(SOCKET_EVENTS.STEP_SCREENSHOT, { stepName, data });
 		});
 
 		proc.stdout.on('data', (d) => onLog(d.toString()));
@@ -280,7 +277,7 @@ async function runBuiltIn(
 	let logBuffer = '';
 	const onLog = (text) => {
 		logBuffer += text;
-		socket.emit('log', text);
+		socket.emit(SOCKET_EVENTS.LOG, text);
 	};
 
 	if (maxRetries === 0) {
@@ -294,9 +291,9 @@ async function runBuiltIn(
 			suppressSave: false,
 			onLog
 		});
-		socket.emit('log', `\nTest finished with code ${code}`);
-		socket.emit('done', code);
-		io.emit('report-ready');
+		socket.emit(SOCKET_EVENTS.LOG, `\nTest finished with code ${code}`);
+		socket.emit(SOCKET_EVENTS.DONE, code);
+		io.emit(SOCKET_EVENTS.REPORT_READY);
 		finishManualRun(socket, runId, code, null);
 
 		// Attach accumulated logs to the report generate-report.js just saved
@@ -359,7 +356,7 @@ async function runBuiltIn(
 		onLog
 	});
 
-	socket.emit('log', `\nTest finished with code ${code}`);
+	socket.emit(SOCKET_EVENTS.LOG, `\nTest finished with code ${code}`);
 
 	const report = await reportService.saveReport({
 		rawCucumberJson: rawJson,
@@ -372,8 +369,8 @@ async function runBuiltIn(
 		attempts
 	});
 
-	socket.emit('done', code);
-	io.emit('report-ready');
+	socket.emit(SOCKET_EVENTS.DONE, code);
+	io.emit(SOCKET_EVENTS.REPORT_READY);
 	finishManualRun(socket, runId, code, report.id);
 
 	if (notifyDiscord || notifySlack) {
@@ -419,8 +416,8 @@ async function runDistributed(
 	const activeRunnerIds = runnerIds.slice(0, chunks.length);
 
 	if (activeRunnerIds.length === 0) {
-		socket.emit('log', '\nNo tests found matching the selected tag.\n');
-		socket.emit('done', 0);
+		socket.emit(SOCKET_EVENTS.LOG, '\nNo tests found matching the selected tag.\n');
+		socket.emit(SOCKET_EVENTS.DONE, 0);
 		finishManualRun(socket, runId, 0, null);
 		return;
 	}
@@ -428,7 +425,7 @@ async function runDistributed(
 	if (activeRunnerIds.length < runnerIds.length) {
 		const skipped = runnerIds.length - activeRunnerIds.length;
 		socket.emit(
-			'log',
+			SOCKET_EVENTS.LOG,
 			`[INFO] ${skipped} runner(s) not used — fewer tests than runners selected.\n`
 		);
 	}
@@ -442,7 +439,7 @@ async function runDistributed(
 	);
 
 	socket.emit(
-		'runner-lanes-init',
+		SOCKET_EVENTS.RUNNER_LANES_INIT,
 		laneInfos.map((l, i) => ({ id: l.id, name: l.name, testCount: chunks[i].length }))
 	);
 
@@ -458,11 +455,14 @@ async function runDistributed(
 		if (code !== 0) overallCode = code;
 		collectedReports[idx] = reportContent;
 		laneAttempts[idx] = attempts;
-		socket.emit('runner-lane-status', { id: laneId, status: code === 0 ? 'done' : 'error' });
+		socket.emit(SOCKET_EVENTS.RUNNER_LANE_STATUS, {
+			id: laneId,
+			status: code === 0 ? JOB_STATUS.DONE : JOB_STATUS.ERROR
+		});
 		doneCount++;
 
 		if (doneCount === total) {
-			socket.emit('log', `\nAll runners finished (exit ${overallCode})`);
+			socket.emit(SOCKET_EVENTS.LOG, `\nAll runners finished (exit ${overallCode})`);
 
 			reportService
 				.saveCombinedReport({
@@ -481,9 +481,12 @@ async function runDistributed(
 					// Result is authoritative from the merged report, not the exit code —
 					// a node's non-test failure (e.g. a failed report fetch) must not flip
 					// a passing run to "fail" in the live UI.
-					socket.emit('done', { code: saved.status === 'PASS' ? 0 : 1, reportId: saved.id });
-					io.emit('report-ready');
-					finishManualRun(socket, runId, saved.status === 'PASS' ? 0 : 1, saved.id);
+					socket.emit(SOCKET_EVENTS.DONE, {
+						code: saved.status === REPORT_STATUS.PASS ? 0 : 1,
+						reportId: saved.id
+					});
+					io.emit(SOCKET_EVENTS.REPORT_READY);
+					finishManualRun(socket, runId, saved.status === REPORT_STATUS.PASS ? 0 : 1, saved.id);
 
 					if (notifyDiscord || notifySlack) {
 						notificationService
@@ -502,7 +505,7 @@ async function runDistributed(
 				})
 				.catch((e) => {
 					console.error('[runner] Failed to save combined report:', e.message);
-					socket.emit('done', { code: overallCode, reportId: null });
+					socket.emit(SOCKET_EVENTS.DONE, { code: overallCode, reportId: null });
 					finishManualRun(socket, runId, overallCode, null);
 				});
 		}
@@ -518,7 +521,7 @@ async function runDistributed(
 			const laneId = lane.id;
 			const onLog = (text) => {
 				laneLogs[laneId] += text;
-				socket.emit('runner-lane-log', { id: laneId, log: text });
+				socket.emit(SOCKET_EVENTS.RUNNER_LANE_LOG, { id: laneId, log: text });
 			};
 
 			const spawnBuiltInLaneAttempt = (currentTag) =>
@@ -532,7 +535,7 @@ async function runDistributed(
 						TRIGGER: TRIGGER_REMOTE,
 						BROWSER: browser,
 						REPORT_RUNNERS: String(workers),
-						PLUM_MODE: 'node',
+						PLUM_MODE: PLUM_MODE_NODE,
 						PLUM_SS_DIR: ssDir
 					};
 					if (workers > 1) env.PARALLEL = String(workers);
@@ -541,7 +544,7 @@ async function runDistributed(
 					activeProcs.add(proc);
 
 					const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-						socket.emit('runner-lane-screenshot', { id: laneId, stepName, data });
+						socket.emit(SOCKET_EVENTS.RUNNER_LANE_SCREENSHOT, { id: laneId, stepName, data });
 					});
 
 					proc.stdout.on('data', (d) => onLog(d.toString()));
@@ -570,7 +573,7 @@ async function runDistributed(
 			const laneId = lane.id;
 			const onLog = (log) => {
 				laneLogs[laneId] += log;
-				socket.emit('runner-lane-log', { id: laneId, log });
+				socket.emit(SOCKET_EVENTS.RUNNER_LANE_LOG, { id: laneId, log });
 			};
 
 			const spawnRemoteLaneAttempt = (currentTag) =>
@@ -586,7 +589,7 @@ async function runDistributed(
 							resolve({ code, rawJson: JSON.parse(raw) });
 						},
 						({ stepName, data }) => {
-							socket.emit('runner-lane-screenshot', { id: laneId, stepName, data });
+							socket.emit(SOCKET_EVENTS.RUNNER_LANE_SCREENSHOT, { id: laneId, stepName, data });
 						}
 					);
 				});

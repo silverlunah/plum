@@ -20,15 +20,17 @@
 
 ### Constants and utilities
 
-- Shared constants live in `frontend/src/lib/constants.js`: `API_BASE`, `BROWSERS`, `TRIGGER_TYPES`, `WORKER_OPTIONS`, `REPORTS_PER_PAGE`, `COPY_TIMEOUT_MS`, `TOAST_TIMEOUT_MS`.
+- Shared constants live in `frontend/src/lib/constants.js`: `API_BASE`, `BROWSERS`, `TRIGGER_TYPES`, `WORKERS_MIN`/`WORKERS_MAX`, `REPORTS_PER_PAGE`, `COPY_TIMEOUT_MS`, `TOAST_TIMEOUT_MS`. This file is config values only (ids, limits, timeouts) — never UI text.
+- All UI copy (headings, button labels, toast messages, placeholders, error strings) lives in `frontend/src/lib/copy/`, one file per feature domain (`dashboard.js`, `reports.js`, `schedules.js`, `repository.js`, `runners.js`, `settings.js`, `auth.js`), plus `common.js` for strings shared across 2+ features (`CANCEL_LABEL`, `SAVE_LABEL`, `pluralize()`, etc.). Static text is a plain exported constant; interpolated or conditional text is an exported function, matching the existing style of `utils/format.js`. Never hardcode a literal user-facing string in a `.svelte` file — extract it into the matching `copy/*.js` file first.
 - Format/display utilities live in `frontend/src/lib/utils/format.js`: `isScheduled`, `triggerLabel`, `triggerVariant`, `stagger`, `fmtDuration`.
 - Never hardcode the API URL — always use `API_BASE` from constants.
-- Never hardcode magic numbers that belong in constants.
+- Never hardcode magic numbers or strings that belong in `constants.js` or `copy/`.
 
 ### API layer
 
 - All backend calls go through `frontend/src/lib/api/` modules (e.g., `reports.js`, `runners.js`).
 - Each module exports typed async functions. Route pages import from there, not from raw `fetch`.
+- Modules that call an authenticated backend route define their own local `authHeaders()` helper returning `{ Authorization: 'Bearer ' + auth.getToken() }`, merged with `'Content-Type'` on POST/PUT calls. This is duplicated per-file on purpose — see `users.js`, `repository.js`, `settings.js`, `runners.js` — not centralized into a shared util.
 
 ### Components
 
@@ -92,11 +94,22 @@ router.get('/:id', async (req, res) => {
 });
 ```
 
+### Auth middleware
+
+There is no global auth gate in `app.js` — every router must declare its own. Two middlewares, always used in this order:
+
+- `jwtAuth` (`middleware/jwtAuth.js`) — requires any authenticated user (accepts a valid JWT, or the MCP API key which resolves to the first admin user).
+- `requireAdmin` (`middleware/requireAdmin.js`) — must run after `jwtAuth`; requires `req.user.role === 'admin'`.
+
+Any route that reads or mutates account-wide configuration — project settings, integrations, backup config, runner nodes, user management — needs `jwtAuth, requireAdmin` on every handler, not just the mutating ones. A route with neither is invisible in review but fully public; check for this explicitly when adding a new settings-like router.
+
 ### Services
 
 - Services own all DB queries, data transformation, and side effects (file I/O, etc.).
 - Use `backend/services/prisma.js` as the shared Prisma client — do not create new instances.
 - Services return plain JS objects, not Prisma model instances with extra methods.
+- Never let a secret field (API keys, tokens, S3 secret keys) reach a service function whose return value a route might `res.json()` directly. Expose a public accessor that strips/masks the field (add a `<field>Set: boolean` if the UI needs to know it's populated) and keep the raw Prisma-backed accessor private, or exported separately under a name like `getProjectRaw()` for the few internal callers that genuinely need the real value (see `settingsService.js`, `runnerService.js`).
+- When updating a secret field, a blank/omitted value means "leave unchanged," not "clear it" — `...(secretValue && { secretValue })` in the Prisma update payload, mirrored on the frontend as a blank input with a placeholder like "Leave blank to keep current token".
 
 ### Constants
 
@@ -184,6 +197,8 @@ spawn(process.execPath, [scriptPath], { stdio: 'inherit' });
 // Bad — 'node' may not be in PATH or may resolve to the wrong version
 spawn('node', [scriptPath]);
 ```
+
+The same rule applies when one script invokes another directly via `execSync`/`execFileSync` (e.g. `run-tests.js` calling `generate-report.js`). Prefer `execFileSync(process.execPath, [absoluteScriptPath], opts)` over `execSync('node relative/path.js')` — it takes an argument array like `spawn` (no shell-quoting needed) and doesn't depend on `node` being resolvable via PATH or on the caller's `cwd`.
 
 ### File paths — always use `path.join()` or `path.resolve()`
 

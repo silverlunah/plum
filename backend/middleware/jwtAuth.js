@@ -1,48 +1,46 @@
 /*
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
 const { verifyToken } = require('../services/userService');
 const prisma = require('../services/prisma');
+const { AUTH_SCHEME } = require('../lib/authHeader');
 
 function jwtAuth(req, res, next) {
 	const auth = req.headers.authorization;
 
 	// MCP API key — resolves to the first admin user so createdById is always valid
 	const mcpKey = process.env.PLUM_MCP_KEY;
-	if (mcpKey && auth === `ApiKey ${mcpKey}`) {
+	if (mcpKey && auth === `${AUTH_SCHEME.API_KEY} ${mcpKey}`) {
 		prisma.user
 			.findFirst({ where: { role: 'admin' }, select: { id: true } })
 			.then((admin) => {
-				req.user = { userId: admin?.id ?? null };
+				req.user = { userId: admin?.id ?? null, role: 'admin' };
 				next();
 			})
 			.catch(() => {
-				req.user = { userId: null };
+				req.user = { userId: null, role: 'admin' };
 				next();
 			});
 		return;
 	}
 
-	if (!auth || !auth.startsWith('Bearer ')) {
+	// Node/CLI shared secret — grants admin-equivalent access to headless tools
+	// (manage-runners.mjs, node self-registration) that have no browser session
+	// or JWT to present. Distributed manually to node machines as PLUM_NODE_KEY.
+	const nodeKey = process.env.PLUM_NODE_KEY;
+	if (nodeKey && auth === `${AUTH_SCHEME.API_KEY} ${nodeKey}`) {
+		req.user = { userId: null, role: 'admin' };
+		return next();
+	}
+
+	if (!auth || !auth.startsWith(`${AUTH_SCHEME.BEARER} `)) {
 		return res.status(401).json({ error: 'Unauthorized' });
 	}
 	let payload;
 	try {
-		payload = verifyToken(auth.slice(7));
+		payload = verifyToken(auth.slice(AUTH_SCHEME.BEARER.length + 1));
 	} catch {
 		return res.status(401).json({ error: 'Invalid or expired token' });
 	}

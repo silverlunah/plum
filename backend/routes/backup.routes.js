@@ -1,18 +1,6 @@
 /*
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
 const express = require('express');
@@ -21,9 +9,10 @@ const backupService = require('../services/backupService');
 const settingsService = require('../services/settingsService');
 const cronService = require('../services/cronService');
 const backupCronService = require('../services/backupCronService');
-const prisma = require('../services/prisma');
+const { jwtAuth } = require('../middleware/jwtAuth');
+const { requireAdmin } = require('../middleware/requireAdmin');
 
-router.get('/export', async (req, res) => {
+router.get('/export', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		const data = await backupService.exportAll();
 		const fileName = `plum-backup-${new Date().toISOString().slice(0, 10)}.json`;
@@ -36,7 +25,7 @@ router.get('/export', async (req, res) => {
 	}
 });
 
-router.post('/import', async (req, res) => {
+router.post('/import', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		const { cronJobs, project, users, runners, testSuites, testRuns } = req.body;
 		const hasData = [cronJobs, project, users, runners, testSuites, testRuns].some(
@@ -54,7 +43,7 @@ router.post('/import', async (req, res) => {
 	}
 });
 
-router.get('/config', async (req, res) => {
+router.get('/config', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		const config = await settingsService.getBackupConfig();
 		res.json(config);
@@ -64,7 +53,7 @@ router.get('/config', async (req, res) => {
 	}
 });
 
-router.post('/config', async (req, res) => {
+router.post('/config', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		await settingsService.updateBackupConfig(req.body);
 		await backupCronService.reload();
@@ -76,12 +65,12 @@ router.post('/config', async (req, res) => {
 	}
 });
 
-router.post('/test-s3', async (req, res) => {
+router.post('/test-s3', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		// If no secret key provided in the request, fall back to the stored one
 		let config = { ...req.body };
 		if (!config.backupS3SecretKey) {
-			const stored = await prisma.project.findUnique({ where: { id: 1 } });
+			const stored = await settingsService.getProjectRaw();
 			config.backupS3SecretKey = stored?.backupS3SecretKey ?? '';
 		}
 
@@ -98,7 +87,7 @@ router.post('/test-s3', async (req, res) => {
 	}
 });
 
-router.post('/run-now', async (req, res) => {
+router.post('/run-now', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		await backupCronService.runBackup();
 		const config = await settingsService.getBackupConfig();

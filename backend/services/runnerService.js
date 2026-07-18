@@ -1,35 +1,43 @@
 /*
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
 const fs = require('fs');
 const path = require('path');
 const prisma = require('./prisma');
 const { loadTestEnv } = require('../lib/testEnv');
+const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
+const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { bearerHeader } = require('../lib/authHeader');
+const { JOB_STATUS } = require('../constants/jobStatus');
 
 // ---------------------------------------------------------------------------
 // Runner CRUD
 // ---------------------------------------------------------------------------
 
-const getAll = () => prisma.runner.findMany({ orderBy: { createdAt: 'asc' } });
+// Strips the auth token before a runner row crosses the HTTP boundary — the
+// token is only ever needed internally (ping/stop/restart/dispatch below all
+// read it via getById, whose result never reaches a client directly).
+function toPublicRunner(runner) {
+	if (!runner) return runner;
+	const { token, ...safe } = runner;
+	return { ...safe, tokenSet: Boolean(token) };
+}
+
+const getAll = async () => {
+	const runners = await prisma.runner.findMany({ orderBy: { createdAt: 'asc' } });
+	return runners.map(toPublicRunner);
+};
 
 const normaliseUrl = (url) => (url ?? '').replace(/\/+$/, '');
 
-const create = ({ name, url, token, browser = 'chromium' }) =>
-	prisma.runner.create({ data: { name, url: normaliseUrl(url), token, browser } });
+const create = async ({ name, url, token, browser = DEFAULT_BROWSER }) => {
+	const runner = await prisma.runner.create({
+		data: { name, url: normaliseUrl(url), token, browser }
+	});
+	return toPublicRunner(runner);
+};
 
 async function remove(id) {
 	// Scrub the deleted runner from any cron job's runnerIds string before
@@ -42,18 +50,29 @@ async function remove(id) {
 			.filter((s) => s && s !== id);
 		await prisma.cronJob.update({
 			where: { id: job.id },
-			data: { runnerIds: ids.length > 0 ? ids.join(',') : 'built-in' }
+			data: { runnerIds: ids.length > 0 ? ids.join(',') : BUILT_IN_RUNNER_ID }
 		});
 	}
 	return prisma.runner.delete({ where: { id } });
 }
 
-const update = (id, data) =>
-	prisma.runner.update({
+// Leaving `token` blank keeps the existing one (same pattern as the S3 backup
+// secret key) instead of clearing a runner's auth on an unrelated edit.
+const update = async (id, { name, url, token, browser }) => {
+	const runner = await prisma.runner.update({
 		where: { id },
-		data: { ...data, ...(data.url && { url: normaliseUrl(data.url) }) }
+		data: {
+			...(name !== undefined && { name }),
+			...(url !== undefined && { url: normaliseUrl(url) }),
+			...(token && { token }),
+			...(browser !== undefined && { browser })
+		}
 	});
+	return toPublicRunner(runner);
+};
 
+// Raw accessor (includes token) — internal use only, for authenticating
+// outbound requests to the runner node (ping/stop/restart/dispatch below).
 const getById = (id) => prisma.runner.findUnique({ where: { id } });
 
 // ---------------------------------------------------------------------------
@@ -65,7 +84,7 @@ async function probe({ url, token }) {
 	try {
 		const res = await fetch(`${url}/api/ping`, {
 			method: 'GET',
-			headers: { Authorization: `Bearer ${token}` },
+			headers: bearerHeader(token),
 			signal: AbortSignal.timeout(5000)
 		});
 		if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
@@ -95,7 +114,7 @@ async function callControlEndpoint(id, endpoint, timeoutMs) {
 	try {
 		const res = await fetch(`${runner.url}/api/${endpoint}`, {
 			method: 'POST',
-			headers: { Authorization: `Bearer ${runner.token}` },
+			headers: bearerHeader(runner.token),
 			signal: AbortSignal.timeout(timeoutMs)
 		});
 		if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
@@ -141,7 +160,7 @@ function collectTestFiles() {
 async function fetchReportContent(runner, jobId, onLog) {
 	try {
 		const res = await fetch(`${runner.url}/api/report/${jobId}`, {
-			headers: { Authorization: `Bearer ${runner.token}` },
+			headers: bearerHeader(runner.token),
 			signal: AbortSignal.timeout(15000)
 		});
 		if (!res.ok) {
@@ -194,7 +213,7 @@ async function dispatchAndPoll(
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
-				Authorization: `Bearer ${runner.token}`
+				...bearerHeader(runner.token)
 			},
 			body: JSON.stringify({
 				tags,
@@ -222,7 +241,7 @@ async function dispatchAndPoll(
 		polling = true;
 		try {
 			const res = await fetch(`${runner.url}/api/execute/${jobId}?offset=${logOffset}`, {
-				headers: { Authorization: `Bearer ${runner.token}` },
+				headers: bearerHeader(runner.token),
 				signal: AbortSignal.timeout(8000)
 			});
 			if (!res.ok) return;
@@ -237,10 +256,10 @@ async function dispatchAndPoll(
 				for (const ss of body.screenshots) onScreenshot(ss);
 			}
 
-			if (body.status === 'done' || body.status === 'error') {
+			if (body.status === JOB_STATUS.DONE || body.status === JOB_STATUS.ERROR) {
 				clearInterval(poll);
 				const content = await fetchReportContent(runner, jobId, onLog);
-				finish(body.exitCode ?? (body.status === 'done' ? 0 : 1), content);
+				finish(body.exitCode ?? (body.status === JOB_STATUS.DONE ? 0 : 1), content);
 			}
 		} catch {
 			// transient polling error — keep trying

@@ -1,18 +1,6 @@
 <!--
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  -->
 
 <script>
@@ -38,6 +26,52 @@
 	import CaseIdChip from '$lib/components/ui/CaseIdChip.svelte';
 	import ResultChip from '$lib/components/ui/ResultChip.svelte';
 	import { TOAST_TIMEOUT_MS } from '$lib/constants';
+	import { CANCEL_LABEL, SAVE_LABEL, SAVING_LABEL, LOADING_LABEL } from '$lib/copy/common';
+	import {
+		TEST_REPOSITORY_BREADCRUMB,
+		TITLE_LABEL,
+		EDIT_RUN_MODAL_TITLE,
+		EDIT_RUN_TITLE,
+		REOPEN_LABEL,
+		START_EXECUTION_LABEL,
+		STOP_EXECUTION_LABEL,
+		EDIT_RUN_BACK_LABEL,
+		MARK_COMPLETE_LABEL,
+		BUILD_TAB_LABEL,
+		EXECUTE_TAB_LABEL,
+		IN_THIS_RUN_LABEL,
+		LOCKED_BADGE,
+		NO_CASES_IN_RUN_MESSAGE,
+		UNASSIGNED_OPTION,
+		SUITE_BROWSER_LABEL,
+		SEARCH_CASES_PLACEHOLDER,
+		NO_MATCHING_CASES,
+		NO_CASES_IN_SUITE,
+		ALL_CASES_ADDED,
+		NO_SUITES_AVAILABLE,
+		NOT_IN_PROGRESS_BANNER,
+		TOGGLE_STEPS_TITLE,
+		ASSIGN_TO_ME_LABEL,
+		IN_PROGRESS_LABEL,
+		PASS_LABEL,
+		FAIL_LABEL,
+		BLOCKED_LABEL,
+		SKIP_LABEL,
+		RESET_TO_PENDING_TITLE,
+		RESET_LABEL,
+		FAILED_TO_LOAD_DATA,
+		FAILED_TO_ADD_CASE,
+		RUN_UPDATED_TOAST,
+		RUN_SAVED_TOAST,
+		RUN_MARKED_COMPLETE_TOAST,
+		RUN_REOPENED_TOAST,
+		runDetailTitle,
+		passedCount,
+		failedCount,
+		remainingCount,
+		stepDataLabel,
+		stepExpectedLabel
+	} from '$lib/copy/repository';
 
 	const runId = $page.params.id;
 
@@ -132,7 +166,7 @@
 			expandedSuites = new Set(suites.map((s) => s.id));
 			if (run.status === 'in-progress') mode = 'execute';
 		} catch (e) {
-			showToast('error', 'Failed to load data');
+			showToast('error', FAILED_TO_LOAD_DATA);
 		} finally {
 			loading = false;
 		}
@@ -200,7 +234,7 @@
 			run = await fetchRun(runId);
 		} catch (e) {
 			run = previous;
-			showToast('error', 'Failed to add case.');
+			showToast('error', FAILED_TO_ADD_CASE);
 		}
 	}
 
@@ -214,7 +248,7 @@
 			const updated = await updateRun(runId, editRunForm);
 			run = { ...run, ...updated };
 			editRunOpen = false;
-			showToast('success', 'Run updated.');
+			showToast('success', RUN_UPDATED_TOAST);
 		} catch (e) {
 			showToast('error', e.message);
 		} finally {
@@ -228,7 +262,7 @@
 			const caseIds = run.entries.map((e) => e.case.id);
 			const updated = await updateRun(runId, { caseIds });
 			run = await fetchRun(runId);
-			showToast('success', 'Run saved.');
+			showToast('success', RUN_SAVED_TOAST);
 		} catch (e) {
 			showToast('error', e.message);
 		} finally {
@@ -275,7 +309,7 @@
 			await updateRun(runId, { status: 'complete' });
 			run = { ...run, status: 'complete' };
 			runsVersion.update((v) => v + 1);
-			showToast('success', 'Run marked as complete.');
+			showToast('success', RUN_MARKED_COMPLETE_TOAST);
 		} catch (e) {
 			showToast('error', e.message);
 		}
@@ -287,7 +321,7 @@
 			run = { ...run, status: 'backlog' };
 			mode = 'build';
 			runsVersion.update((v) => v + 1);
-			showToast('success', 'Run reopened.');
+			showToast('success', RUN_REOPENED_TOAST);
 		} catch (e) {
 			showToast('error', e.message);
 		}
@@ -324,33 +358,33 @@
 	$: failCount = run?.entries.filter((e) => e.status === 'fail').length ?? 0;
 </script>
 
-<svelte:head><title>{run?.title ?? 'Test Run'} — Plum</title></svelte:head>
+<svelte:head><title>{runDetailTitle(run)}</title></svelte:head>
 
 <Toast {toast} />
 
-<Modal bind:open={editRunOpen} title="Edit Run">
+<Modal bind:open={editRunOpen} title={EDIT_RUN_MODAL_TITLE}>
 	<div class="form-fields">
 		<div class="field">
-			<label class="field-label" for="er-title">Title</label>
+			<label class="field-label" for="er-title">{TITLE_LABEL}</label>
 			<input id="er-title" type="text" class="field-input" bind:value={editRunForm.title} />
 		</div>
 		<div class="modal-actions">
 			<Button on:click={handleUpdateRun} disabled={editRunSaving}>
-				{editRunSaving ? 'Saving…' : 'Save'}
+				{editRunSaving ? SAVING_LABEL : SAVE_LABEL}
 			</Button>
-			<Button variant="ghost" on:click={() => (editRunOpen = false)}>Cancel</Button>
+			<Button variant="ghost" on:click={() => (editRunOpen = false)}>{CANCEL_LABEL}</Button>
 		</div>
 	</div>
 </Modal>
 
 <div class="breadcrumb">
-	<a href="/test-repository" class="bc-link">Test Repository</a>
+	<a href="/test-repository" class="bc-link">{TEST_REPOSITORY_BREADCRUMB}</a>
 	<span class="bc-sep">›</span>
 	<span class="bc-current">{run?.title ?? '…'}</span>
 </div>
 
 {#if loading}
-	<div class="loading-state">Loading…</div>
+	<div class="loading-state">{LOADING_LABEL}</div>
 {:else if run}
 	<div class="run-header">
 		<div class="run-header-left">
@@ -358,7 +392,7 @@
 			<span class="run-status-badge {run.status}">{run.status}</span>
 			<button
 				class="icon-btn"
-				title="Edit run"
+				title={EDIT_RUN_TITLE}
 				on:click={() => {
 					editRunForm = { title: run.title };
 					editRunOpen = true;
@@ -381,20 +415,20 @@
 		</div>
 		<div class="run-header-actions">
 			{#if isLocked}
-				<Button variant="ghost" on:click={handleReopenRun}>Reopen</Button>
+				<Button variant="ghost" on:click={handleReopenRun}>{REOPEN_LABEL}</Button>
 			{:else if mode === 'build'}
 				<Button variant="ghost" on:click={handleSaveRun} disabled={saving}>
-					{saving ? 'Saving…' : 'Save'}
+					{saving ? SAVING_LABEL : SAVE_LABEL}
 				</Button>
 				{#if run.entries.length > 0}
-					<Button on:click={handleStartExecution}>Start Execution</Button>
+					<Button on:click={handleStartExecution}>{START_EXECUTION_LABEL}</Button>
 				{/if}
 			{:else if run.status === 'in-progress'}
-				<Button variant="ghost" on:click={handleStopExecution}>Stop Execution</Button>
-				<Button variant="ghost" on:click={() => (mode = 'build')}>← Edit Run</Button>
-				<Button on:click={handleCompleteRun}>Mark Complete</Button>
+				<Button variant="ghost" on:click={handleStopExecution}>{STOP_EXECUTION_LABEL}</Button>
+				<Button variant="ghost" on:click={() => (mode = 'build')}>{EDIT_RUN_BACK_LABEL}</Button>
+				<Button on:click={handleCompleteRun}>{MARK_COMPLETE_LABEL}</Button>
 			{:else}
-				<Button variant="ghost" on:click={() => (mode = 'build')}>← Edit Run</Button>
+				<Button variant="ghost" on:click={() => (mode = 'build')}>{EDIT_RUN_BACK_LABEL}</Button>
 			{/if}
 		</div>
 	</div>
@@ -402,10 +436,10 @@
 	<!-- Mode tabs -->
 	<div class="mode-tabs">
 		<button class="mode-tab" class:active={mode === 'build'} on:click={() => (mode = 'build')}>
-			Build
+			{BUILD_TAB_LABEL}
 		</button>
 		<button class="mode-tab" class:active={mode === 'execute'} on:click={() => (mode = 'execute')}>
-			Execute
+			{EXECUTE_TAB_LABEL}
 			{#if totalCount > 0}
 				<span class="exec-progress">{completedCount}/{totalCount}</span>
 			{/if}
@@ -421,15 +455,15 @@
 			<!-- Left: run entries -->
 			<div class="builder-panel left-panel">
 				<div class="builder-panel-head">
-					<h2 class="builder-panel-title">In this run</h2>
+					<h2 class="builder-panel-title">{IN_THIS_RUN_LABEL}</h2>
 					<span class="count-chip">{run.entries.length}</span>
 					{#if isLocked}
-						<span class="locked-badge">locked</span>
+						<span class="locked-badge">{LOCKED_BADGE}</span>
 					{/if}
 				</div>
 
 				{#if run.entries.length === 0}
-					<EmptyState message="No cases in this run." size="sm" />
+					<EmptyState message={NO_CASES_IN_RUN_MESSAGE} size="sm" />
 				{:else}
 					<div class="entry-sort-bar">
 						{#each [['order', 'Order'], ['name', 'Name'], ['priority', 'Priority'], ['status', 'Status'], ['suite', 'Suite']] as [val, label]}
@@ -494,7 +528,7 @@
 										disabled={assigning === entry.id}
 										on:change={(e) => handleAssignEntry(entry.id, e.target.value)}
 									>
-										<option value="">Unassigned</option>
+										<option value="">{UNASSIGNED_OPTION}</option>
 										{#each members as m}
 											<option value={m.id}>{m.name}</option>
 										{/each}
@@ -522,12 +556,12 @@
 			{#if !isLocked}
 				<div class="builder-panel right-panel">
 					<div class="builder-panel-head">
-						<h2 class="builder-panel-title">Suite browser</h2>
+						<h2 class="builder-panel-title">{SUITE_BROWSER_LABEL}</h2>
 						<input
 							type="text"
 							class="search-input"
 							bind:value={search}
-							placeholder="Search cases…"
+							placeholder={SEARCH_CASES_PLACEHOLDER}
 						/>
 					</div>
 
@@ -572,16 +606,16 @@
 								{:else if expandedSuites.has(suite.id)}
 									<p class="browser-empty">
 										{search
-											? 'No matching cases'
+											? NO_MATCHING_CASES
 											: suite._totalCases === 0
-												? 'No cases in this suite'
-												: 'All cases added'}
+												? NO_CASES_IN_SUITE
+												: ALL_CASES_ADDED}
 									</p>
 								{/if}
 							</div>
 						{/each}
 						{#if filteredSuites.length === 0}
-							<p class="browser-empty">No suites available.</p>
+							<p class="browser-empty">{NO_SUITES_AVAILABLE}</p>
 						{/if}
 					</div>
 				</div>
@@ -591,16 +625,16 @@
 		<div class="execute-workspace" transition:fly={{ y: 4, duration: 150 }}>
 			{#if run.status !== 'in-progress' && !isLocked}
 				<div class="exec-locked-banner">
-					This run is not in progress — start execution to record results.
+					{NOT_IN_PROGRESS_BANNER}
 				</div>
 			{/if}
 			<!-- Progress bar -->
 			{#if totalCount > 0}
 				<div class="progress-bar-wrap">
 					<div class="progress-stats">
-						<span class="stat pass">{passCount} passed</span>
-						<span class="stat fail">{failCount} failed</span>
-						<span class="stat muted">{totalCount - completedCount} remaining</span>
+						<span class="stat pass">{passedCount(passCount)}</span>
+						<span class="stat fail">{failedCount(failCount)}</span>
+						<span class="stat muted">{remainingCount(totalCount - completedCount)}</span>
 					</div>
 					<div class="progress-bar">
 						<div class="progress-fill pass" style="width: {(passCount / totalCount) * 100}%"></div>
@@ -618,7 +652,7 @@
 									<button
 										class="exec-chevron"
 										on:click={() => toggleExecSteps(entry.id)}
-										title="Toggle steps"
+										title={TOGGLE_STEPS_TITLE}
 									>
 										<svg
 											class="chevron"
@@ -657,7 +691,7 @@
 												on:click={() => handleAssignEntry(entry.id, currentUserId)}
 												disabled={assigning === entry.id}
 											>
-												Assign to me
+												{ASSIGN_TO_ME_LABEL}
 											</button>
 										{/if}
 									</div>
@@ -670,19 +704,20 @@
 										<button
 											class="exec-btn in-progress"
 											class:active={entry.status === 'in-progress'}
-											on:click={() => handleMarkEntry(entry, 'in-progress')}>In Progress</button
+											on:click={() => handleMarkEntry(entry, 'in-progress')}
+											>{IN_PROGRESS_LABEL}</button
 										>
 										<button class="exec-btn pass" on:click={() => handleMarkEntry(entry, 'pass')}
-											>Pass</button
+											>{PASS_LABEL}</button
 										>
 										<button class="exec-btn fail" on:click={() => handleMarkEntry(entry, 'fail')}
-											>Fail</button
+											>{FAIL_LABEL}</button
 										>
 										<button class="exec-btn warn" on:click={() => handleMarkEntry(entry, 'blocked')}
-											>Blocked</button
+											>{BLOCKED_LABEL}</button
 										>
 										<button class="exec-btn muted" on:click={() => handleMarkEntry(entry, 'skip')}
-											>Skip</button
+											>{SKIP_LABEL}</button
 										>
 									</div>
 								{:else}
@@ -691,7 +726,7 @@
 										<button
 											class="exec-reset"
 											on:click={() => handleMarkEntry(entry, 'pending')}
-											title="Reset to pending">↩ Reset</button
+											title={RESET_TO_PENDING_TITLE}>{RESET_LABEL}</button
 										>
 									</div>
 								{/if}
@@ -707,10 +742,10 @@
 										<div class="exec-step-body">
 											<p class="exec-step-action">{step.action}</p>
 											{#if step.testData}
-												<p class="exec-step-data">Data: {step.testData}</p>
+												<p class="exec-step-data">{stepDataLabel(step.testData)}</p>
 											{/if}
 											{#if step.expectedOutput}
-												<p class="exec-step-expected">Expected: {step.expectedOutput}</p>
+												<p class="exec-step-expected">{stepExpectedLabel(step.expectedOutput)}</p>
 											{/if}
 										</div>
 									</div>

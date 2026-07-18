@@ -1,18 +1,6 @@
 /*
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
 /**
@@ -70,9 +58,17 @@ function saveNodeConfig(dir, cfg) {
  */
 async function registerWithPrimary({ primary, name, url, token, browser }) {
 	const base = primary.replace(/\/$/, '');
+	// The /runners routes require an authenticated admin session, which this
+	// headless flow has no browser/JWT to provide — PLUM_NODE_KEY is the shared
+	// secret that stands in for one (see backend/middleware/jwtAuth.js).
+	const nodeKey = process.env.PLUM_NODE_KEY;
+	const authHeaders = nodeKey ? { Authorization: `ApiKey ${nodeKey}` } : {};
 
 	let existing = null;
-	const listRes = await fetch(`${base}/runners`, { signal: AbortSignal.timeout(10000) });
+	const listRes = await fetch(`${base}/runners`, {
+		headers: authHeaders,
+		signal: AbortSignal.timeout(10000)
+	});
 	if (!listRes.ok) throw new Error(`primary returned HTTP ${listRes.status} listing runners`);
 	const { runners = [] } = await listRes.json();
 	existing = runners.find((r) => r.name === name && r.url === url) ?? null;
@@ -80,7 +76,7 @@ async function registerWithPrimary({ primary, name, url, token, browser }) {
 
 	const res = await fetch(`${base}/runners`, {
 		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
+		headers: { 'Content-Type': 'application/json', ...authHeaders },
 		body: JSON.stringify({ name, url, token, browser }),
 		signal: AbortSignal.timeout(10000)
 	});

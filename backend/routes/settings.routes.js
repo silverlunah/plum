@@ -1,18 +1,6 @@
 /*
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
 const express = require('express');
@@ -21,8 +9,9 @@ const settingsService = require('../services/settingsService');
 const testSuiteService = require('../services/testSuiteService');
 const testCaseService = require('../services/testCaseService');
 const { jwtAuth } = require('../middleware/jwtAuth');
+const { requireAdmin } = require('../middleware/requireAdmin');
 
-router.get('/project', async (req, res, next) => {
+router.get('/project', jwtAuth, requireAdmin, async (req, res, next) => {
 	try {
 		const project = await settingsService.getProject();
 		res.json(project);
@@ -31,7 +20,7 @@ router.get('/project', async (req, res, next) => {
 	}
 });
 
-router.post('/project', async (req, res, next) => {
+router.post('/project', jwtAuth, requireAdmin, async (req, res, next) => {
 	try {
 		const { name, logoUrl, timezone, maxRetries } = req.body;
 		const project = await settingsService.updateProject({ name, logoUrl, timezone, maxRetries });
@@ -76,7 +65,7 @@ router.post('/test-prefixes/migrate', jwtAuth, async (req, res, next) => {
 	}
 });
 
-router.get('/integrations', async (req, res, next) => {
+router.get('/integrations', jwtAuth, requireAdmin, async (req, res, next) => {
 	try {
 		const webhooks = await settingsService.getWebhooks();
 		res.json(webhooks);
@@ -85,7 +74,7 @@ router.get('/integrations', async (req, res, next) => {
 	}
 });
 
-router.post('/integrations', async (req, res, next) => {
+router.post('/integrations', jwtAuth, requireAdmin, async (req, res, next) => {
 	try {
 		const { discordWebhookUrl, slackWebhookUrl, notifyPublicUrl } = req.body;
 		const project = await settingsService.updateWebhooks({

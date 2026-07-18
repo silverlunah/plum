@@ -1,24 +1,13 @@
 <!--
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  -->
 
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { fly, slide } from 'svelte/transition';
 	import { io } from 'socket.io-client';
+	import { SOCKET_EVENTS } from '$lib/socketEvents';
 	import {
 		socket,
 		runnerState,
@@ -39,15 +28,51 @@
 		API_BASE,
 		BROWSERS,
 		BUILTIN_RUNNER_ID,
-		BUILTIN_RUNNER_LABEL,
 		WORKERS_MIN,
 		WORKERS_MAX,
 		RUN_PICKER_LIMIT,
 		RUN_TAG_DISPLAY_LIMIT,
-		ALL_TESTS_LABEL,
 		REDIRECT_DELAY_MS,
 		TRIGGER_TYPES
 	} from '$lib/constants';
+	import {
+		ALL_TESTS_LABEL,
+		BUILTIN_RUNNER_LABEL,
+		CLEAR_LABEL,
+		DISCORD_LABEL,
+		SLACK_LABEL
+	} from '$lib/copy/common';
+	import {
+		RUN_ALL_TITLE,
+		RUN_ALL_CONFIRM_LABEL,
+		RUN_ALL_BODY_PREFIX,
+		RUN_ALL_BODY_STRONG,
+		RUN_ALL_BODY_SUFFIX,
+		VIEW_REPORT_LABEL,
+		TEST_RUN_LABEL,
+		CLEAR_TEST_RUN_LABEL,
+		NO_RUN_SELECTED_LABEL,
+		NO_ACTIVE_TEST_RUNS,
+		WORKERS_LABEL,
+		BROWSER_LABEL,
+		RUNNERS_LABEL,
+		NOTIFY_LABEL,
+		NO_AUTOMATED_CASES_TITLE,
+		RUNNING_LABEL,
+		RUN_LABEL,
+		MANUAL_RUN_LABEL,
+		NO_TESTS_RUNNING,
+		LIVE_LABEL,
+		automatedCaseCount,
+		discordNotifyTitle,
+		slackNotifyTitle,
+		runnersCountLabel,
+		runKindLabel,
+		startedByLabel,
+		collapseOrExpandLabel,
+		statusLabel as computeStatusLabel,
+		runnerSummary as computeRunnerSummary
+	} from '$lib/copy/runners';
 	import { triggerLabel, triggerVariant } from '$lib/utils/format';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
@@ -178,11 +203,11 @@
 		_socket = s;
 		socket.set(s);
 
-		s.on('log', (data) => {
+		s.on(SOCKET_EVENTS.LOG, (data) => {
 			runnerState.update((r) => ({ ...r, output: r.output + data + '\n' }));
 		});
 
-		s.on('done', (payload) => {
+		s.on(SOCKET_EVENTS.DONE, (payload) => {
 			// Distributed runs send { code, reportId }; the built-in path sends a bare code.
 			const code = typeof payload === 'object' && payload !== null ? payload.code : payload;
 			const providedId =
@@ -208,32 +233,32 @@
 			});
 		});
 
-		s.on('runner-lanes-init', (lanes) => {
+		s.on(SOCKET_EVENTS.RUNNER_LANES_INIT, (lanes) => {
 			runnerState.update((r) => ({
 				...r,
 				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '', latestScreenshot: null }))
 			}));
 		});
 
-		s.on('runner-lane-log', ({ id, log }) => {
+		s.on(SOCKET_EVENTS.RUNNER_LANE_LOG, ({ id, log }) => {
 			runnerState.update((r) => ({
 				...r,
 				lanes: r.lanes.map((l) => (l.id === id ? { ...l, logs: l.logs + log } : l))
 			}));
 		});
 
-		s.on('runner-lane-status', ({ id, status }) => {
+		s.on(SOCKET_EVENTS.RUNNER_LANE_STATUS, ({ id, status }) => {
 			runnerState.update((r) => ({
 				...r,
 				lanes: r.lanes.map((l) => (l.id === id ? { ...l, status } : l))
 			}));
 		});
 
-		s.on('step-screenshot', ({ stepName, data }) => {
+		s.on(SOCKET_EVENTS.STEP_SCREENSHOT, ({ stepName, data }) => {
 			runnerState.update((r) => ({ ...r, latestScreenshot: { stepName, data } }));
 		});
 
-		s.on('runner-lane-screenshot', ({ id, stepName, data }) => {
+		s.on(SOCKET_EVENTS.RUNNER_LANE_SCREENSHOT, ({ id, stepName, data }) => {
 			runnerState.update((r) => ({
 				...r,
 				lanes: r.lanes.map((l) =>
@@ -242,7 +267,7 @@
 			}));
 		});
 
-		s.on('report-ready', () => reportsVersion.update((v) => v + 1));
+		s.on(SOCKET_EVENTS.REPORT_READY, () => reportsVersion.update((v) => v + 1));
 
 		function updateBgRun(runId, updater) {
 			backgroundRuns.update((r) => {
@@ -251,41 +276,41 @@
 			});
 		}
 
-		s.on('bg-run-start', ({ runId, kind, label, meta }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_START, ({ runId, kind, label, meta }) => {
 			backgroundRuns.update((r) => ({ ...r, [runId]: makeBgRunEntry(kind, label, meta) }));
 			panelExpanded.set(true);
 		});
 
-		s.on('bg-run-log', ({ runId, log }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_LOG, ({ runId, log }) => {
 			updateBgRun(runId, (run) => ({ ...run, output: run.output + log }));
 		});
 
-		s.on('bg-run-lanes-init', ({ runId, lanes }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_LANES_INIT, ({ runId, lanes }) => {
 			updateBgRun(runId, (run) => ({
 				...run,
 				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '', latestScreenshot: null }))
 			}));
 		});
 
-		s.on('bg-run-lane-log', ({ runId, laneId, log }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_LANE_LOG, ({ runId, laneId, log }) => {
 			updateBgRun(runId, (run) => ({
 				...run,
 				lanes: run.lanes.map((l) => (l.id === laneId ? { ...l, logs: l.logs + log } : l))
 			}));
 		});
 
-		s.on('bg-run-lane-status', ({ runId, laneId, status }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_LANE_STATUS, ({ runId, laneId, status }) => {
 			updateBgRun(runId, (run) => ({
 				...run,
 				lanes: run.lanes.map((l) => (l.id === laneId ? { ...l, status } : l))
 			}));
 		});
 
-		s.on('bg-run-screenshot', ({ runId, stepName, data }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_SCREENSHOT, ({ runId, stepName, data }) => {
 			updateBgRun(runId, (run) => ({ ...run, latestScreenshot: { stepName, data } }));
 		});
 
-		s.on('bg-run-lane-screenshot', ({ runId, laneId, stepName, data }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_LANE_SCREENSHOT, ({ runId, laneId, stepName, data }) => {
 			updateBgRun(runId, (run) => ({
 				...run,
 				lanes: run.lanes.map((l) =>
@@ -294,7 +319,7 @@
 			}));
 		});
 
-		s.on('bg-run-done', ({ runId, code, reportId }) => {
+		s.on(SOCKET_EVENTS.BG_RUN_DONE, ({ runId, code, reportId }) => {
 			const passed = code === 0 || code === null;
 			const cancelled = code === 130;
 			updateBgRun(runId, (run) => ({
@@ -357,26 +382,11 @@
 						? 'var(--pass)'
 						: 'var(--border)';
 
-	$: statusLabel = state.running
-		? 'Running'
-		: state.status === 'pass'
-			? 'Passed'
-			: state.status === 'fail'
-				? 'Failed'
-				: anyBgCronRunning
-					? 'Scheduled'
-					: anyBgRunning
-						? 'Running'
-						: 'Ready';
+	$: statusLabel = computeStatusLabel(state, anyBgRunning, anyBgCronRunning);
 
 	$: currentBrowser = BROWSERS.find((b) => b.id === cfg.browser) ?? BROWSERS[0];
 
-	$: runnerSummary =
-		cfg.selectedRunners.length === 1 && cfg.selectedRunners[0] === BUILTIN_RUNNER_ID
-			? BUILTIN_RUNNER_LABEL
-			: cfg.selectedRunners.length === 1
-				? (availableRunners.find((r) => r.id === cfg.selectedRunners[0])?.name ?? '1 node')
-				: `${cfg.selectedRunners.length} nodes`;
+	$: runnerSummary = computeRunnerSummary(cfg, availableRunners);
 
 	async function selectRun(run) {
 		runPickOpen = false;
@@ -440,14 +450,15 @@
 <!-- Run all disclaimer -->
 <ConfirmModal
 	bind:open={runAllModalOpen}
-	title="Run all tests?"
-	confirmLabel="Run all tests"
+	title={RUN_ALL_TITLE}
+	confirmLabel={RUN_ALL_CONFIRM_LABEL}
 	on:confirm={() => {
 		runAllModalOpen = false;
 		triggerRun(undefined, undefined, { notifyDiscord, notifySlack });
 	}}
 >
-	No tag or filter is set. This will run <strong>every test</strong> in the suite, which may take a while.
+	{RUN_ALL_BODY_PREFIX} <strong>{RUN_ALL_BODY_STRONG}</strong>
+	{RUN_ALL_BODY_SUFFIX}
 </ConfirmModal>
 
 <div class="panel" class:expanded={$panelExpanded}>
@@ -476,7 +487,7 @@
 					class="view-report-btn"
 					transition:fly={{ x: -6, duration: 200 }}
 				>
-					View Report
+					{VIEW_REPORT_LABEL}
 					<svg
 						width="11"
 						height="11"
@@ -513,10 +524,14 @@
 						<span class="run-chip-spinner"></span>
 					{:else if selectedRun.tags !== null}
 						<span class="run-chip-count" class:none={selectedRun.tags.length === 0}>
-							{selectedRun.tags.length} automated
+							{automatedCaseCount(selectedRun.tags.length)}
 						</span>
 					{/if}
-					<button class="run-chip-clear" on:click={clearSelectedRun} aria-label="Clear test run">
+					<button
+						class="run-chip-clear"
+						on:click={clearSelectedRun}
+						aria-label={CLEAR_TEST_RUN_LABEL}
+					>
 						<svg width="9" height="9" viewBox="0 0 14 14" fill="none"
 							><path
 								d="M1 1l12 12M13 1L1 13"
@@ -556,7 +571,7 @@
 
 			<!-- Test run dropdown -->
 			<div class="ctrl-group">
-				<span class="ctrl-label">Test Run</span>
+				<span class="ctrl-label">{TEST_RUN_LABEL}</span>
 				<div class="dropdown-wrap" use:clickOutside on:clickoutside={() => (runPickOpen = false)}>
 					<button
 						class="dropdown-trigger"
@@ -567,7 +582,7 @@
 						}}
 						disabled={state.running}
 					>
-						<span>{selectedRun ? selectedRun.title : 'None'}</span>
+						<span>{selectedRun ? selectedRun.title : NO_RUN_SELECTED_LABEL}</span>
 						<svg
 							width="10"
 							height="10"
@@ -586,12 +601,13 @@
 						<div class="dropdown-menu run-pick-menu" transition:fly={{ y: 6, duration: 130 }}>
 							{#if selectedRun}
 								<button class="dropdown-item" on:click={clearSelectedRun}>
-									<span style="color:var(--text-muted)">✕</span> Clear
+									<span style="color:var(--text-muted)">✕</span>
+									{CLEAR_LABEL}
 								</button>
 								<div class="dropdown-divider"></div>
 							{/if}
 							{#if testRuns.filter((r) => r.status !== 'complete').length === 0}
-								<div class="dropdown-empty">No active test runs</div>
+								<div class="dropdown-empty">{NO_ACTIVE_TEST_RUNS}</div>
 							{:else}
 								{#each testRuns.filter((r) => r.status !== 'complete') as run}
 									<button
@@ -612,7 +628,7 @@
 
 			<!-- Workers stepper -->
 			<div class="ctrl-group">
-				<span class="ctrl-label">Workers</span>
+				<span class="ctrl-label">{WORKERS_LABEL}</span>
 				<div class="stepper">
 					<button
 						class="step-btn"
@@ -632,7 +648,7 @@
 
 			<!-- Browser -->
 			<div class="ctrl-group">
-				<span class="ctrl-label">Browser</span>
+				<span class="ctrl-label">{BROWSER_LABEL}</span>
 				<div class="dropdown-wrap" use:clickOutside on:clickoutside={() => (browserOpen = false)}>
 					<button
 						class="dropdown-trigger"
@@ -680,7 +696,7 @@
 			{#if availableRunners.length > 0}
 				<div class="ctrl-divider"></div>
 				<div class="ctrl-group">
-					<span class="ctrl-label">Runners</span>
+					<span class="ctrl-label">{RUNNERS_LABEL}</span>
 					<div class="dropdown-wrap" use:clickOutside on:clickoutside={() => (runnersOpen = false)}>
 						<button
 							class="dropdown-trigger"
@@ -739,7 +755,7 @@
 			{#if integrations.discordWebhookUrl || integrations.slackWebhookUrl}
 				<div class="ctrl-divider"></div>
 				<div class="ctrl-group">
-					<span class="ctrl-label">Notify</span>
+					<span class="ctrl-label">{NOTIFY_LABEL}</span>
 					<div class="notify-toggles">
 						{#if integrations.discordWebhookUrl}
 							<button
@@ -747,8 +763,8 @@
 								class="notify-btn"
 								class:active={notifyDiscord}
 								on:click={() => (notifyDiscord = !notifyDiscord)}
-								title={notifyDiscord ? 'Discord notification on' : 'Discord notification off'}
-								disabled={state.running}>Discord</button
+								title={discordNotifyTitle(notifyDiscord)}
+								disabled={state.running}>{DISCORD_LABEL}</button
 							>
 						{/if}
 						{#if integrations.slackWebhookUrl}
@@ -757,8 +773,8 @@
 								class="notify-btn"
 								class:active={notifySlack}
 								on:click={() => (notifySlack = !notifySlack)}
-								title={notifySlack ? 'Slack notification on' : 'Slack notification off'}
-								disabled={state.running}>Slack</button
+								title={slackNotifyTitle(notifySlack)}
+								disabled={state.running}>{SLACK_LABEL}</button
 							>
 						{/if}
 					</div>
@@ -775,18 +791,16 @@
 				disabled={state.running ||
 					selectedRunLoading ||
 					(selectedRun && selectedRun.tags?.length === 0)}
-				title={selectedRun && selectedRun.tags?.length === 0
-					? 'No automated cases in this run'
-					: undefined}
+				title={selectedRun && selectedRun.tags?.length === 0 ? NO_AUTOMATED_CASES_TITLE : undefined}
 			>
 				{#if state.running}
 					<span class="run-spinner"></span>
-					Running
+					{RUNNING_LABEL}
 				{:else}
 					<svg width="9" height="10" viewBox="0 0 10 12" fill="currentColor" stroke="none">
 						<polygon points="0,0 10,6 0,12" />
 					</svg>
-					Run
+					{RUN_LABEL}
 				{/if}
 			</button>
 		</div>
@@ -797,7 +811,7 @@
 		<button
 			class="expand-btn"
 			on:click={() => panelExpanded.update((v) => !v)}
-			aria-label={$panelExpanded ? 'Collapse panel' : 'Expand panel'}
+			aria-label={collapseOrExpandLabel($panelExpanded)}
 		>
 			<svg
 				width="14"
@@ -823,7 +837,7 @@
 				<a href="/reports/live" class="run-card active-run">
 					<span class="run-card-dot pulse-accent"></span>
 					<div class="run-card-info">
-						<span class="run-card-label">{state.currentRun?.runTitle || 'Manual run'}</span>
+						<span class="run-card-label">{state.currentRun?.runTitle || MANUAL_RUN_LABEL}</span>
 						{#if state.currentRun}
 							<span class="run-card-meta">
 								{truncatedRunTag}
@@ -833,12 +847,12 @@
 								{state.currentRun.browser}
 								{#if state.currentRun.runners?.length > 1}
 									<span class="meta-dot">·</span>
-									{state.currentRun.runners.length} runners
+									{runnersCountLabel(state.currentRun.runners.length)}
 								{/if}
 							</span>
 						{/if}
 					</div>
-					<Badge variant="tag">Live</Badge>
+					<Badge variant="tag">{LIVE_LABEL}</Badge>
 					<svg
 						width="13"
 						height="13"
@@ -864,9 +878,9 @@
 					<div class="run-card-info">
 						<span class="run-card-label">{run.label}</span>
 						<span class="run-card-meta">
-							{triggerLabel(run.kind)} run
+							{runKindLabel(run.kind)}
 							{#if run.currentRun?.startedBy}
-								<span class="meta-dot">·</span> started by {run.currentRun.startedBy}
+								<span class="meta-dot">·</span> {startedByLabel(run.currentRun.startedBy)}
 							{/if}
 						</span>
 					</div>
@@ -903,7 +917,7 @@
 						<line x1="10" y1="15" x2="10" y2="12" />
 						<line x1="10" y1="9" x2="10.01" y2="9" />
 					</svg>
-					No tests currently running
+					{NO_TESTS_RUNNING}
 				</div>
 			{/if}
 		</div>

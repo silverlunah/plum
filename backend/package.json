@@ -8,12 +8,12 @@
 		"create-env": "node services/envService.js",
 		"test": "node config/scripts/run-tests.js",
 		"manage-runners": "node scripts/manage-runners.mjs",
-		"create-test": "node scripts/create-test.js",
+		"create-test": "node config/scripts/create-test.mjs",
 		"mcp": "node mcp/server.js"
 	},
 	"keywords": [],
-	"author": "",
-	"license": "ISC",
+	"author": "silverlunah",
+	"license": "MIT",
 	"devDependencies": {
 		"@playwright/test": "^1.50.1",
 		"@types/node": "^22.17.0",

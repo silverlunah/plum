@@ -1,18 +1,6 @@
 /*
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
 const cron = require('node-cron');
@@ -28,6 +16,10 @@ const notificationService = require('./notificationService');
 const activeRunsService = require('./activeRunsService');
 const { startSsPoller } = require('../lib/screenshotPoller');
 const { BUILT_IN_RUNNER_ID, TRIGGER_REMOTE, TRIGGER_TYPE } = require('../constants/triggers');
+const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { PLUM_MODE_NODE } = require('../constants/env');
+const { SOCKET_EVENTS } = require('../constants/socketEvents');
+const { JOB_STATUS } = require('../constants/jobStatus');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { readCucumberReportFile } = require('../lib/reportFilename');
 const { runWithRetries } = require('../lib/retryRunner');
@@ -86,12 +78,12 @@ function runSingleBuiltInAttempt({ taskName, currentTag, workers, browser, suppr
 			PLUM_SS_DIR: ssDir
 		};
 		if (workers > 1) env.PARALLEL = String(workers);
-		if (suppressSave) env.PLUM_MODE = 'node';
+		if (suppressSave) env.PLUM_MODE = PLUM_MODE_NODE;
 
 		const task = spawn('npm', ['run', 'test'], { env, shell: true });
 
 		const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-			if (_io) _io.emit('bg-run-screenshot', { runId: taskName, stepName, data });
+			if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_SCREENSHOT, { runId: taskName, stepName, data });
 		});
 
 		task.stdout.on('data', (d) => {
@@ -119,7 +111,7 @@ async function runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscor
 	const { maxRetries } = await settingsService.getProject();
 
 	const onLog = (text) => {
-		if (_io) _io.emit('bg-run-log', { runId: taskName, log: text });
+		if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_LOG, { runId: taskName, log: text });
 	};
 
 	if (maxRetries === 0) {
@@ -141,7 +133,12 @@ async function runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscor
 			})
 			.then((report) => {
 				activeRunsService.unregisterRun(taskName);
-				if (_io) _io.emit('bg-run-done', { runId: taskName, code, reportId: report?.id ?? null });
+				if (_io)
+					_io.emit(SOCKET_EVENTS.BG_RUN_DONE, {
+						runId: taskName,
+						code,
+						reportId: report?.id ?? null
+					});
 
 				if (report) {
 					prisma.report
@@ -165,7 +162,7 @@ async function runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscor
 			.catch((e) => {
 				console.error(`[cron] Notification failed: ${e.message}`);
 				activeRunsService.unregisterRun(taskName);
-				if (_io) _io.emit('bg-run-done', { runId: taskName, code, reportId: null });
+				if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_DONE, { runId: taskName, code, reportId: null });
 			});
 		return;
 	}
@@ -203,7 +200,8 @@ async function runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscor
 	}
 
 	activeRunsService.unregisterRun(taskName);
-	if (_io) _io.emit('bg-run-done', { runId: taskName, code, reportId: report?.id ?? null });
+	if (_io)
+		_io.emit(SOCKET_EVENTS.BG_RUN_DONE, { runId: taskName, code, reportId: report?.id ?? null });
 
 	if (report && (notifyDiscord || notifySlack)) {
 		notificationService
@@ -246,14 +244,14 @@ async function runDistributed({
 	if (activeRunnerIds.length === 0) {
 		console.log(`Task "${taskName}" — no tests found, skipping.`);
 		activeRunsService.unregisterRun(taskName);
-		if (_io) _io.emit('bg-run-done', { runId: taskName, code: 0, reportId: null });
+		if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_DONE, { runId: taskName, code: 0, reportId: null });
 		return;
 	}
 
 	const laneInfos = await resolveLaneInfos(activeRunnerIds);
 
 	if (_io) {
-		_io.emit('bg-run-lanes-init', {
+		_io.emit(SOCKET_EVENTS.BG_RUN_LANES_INIT, {
 			runId: taskName,
 			lanes: laneInfos.map((l, i) => ({ id: l.id, name: l.name, testCount: chunks[i].length }))
 		});
@@ -270,10 +268,10 @@ async function runDistributed({
 		laneAttempts[idx] = attempts;
 		doneCount++;
 		if (_io) {
-			_io.emit('bg-run-lane-status', {
+			_io.emit(SOCKET_EVENTS.BG_RUN_LANE_STATUS, {
 				runId: taskName,
 				laneId,
-				status: code === 0 ? 'done' : 'error'
+				status: code === 0 ? JOB_STATUS.DONE : JOB_STATUS.ERROR
 			});
 		}
 
@@ -294,7 +292,7 @@ async function runDistributed({
 				.then((saved) => {
 					activeRunsService.unregisterRun(taskName);
 					if (_io) {
-						_io.emit('bg-run-done', {
+						_io.emit(SOCKET_EVENTS.BG_RUN_DONE, {
 							runId: taskName,
 							code: overallCode,
 							reportId: saved?.id ?? null
@@ -316,7 +314,12 @@ async function runDistributed({
 				.catch((e) => {
 					console.error(`[cron] Failed to save combined report: ${e.message}`);
 					activeRunsService.unregisterRun(taskName);
-					if (_io) _io.emit('bg-run-done', { runId: taskName, code: overallCode, reportId: null });
+					if (_io)
+						_io.emit(SOCKET_EVENTS.BG_RUN_DONE, {
+							runId: taskName,
+							code: overallCode,
+							reportId: null
+						});
 				});
 		}
 	}
@@ -329,7 +332,7 @@ async function runDistributed({
 		if (lane.id === BUILT_IN_RUNNER_ID) {
 			const idx = i;
 			const onLog = (text) => {
-				if (_io) _io.emit('bg-run-lane-log', { runId: taskName, laneId, log: text });
+				if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_LANE_LOG, { runId: taskName, laneId, log: text });
 			};
 
 			const spawnBuiltInLaneAttempt = (currentTag) =>
@@ -342,7 +345,7 @@ async function runDistributed({
 						TAG: currentTag,
 						TRIGGER: TRIGGER_REMOTE, // node-mode: file naming only, not persisted to DB
 						BROWSER: browser,
-						PLUM_MODE: 'node',
+						PLUM_MODE: PLUM_MODE_NODE,
 						PLUM_SS_DIR: ssDir
 					};
 					if (workers > 1) env.PARALLEL = String(workers);
@@ -351,7 +354,12 @@ async function runDistributed({
 
 					const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
 						if (_io)
-							_io.emit('bg-run-lane-screenshot', { runId: taskName, laneId, stepName, data });
+							_io.emit(SOCKET_EVENTS.BG_RUN_LANE_SCREENSHOT, {
+								runId: taskName,
+								laneId,
+								stepName,
+								data
+							});
 					});
 
 					task.stdout.on('data', (d) => {
@@ -381,7 +389,7 @@ async function runDistributed({
 			const idx = i;
 			const onLog = (log) => {
 				process.stdout.write(log);
-				if (_io) _io.emit('bg-run-lane-log', { runId: taskName, laneId, log });
+				if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_LANE_LOG, { runId: taskName, laneId, log });
 			};
 
 			const spawnRemoteLaneAttempt = (currentTag) =>
@@ -393,7 +401,12 @@ async function runDistributed({
 						(code, content) => resolve({ code, rawJson: content ? JSON.parse(content) : [] }),
 						({ stepName, data }) => {
 							if (_io)
-								_io.emit('bg-run-lane-screenshot', { runId: taskName, laneId, stepName, data });
+								_io.emit(SOCKET_EVENTS.BG_RUN_LANE_SCREENSHOT, {
+									runId: taskName,
+									laneId,
+									stepName,
+									data
+								});
 						}
 					);
 				});
@@ -429,7 +442,7 @@ async function runCronJob(job) {
 	const meta = { tag: tags, browser, workers };
 	activeRunsService.registerRun(taskName, { kind: TRIGGER_TYPE.CRON, label, meta });
 	if (_io) {
-		_io.emit('bg-run-start', { runId: taskName, kind: TRIGGER_TYPE.CRON, label, meta });
+		_io.emit(SOCKET_EVENTS.BG_RUN_START, { runId: taskName, kind: TRIGGER_TYPE.CRON, label, meta });
 	}
 	console.log(`Running scheduled task: "${taskName}" → runners: ${runnerIds.join(', ')}`);
 
@@ -509,7 +522,7 @@ const addCronJob = async ({
 			cronExpression,
 			tags: tags ?? '',
 			workers: workers ?? 1,
-			browser: browser ?? 'chromium',
+			browser: browser ?? DEFAULT_BROWSER,
 			runnerIds: runnerIdsStr,
 			notifyDiscord: notifyDiscord ?? false,
 			notifySlack: notifySlack ?? false,
@@ -564,7 +577,7 @@ const updateCronJob = async (
 			cronExpression,
 			tags,
 			workers: workers ?? 1,
-			browser: browser ?? 'chromium',
+			browser: browser ?? DEFAULT_BROWSER,
 			runnerIds: runnerIdsStr,
 			notifyDiscord: notifyDiscord ?? false,
 			notifySlack: notifySlack ?? false,

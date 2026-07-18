@@ -1,18 +1,6 @@
 <!--
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  -->
 
 <script>
@@ -53,11 +41,231 @@
 	import { builtInEnabled } from '$lib/stores/runner';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
-	import { API_BASE, BROWSERS, TOAST_TIMEOUT_MS, MAX_TEST_RETRIES } from '$lib/constants';
+	import {
+		API_BASE,
+		BROWSERS,
+		TOAST_TIMEOUT_MS,
+		MAX_TEST_RETRIES,
+		COPY_TIMEOUT_MS
+	} from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
+	import { CANCEL_LABEL, EDIT_LABEL, SAVE_LABEL, EMAIL_LABEL } from '$lib/copy/common';
+	import {
+		PAGE_TITLE,
+		HEADING,
+		NAME_LABEL,
+		NETWORK_ERROR,
+		PROJECT_LABEL,
+		RUNNERS_LABEL,
+		REPOSITORY_NAV_LABEL,
+		REPOSITORY_HEADING,
+		INTEGRATIONS_LABEL,
+		MCP_NAV_LABEL,
+		MCP_HEADING,
+		ACCOUNT_LABEL,
+		USERS_LABEL,
+		BACKUP_LABEL,
+		PROJECT_DESC,
+		RUNNERS_DESC,
+		REPOSITORY_DESC,
+		INTEGRATIONS_DESC,
+		MCP_DESC,
+		ACCOUNT_DESC,
+		USERS_DESC,
+		BACKUP_DESC,
+		RUNNER_FIELDS_REQUIRED_ERROR,
+		ADD_RUNNER_FAILED,
+		REMOVE_RUNNER_FAILED,
+		UPDATE_RUNNER_FAILED,
+		cannotReachRunnerError,
+		runnerAddedToast,
+		runnerRemovedToast,
+		runnerStoppedToast,
+		runnerStopFailedToast,
+		runnerStopFailedGenericToast,
+		runnerRestartingToast,
+		runnerRestartFailedToast,
+		runnerRestartFailedGenericToast,
+		runnerUpdatedToast,
+		PROJECT_NAME_LABEL,
+		PROJECT_NAME_PLACEHOLDER,
+		LOGO_URL_LABEL,
+		LOGO_URL_HINT,
+		LOGO_URL_PLACEHOLDER,
+		PREVIEW_LABEL,
+		LOGO_PREVIEW_ALT,
+		TIMEZONE_LABEL,
+		TIMEZONE_HINT,
+		RETRY_FAILED_TESTS_LABEL,
+		RETRY_FAILED_TESTS_HINT,
+		DARK_MODE_LABEL,
+		DARK_MODE_DESC,
+		PROJECT_SAVED_TOAST,
+		PROJECT_SAVE_FAILED,
+		saveProjectLabel,
+		BUILTIN_RUNNER_TOGGLE_LABEL,
+		BUILTIN_RUNNER_TOGGLE_DESC,
+		RUNNER_URL_LABEL,
+		RUNNER_URL_HINT_PREFIX,
+		RUNNER_URL_HINT_SUFFIX,
+		RUNNER_URL_PLACEHOLDER,
+		TOKEN_LABEL,
+		TOKEN_PLACEHOLDER,
+		KEEP_TOKEN_PLACEHOLDER,
+		BROWSER_LABEL,
+		RUNNER_NAME_PLACEHOLDER,
+		RUNNER_UNREACHABLE_LABEL,
+		RUNNER_PINGING_LABEL,
+		REMOVE_LABEL,
+		ADD_RUNNER_FORM_TITLE,
+		OPEN_ADD_RUNNER_LABEL,
+		editRunnerSubmitLabel,
+		addRunnerSubmitLabel,
+		restartRunnerLabel,
+		stopRunnerLabel,
+		CASE_PREFIX_LABEL,
+		CASE_PREFIX_PLACEHOLDER,
+		SUITE_PREFIX_LABEL,
+		SUITE_PREFIX_PLACEHOLDER,
+		EXAMPLES_LABEL,
+		PREFIXES_SAVED_TOAST,
+		PREFIXES_SAVE_FAILED,
+		MIGRATE_IDS_HEADING,
+		MIGRATE_DESC_PREFIX,
+		MIGRATE_DESC_STRONG,
+		MIGRATE_DESC_SUFFIX,
+		NEW_CASE_PREFIX_LABEL,
+		NEW_SUITE_PREFIX_LABEL,
+		MIGRATION_COMPLETE_TOAST,
+		MIGRATION_FAILED_TOAST,
+		savePrefixesLabel,
+		runMigrationLabel,
+		WEBHOOKS_CARD_TITLE,
+		DISCORD_WEBHOOK_LABEL,
+		DISCORD_WEBHOOK_HINT,
+		DISCORD_WEBHOOK_PLACEHOLDER,
+		SLACK_WEBHOOK_LABEL,
+		SLACK_WEBHOOK_HINT,
+		SLACK_WEBHOOK_PLACEHOLDER,
+		PUBLIC_URL_LABEL,
+		PUBLIC_URL_HINT,
+		PUBLIC_URL_PLACEHOLDER,
+		INTEGRATIONS_SAVED_TOAST,
+		INTEGRATIONS_SAVE_FAILED,
+		CI_TRIGGERS_CARD_TITLE,
+		CI_DESC_PART1,
+		CI_DESC_PART2,
+		CI_DESC_PART3,
+		MCP_TAB_LINK_LABEL,
+		CI_DESC_PART4,
+		EXTERNAL_BADGE_LABEL,
+		saveIntegrationsLabel,
+		copyCiSnippetLabel,
+		API_KEY_CARD_TITLE,
+		NO_KEY_GENERATED_MESSAGE,
+		HIDE_KEY_TITLE,
+		SHOW_KEY_TITLE,
+		COPY_KEY_TITLE,
+		MCP_REGEN_NOTE,
+		CONFIG_SNIPPET_CARD_TITLE,
+		CONFIG_SNIPPET_DESC_PREFIX,
+		CONFIG_SNIPPET_DESC_SUFFIX,
+		MCP_KEY_GENERATED_TOAST,
+		MCP_KEY_GENERATE_FAILED,
+		generateKeyLabel,
+		regenerateKeyLabel,
+		copyMcpSnippetLabel,
+		PROFILE_CARD_TITLE,
+		CHANGE_PASSWORD_CARD_TITLE,
+		CURRENT_PASSWORD_LABEL,
+		NEW_PASSWORD_LABEL,
+		CONFIRM_NEW_PASSWORD_LABEL,
+		SIGN_OUT_LABEL,
+		PROFILE_UPDATED_TOAST,
+		PASSWORDS_NO_MATCH_ERROR,
+		PASSWORD_TOO_SHORT_ERROR,
+		PASSWORD_CHANGED_TOAST,
+		saveProfileLabel,
+		changePasswordLabel,
+		REMOVE_USER_MODAL_TITLE,
+		REMOVE_USER_LABEL,
+		REMOVE_USER_BODY_PREFIX,
+		REMOVE_USER_BODY_SUFFIX,
+		ADD_USER_CARD_TITLE,
+		USER_NAME_PLACEHOLDER,
+		USER_EMAIL_PLACEHOLDER,
+		PASSWORD_LABEL,
+		ROLE_LABEL,
+		USER_ROLE_OPTION,
+		ADMIN_ROLE_OPTION,
+		REMOVE_USER_ICON_TITLE,
+		YOU_CHIP_LABEL,
+		USER_FORM_REQUIRED_ERROR,
+		addUserLabel,
+		userAddedToast,
+		userRemovedToast,
+		MANUAL_BACKUP_CARD_TITLE,
+		EXPORT_BLOCK_TITLE,
+		EXPORT_BLOCK_DESC_PREFIX,
+		EXPORT_BLOCK_DESC_SUFFIX,
+		IMPORT_BLOCK_TITLE,
+		IMPORT_BLOCK_DESC,
+		CHOOSE_FILE_LABEL,
+		BACKUP_DISCLAIMER_PREFIX,
+		BACKUP_DISCLAIMER_SUFFIX,
+		S3_STORAGE_CARD_TITLE,
+		S3_STORAGE_DESC_PREFIX,
+		ENDPOINT_URL_LABEL,
+		S3_STORAGE_DESC_SUFFIX,
+		ENDPOINT_URL_HINT,
+		ENDPOINT_URL_PLACEHOLDER,
+		REGION_LABEL,
+		REGION_HINT_PREFIX,
+		REGION_HINT_SUFFIX,
+		REGION_PLACEHOLDER,
+		BUCKET_LABEL,
+		BUCKET_PLACEHOLDER,
+		PATH_PREFIX_LABEL,
+		PATH_PREFIX_HINT,
+		PATH_PREFIX_PLACEHOLDER,
+		ACCESS_KEY_LABEL,
+		ACCESS_KEY_PLACEHOLDER,
+		SECRET_KEY_LABEL,
+		TEST_CONNECTION_LABEL,
+		SAVE_S3_CONFIG_LABEL,
+		S3_CONNECTION_SUCCESS,
+		S3_CONNECTION_FAILED,
+		BACKUP_CONFIG_SAVED_TOAST,
+		BACKUP_CONFIG_SAVE_FAILED,
+		SCHEDULED_BACKUP_CARD_TITLE,
+		CONFIGURE_S3_FIRST_MESSAGE,
+		ENABLE_SCHEDULED_BACKUP_LABEL,
+		CRON_EXPRESSION_LABEL,
+		CRON_HINT_PREFIX,
+		CRON_HINT_SUFFIX,
+		CRONTAB_LINK_LABEL,
+		CRON_PLACEHOLDER,
+		BACKUP_LAST_RUN_PREFIX,
+		BACKUP_DOWNLOADED_TOAST,
+		EXPORT_FAILED_TOAST,
+		IMPORT_SUCCESS_TOAST,
+		IMPORT_FAILED_FALLBACK,
+		BACKUP_UPLOAD_SUCCESS_TOAST,
+		BACKUP_UPLOAD_FAILED_FALLBACK,
+		backupFilename,
+		exportLabel,
+		importLabel,
+		secretKeyHint,
+		secretKeyPlaceholder,
+		testConnectionLabel,
+		saveS3ConfigLabel,
+		uploadedToLabel,
+		uploadS3NowLabel,
+		saveScheduleLabel
+	} from '$lib/copy/settings';
 
 	/** @type {'project' | 'runners' | 'repository' | 'integrations' | 'mcp' | 'account' | 'users' | 'backup'} */
 	let section =
@@ -224,7 +432,7 @@
 				} catch {
 					pingResults = {
 						...pingResults,
-						[r.id]: { ok: false, error: 'Network error', loading: false }
+						[r.id]: { ok: false, error: NETWORK_ERROR, loading: false }
 					};
 				}
 			})
@@ -247,7 +455,7 @@
 
 	async function handleAddRunner() {
 		if (!runnerForm.name || !runnerForm.url || !runnerForm.token) {
-			runnerFormError = 'Name, URL and token are required.';
+			runnerFormError = RUNNER_FIELDS_REQUIRED_ERROR;
 			return;
 		}
 		runnerFormError = '';
@@ -255,7 +463,7 @@
 		try {
 			const probe = await probeRunner(runnerForm.url, runnerForm.token);
 			if (!probe.ok) {
-				runnerFormError = `Cannot reach this runner — ${probe.error ?? 'check the URL and token'}.`;
+				runnerFormError = cannotReachRunnerError(probe.error);
 				return;
 			}
 			const { runner } = await createRunner(runnerForm);
@@ -266,9 +474,9 @@
 			};
 			runnerForm = { name: '', url: '', token: '', browser: 'chromium' };
 			runnerFormOpen = false;
-			showToast('success', `Runner "${runner.name}" added.`);
+			showToast('success', runnerAddedToast(runner.name));
 		} catch {
-			runnerFormError = 'Failed to add runner.';
+			runnerFormError = ADD_RUNNER_FAILED;
 		} finally {
 			runnerFormSaving = false;
 		}
@@ -278,9 +486,9 @@
 		try {
 			await deleteRunner(id);
 			runners = runners.filter((r) => r.id !== id);
-			showToast('success', `Runner "${name}" removed.`);
+			showToast('success', runnerRemovedToast(name));
 		} catch {
-			showToast('error', 'Failed to remove runner.');
+			showToast('error', REMOVE_RUNNER_FAILED);
 		}
 	}
 
@@ -290,7 +498,7 @@
 			const result = await pingRunner(id);
 			pingResults = { ...pingResults, [id]: { ...result, loading: false } };
 		} catch {
-			pingResults = { ...pingResults, [id]: { ok: false, error: 'Network error', loading: false } };
+			pingResults = { ...pingResults, [id]: { ok: false, error: NETWORK_ERROR, loading: false } };
 		}
 	}
 
@@ -299,12 +507,12 @@
 		try {
 			const result = await stopRunner(id);
 			if (result.ok) {
-				showToast('success', `Runner "${name}" stopped.`);
+				showToast('success', runnerStoppedToast(name));
 			} else {
-				showToast('error', `Could not stop "${name}": ${result.error ?? 'unknown error'}`);
+				showToast('error', runnerStopFailedToast(name, result.error));
 			}
 		} catch {
-			showToast('error', `Could not stop "${name}".`);
+			showToast('error', runnerStopFailedGenericToast(name));
 		} finally {
 			stoppingId = null;
 			refreshPing(id);
@@ -316,12 +524,12 @@
 		try {
 			const result = await restartRunner(id);
 			if (result.ok) {
-				showToast('success', `Runner "${name}" restarting…`);
+				showToast('success', runnerRestartingToast(name));
 			} else {
-				showToast('error', `Could not restart "${name}": ${result.error ?? 'unknown error'}`);
+				showToast('error', runnerRestartFailedToast(name, result.error));
 			}
 		} catch {
-			showToast('error', `Could not restart "${name}".`);
+			showToast('error', runnerRestartFailedGenericToast(name));
 		} finally {
 			restartingId = null;
 			// Give the replacement process a moment to bind before checking on it.
@@ -331,30 +539,40 @@
 
 	function startEdit(r) {
 		editingId = r.id;
-		editForm = { name: r.name, url: r.url, token: r.token, browser: r.browser };
+		// Token is never sent back by the server — leave blank; the update
+		// only replaces it if the admin types a new one (see handleUpdateRunner).
+		editForm = { name: r.name, url: r.url, token: '', browser: r.browser };
 		editFormError = '';
 	}
 
 	async function handleUpdateRunner(id) {
-		if (!editForm.name || !editForm.url || !editForm.token) {
-			editFormError = 'Name, URL and token are required.';
+		if (!editForm.name || !editForm.url) {
+			editFormError = RUNNER_FIELDS_REQUIRED_ERROR;
 			return;
 		}
 		editFormError = '';
 		editFormSaving = true;
 		try {
-			const probe = await probeRunner(editForm.url, editForm.token);
-			if (!probe.ok) {
-				editFormError = `Cannot reach this runner — ${probe.error ?? 'check the URL and token'}.`;
-				return;
+			// Only re-probe (and require a reachable token) when the admin actually
+			// typed a new one — an empty token here means "keep the existing one",
+			// which the still-running node already accepts.
+			if (editForm.token) {
+				const probe = await probeRunner(editForm.url, editForm.token);
+				if (!probe.ok) {
+					editFormError = cannotReachRunnerError(probe.error);
+					return;
+				}
+				pingResults = {
+					...pingResults,
+					[id]: { ok: true, latency: probe.latency, loading: false }
+				};
 			}
 			const { runner } = await updateRunner(id, editForm);
 			runners = runners.map((r) => (r.id === id ? runner : r));
-			pingResults = { ...pingResults, [id]: { ok: true, latency: probe.latency, loading: false } };
 			editingId = null;
-			showToast('success', `Runner "${runner.name}" updated.`);
+			showToast('success', runnerUpdatedToast(runner.name));
 		} catch {
-			editFormError = 'Failed to update runner.';
+			editFormError = UPDATE_RUNNER_FAILED;
 		} finally {
 			editFormSaving = false;
 		}
@@ -364,9 +582,9 @@
 		projectSaving = true;
 		try {
 			await saveProject(project);
-			showToast('success', 'Project settings saved.');
+			showToast('success', PROJECT_SAVED_TOAST);
 		} catch {
-			showToast('error', 'Failed to save project settings.');
+			showToast('error', PROJECT_SAVE_FAILED);
 		} finally {
 			projectSaving = false;
 		}
@@ -380,12 +598,12 @@
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement('a');
 			a.href = url;
-			a.download = `plum-backup-${new Date().toISOString().slice(0, 10)}.json`;
+			a.download = backupFilename(new Date().toISOString().slice(0, 10));
 			a.click();
 			URL.revokeObjectURL(url);
-			showToast('success', 'Backup downloaded.');
+			showToast('success', BACKUP_DOWNLOADED_TOAST);
 		} catch {
-			showToast('error', 'Export failed.');
+			showToast('error', EXPORT_FAILED_TOAST);
 		} finally {
 			exporting = false;
 		}
@@ -399,12 +617,12 @@
 			const data = JSON.parse(text);
 			const result = await importBackup(data);
 			if (result.error) throw new Error(result.error);
-			showToast('success', 'Import successful. Cron jobs have been re-scheduled.');
+			showToast('success', IMPORT_SUCCESS_TOAST);
 			project = await fetchProject();
 			importFile = null;
 			if (fileInput) fileInput.value = '';
 		} catch (e) {
-			showToast('error', e.message || 'Import failed. Check the file format.');
+			showToast('error', e.message || IMPORT_FAILED_FALLBACK);
 		} finally {
 			importing = false;
 		}
@@ -418,9 +636,9 @@
 		prefixesSaving = true;
 		try {
 			prefixes = await savePrefixes(prefixes);
-			showToast('success', 'Prefixes saved.');
+			showToast('success', PREFIXES_SAVED_TOAST);
 		} catch {
-			showToast('error', 'Failed to save prefixes.');
+			showToast('error', PREFIXES_SAVE_FAILED);
 		} finally {
 			prefixesSaving = false;
 		}
@@ -431,9 +649,9 @@
 		try {
 			await migratePrefixes(migrateForm);
 			prefixes = { ...prefixes, ...migrateForm };
-			showToast('success', 'Prefix migration complete. All IDs updated.');
+			showToast('success', MIGRATION_COMPLETE_TOAST);
 		} catch {
-			showToast('error', 'Migration failed.');
+			showToast('error', MIGRATION_FAILED_TOAST);
 		} finally {
 			migrating = false;
 		}
@@ -449,7 +667,7 @@
 				email: profileForm.email
 			});
 			auth.login($auth.token, { ...$auth.user, ...user });
-			showToast('success', 'Profile updated.');
+			showToast('success', PROFILE_UPDATED_TOAST);
 		} catch (e) {
 			profileError = e.message;
 		} finally {
@@ -460,7 +678,7 @@
 	async function handleCreateUser() {
 		userFormError = '';
 		if (!userForm.name || !userForm.email || !userForm.password) {
-			userFormError = 'Name, email and password are required.';
+			userFormError = USER_FORM_REQUIRED_ERROR;
 			return;
 		}
 		userFormSaving = true;
@@ -468,7 +686,7 @@
 			const user = await createUserApi(userForm);
 			allUsers = [...allUsers, user];
 			userForm = { name: '', email: '', password: '', role: 'user' };
-			showToast('success', `User "${user.name}" added.`);
+			showToast('success', userAddedToast(user.name));
 		} catch (e) {
 			userFormError = e.message;
 		} finally {
@@ -480,7 +698,7 @@
 		try {
 			await deleteUserApi(id);
 			allUsers = allUsers.filter((u) => u.id !== id);
-			showToast('success', `User "${name}" removed.`);
+			showToast('success', userRemovedToast(name));
 		} catch (e) {
 			showToast('error', e.message);
 		}
@@ -491,11 +709,11 @@
 	async function handleChangePassword() {
 		pwError = '';
 		if (pwForm.newPassword !== pwForm.confirmPassword) {
-			pwError = 'Passwords do not match.';
+			pwError = PASSWORDS_NO_MATCH_ERROR;
 			return;
 		}
 		if (pwForm.newPassword.length < 8) {
-			pwError = 'Password must be at least 8 characters.';
+			pwError = PASSWORD_TOO_SHORT_ERROR;
 			return;
 		}
 		pwSaving = true;
@@ -506,7 +724,7 @@
 				newPassword: pwForm.newPassword
 			});
 			pwForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
-			showToast('success', 'Password changed.');
+			showToast('success', PASSWORD_CHANGED_TOAST);
 		} catch (e) {
 			pwError = e.message;
 		} finally {
@@ -526,9 +744,9 @@
 			mcpKey = result.mcpKey;
 			mcpKeySet = true;
 			mcpShowKey = true;
-			showToast('success', 'MCP key generated.');
+			showToast('success', MCP_KEY_GENERATED_TOAST);
 		} catch {
-			showToast('error', 'Failed to generate MCP key.');
+			showToast('error', MCP_KEY_GENERATE_FAILED);
 		} finally {
 			mcpGenerating = false;
 		}
@@ -537,21 +755,21 @@
 	function handleCopyMcpKey() {
 		navigator.clipboard.writeText(mcpKey).then(() => {
 			mcpKeyCopied = true;
-			setTimeout(() => (mcpKeyCopied = false), 1500);
+			setTimeout(() => (mcpKeyCopied = false), COPY_TIMEOUT_MS);
 		});
 	}
 
 	function handleCopyMcpSnippet() {
 		navigator.clipboard.writeText(mcpConfigSnippet).then(() => {
 			mcpSnippetCopied = true;
-			setTimeout(() => (mcpSnippetCopied = false), 1500);
+			setTimeout(() => (mcpSnippetCopied = false), COPY_TIMEOUT_MS);
 		});
 	}
 
 	function handleCopyCiSnippet() {
 		navigator.clipboard.writeText(ciWorkflowSnippet).then(() => {
 			ciSnippetCopied = true;
-			setTimeout(() => (ciSnippetCopied = false), 1500);
+			setTimeout(() => (ciSnippetCopied = false), COPY_TIMEOUT_MS);
 		});
 	}
 
@@ -559,9 +777,9 @@
 		integrationsSaving = true;
 		try {
 			integrations = await saveIntegrations(integrations);
-			showToast('success', 'Integration settings saved.');
+			showToast('success', INTEGRATIONS_SAVED_TOAST);
 		} catch {
-			showToast('error', 'Failed to save integration settings.');
+			showToast('error', INTEGRATIONS_SAVE_FAILED);
 		} finally {
 			integrationsSaving = false;
 		}
@@ -576,9 +794,9 @@
 			if (result.error) throw new Error(result.error);
 			if (backupConfig.backupS3SecretKey) backupS3SecretKeySet = true;
 			backupConfig = { ...backupConfig, backupS3SecretKey: '' };
-			showToast('success', 'Backup configuration saved.');
+			showToast('success', BACKUP_CONFIG_SAVED_TOAST);
 		} catch (e) {
-			showToast('error', e.message || 'Failed to save backup configuration.');
+			showToast('error', e.message || BACKUP_CONFIG_SAVE_FAILED);
 		} finally {
 			backupConfigSaving = false;
 		}
@@ -592,10 +810,10 @@
 			const result = await testBackupS3(backupConfig);
 			if (result.error) throw new Error(result.error);
 			backupS3TestResult = 'success';
-			backupS3TestMessage = 'Connection successful.';
+			backupS3TestMessage = S3_CONNECTION_SUCCESS;
 		} catch (e) {
 			backupS3TestResult = 'error';
-			backupS3TestMessage = e.message || 'Connection failed.';
+			backupS3TestMessage = e.message || S3_CONNECTION_FAILED;
 		} finally {
 			backupTestingS3 = false;
 		}
@@ -608,9 +826,9 @@
 			if (result.error) throw new Error(result.error);
 			backupLastRunAt = result.lastRunAt;
 			backupLastStatus = result.lastStatus ?? '';
-			showToast('success', 'Backup uploaded to S3 successfully.');
+			showToast('success', BACKUP_UPLOAD_SUCCESS_TOAST);
 		} catch (e) {
-			showToast('error', e.message || 'Backup failed. Check your S3 configuration.');
+			showToast('error', e.message || BACKUP_UPLOAD_FAILED_FALLBACK);
 			const bc = await fetchBackupConfig().catch(() => null);
 			if (bc) {
 				backupLastRunAt = bc.backupLastRunAt;
@@ -634,7 +852,7 @@
 					command: 'plum',
 					args: ['mcp'],
 					env: {
-						PLUM_API_URL: 'http://localhost:3001',
+						PLUM_API_URL: API_BASE,
 						PLUM_API_KEY: mcpKey
 					}
 				}
@@ -670,24 +888,24 @@
 	$: navItems =
 		$auth.user?.role === 'admin'
 			? [
-					{ id: 'project', label: 'Project' },
-					{ id: 'runners', label: 'Runners' },
-					{ id: 'repository', label: 'Repository' },
-					{ id: 'integrations', label: 'Integrations' },
-					{ id: 'mcp', label: 'MCP' },
-					{ id: 'account', label: 'Account' },
-					{ id: 'users', label: 'Users' },
-					{ id: 'backup', label: 'Backup' }
+					{ id: 'project', label: PROJECT_LABEL },
+					{ id: 'runners', label: RUNNERS_LABEL },
+					{ id: 'repository', label: REPOSITORY_NAV_LABEL },
+					{ id: 'integrations', label: INTEGRATIONS_LABEL },
+					{ id: 'mcp', label: MCP_NAV_LABEL },
+					{ id: 'account', label: ACCOUNT_LABEL },
+					{ id: 'users', label: USERS_LABEL },
+					{ id: 'backup', label: BACKUP_LABEL }
 				]
-			: [{ id: 'account', label: 'Account' }];
+			: [{ id: 'account', label: ACCOUNT_LABEL }];
 </script>
 
-<svelte:head><title>Settings — Plum</title></svelte:head>
+<svelte:head><title>{PAGE_TITLE}</title></svelte:head>
 
 <Toast {toast} />
 
 <div class="page-header">
-	<h1>Settings</h1>
+	<h1>{HEADING}</h1>
 </div>
 
 <div class="settings-layout">
@@ -712,42 +930,42 @@
 		{#if section === 'project'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<div class="content-header">
-					<h2>Project</h2>
-					<p class="content-desc">Identity information shown across the UI</p>
+					<h2>{PROJECT_LABEL}</h2>
+					<p class="content-desc">{PROJECT_DESC}</p>
 				</div>
 
 				<div class="card settings-card">
 					<div class="field">
-						<label class="field-label" for="project-name">Project Name</label>
+						<label class="field-label" for="project-name">{PROJECT_NAME_LABEL}</label>
 						<input
 							id="project-name"
 							type="text"
 							class="field-input"
 							bind:value={project.name}
-							placeholder="My Test Suite"
+							placeholder={PROJECT_NAME_PLACEHOLDER}
 						/>
 					</div>
 
 					<div class="field">
 						<label class="field-label" for="project-logo">
-							<span>Logo URL</span>
-							<span class="field-hint">Direct link to an image (PNG, SVG, JPG)</span>
+							<span>{LOGO_URL_LABEL}</span>
+							<span class="field-hint">{LOGO_URL_HINT}</span>
 						</label>
 						<input
 							id="project-logo"
 							type="url"
 							class="field-input"
 							bind:value={project.logoUrl}
-							placeholder="https://example.com/logo.png"
+							placeholder={LOGO_URL_PLACEHOLDER}
 						/>
 					</div>
 
 					{#if project.logoUrl}
 						<div class="logo-preview">
-							<span class="preview-label">Preview</span>
+							<span class="preview-label">{PREVIEW_LABEL}</span>
 							<img
 								src={project.logoUrl}
-								alt="Project logo preview"
+								alt={LOGO_PREVIEW_ALT}
 								class="logo-img"
 								on:error={(e) => (e.target.style.display = 'none')}
 							/>
@@ -756,8 +974,8 @@
 
 					<div class="field">
 						<label class="field-label" for="project-timezone">
-							<span>Timezone</span>
-							<span class="field-hint">Used to schedule cron jobs and backups</span>
+							<span>{TIMEZONE_LABEL}</span>
+							<span class="field-hint">{TIMEZONE_HINT}</span>
 						</label>
 						<select id="project-timezone" class="field-input" bind:value={project.timezone}>
 							{#each TIMEZONES as tz}
@@ -768,10 +986,9 @@
 
 					<div class="field">
 						<label class="field-label" for="project-max-retries">
-							<span>Retry failed tests</span>
+							<span>{RETRY_FAILED_TESTS_LABEL}</span>
 							<span class="field-hint">
-								Automatically re-run failed scenarios up to this many times before finalizing the
-								report. 0 disables retries.
+								{RETRY_FAILED_TESTS_HINT}
 							</span>
 						</label>
 						<input
@@ -787,8 +1004,8 @@
 					<!-- Dark mode toggle -->
 					<div class="toggle-row">
 						<div class="toggle-info">
-							<span class="toggle-label">Dark mode</span>
-							<span class="toggle-desc">Switch between light and dark appearance</span>
+							<span class="toggle-label">{DARK_MODE_LABEL}</span>
+							<span class="toggle-desc">{DARK_MODE_DESC}</span>
 						</div>
 						<button
 							class="toggle-switch"
@@ -803,7 +1020,7 @@
 
 					<div class="card-footer">
 						<Button on:click={handleSaveProject} disabled={projectSaving}>
-							{projectSaving ? 'Saving…' : 'Save Project'}
+							{saveProjectLabel(projectSaving)}
 						</Button>
 					</div>
 				</div>
@@ -813,9 +1030,9 @@
 		{:else if section === 'runners'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<div class="content-header">
-					<h2>Runners</h2>
+					<h2>{RUNNERS_LABEL}</h2>
 					<p class="content-desc">
-						Register self-hosted runner nodes to distribute tests across machines.
+						{RUNNERS_DESC}
 					</p>
 				</div>
 
@@ -823,9 +1040,9 @@
 					<!-- Built-in runner toggle -->
 					<div class="toggle-row">
 						<div class="toggle-info">
-							<span class="toggle-label">Built-in runner</span>
+							<span class="toggle-label">{BUILTIN_RUNNER_TOGGLE_LABEL}</span>
 							<span class="toggle-desc">
-								Use this server to run tests locally. Disable to route all runs to external nodes.
+								{BUILTIN_RUNNER_TOGGLE_DESC}
 							</span>
 						</div>
 						<button
@@ -848,20 +1065,21 @@
 									<div class="runner-card editing" transition:fly={{ y: -4, duration: 180 }}>
 										<div class="runner-form-fields">
 											<div class="field">
-												<label class="field-label" for="edit-name-{r.id}">Name</label>
+												<label class="field-label" for="edit-name-{r.id}">{NAME_LABEL}</label>
 												<input
 													id="edit-name-{r.id}"
 													type="text"
 													class="field-input"
 													bind:value={editForm.name}
-													placeholder="staging-node"
+													placeholder={RUNNER_NAME_PLACEHOLDER}
 												/>
 											</div>
 											<div class="field">
 												<label class="field-label" for="edit-url-{r.id}">
-													URL
+													{RUNNER_URL_LABEL}
 													<span class="field-hint"
-														>Use <code>host.docker.internal</code> for local nodes</span
+														>{RUNNER_URL_HINT_PREFIX} <code>host.docker.internal</code>
+														{RUNNER_URL_HINT_SUFFIX}</span
 													>
 												</label>
 												<input
@@ -869,23 +1087,23 @@
 													type="url"
 													class="field-input"
 													bind:value={editForm.url}
-													placeholder="http://host.docker.internal:3002"
+													placeholder={RUNNER_URL_PLACEHOLDER}
 												/>
 											</div>
 											<div class="field">
-												<label class="field-label" for="edit-token-{r.id}">Token</label>
+												<label class="field-label" for="edit-token-{r.id}">{TOKEN_LABEL}</label>
 												<input
 													id="edit-token-{r.id}"
 													type="text"
 													class="field-input"
 													bind:value={editForm.token}
-													placeholder="secret-token"
+													placeholder={KEEP_TOKEN_PLACEHOLDER}
 													spellcheck="false"
 													autocomplete="off"
 												/>
 											</div>
 											<div class="field">
-												<label class="field-label" for="edit-browser-{r.id}">Browser</label>
+												<label class="field-label" for="edit-browser-{r.id}">{BROWSER_LABEL}</label>
 												<select
 													id="edit-browser-{r.id}"
 													class="field-input"
@@ -902,7 +1120,7 @@
 										{/if}
 										<div class="runner-form-actions">
 											<Button on:click={() => handleUpdateRunner(r.id)} disabled={editFormSaving}>
-												{editFormSaving ? 'Checking…' : 'Save'}
+												{editRunnerSubmitLabel(editFormSaving)}
 											</Button>
 											<Button
 												variant="ghost"
@@ -910,7 +1128,7 @@
 													editingId = null;
 													editFormError = '';
 												}}
-												disabled={editFormSaving}>Cancel</Button
+												disabled={editFormSaving}>{CANCEL_LABEL}</Button
 											>
 										</div>
 									</div>
@@ -936,33 +1154,37 @@
 												{#if ping.ok}
 													<span class="ping-badge ok">{ping.latency}ms</span>
 												{:else}
-													<span class="ping-badge fail" title={ping.error}>unreachable</span>
+													<span class="ping-badge fail" title={ping.error}
+														>{RUNNER_UNREACHABLE_LABEL}</span
+													>
 												{/if}
 											{:else if ping?.loading}
-												<span class="ping-badge pinging">pinging…</span>
+												<span class="ping-badge pinging">{RUNNER_PINGING_LABEL}</span>
 											{/if}
 										</div>
 										<p class="runner-card-url">{r.url}</p>
 										<div class="runner-card-actions">
-											<Button variant="ghost" size="sm" on:click={() => startEdit(r)}>Edit</Button>
+											<Button variant="ghost" size="sm" on:click={() => startEdit(r)}
+												>{EDIT_LABEL}</Button
+											>
 											<Button
 												variant="ghost"
 												size="sm"
 												disabled={restartingId === r.id}
 												on:click={() => handleRestartRunner(r.id, r.name)}
-												>{restartingId === r.id ? 'Restarting…' : 'Restart'}</Button
+												>{restartRunnerLabel(restartingId === r.id)}</Button
 											>
 											<Button
 												variant="ghost"
 												size="sm"
 												disabled={stoppingId === r.id}
 												on:click={() => handleStopRunner(r.id, r.name)}
-												>{stoppingId === r.id ? 'Stopping…' : 'Stop'}</Button
+												>{stopRunnerLabel(stoppingId === r.id)}</Button
 											>
 											<Button
 												variant="danger"
 												size="sm"
-												on:click={() => handleDeleteRunner(r.id, r.name)}>Remove</Button
+												on:click={() => handleDeleteRunner(r.id, r.name)}>{REMOVE_LABEL}</Button
 											>
 										</div>
 									</div>
@@ -974,23 +1196,24 @@
 					<!-- Add runner form / button -->
 					{#if runnerFormOpen}
 						<div class="runner-form" transition:fly={{ y: -6, duration: 200 }}>
-							<p class="runner-form-title">Add runner</p>
+							<p class="runner-form-title">{ADD_RUNNER_FORM_TITLE}</p>
 							<div class="runner-form-fields">
 								<div class="field">
-									<label class="field-label" for="rn-name">Name</label>
+									<label class="field-label" for="rn-name">{NAME_LABEL}</label>
 									<input
 										id="rn-name"
 										type="text"
 										class="field-input"
 										bind:value={runnerForm.name}
-										placeholder="staging-node"
+										placeholder={RUNNER_NAME_PLACEHOLDER}
 									/>
 								</div>
 								<div class="field">
 									<label class="field-label" for="rn-url">
-										URL
+										{RUNNER_URL_LABEL}
 										<span class="field-hint"
-											>Use <code>host.docker.internal</code> for local nodes</span
+											>{RUNNER_URL_HINT_PREFIX} <code>host.docker.internal</code>
+											{RUNNER_URL_HINT_SUFFIX}</span
 										>
 									</label>
 									<input
@@ -998,23 +1221,23 @@
 										type="url"
 										class="field-input"
 										bind:value={runnerForm.url}
-										placeholder="http://host.docker.internal:3002"
+										placeholder={RUNNER_URL_PLACEHOLDER}
 									/>
 								</div>
 								<div class="field">
-									<label class="field-label" for="rn-token">Token</label>
+									<label class="field-label" for="rn-token">{TOKEN_LABEL}</label>
 									<input
 										id="rn-token"
 										type="text"
 										class="field-input"
 										bind:value={runnerForm.token}
-										placeholder="secret-token"
+										placeholder={TOKEN_PLACEHOLDER}
 										spellcheck="false"
 										autocomplete="off"
 									/>
 								</div>
 								<div class="field">
-									<label class="field-label" for="rn-browser">Browser</label>
+									<label class="field-label" for="rn-browser">{BROWSER_LABEL}</label>
 									<select id="rn-browser" class="field-input" bind:value={runnerForm.browser}>
 										{#each BROWSERS as b}
 											<option value={b.id}>{b.label}</option>
@@ -1027,7 +1250,7 @@
 							{/if}
 							<div class="runner-form-actions">
 								<Button on:click={handleAddRunner} disabled={runnerFormSaving}>
-									{runnerFormSaving ? 'Checking…' : 'Add Runner'}
+									{addRunnerSubmitLabel(runnerFormSaving)}
 								</Button>
 								<Button
 									variant="ghost"
@@ -1035,13 +1258,15 @@
 										runnerFormOpen = false;
 										runnerFormError = '';
 									}}
-									disabled={runnerFormSaving}>Cancel</Button
+									disabled={runnerFormSaving}>{CANCEL_LABEL}</Button
 								>
 							</div>
 						</div>
 					{:else}
 						<div class="card-footer">
-							<Button variant="ghost" on:click={() => (runnerFormOpen = true)}>+ Add Runner</Button>
+							<Button variant="ghost" on:click={() => (runnerFormOpen = true)}
+								>{OPEN_ADD_RUNNER_LABEL}</Button
+							>
 						</div>
 					{/if}
 				</div>
@@ -1051,59 +1276,62 @@
 		{:else if section === 'repository'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<div class="content-header">
-					<h2>Test Repository</h2>
-					<p class="content-desc">Configure ID prefixes for test suites and cases.</p>
+					<h2>{REPOSITORY_HEADING}</h2>
+					<p class="content-desc">{REPOSITORY_DESC}</p>
 				</div>
 
 				<div class="card settings-card">
 					<div class="field-row">
 						<div class="field">
-							<label class="field-label" for="tc-prefix">Test Case prefix</label>
+							<label class="field-label" for="tc-prefix">{CASE_PREFIX_LABEL}</label>
 							<input
 								id="tc-prefix"
 								type="text"
 								class="field-input mono"
 								bind:value={prefixes.testCasePrefix}
-								placeholder="TC"
+								placeholder={CASE_PREFIX_PLACEHOLDER}
 								maxlength="10"
 							/>
 						</div>
 						<div class="field">
-							<label class="field-label" for="ts-prefix">Test Suite prefix</label>
+							<label class="field-label" for="ts-prefix">{SUITE_PREFIX_LABEL}</label>
 							<input
 								id="ts-prefix"
 								type="text"
 								class="field-input mono"
 								bind:value={prefixes.testSuitePrefix}
-								placeholder="TS"
+								placeholder={SUITE_PREFIX_PLACEHOLDER}
 								maxlength="10"
 							/>
 						</div>
 					</div>
 					<p class="content-desc">
-						Examples: <code class="code-sample">{prefixes.testCasePrefix || 'TC'}-001</code>,
-						<code class="code-sample">{prefixes.testSuitePrefix || 'TS'}-001</code>
+						{EXAMPLES_LABEL}
+						<code class="code-sample">{prefixes.testCasePrefix || CASE_PREFIX_PLACEHOLDER}-001</code
+						>,
+						<code class="code-sample"
+							>{prefixes.testSuitePrefix || SUITE_PREFIX_PLACEHOLDER}-001</code
+						>
 					</p>
 					<div class="card-footer">
 						<Button on:click={handleSavePrefixes} disabled={prefixesSaving}>
-							{prefixesSaving ? 'Saving…' : 'Save Prefixes'}
+							{savePrefixesLabel(prefixesSaving)}
 						</Button>
 					</div>
 				</div>
 
 				<div class="content-header" style="margin-top: 1rem">
-					<h2>Migrate IDs</h2>
+					<h2>{MIGRATE_IDS_HEADING}</h2>
 					<p class="content-desc">
-						Rename all existing test IDs to use a new prefix. Cucumber tags in code are <strong
-							>not</strong
-						> affected — you manage those separately.
+						{MIGRATE_DESC_PREFIX} <strong>{MIGRATE_DESC_STRONG}</strong>
+						{MIGRATE_DESC_SUFFIX}
 					</p>
 				</div>
 
 				<div class="card settings-card">
 					<div class="field-row">
 						<div class="field">
-							<label class="field-label" for="mig-tc">New case prefix</label>
+							<label class="field-label" for="mig-tc">{NEW_CASE_PREFIX_LABEL}</label>
 							<input
 								id="mig-tc"
 								type="text"
@@ -1114,7 +1342,7 @@
 							/>
 						</div>
 						<div class="field">
-							<label class="field-label" for="mig-ts">New suite prefix</label>
+							<label class="field-label" for="mig-ts">{NEW_SUITE_PREFIX_LABEL}</label>
 							<input
 								id="mig-ts"
 								type="text"
@@ -1127,7 +1355,7 @@
 					</div>
 					<div class="card-footer">
 						<Button variant="ghost" on:click={handleMigratePrefixes} disabled={migrating}>
-							{migrating ? 'Migrating…' : 'Run Migration'}
+							{runMigrationLabel(migrating)}
 						</Button>
 					</div>
 				</div>
@@ -1137,82 +1365,78 @@
 		{:else if section === 'integrations'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<div class="content-header">
-					<h2>Integrations</h2>
+					<h2>{INTEGRATIONS_LABEL}</h2>
 					<p class="content-desc">
-						Connect Discord and Slack to receive run notifications with pass/fail results and report
-						links.
+						{INTEGRATIONS_DESC}
 					</p>
 				</div>
 
 				<div class="card settings-card">
-					<p class="card-title">Webhooks</p>
+					<p class="card-title">{WEBHOOKS_CARD_TITLE}</p>
 
 					<div class="field">
 						<label class="field-label" for="discord-url">
-							<span>Discord Webhook URL</span>
-							<span class="field-hint">Leave blank to disable Discord notifications</span>
+							<span>{DISCORD_WEBHOOK_LABEL}</span>
+							<span class="field-hint">{DISCORD_WEBHOOK_HINT}</span>
 						</label>
 						<input
 							id="discord-url"
 							type="url"
 							class="field-input"
 							bind:value={integrations.discordWebhookUrl}
-							placeholder="https://discord.com/api/webhooks/…"
+							placeholder={DISCORD_WEBHOOK_PLACEHOLDER}
 						/>
 					</div>
 
 					<div class="field">
 						<label class="field-label" for="slack-url">
-							<span>Slack Webhook URL</span>
-							<span class="field-hint">Leave blank to disable Slack notifications</span>
+							<span>{SLACK_WEBHOOK_LABEL}</span>
+							<span class="field-hint">{SLACK_WEBHOOK_HINT}</span>
 						</label>
 						<input
 							id="slack-url"
 							type="url"
 							class="field-input"
 							bind:value={integrations.slackWebhookUrl}
-							placeholder="https://hooks.slack.com/services/…"
+							placeholder={SLACK_WEBHOOK_PLACEHOLDER}
 						/>
 					</div>
 
 					<div class="field">
 						<label class="field-label" for="public-url">
-							<span>Public URL</span>
-							<span class="field-hint"
-								>Base URL of this Plum instance, used to link reports in notifications</span
-							>
+							<span>{PUBLIC_URL_LABEL}</span>
+							<span class="field-hint">{PUBLIC_URL_HINT}</span>
 						</label>
 						<input
 							id="public-url"
 							type="url"
 							class="field-input"
 							bind:value={integrations.notifyPublicUrl}
-							placeholder="https://plum.yourcompany.com"
+							placeholder={PUBLIC_URL_PLACEHOLDER}
 						/>
 					</div>
 
 					<Button on:click={handleSaveIntegrations} disabled={integrationsSaving}>
-						{integrationsSaving ? 'Saving…' : 'Save Integrations'}
+						{saveIntegrationsLabel(integrationsSaving)}
 					</Button>
 				</div>
 
 				<div class="card settings-card">
-					<p class="card-title">CI / External Triggers</p>
+					<p class="card-title">{CI_TRIGGERS_CARD_TITLE}</p>
 					<p class="content-desc">
-						Trigger a Plum run from GitHub Actions (e.g. on a pull request, against its preview
-						deployment) or any other external script by calling <code class="code-sample"
-							>POST {API_BASE}/trigger</code
+						{CI_DESC_PART1} <code class="code-sample">POST {API_BASE}/trigger</code>
+						{CI_DESC_PART2}
+						<code class="code-sample">Authorization: ApiKey …</code>
+						{CI_DESC_PART3}
+						<button class="link-btn" on:click={() => setSection('mcp')}>{MCP_TAB_LINK_LABEL}</button
 						>
-						with an
-						<code class="code-sample">Authorization: ApiKey …</code> header. Generate a key on the
-						<button class="link-btn" on:click={() => setSection('mcp')}>MCP tab</button>
-						and store it as a repo secret — never commit it directly. Runs triggered this way show up
-						in Reports tagged <Badge variant="external">External</Badge>.
+						{CI_DESC_PART4}
+						<Badge variant="external">{EXTERNAL_BADGE_LABEL}</Badge>.
 					</p>
 					<pre class="mcp-snippet">{ciWorkflowSnippet}</pre>
 					<div class="card-footer">
 						<Button variant="ghost" on:click={handleCopyCiSnippet}>
-							{ciSnippetCopied ? 'Copied!' : 'Copy Workflow Step'}
+							{copyCiSnippetLabel(ciSnippetCopied)}
 						</Button>
 					</div>
 				</div>
@@ -1222,21 +1446,20 @@
 		{:else if section === 'mcp'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<div class="content-header">
-					<h2>MCP Integration</h2>
+					<h2>{MCP_HEADING}</h2>
 					<p class="content-desc">
-						Generate an API key for any MCP-compatible AI client — Claude, Cursor, Windsurf, and
-						others.
+						{MCP_DESC}
 					</p>
 				</div>
 
 				<div class="card settings-card">
-					<p class="card-title">API Key</p>
+					<p class="card-title">{API_KEY_CARD_TITLE}</p>
 
 					{#if !mcpKeySet}
-						<p class="content-desc">No key generated yet.</p>
+						<p class="content-desc">{NO_KEY_GENERATED_MESSAGE}</p>
 						<div class="card-footer">
 							<Button on:click={handleGenerateMcpKey} disabled={mcpGenerating}>
-								{mcpGenerating ? 'Generating…' : 'Generate Key'}
+								{generateKeyLabel(mcpGenerating)}
 							</Button>
 						</div>
 					{:else}
@@ -1251,7 +1474,7 @@
 							/>
 							<button
 								class="icon-btn"
-								title={mcpShowKey ? 'Hide key' : 'Show key'}
+								title={mcpShowKey ? HIDE_KEY_TITLE : SHOW_KEY_TITLE}
 								on:click={() => (mcpShowKey = !mcpShowKey)}
 							>
 								{#if mcpShowKey}
@@ -1290,7 +1513,7 @@
 									</svg>
 								{/if}
 							</button>
-							<button class="icon-btn" title="Copy key" on:click={handleCopyMcpKey}>
+							<button class="icon-btn" title={COPY_KEY_TITLE} on:click={handleCopyMcpKey}>
 								{#if mcpKeyCopied}
 									<svg
 										width="14"
@@ -1322,10 +1545,10 @@
 								{/if}
 							</button>
 						</div>
-						<p class="mcp-regen-note">Regenerating invalidates the existing key immediately.</p>
+						<p class="mcp-regen-note">{MCP_REGEN_NOTE}</p>
 						<div class="card-footer">
 							<Button variant="ghost" on:click={handleGenerateMcpKey} disabled={mcpGenerating}>
-								{mcpGenerating ? 'Generating…' : 'Regenerate Key'}
+								{regenerateKeyLabel(mcpGenerating)}
 							</Button>
 						</div>
 					{/if}
@@ -1333,16 +1556,16 @@
 
 				{#if mcpKeySet}
 					<div class="card settings-card">
-						<p class="card-title">Config Snippet</p>
+						<p class="card-title">{CONFIG_SNIPPET_CARD_TITLE}</p>
 						<p class="content-desc">
-							Add this to your MCP client's config file (e.g.
-							<code class="code-sample">claude_desktop_config.json</code>, Cursor MCP settings,
-							etc.).
+							{CONFIG_SNIPPET_DESC_PREFIX}
+							<code class="code-sample">claude_desktop_config.json</code
+							>{CONFIG_SNIPPET_DESC_SUFFIX}
 						</p>
 						<pre class="mcp-snippet">{mcpConfigSnippet}</pre>
 						<div class="card-footer">
 							<Button variant="ghost" on:click={handleCopyMcpSnippet}>
-								{mcpSnippetCopied ? 'Copied!' : 'Copy Config'}
+								{copyMcpSnippetLabel(mcpSnippetCopied)}
 							</Button>
 						</div>
 					</div>
@@ -1353,14 +1576,14 @@
 		{:else if section === 'account'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<div class="content-header">
-					<h2>Account</h2>
-					<p class="content-desc">Manage your profile, credentials and session.</p>
+					<h2>{ACCOUNT_LABEL}</h2>
+					<p class="content-desc">{ACCOUNT_DESC}</p>
 				</div>
 
 				<div class="card settings-card">
-					<p class="card-title">Profile</p>
+					<p class="card-title">{PROFILE_CARD_TITLE}</p>
 					<div class="field">
-						<label class="field-label" for="profile-name">Name</label>
+						<label class="field-label" for="profile-name">{NAME_LABEL}</label>
 						<input
 							id="profile-name"
 							type="text"
@@ -1369,7 +1592,7 @@
 						/>
 					</div>
 					<div class="field">
-						<label class="field-label" for="profile-email">Email</label>
+						<label class="field-label" for="profile-email">{EMAIL_LABEL}</label>
 						<input
 							id="profile-email"
 							type="email"
@@ -1383,15 +1606,15 @@
 							on:click={handleUpdateProfile}
 							disabled={profileSaving || !profileForm.name || !profileForm.email}
 						>
-							{profileSaving ? 'Saving…' : 'Save Profile'}
+							{saveProfileLabel(profileSaving)}
 						</Button>
 					</div>
 				</div>
 
 				<div class="card settings-card">
-					<p class="card-title">Change password</p>
+					<p class="card-title">{CHANGE_PASSWORD_CARD_TITLE}</p>
 					<div class="field">
-						<label class="field-label" for="pw-current">Current password</label>
+						<label class="field-label" for="pw-current">{CURRENT_PASSWORD_LABEL}</label>
 						<input
 							id="pw-current"
 							type="password"
@@ -1401,7 +1624,7 @@
 						/>
 					</div>
 					<div class="field">
-						<label class="field-label" for="pw-new">New password</label>
+						<label class="field-label" for="pw-new">{NEW_PASSWORD_LABEL}</label>
 						<input
 							id="pw-new"
 							type="password"
@@ -1411,7 +1634,7 @@
 						/>
 					</div>
 					<div class="field">
-						<label class="field-label" for="pw-confirm">Confirm new password</label>
+						<label class="field-label" for="pw-confirm">{CONFIRM_NEW_PASSWORD_LABEL}</label>
 						<input
 							id="pw-confirm"
 							type="password"
@@ -1426,14 +1649,14 @@
 							on:click={handleChangePassword}
 							disabled={pwSaving || !pwForm.currentPassword || !pwForm.newPassword}
 						>
-							{pwSaving ? 'Saving…' : 'Change Password'}
+							{changePasswordLabel(pwSaving)}
 						</Button>
 					</div>
 				</div>
 
 				<div class="card settings-card">
 					<div class="card-footer">
-						<Button variant="danger" size="sm" on:click={handleLogout}>Sign out</Button>
+						<Button variant="danger" size="sm" on:click={handleLogout}>{SIGN_OUT_LABEL}</Button>
 					</div>
 				</div>
 			</div>
@@ -1442,48 +1665,49 @@
 		{:else if section === 'users'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<div class="content-header">
-					<h2>Users</h2>
-					<p class="content-desc">Add and manage who can access Plum.</p>
+					<h2>{USERS_LABEL}</h2>
+					<p class="content-desc">{USERS_DESC}</p>
 				</div>
 
 				<ConfirmModal
 					bind:open={confirmDeleteUserOpen}
-					title="Remove User"
-					confirmLabel="Remove"
+					title={REMOVE_USER_MODAL_TITLE}
+					confirmLabel={REMOVE_USER_LABEL}
 					on:confirm={() => handleDeleteUser(confirmDeleteUser?.id, confirmDeleteUser?.name)}
 				>
 					{#if confirmDeleteUser}
-						Remove <strong>{confirmDeleteUser.name}</strong>? They will lose access immediately.
+						{REMOVE_USER_BODY_PREFIX}
+						<strong>{confirmDeleteUser.name}</strong>{REMOVE_USER_BODY_SUFFIX}
 					{/if}
 				</ConfirmModal>
 
 				<div class="card settings-card">
-					<p class="card-title">Add User</p>
+					<p class="card-title">{ADD_USER_CARD_TITLE}</p>
 					<div class="field-row">
 						<div class="field">
-							<label class="field-label" for="u-name">Name</label>
+							<label class="field-label" for="u-name">{NAME_LABEL}</label>
 							<input
 								id="u-name"
 								type="text"
 								class="field-input"
 								bind:value={userForm.name}
-								placeholder="Jane Smith"
+								placeholder={USER_NAME_PLACEHOLDER}
 							/>
 						</div>
 						<div class="field">
-							<label class="field-label" for="u-email">Email</label>
+							<label class="field-label" for="u-email">{EMAIL_LABEL}</label>
 							<input
 								id="u-email"
 								type="email"
 								class="field-input"
 								bind:value={userForm.email}
-								placeholder="jane@example.com"
+								placeholder={USER_EMAIL_PLACEHOLDER}
 							/>
 						</div>
 					</div>
 					<div class="field-row">
 						<div class="field">
-							<label class="field-label" for="u-pw">Password</label>
+							<label class="field-label" for="u-pw">{PASSWORD_LABEL}</label>
 							<input
 								id="u-pw"
 								type="password"
@@ -1493,17 +1717,17 @@
 							/>
 						</div>
 						<div class="field">
-							<label class="field-label" for="u-role">Role</label>
+							<label class="field-label" for="u-role">{ROLE_LABEL}</label>
 							<select id="u-role" class="field-input" bind:value={userForm.role}>
-								<option value="user">User</option>
-								<option value="admin">Admin</option>
+								<option value="user">{USER_ROLE_OPTION}</option>
+								<option value="admin">{ADMIN_ROLE_OPTION}</option>
 							</select>
 						</div>
 					</div>
 					{#if userFormError}<p class="form-error">{userFormError}</p>{/if}
 					<div class="card-footer">
 						<Button on:click={handleCreateUser} disabled={userFormSaving}>
-							{userFormSaving ? 'Adding…' : 'Add User'}
+							{addUserLabel(userFormSaving)}
 						</Button>
 					</div>
 				</div>
@@ -1520,7 +1744,7 @@
 								{#if u.id !== $auth.user?.id}
 									<button
 										class="icon-btn danger"
-										title="Remove user"
+										title={REMOVE_USER_ICON_TITLE}
 										on:click={() => {
 											confirmDeleteUser = { id: u.id, name: u.name };
 											confirmDeleteUserOpen = true;
@@ -1542,7 +1766,7 @@
 										</svg>
 									</button>
 								{:else}
-									<span class="you-chip">you</span>
+									<span class="you-chip">{YOU_CHIP_LABEL}</span>
 								{/if}
 							</div>
 						{/each}
@@ -1554,35 +1778,33 @@
 		{:else if section === 'backup'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<div class="content-header">
-					<h2>Backup</h2>
+					<h2>{BACKUP_LABEL}</h2>
 					<p class="content-desc">
-						Export your test cases, schedules, users, and project settings. Automate uploads to any
-						S3-compatible storage — Cloudflare R2, Backblaze B2, AWS S3, or MinIO.
+						{BACKUP_DESC}
 					</p>
 				</div>
 
 				<!-- Manual export / import -->
 				<div class="card settings-card">
-					<p class="card-title">Manual Backup</p>
+					<p class="card-title">{MANUAL_BACKUP_CARD_TITLE}</p>
 					<div class="backup-row">
 						<div class="backup-block">
-							<p class="backup-block-title">Export</p>
+							<p class="backup-block-title">{EXPORT_BLOCK_TITLE}</p>
 							<p class="backup-block-desc">
-								Downloads a <code>.json</code> file with all cron jobs, test cases, test runs, users,
-								runners, and project settings.
+								{EXPORT_BLOCK_DESC_PREFIX} <code>.json</code>
+								{EXPORT_BLOCK_DESC_SUFFIX}
 							</p>
 							<Button on:click={handleExport} disabled={exporting}>
-								{exporting ? 'Exporting…' : 'Export JSON'}
+								{exportLabel(exporting)}
 							</Button>
 						</div>
 
 						<div class="backup-divider"></div>
 
 						<div class="backup-block">
-							<p class="backup-block-title">Import</p>
+							<p class="backup-block-title">{IMPORT_BLOCK_TITLE}</p>
 							<p class="backup-block-desc">
-								Restores all data from a previously exported backup. Existing records are
-								overwritten. Cron jobs are re-scheduled after import.
+								{IMPORT_BLOCK_DESC}
 							</p>
 							<div class="import-row">
 								<label class="file-label">
@@ -1593,53 +1815,56 @@
 										class="file-input-hidden"
 										on:change={handleFileChange}
 									/>
-									<span class="file-btn">{importFile ? importFile.name : 'Choose file…'}</span>
+									<span class="file-btn">{importFile ? importFile.name : CHOOSE_FILE_LABEL}</span>
 								</label>
 								<Button on:click={handleImport} disabled={!importFile || importing}>
-									{importing ? 'Importing…' : 'Import'}
+									{importLabel(importing)}
 								</Button>
 							</div>
 						</div>
 					</div>
 					<p class="backup-disclaimer">
-						Reports are not included in backups. To back up report history, run
-						<code>pg_dump</code> directly on the PostgreSQL volume.
+						{BACKUP_DISCLAIMER_PREFIX}
+						<code>pg_dump</code>
+						{BACKUP_DISCLAIMER_SUFFIX}
 					</p>
 				</div>
 
 				<!-- S3 cloud backup -->
 				<div class="card settings-card">
-					<p class="card-title">S3 Storage</p>
+					<p class="card-title">{S3_STORAGE_CARD_TITLE}</p>
 					<p class="backup-block-desc" style="margin-bottom: 1.25rem;">
-						Works with any S3-compatible provider — Cloudflare R2, Backblaze B2, AWS S3, or MinIO.
-						Leave <strong>Endpoint URL</strong> empty for AWS S3.
+						{S3_STORAGE_DESC_PREFIX} <strong>{ENDPOINT_URL_LABEL}</strong>
+						{S3_STORAGE_DESC_SUFFIX}
 					</p>
 
 					<div class="field-row">
 						<div class="field">
 							<label class="field-label" for="s3-endpoint">
-								<span>Endpoint URL</span>
-								<span class="field-hint">Leave blank for AWS S3</span>
+								<span>{ENDPOINT_URL_LABEL}</span>
+								<span class="field-hint">{ENDPOINT_URL_HINT}</span>
 							</label>
 							<input
 								id="s3-endpoint"
 								type="url"
 								class="field-input"
 								bind:value={backupConfig.backupS3Endpoint}
-								placeholder="https://account.r2.cloudflarestorage.com"
+								placeholder={ENDPOINT_URL_PLACEHOLDER}
 							/>
 						</div>
 						<div class="field">
 							<label class="field-label" for="s3-region">
-								<span>Region</span>
-								<span class="field-hint">Use <code>auto</code> for Cloudflare R2</span>
+								<span>{REGION_LABEL}</span>
+								<span class="field-hint"
+									>{REGION_HINT_PREFIX} <code>auto</code> {REGION_HINT_SUFFIX}</span
+								>
 							</label>
 							<input
 								id="s3-region"
 								type="text"
 								class="field-input"
 								bind:value={backupConfig.backupS3Region}
-								placeholder="us-east-1"
+								placeholder={REGION_PLACEHOLDER}
 							/>
 						</div>
 					</div>
@@ -1647,27 +1872,27 @@
 					<div class="field-row">
 						<div class="field">
 							<label class="field-label" for="s3-bucket">
-								<span>Bucket</span>
+								<span>{BUCKET_LABEL}</span>
 							</label>
 							<input
 								id="s3-bucket"
 								type="text"
 								class="field-input"
 								bind:value={backupConfig.backupS3Bucket}
-								placeholder="my-plum-backups"
+								placeholder={BUCKET_PLACEHOLDER}
 							/>
 						</div>
 						<div class="field">
 							<label class="field-label" for="s3-prefix">
-								<span>Path Prefix</span>
-								<span class="field-hint">Optional folder inside the bucket</span>
+								<span>{PATH_PREFIX_LABEL}</span>
+								<span class="field-hint">{PATH_PREFIX_HINT}</span>
 							</label>
 							<input
 								id="s3-prefix"
 								type="text"
 								class="field-input"
 								bind:value={backupConfig.backupS3Prefix}
-								placeholder="plum/"
+								placeholder={PATH_PREFIX_PLACEHOLDER}
 							/>
 						</div>
 					</div>
@@ -1675,32 +1900,28 @@
 					<div class="field-row">
 						<div class="field">
 							<label class="field-label" for="s3-access-key">
-								<span>Access Key ID</span>
+								<span>{ACCESS_KEY_LABEL}</span>
 							</label>
 							<input
 								id="s3-access-key"
 								type="text"
 								class="field-input"
 								bind:value={backupConfig.backupS3AccessKey}
-								placeholder="AKIAIOSFODNN7EXAMPLE"
+								placeholder={ACCESS_KEY_PLACEHOLDER}
 								autocomplete="off"
 							/>
 						</div>
 						<div class="field">
 							<label class="field-label" for="s3-secret-key">
-								<span>Secret Access Key</span>
-								<span class="field-hint"
-									>{backupS3SecretKeySet
-										? 'A key is already saved — leave blank to keep it'
-										: 'Required'}</span
-								>
+								<span>{SECRET_KEY_LABEL}</span>
+								<span class="field-hint">{secretKeyHint(backupS3SecretKeySet)}</span>
 							</label>
 							<input
 								id="s3-secret-key"
 								type="password"
 								class="field-input"
 								bind:value={backupConfig.backupS3SecretKey}
-								placeholder={backupS3SecretKeySet ? '••••••••' : 'Enter secret key'}
+								placeholder={secretKeyPlaceholder(backupS3SecretKeySet)}
 								autocomplete="new-password"
 							/>
 						</div>
@@ -1708,10 +1929,10 @@
 
 					<div class="backup-actions">
 						<Button variant="ghost" on:click={handleTestS3} disabled={backupTestingS3}>
-							{backupTestingS3 ? 'Testing…' : 'Test Connection'}
+							{testConnectionLabel(backupTestingS3)}
 						</Button>
 						<Button on:click={handleSaveBackupConfig} disabled={backupConfigSaving}>
-							{backupConfigSaving ? 'Saving…' : 'Save S3 Config'}
+							{saveS3ConfigLabel(backupConfigSaving)}
 						</Button>
 					</div>
 
@@ -1729,14 +1950,14 @@
 
 				<!-- Scheduled backup -->
 				<div class="card settings-card" class:card-disabled={!s3Configured}>
-					<p class="card-title">Scheduled Backup</p>
+					<p class="card-title">{SCHEDULED_BACKUP_CARD_TITLE}</p>
 
 					{#if !s3Configured}
-						<p class="backup-block-desc">Configure S3 storage above to enable scheduled backups.</p>
+						<p class="backup-block-desc">{CONFIGURE_S3_FIRST_MESSAGE}</p>
 					{:else}
 						<div class="field">
 							<label class="field-label backup-toggle-label" for="backup-enabled">
-								<span>Enable scheduled backup</span>
+								<span>{ENABLE_SCHEDULED_BACKUP_LABEL}</span>
 								<button
 									id="backup-enabled"
 									class="toggle-btn"
@@ -1752,11 +1973,12 @@
 
 						<div class="field">
 							<label class="field-label" for="backup-cron">
-								<span>Cron Expression</span>
+								<span>{CRON_EXPRESSION_LABEL}</span>
 								<span class="field-hint">
-									5-field cron — e.g. <code>0 2 * * *</code> = daily at 2 AM.
+									{CRON_HINT_PREFIX} <code>0 2 * * *</code>
+									{CRON_HINT_SUFFIX}
 									<a href="https://crontab.guru" target="_blank" rel="noopener noreferrer"
-										>Test at crontab.guru ↗</a
+										>{CRONTAB_LINK_LABEL}</a
 									>
 								</span>
 							</label>
@@ -1765,16 +1987,17 @@
 								type="text"
 								class="field-input field-input-mono"
 								bind:value={backupConfig.backupCron}
-								placeholder="0 2 * * *"
+								placeholder={CRON_PLACEHOLDER}
 							/>
 						</div>
 
 						{#if backupLastRunAt}
 							<p class="backup-last-run">
-								Last backup: {new Date(backupLastRunAt).toLocaleString()} —
+								{BACKUP_LAST_RUN_PREFIX}
+								{new Date(backupLastRunAt).toLocaleString()} —
 								{#if backupLastStatus?.startsWith('success:')}
 									<span class="status-success"
-										>uploaded to {backupLastStatus.replace('success:', '')}</span
+										>{uploadedToLabel(backupLastStatus.replace('success:', ''))}</span
 									>
 								{:else if backupLastStatus?.startsWith('error:')}
 									<span class="status-error">{backupLastStatus.replace('error:', '')}</span>
@@ -1786,10 +2009,10 @@
 
 						<div class="backup-actions">
 							<Button variant="ghost" on:click={handleRunBackupNow} disabled={backupRunningNow}>
-								{backupRunningNow ? 'Uploading…' : 'Upload to S3 Now'}
+								{uploadS3NowLabel(backupRunningNow)}
 							</Button>
 							<Button on:click={handleSaveBackupConfig} disabled={backupConfigSaving}>
-								{backupConfigSaving ? 'Saving…' : 'Save Schedule'}
+								{saveScheduleLabel(backupConfigSaving)}
 							</Button>
 						</div>
 					{/if}

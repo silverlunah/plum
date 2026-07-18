@@ -1,21 +1,11 @@
 /*
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
 import { writable, get } from 'svelte/store';
+import { BROWSERS } from '$lib/constants';
+import { SOCKET_EVENTS } from '$lib/socketEvents';
 import { auth } from './auth';
 
 export const socket = writable(null);
@@ -35,7 +25,7 @@ export const runnerState = writable({
 export const runnerConfig = writable({
 	workers: 1,
 	testID: '',
-	browser: 'chromium',
+	browser: BROWSERS[0].id,
 	selectedRunners: ['built-in']
 });
 
@@ -72,7 +62,7 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 	});
 	panelExpanded.set(true);
 
-	s.emit('run-test', {
+	s.emit(SOCKET_EVENTS.RUN_TEST, {
 		tag: runId,
 		workers,
 		browser,
@@ -87,5 +77,5 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 
 export function cancelRun() {
 	const s = get(socket);
-	if (s) s.emit('cancel-test');
+	if (s) s.emit(SOCKET_EVENTS.CANCEL_TEST);
 }

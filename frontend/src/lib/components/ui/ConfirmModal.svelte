@@ -1,27 +1,16 @@
 <!--
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  -->
 
 <script>
 	import { createEventDispatcher } from 'svelte';
 	import Modal from './Modal.svelte';
+	import { CONFIRM_TITLE, CONFIRM_LABEL, CANCEL_LABEL, WORKING_LABEL } from '$lib/copy/common';
 
 	export let open = false;
-	export let title = 'Confirm';
-	export let confirmLabel = 'Delete';
+	export let title = CONFIRM_TITLE;
+	export let confirmLabel = CONFIRM_LABEL;
 	export let loading = false;
 
 	const dispatch = createEventDispatcher();
@@ -33,9 +22,11 @@
 	</div>
 	<div class="actions">
 		<button class="btn-danger" on:click={() => dispatch('confirm')} disabled={loading}>
-			{loading ? 'Working…' : confirmLabel}
+			{loading ? WORKING_LABEL : confirmLabel}
 		</button>
-		<button class="btn-cancel" on:click={() => (open = false)} disabled={loading}>Cancel</button>
+		<button class="btn-cancel" on:click={() => (open = false)} disabled={loading}
+			>{CANCEL_LABEL}</button
+		>
 	</div>
 </Modal>
 

@@ -1,18 +1,6 @@
 <!--
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  -->
 
 <script>
@@ -22,6 +10,21 @@
 	import { auth } from '$lib/stores/auth';
 	import { login as apiLogin } from '$lib/api/auth';
 	import { theme } from '$lib/stores/theme';
+	import { EMAIL_LABEL, PASSWORD_LABEL } from '$lib/copy/common';
+	import {
+		CHECKING_SERVER,
+		EMAIL_PLACEHOLDER,
+		SETUP_PAGE_TITLE,
+		WELCOME_TITLE,
+		WELCOME_SUBTITLE,
+		YOUR_NAME_LABEL,
+		NAME_PLACEHOLDER,
+		PASSWORD_MIN_PLACEHOLDER,
+		ALL_FIELDS_REQUIRED,
+		PASSWORD_MIN_LENGTH_ERROR,
+		SETUP_FAILED_FALLBACK,
+		createAccountLabel
+	} from '$lib/copy/auth';
 
 	let name = '';
 	let email = '';
@@ -40,11 +43,11 @@
 
 	async function handleSubmit() {
 		if (!name || !email || !password) {
-			error = 'All fields are required.';
+			error = ALL_FIELDS_REQUIRED;
 			return;
 		}
 		if (password.length < 8) {
-			error = 'Password must be at least 8 characters.';
+			error = PASSWORD_MIN_LENGTH_ERROR;
 			return;
 		}
 		error = '';
@@ -55,59 +58,59 @@
 			auth.login(token, user);
 			window.location.href = '/';
 		} catch (e) {
-			error = e.message || 'Setup failed';
+			error = e.message || SETUP_FAILED_FALLBACK;
 		} finally {
 			loading = false;
 		}
 	}
 </script>
 
-<svelte:head><title>Setup — Plum</title></svelte:head>
+<svelte:head><title>{SETUP_PAGE_TITLE}</title></svelte:head>
 
 <div class="page" data-theme={$theme}>
 	{#if checking}
-		<p class="checking">Checking server…</p>
+		<p class="checking">{CHECKING_SERVER}</p>
 	{:else}
 		<div class="card">
 			<div class="brand">
 				<span class="brand-serif">Pl</span><span class="brand-sans">um</span>
 			</div>
 			<div class="heading">
-				<h1 class="title">Welcome to Plum</h1>
-				<p class="subtitle">Create your first account to get started.</p>
+				<h1 class="title">{WELCOME_TITLE}</h1>
+				<p class="subtitle">{WELCOME_SUBTITLE}</p>
 			</div>
 
 			<div class="fields">
 				<div class="field">
-					<label class="label" for="name">Your name</label>
+					<label class="label" for="name">{YOUR_NAME_LABEL}</label>
 					<input
 						id="name"
 						type="text"
 						class="input"
 						bind:value={name}
-						placeholder="Jane Smith"
+						placeholder={NAME_PLACEHOLDER}
 						autocomplete="name"
 					/>
 				</div>
 				<div class="field">
-					<label class="label" for="email">Email</label>
+					<label class="label" for="email">{EMAIL_LABEL}</label>
 					<input
 						id="email"
 						type="email"
 						class="input"
 						bind:value={email}
-						placeholder="jane@example.com"
+						placeholder={EMAIL_PLACEHOLDER}
 						autocomplete="email"
 					/>
 				</div>
 				<div class="field">
-					<label class="label" for="password">Password</label>
+					<label class="label" for="password">{PASSWORD_LABEL}</label>
 					<input
 						id="password"
 						type="password"
 						class="input"
 						bind:value={password}
-						placeholder="Min. 8 characters"
+						placeholder={PASSWORD_MIN_PLACEHOLDER}
 						autocomplete="new-password"
 					/>
 				</div>
@@ -122,7 +125,7 @@
 				on:click={handleSubmit}
 				disabled={loading || !name || !email || !password}
 			>
-				{loading ? 'Creating account…' : 'Create account'}
+				{createAccountLabel(loading)}
 			</button>
 		</div>
 	{/if}

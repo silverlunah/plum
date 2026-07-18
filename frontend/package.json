@@ -2,6 +2,7 @@
 	"name": "plum-frontend",
 	"private": true,
 	"version": "1.4.0",
+	"license": "MIT",
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",

@@ -1,18 +1,6 @@
 <!--
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  -->
 
 <script>
@@ -31,7 +19,33 @@
 		featureSuiteTag,
 		scenarioHasScreenshots
 	} from '$lib/utils/format';
-	import { REPLAY_STEP_MS } from '$lib/constants';
+	import { REPLAY_STEP_MS, BROWSERS } from '$lib/constants';
+	import { pluralize } from '$lib/copy/common';
+	import {
+		DETAIL_PAGE_TITLE,
+		REPORTS_BACK_LABEL,
+		LOAD_ERROR,
+		PASSED_LABEL,
+		FAILED_LABEL,
+		STAT_PASSED,
+		STAT_FAILED,
+		STAT_SKIPPED,
+		STAT_DURATION,
+		RUN_LOGS_LABEL,
+		RETRY_TITLE,
+		WATCH_REPLAY_TITLE,
+		REPLAY_LABEL,
+		SCREENSHOT_TOGGLE_LABEL,
+		STEP_SCREENSHOT_ALT,
+		NO_SCREENSHOT_MESSAGE,
+		runnersBadge,
+		casesCountLabel,
+		attemptsLabel,
+		caseLabel,
+		replayScreenshotAlt,
+		pauseOrPlayTitle,
+		replayCounter
+	} from '$lib/copy/reports';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import BackLink from '$lib/components/ui/BackLink.svelte';
 	import StatusDot from '$lib/components/ui/StatusDot.svelte';
@@ -126,7 +140,7 @@
 		try {
 			detail = await fetchReportDetail(reportId);
 		} catch {
-			error = 'Could not load report.';
+			error = LOAD_ERROR;
 		}
 	});
 
@@ -159,9 +173,9 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<svelte:head><title>Report — Plum</title></svelte:head>
+<svelte:head><title>{DETAIL_PAGE_TITLE}</title></svelte:head>
 
-<BackLink href="/reports" label="Reports" />
+<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
 
 {#if error}
 	<div class="error-state">{error}</div>
@@ -205,7 +219,7 @@
 
 				<div>
 					<div class="h1-row">
-						<h1>{overallPass ? 'Passed' : 'Failed'}</h1>
+						<h1>{overallPass ? PASSED_LABEL : FAILED_LABEL}</h1>
 						{#if detail.testRun?.title}
 							<span class="run-name-badge">{detail.testRun.title}</span>
 						{:else if isScheduled(detail.triggerType)}
@@ -220,8 +234,8 @@
 						<span>{new Date(detail.createdAt).toLocaleString()}</span>
 						<span class="meta-sep">·</span>
 						<span class="browser-pill">
-							<BrowserIcon browser={detail.browser ?? 'chromium'} />
-							{detail.browser ?? 'chromium'}
+							<BrowserIcon browser={detail.browser ?? BROWSERS[0].id} />
+							{detail.browser ?? BROWSERS[0].id}
 						</span>
 					</div>
 				</div>
@@ -243,7 +257,7 @@
 						>
 							<polyline points="20 6 9 17 4 12" />
 						</svg>
-						passed
+						{STAT_PASSED}
 					</span>
 				</div>
 				{#if failed > 0}
@@ -262,7 +276,7 @@
 							>
 								<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
 							</svg>
-							failed
+							{STAT_FAILED}
 						</span>
 					</div>
 				{/if}
@@ -281,7 +295,7 @@
 							>
 								<line x1="5" y1="12" x2="19" y2="12" />
 							</svg>
-							skipped
+							{STAT_SKIPPED}
 						</span>
 					</div>
 				{/if}
@@ -300,7 +314,7 @@
 						>
 							<circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
 						</svg>
-						duration
+						{STAT_DURATION}
 					</span>
 				</div>
 				<div class="stat">
@@ -318,7 +332,7 @@
 							<rect x="2" y="3" width="20" height="14" rx="2" />
 							<path d="M8 21h8M12 17v4" />
 						</svg>
-						runner{detail.runners !== 1 ? 's' : ''}
+						{pluralize(detail.runners, 'runner')}
 					</span>
 				</div>
 			</div>
@@ -340,9 +354,9 @@
 				>
 					<polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
 				</svg>
-				Run Logs
+				{RUN_LOGS_LABEL}
 				{#if logSections.length > 1}
-					<span class="log-runner-count">{logSections.length} runners</span>
+					<span class="log-runner-count">{runnersBadge(logSections.length)}</span>
 				{/if}
 			</summary>
 
@@ -428,14 +442,11 @@
 								<span class="scenario-name">
 									{group.name}
 									{#if group.scenarios.length > 1}
-										<span class="scenario-count">{group.scenarios.length} cases</span>
+										<span class="scenario-count">{casesCountLabel(group.scenarios.length)}</span>
 									{/if}
 									{#if group.scenarios[0]?.attempts > 1}
-										<span
-											class="scenario-count"
-											title="Failed and was automatically retried before the final result"
-										>
-											{group.scenarios[0].attempts} attempts
+										<span class="scenario-count" title={RETRY_TITLE}>
+											{attemptsLabel(group.scenarios[0].attempts)}
 										</span>
 									{/if}
 								</span>
@@ -466,13 +477,13 @@
 							{#if groupHasReplay && group.scenarios.length === 1}
 								<button
 									class="replay-btn"
-									title="Watch replay"
+									title={WATCH_REPLAY_TITLE}
 									on:click={() => openReplay(group.scenarios[0])}
 								>
 									<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none">
 										<polygon points="5,3 19,12 5,21" />
 									</svg>
-									Replay
+									{REPLAY_LABEL}
 								</button>
 							{/if}
 						</div>
@@ -483,7 +494,7 @@
 									{#if group.scenarios.length > 1}
 										<div class="example-header">
 											<StatusDot status={scenario.status} />
-											<span>Case {exampleIndex + 1}</span>
+											<span>{caseLabel(exampleIndex + 1)}</span>
 											<span class="scenario-duration">{fmtDuration(scenario.duration)}</span>
 											{#if scenarioHasScreenshots(scenario)}
 												<button
@@ -499,7 +510,7 @@
 													>
 														<polygon points="5,3 19,12 5,21" />
 													</svg>
-													Replay
+													{REPLAY_LABEL}
 												</button>
 											{/if}
 										</div>
@@ -524,11 +535,11 @@
 
 											{#if step.screenshot}
 												<details class="screenshot-wrap">
-													<summary class="screenshot-toggle">Screenshot</summary>
+													<summary class="screenshot-toggle">{SCREENSHOT_TOGGLE_LABEL}</summary>
 													<img
 														class="screenshot"
 														src={screenshotUrl(step.screenshot)}
-														alt="Step screenshot"
+														alt={STEP_SCREENSHOT_ALT}
 													/>
 												</details>
 											{/if}
@@ -571,10 +582,10 @@
 					<img
 						class="replay-screenshot"
 						src={screenshotUrl(currentReplayStep.screenshot)}
-						alt="Step {replayIdx + 1} screenshot"
+						alt={replayScreenshotAlt(replayIdx + 1)}
 					/>
 				{:else}
-					<div class="replay-no-screenshot">No screenshot captured for this step</div>
+					<div class="replay-no-screenshot">{NO_SCREENSHOT_MESSAGE}</div>
 				{/if}
 			</div>
 
@@ -619,7 +630,7 @@
 				<button
 					class="replay-play-btn"
 					on:click={togglePlayback}
-					title={replayPlaying ? 'Pause' : 'Play'}
+					title={pauseOrPlayTitle(replayPlaying)}
 				>
 					{#if replayPlaying}
 						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
@@ -656,7 +667,7 @@
 					</svg>
 				</button>
 
-				<span class="replay-counter">{replayIdx + 1} / {replaySteps.length}</span>
+				<span class="replay-counter">{replayCounter(replayIdx + 1, replaySteps.length)}</span>
 			</div>
 		</div>
 	</div>

@@ -1,21 +1,11 @@
 /*
  * This file is part of Plum.
- *
- * Plum is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Plum is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Plum. If not, see https://www.gnu.org/licenses/.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
 const prisma = require('./prisma');
+const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
+const { DEFAULT_BROWSER } = require('../constants/defaults');
 
 // ---------------------------------------------------------------------------
 // Export — all data except reports (reports are too large; use pg_dump instead)
@@ -118,9 +108,9 @@ const importAll = async (
 						cronExpression: job.cronExpression,
 						tags: job.tags,
 						workers: job.workers ?? 1,
-						browser: job.browser ?? 'chromium',
+						browser: job.browser ?? DEFAULT_BROWSER,
 						enabled: job.enabled ?? true,
-						runnerIds: job.runnerIds ?? 'built-in',
+						runnerIds: job.runnerIds ?? BUILT_IN_RUNNER_ID,
 						notifyDiscord: job.notifyDiscord ?? false,
 						notifySlack: job.notifySlack ?? false
 					},
@@ -128,8 +118,8 @@ const importAll = async (
 						cronExpression: job.cronExpression,
 						tags: job.tags,
 						workers: job.workers ?? 1,
-						browser: job.browser ?? 'chromium',
-						runnerIds: job.runnerIds ?? 'built-in',
+						browser: job.browser ?? DEFAULT_BROWSER,
+						runnerIds: job.runnerIds ?? BUILT_IN_RUNNER_ID,
 						notifyDiscord: job.notifyDiscord ?? false,
 						notifySlack: job.notifySlack ?? false
 					}
