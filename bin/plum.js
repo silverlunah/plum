@@ -711,7 +711,12 @@ async function nodeStart({ reconfig }) {
 		prepareEnv();
 		clack.log.success('Environment ready.');
 	} catch (e) {
-		clack.log.warn(`Environment prep failed: ${e.message}`);
+		clack.log.error(
+			`Environment prep failed: ${e.message}\nNot starting the node — it would come up "running" but fail every dispatched test at the browser-launch step.`
+		);
+		clack.outro(pc.red('Node not started.'));
+		process.exitCode = 1;
+		return;
 	}
 
 	if (registeredId) {
@@ -760,7 +765,12 @@ async function nodeRestart() {
 	try {
 		prepareEnv();
 	} catch (e) {
-		clack.log.warn(`Dependency refresh failed: ${e.message}`);
+		clack.log.error(
+			`Dependency refresh failed: ${e.message}\nNot restarting the node — it would come up "running" but fail every dispatched test at the browser-launch step. The node stays stopped until this is fixed and \`plum node restart\` is run again.`
+		);
+		clack.outro(pc.red('Node not restarted.'));
+		process.exitCode = 1;
+		return;
 	}
 
 	try {
