@@ -7,7 +7,7 @@ FROM mcr.microsoft.com/playwright:v1.50.0
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm install
+RUN npm ci
 RUN npx playwright install --with-deps
 
 COPY . .
