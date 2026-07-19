@@ -38,6 +38,7 @@ if (!isNodeMode()) {
 	app.use('/test-runs', require('./routes/test-runs.routes'));
 	app.use('/trigger', require('./routes/trigger.routes'));
 	app.use('/active-runs', require('./routes/active-runs.routes'));
+	app.use('/mcp', require('./routes/mcp.routes'));
 }
 
 // Global JSON error handler — Express's default sends HTML, which breaks JSON clients

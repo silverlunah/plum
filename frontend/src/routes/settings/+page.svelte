@@ -849,11 +849,10 @@
 		{
 			mcpServers: {
 				plum: {
-					command: 'plum',
-					args: ['mcp'],
-					env: {
-						PLUM_API_URL: API_BASE,
-						PLUM_API_KEY: mcpKey
+					type: 'http',
+					url: `${API_BASE}/mcp`,
+					headers: {
+						Authorization: `ApiKey ${mcpKey}`
 					}
 				}
 			}

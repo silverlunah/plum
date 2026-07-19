@@ -8,8 +8,7 @@
 		"create-env": "node services/envService.js",
 		"test": "node config/scripts/run-tests.js",
 		"manage-runners": "node scripts/manage-runners.mjs",
-		"create-test": "node config/scripts/create-test.mjs",
-		"mcp": "node mcp/server.js"
+		"create-test": "node config/scripts/create-test.mjs"
 	},
 	"keywords": [],
 	"author": "silverlunah",
