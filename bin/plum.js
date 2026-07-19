@@ -1270,32 +1270,6 @@ switch (command) {
 		break;
 	}
 
-	case 'mcp': {
-		// Claude launches `plum mcp` directly, skipping every other command
-		// (`server start`, `node start`, `run-test`) that would otherwise have
-		// already called ensureBackendDeps/prepareEnv. Without this guard, a
-		// stale/missing backend/node_modules (e.g. after `npm i -g plum-e2e@latest`
-		// wipes it) makes the MCP server fail outright on its own requires.
-		try {
-			const { ensureBackendDeps } = runnerProcessLib();
-			ensureBackendDeps();
-		} catch (e) {
-			console.error(`Could not verify backend dependencies: ${e.message}`);
-			process.exit(1);
-		}
-
-		const mcpScript = path.join(plumRoot, 'backend', 'mcp', 'server.js');
-		spawn(process.execPath, [mcpScript], {
-			stdio: 'inherit',
-			env: {
-				...process.env,
-				PLUM_API_URL: process.env.PLUM_API_URL || 'http://localhost:3001',
-				PLUM_API_KEY: process.env.PLUM_API_KEY || ''
-			}
-		});
-		break;
-	}
-
 	default:
 		console.log('--------------------------------------\n');
 		console.log('Usage: plum <command>\n');
@@ -1340,6 +1314,5 @@ switch (command) {
 		console.log('    --browser <name>   chromium | firefox (default: chromium)');
 		console.log('  create-step          Interactively scaffold a new step definition');
 		console.log('  create-test          Scaffold a new .feature + Page.ts + Steps.ts');
-		console.log('  mcp                  Start the Plum MCP server (stdio) for Claude integration');
 		console.log('\n--------------------------------------\n');
 }
