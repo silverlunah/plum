@@ -98,14 +98,20 @@ export const FAILED_TO_DELETE_CASE = 'Failed to delete case.';
 export const TEST_CASE_UPDATED_TOAST = 'Test case updated.';
 export const STEPS_SAVED_TOAST = 'Steps saved.';
 export const SUITE_UPDATED_TOAST = 'Suite updated.';
+export const MOVE_CASE_TITLE = 'Move to suite';
+export const MOVE_TEST_CASE_MODAL_TITLE = 'Move Test Case';
+export const MOVE_TO_SUITE_LABEL = 'Move to suite';
+export const FAILED_TO_MOVE_CASE = 'Failed to move case.';
 
 export const suiteDetailTitle = (suite) =>
 	`${suite ? `${suite.displayId} — ${suite.name}` : 'Suite'} — Plum`;
 export const createdByCapitalized = (name) => `Created by ${name}`;
 export const caseCreatedToast = (displayId) => `${displayId} created.`;
 export const caseDeletedToast = (displayId) => `${displayId} deleted.`;
+export const caseMovedToast = (displayId, suiteName) => `${displayId} moved to ${suiteName}.`;
 export const stepCount = (count) => `${count} ${pluralize(count, 'step')}`;
 export const saveStepsLabel = (saving) => (saving ? 'Saving…' : 'Save Steps');
+export const moveCaseLabel = (saving) => (saving ? 'Moving…' : 'Move');
 export const runLinkLabel = (title) => `${title} ↗`;
 
 // ── Run detail ──

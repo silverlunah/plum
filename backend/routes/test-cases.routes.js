@@ -38,8 +38,13 @@ router.post('/', jwtAuth, async (req, res, next) => {
 
 router.put('/:id', jwtAuth, async (req, res, next) => {
 	try {
-		const { title, description, priority } = req.body;
-		const testCase = await testCaseService.update(req.params.id, { title, description, priority });
+		const { title, description, priority, suiteId } = req.body;
+		const testCase = await testCaseService.update(req.params.id, {
+			title,
+			description,
+			priority,
+			suiteId
+		});
 		res.json({ testCase });
 	} catch (e) {
 		next(e);
