@@ -8,7 +8,6 @@ const jwt = require('jsonwebtoken');
 const prisma = require('./prisma');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'plum-dev-secret-change-in-production';
-const JWT_EXPIRY = '7d';
 const SALT_ROUNDS = 10;
 
 const userSelect = { id: true, name: true, email: true, role: true, createdAt: true };
@@ -33,8 +32,7 @@ async function login({ email, password }) {
 	if (!match) return null;
 	const token = jwt.sign(
 		{ userId: user.id, email: user.email, name: user.name, role: user.role },
-		JWT_SECRET,
-		{ expiresIn: JWT_EXPIRY }
+		JWT_SECRET
 	);
 	return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
 }
