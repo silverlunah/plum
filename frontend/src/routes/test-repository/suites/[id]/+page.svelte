@@ -9,6 +9,7 @@
 	import { fly, fade } from 'svelte/transition';
 	import {
 		fetchSuite,
+		fetchAllSuitesWithCases,
 		updateSuite,
 		createTestCase,
 		fetchTestCase,
@@ -80,13 +81,20 @@
 		TEST_CASE_UPDATED_TOAST,
 		STEPS_SAVED_TOAST,
 		SUITE_UPDATED_TOAST,
+		MOVE_CASE_TITLE,
+		MOVE_TEST_CASE_MODAL_TITLE,
+		MOVE_TO_SUITE_LABEL,
+		NO_SUITES_AVAILABLE,
+		FAILED_TO_MOVE_CASE,
 		suiteDetailTitle,
 		createdByCapitalized,
 		caseCreatedToast,
 		caseDeletedToast,
+		caseMovedToast,
 		caseCount,
 		stepCount,
 		saveStepsLabel,
+		moveCaseLabel,
 		runLinkLabel
 	} from '$lib/copy/repository';
 
@@ -117,6 +125,13 @@
 
 	let confirmDeleteCase = null;
 	let confirmDeleteCaseOpen = false;
+
+	let allSuites = [];
+	let moveCaseOpen = false;
+	let moveCaseTarget = null;
+	let moveCaseSuiteId = '';
+	let moveCaseSaving = false;
+	$: otherSuites = allSuites.filter((s) => s.id !== suiteId);
 
 	let caseSearch = '';
 	let casesPage = 1;
@@ -181,6 +196,9 @@
 		} finally {
 			loading = false;
 		}
+		try {
+			allSuites = await fetchAllSuitesWithCases();
+		} catch {}
 	});
 
 	async function handleCreateCase() {
@@ -285,6 +303,34 @@
 		}
 		confirmDeleteCase = null;
 		confirmDeleteCaseOpen = false;
+	}
+
+	function openMoveCase(tc) {
+		moveCaseTarget = tc;
+		moveCaseSuiteId = otherSuites[0]?.id ?? '';
+		moveCaseOpen = true;
+	}
+
+	async function handleMoveCase() {
+		if (!moveCaseTarget || !moveCaseSuiteId) return;
+		moveCaseSaving = true;
+		try {
+			await updateTestCase(moveCaseTarget.id, { suiteId: moveCaseSuiteId });
+			const targetSuite = allSuites.find((s) => s.id === moveCaseSuiteId);
+			suite = {
+				...suite,
+				cases: suite.cases.filter((c) => c.id !== moveCaseTarget.id),
+				_count: { cases: suite._count.cases - 1 }
+			};
+			if (selectedCase?.id === moveCaseTarget.id) selectedCase = null;
+			showToast('success', caseMovedToast(moveCaseTarget.displayId, targetSuite?.name ?? ''));
+			moveCaseOpen = false;
+			moveCaseTarget = null;
+		} catch (e) {
+			showToast('error', e.message ?? FAILED_TO_MOVE_CASE);
+		} finally {
+			moveCaseSaving = false;
+		}
 	}
 
 	async function handleUpdateSuite() {
@@ -405,6 +451,32 @@
 				{editSuiteSaving ? SAVING_LABEL : SAVE_LABEL}
 			</Button>
 			<Button variant="ghost" on:click={() => (editSuiteOpen = false)}>{CANCEL_LABEL}</Button>
+		</div>
+	</div>
+</Modal>
+
+<Modal bind:open={moveCaseOpen} title={MOVE_TEST_CASE_MODAL_TITLE}>
+	<div class="form-fields">
+		{#if moveCaseTarget}
+			<p class="move-case-subtitle">{moveCaseTarget.displayId} — {moveCaseTarget.title}</p>
+		{/if}
+		{#if otherSuites.length === 0}
+			<p class="form-error">{NO_SUITES_AVAILABLE}</p>
+		{:else}
+			<div class="field">
+				<label class="field-label" for="move-suite">{MOVE_TO_SUITE_LABEL}</label>
+				<select id="move-suite" class="field-input" bind:value={moveCaseSuiteId}>
+					{#each otherSuites as s}
+						<option value={s.id}>{s.displayId} — {s.name}</option>
+					{/each}
+				</select>
+			</div>
+		{/if}
+		<div class="modal-actions">
+			<Button on:click={handleMoveCase} disabled={moveCaseSaving || otherSuites.length === 0}>
+				{moveCaseLabel(moveCaseSaving)}
+			</Button>
+			<Button variant="ghost" on:click={() => (moveCaseOpen = false)}>{CANCEL_LABEL}</Button>
 		</div>
 	</div>
 </Modal>
@@ -549,6 +621,26 @@
 								{/if}
 								<div class="case-row-actions" on:click|stopPropagation>
 									<button
+										class="icon-btn small"
+										title={MOVE_CASE_TITLE}
+										on:click={() => openMoveCase(tc)}
+									>
+										<svg
+											width="11"
+											height="11"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<path
+												d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"
+											/>
+										</svg>
+									</button>
+									<button
 										class="icon-btn danger small"
 										on:click={() => {
 											confirmDeleteCase = { id: tc.id, displayId: tc.displayId, title: tc.title };
@@ -606,6 +698,26 @@
 							{/if}
 							<div class="detail-header-actions">
 								{#if !editingCase}
+									<button
+										class="icon-btn"
+										title={MOVE_CASE_TITLE}
+										on:click={() => openMoveCase(selectedCase)}
+									>
+										<svg
+											width="13"
+											height="13"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<path
+												d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"
+											/>
+										</svg>
+									</button>
 									<button class="icon-btn" title={EDIT_CASE_TITLE} on:click={startEditCase}>
 										<svg
 											width="13"
@@ -1576,6 +1688,10 @@
 	.form-error {
 		font-size: 0.8125rem;
 		color: var(--fail);
+	}
+	.move-case-subtitle {
+		font-size: 0.8125rem;
+		color: var(--text-muted);
 	}
 	.modal-actions {
 		display: flex;
