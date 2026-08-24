@@ -242,7 +242,7 @@
 			{@const suiteKey = suiteIds(suite)[0] ?? suite.suiteName}
 			{@const suiteOpen = !collapsedSuites.has(suiteKey)}
 			<div class="suite" style={stagger(si, 55)}>
-				<div class="suite-header">
+				<div class="suite-header" class:collapsed={!suiteOpen}>
 					<button
 						class="suite-toggle"
 						on:click={() => toggleSuite(suiteKey)}
@@ -570,6 +570,11 @@
 		background: var(--bg-subtle);
 		border-bottom: 1px solid var(--border);
 		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+	}
+
+	.suite-header.collapsed {
+		border-bottom: none;
+		border-radius: var(--radius-lg);
 	}
 
 	.suite-toggle {
