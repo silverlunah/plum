@@ -242,10 +242,16 @@ function processCucumberJson(raw, attempts = {}) {
 					}
 				}
 
+				const rawStatus = step.result?.status ?? 'pending';
+				// Undefined/ambiguous steps rank below 'failed' otherwise, so a step
+				// definition mismatch reports as passing instead of failing.
+				const status =
+					rawStatus === 'undefined' || rawStatus === 'ambiguous' ? 'failed' : rawStatus;
+
 				return {
 					keyword: step.keyword.trim(),
 					name: step.name ?? '',
-					status: step.result?.status ?? 'pending',
+					status,
 					duration: Math.round((step.result?.duration ?? 0) / 1_000_000),
 					error: step.result?.error_message ?? null,
 					screenshot: screenshotFile
