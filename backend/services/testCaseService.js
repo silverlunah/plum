@@ -86,13 +86,14 @@ async function create({ suiteId, title, description, priority, createdById }) {
 	});
 }
 
-async function update(id, { title, description, priority }) {
+async function update(id, { title, description, priority, suiteId }) {
 	return prisma.testCase.update({
 		where: { id },
 		data: {
 			...(title !== undefined && { title }),
 			...(description !== undefined && { description }),
-			...(priority !== undefined && { priority })
+			...(priority !== undefined && { priority }),
+			...(suiteId !== undefined && { suiteId })
 		},
 		select: caseSelect
 	});
