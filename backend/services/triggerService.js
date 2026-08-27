@@ -169,6 +169,7 @@ function runWithRetriesAndSave({
 				rawCucumberJson: rawJson,
 				tags: tag,
 				triggerType: trigger,
+				workerCount: workers,
 				browser,
 				testRunId: testRunId ?? null,
 				duration: Date.now() - startedAt,

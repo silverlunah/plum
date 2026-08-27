@@ -362,6 +362,7 @@ async function runBuiltIn(
 		rawCucumberJson: rawJson,
 		tags: tag,
 		triggerType: TRIGGER_TYPE.MANUAL,
+		workerCount: workers,
 		browser,
 		testRunId: testRunId ?? null,
 		logs: logBuffer || null,
@@ -468,6 +469,7 @@ async function runDistributed(
 				.saveCombinedReport({
 					reports: collectedReports,
 					runners: laneInfos,
+					workers,
 					overallCode,
 					tag,
 					triggerType: TRIGGER_TYPE.MANUAL,

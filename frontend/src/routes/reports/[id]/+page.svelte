@@ -318,7 +318,7 @@
 					</span>
 				</div>
 				<div class="stat">
-					<span class="stat-num">{detail.runners}</span>
+					<span class="stat-num">{detail.runnerCount}</span>
 					<span class="stat-label">
 						<svg
 							width="10"
@@ -332,9 +332,32 @@
 							<rect x="2" y="3" width="20" height="14" rx="2" />
 							<path d="M8 21h8M12 17v4" />
 						</svg>
-						{pluralize(detail.runners, 'runner')}
+						{pluralize(detail.runnerCount, 'runner')}
 					</span>
 				</div>
+				{#if detail.workerCount > 1}
+					<div class="stat">
+						<span class="stat-num">{detail.workerCount}</span>
+						<span class="stat-label">
+							<svg
+								width="10"
+								height="10"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<rect x="3" y="3" width="7" height="7" rx="1" />
+								<rect x="14" y="3" width="7" height="7" rx="1" />
+								<rect x="3" y="14" width="7" height="7" rx="1" />
+								<rect x="14" y="14" width="7" height="7" rx="1" />
+							</svg>
+							{pluralize(detail.workerCount, 'worker')}
+						</span>
+					</div>
+				{/if}
 			</div>
 		</div>
 	</div>

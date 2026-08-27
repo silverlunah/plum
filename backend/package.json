@@ -27,6 +27,7 @@
 		"@cucumber/cucumber": "^11.2.0",
 		"@modelcontextprotocol/sdk": "^1.29.0",
 		"@prisma/client": "^6.19.3",
+		"@rrweb/record": "^2.1.1",
 		"bcryptjs": "^2.4.3",
 		"chai": "^4.3.6",
 		"chai-soft-assert": "^0.0.5",
