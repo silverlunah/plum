@@ -140,3 +140,113 @@ export function parseRunnerLogs(logs) {
 export function scenarioHasScreenshots(scenario) {
 	return scenario.steps?.some((step) => step.screenshot) ?? false;
 }
+
+/**
+ * Buckets a report's features/scenarios by runner (lane) then worker
+ * (Cucumber --parallel process), preserving first-seen order. The innermost
+ * `features` array keeps the same shape as the flat list it replaces —
+ * callers should only show a group header when a level has more than one
+ * bucket.
+ */
+export function groupScenariosByRunnerAndWorker(features) {
+	const runnerOrder = [];
+	const runnerMap = new Map();
+
+	for (const feature of features ?? []) {
+		for (const scenario of feature.scenarios ?? []) {
+			const runnerKey = scenario.runnerName ?? '';
+			const workerKey = scenario.workerId ?? 1;
+
+			if (!runnerMap.has(runnerKey)) {
+				runnerMap.set(runnerKey, {
+					runnerName: scenario.runnerName ?? null,
+					workerOrder: [],
+					workerMap: new Map()
+				});
+				runnerOrder.push(runnerKey);
+			}
+			const runnerEntry = runnerMap.get(runnerKey);
+
+			if (!runnerEntry.workerMap.has(workerKey)) {
+				runnerEntry.workerMap.set(workerKey, {
+					workerId: workerKey,
+					featureOrder: [],
+					featureMap: new Map()
+				});
+				runnerEntry.workerOrder.push(workerKey);
+			}
+			const workerEntry = runnerEntry.workerMap.get(workerKey);
+
+			if (!workerEntry.featureMap.has(feature.name)) {
+				workerEntry.featureMap.set(feature.name, { ...feature, scenarios: [] });
+				workerEntry.featureOrder.push(feature.name);
+			}
+			workerEntry.featureMap.get(feature.name).scenarios.push(scenario);
+		}
+	}
+
+	return runnerOrder.map((rk) => {
+		const r = runnerMap.get(rk);
+		return {
+			runnerName: r.runnerName,
+			workers: r.workerOrder.map((wk) => {
+				const w = r.workerMap.get(wk);
+				return {
+					workerId: w.workerId,
+					features: w.featureOrder.map((fn) => {
+						const f = w.featureMap.get(fn);
+						return { ...f, scenarioGroups: groupedScenarios(f.scenarios) };
+					})
+				};
+			})
+		};
+	});
+}
+
+/**
+ * Turns a scenario's tab recordings into an ordered, non-overlapping timeline
+ * of {recordingId, from, to} segments (epoch ms), so a replay can auto-switch
+ * which tab it's showing instead of a manual tab strip. Recordings missing
+ * startedAt/endedAt (written before that field existed) are dropped — nothing
+ * to line up on a shared clock without them.
+ *
+ * Tabs are assumed to open/close like a stack (a popup nested inside the tab
+ * that opened it) — the only shape browser.ts's own tab tracking produces.
+ */
+export function computeRecordingSegments(recordings) {
+	const usable = recordings.filter((r) => r.startedAt != null && r.endedAt != null);
+	if (usable.length === 0) return [];
+
+	const boundaries = usable.flatMap((r) => [
+		{ ts: r.startedAt, kind: 'open', recording: r },
+		{ ts: r.endedAt, kind: 'close', recording: r }
+	]);
+	boundaries.sort((a, b) => a.ts - b.ts || (a.kind === 'open' ? -1 : 1));
+
+	const segments = [];
+	const stack = [];
+	let lastBoundary = boundaries[0].ts;
+
+	for (const b of boundaries) {
+		if (b.kind === 'open') {
+			const top = stack[stack.length - 1];
+			if (top && b.ts > lastBoundary) {
+				segments.push({ recordingId: top.id, from: lastBoundary, to: b.ts });
+			}
+			stack.push(b.recording);
+			lastBoundary = b.ts;
+		} else if (stack[stack.length - 1]?.id === b.recording.id) {
+			segments.push({ recordingId: b.recording.id, from: lastBoundary, to: b.ts });
+			stack.pop();
+			lastBoundary = b.ts;
+		}
+		// A close for a recording that isn't currently on top means it opened
+		// and closed while something nested inside it was still active — its
+		// own segment stays open until whatever's on top of it closes too.
+	}
+	const remaining = stack[stack.length - 1];
+	if (remaining && remaining.endedAt > lastBoundary) {
+		segments.push({ recordingId: remaining.id, from: lastBoundary, to: remaining.endedAt });
+	}
+	return segments;
+}

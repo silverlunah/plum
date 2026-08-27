@@ -26,6 +26,13 @@
 	--external-soft: #ccfbf1;
 	--terminal-bg: #0d0c08;
 	--terminal-text: #d6d0c8;
+	/* Fixed syntax-highlight colors for the always-dark code viewer (inspector
+	   markup panel) — deliberately NOT the theme accent/node/pass tokens above,
+	   which are tuned for light surfaces and go muddy against a dark one. */
+	--code-tag: #7dd3fc;
+	--code-attr: #fbbf24;
+	--code-string: #86efac;
+	--code-comment: #9ca3af;
 
 	--font-display: 'Playfair Display', Georgia, serif;
 	--font-body: 'DM Sans', system-ui, -apple-system, sans-serif;

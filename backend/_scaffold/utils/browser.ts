@@ -24,6 +24,10 @@ import * as zlib from 'zlib';
 // (processCucumberJson) — the two runtimes don't share a module, mirroring how
 // 'image/png' is already duplicated between this file and reportService.js.
 const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
+// Small, always-attached marker (independent of whether any tab actually
+// recorded events) so a scenario's worker is always recoverable for grouping,
+// even on an instant-failure scenario with an empty recording.
+const WORKER_META_MIME_TYPE = 'application/x-plum-worker+json';
 // @rrweb/record's package.json only exports its main entry ("."), so a deep
 // require.resolve() of the UMD bundle is blocked by Node's exports map — resolve
 // the (exported) main entry instead and locate the sibling file on disk.
@@ -36,6 +40,8 @@ interface TabRecording {
 	tabId: string;
 	tabIndex: number;
 	events: unknown[];
+	openedAt: number;
+	closedAt: number | null;
 }
 
 let _browser: Browser;
@@ -47,14 +53,30 @@ let _tabCounter = 0;
 let _workerId = 1;
 
 export const page = (): Page => _page;
+export const context = (): BrowserContext => _context;
 
 function tabIdForIndex(index: number): string {
 	return index === 0 ? 'main' : `tab-${index + 1}`;
 }
 
+// A static page (nothing left to interact with) can go a long time between
+// rrweb events, or emit none at all after its initial load — its own event
+// timestamps are a poor proxy for how long it stayed relevant. Real
+// open/close times let the replay UI line multiple tabs up on one timeline
+// without guessing from event gaps.
 function attachRecorder(pg: Page): void {
 	const tabIndex = _tabCounter++;
-	_tabs.set(pg, { tabId: tabIdForIndex(tabIndex), tabIndex, events: [] });
+	const recording: TabRecording = {
+		tabId: tabIdForIndex(tabIndex),
+		tabIndex,
+		events: [],
+		openedAt: Date.now(),
+		closedAt: null
+	};
+	_tabs.set(pg, recording);
+	pg.on('close', () => {
+		recording.closedAt = Date.now();
+	});
 }
 
 export async function setup(): Promise<void> {
@@ -87,7 +109,12 @@ export async function setup(): Promise<void> {
 	});
 	await _context.addInitScript({ path: RECORD_BUNDLE_PATH });
 	await _context.addInitScript(() => {
-		// @ts-ignore — rrwebRecord is injected by the record.umd.min.cjs bundle above
+		// addInitScript runs in every frame, including hidden ad/tracking iframes.
+		// Recordings are tracked per-Page, so an unguarded sub-frame session would
+		// corrupt the tab's event stream with bogus 0x0 "about:blank" entries.
+		// @ts-ignore
+		if (window.self !== window.top) return;
+		// @ts-ignore
 		if (window.rrwebRecord) {
 			// @ts-ignore
 			window.rrwebRecord.record({
@@ -115,6 +142,26 @@ export async function screenshotStep(
 	}
 }
 
+/**
+ * Injects a labeled rrweb custom event at the current recording timestamp so
+ * the replay UI can show which step was running at any point in the timeline.
+ */
+export async function markStepStart(stepName: string): Promise<void> {
+	if (!_page) return;
+	try {
+		await _page.evaluate((name) => {
+			// @ts-ignore — rrwebRecord is injected by the record.umd.min.cjs bundle
+			if (window.rrwebRecord?.record?.addCustomEvent) {
+				// @ts-ignore
+				window.rrwebRecord.record.addCustomEvent('step', { name });
+			}
+		}, stepName);
+	} catch {
+		// best-effort — a missing marker just means the replay UI won't show a
+		// step label at that point, it doesn't affect the recording itself
+	}
+}
+
 export async function streamLiveScreenshot(stepName: string): Promise<void> {
 	const ssDir = process.env.PLUM_SS_DIR;
 	if (!ssDir || !_page) return;
@@ -139,6 +186,16 @@ export async function streamLiveScreenshot(stepName: string): Promise<void> {
 export async function flushRecordings(
 	attach: (data: Buffer, mime: string) => Promise<void>
 ): Promise<void> {
+	try {
+		await attach(
+			Buffer.from(JSON.stringify({ workerId: _workerId }), 'utf8'),
+			WORKER_META_MIME_TYPE
+		);
+	} catch {
+		// best-effort — a missing worker marker just falls back to workerId 1
+	}
+
+	const flushedAt = Date.now();
 	for (const recording of _tabs.values()) {
 		if (recording.events.length === 0) continue;
 		try {
@@ -146,7 +203,11 @@ export async function flushRecordings(
 				workerId: _workerId,
 				tabId: recording.tabId,
 				tabIndex: recording.tabIndex,
-				events: recording.events
+				events: recording.events,
+				openedAt: recording.openedAt,
+				// A tab still open when the scenario ends (typically the main tab)
+				// stayed relevant through to the flush, not just its last DOM event.
+				closedAt: recording.closedAt ?? flushedAt
 			});
 			const gz = zlib.gzipSync(Buffer.from(payload, 'utf8'));
 			await attach(gz, RRWEB_MIME_TYPE);

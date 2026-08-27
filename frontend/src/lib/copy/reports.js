@@ -51,9 +51,16 @@ export const runnersBadge = (count) => `${count} runners`;
 export const casesCountLabel = (count) => `${count} cases`;
 export const attemptsLabel = (count) => `${count} attempts`;
 export const caseLabel = (index) => `Case ${index}`;
-export const replayScreenshotAlt = (index) => `Step ${index} screenshot`;
-export const pauseOrPlayTitle = (playing) => (playing ? 'Pause' : 'Play');
-export const replayCounter = (index, total) => `${index} / ${total}`;
+
+// ── Recording replay ──
+export const PLAYER_LOAD_ERROR = 'Could not load this recording.';
+export const INSPECT_TOGGLE_LABEL = 'Inspect element';
+export const RESTART_LABEL = 'Restart replay';
+export const NO_ELEMENT_SELECTED = 'Click an element in the replay to inspect it.';
+export const ELEMENT_ATTRIBUTES_LABEL = 'Attributes';
+export const ELEMENT_SIZE_LABEL = 'Size';
+export const recordingTabLabel = (tabIndex) =>
+	tabIndex === 0 ? 'Main tab' : `Tab ${tabIndex + 1}`;
 
 // ── Live run ──
 export const LIVE_PAGE_TITLE = 'Live Run — Plum';
@@ -76,6 +83,9 @@ export const RUNNER_LABEL = 'Runner';
 export const RUNNING_LABEL = 'Running…';
 export const FINISHED_LABEL = 'Finished';
 export const WAITING_FOR_OUTPUT = '(waiting for output…)';
+
+export const UNKNOWN_RUNNER_LABEL = 'Unknown runner';
+export const workerLabel = (id) => `Worker ${id}`;
 
 export const runsInProgressHeading = (count) =>
 	count === 1 ? 'A run in progress' : `${count} runs in progress`;

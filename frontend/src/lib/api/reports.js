@@ -42,6 +42,19 @@ export async function fetchReportDetail(id) {
 	return res.json();
 }
 
+export async function fetchRecordings(reportId) {
+	const res = await fetch(`${API_BASE}/reports/${reportId}/recordings`);
+	if (!res.ok) throw new Error('Failed to fetch recordings');
+	return res.json();
+}
+
+export async function fetchRecordingEvents(reportId, recordingId) {
+	const res = await fetch(`${API_BASE}/reports/${reportId}/recordings/${recordingId}/events`);
+	if (!res.ok) throw new Error('Failed to fetch recording events');
+	const { events } = await res.json();
+	return events;
+}
+
 export async function deleteReport(id) {
 	const res = await fetch(`${API_BASE}/reports/${id}`, { method: 'DELETE' });
 	if (!res.ok) throw new Error('Failed to delete report');

@@ -5,21 +5,20 @@
 
 <script>
 	import { page } from '$app/stores';
-	import { onMount, onDestroy } from 'svelte';
-	import { slide, fade } from 'svelte/transition';
-	import { fetchReportDetail, screenshotUrl } from '$lib/api/reports';
+	import { onMount } from 'svelte';
+	import { slide } from 'svelte/transition';
+	import { fetchReportDetail, screenshotUrl, fetchRecordings } from '$lib/api/reports';
 	import {
 		isScheduled,
 		triggerLabel,
 		fmtDuration,
 		stagger,
 		featureFile,
-		groupedScenarios,
+		groupScenariosByRunnerAndWorker,
 		parseRunnerLogs,
-		featureSuiteTag,
-		scenarioHasScreenshots
+		featureSuiteTag
 	} from '$lib/utils/format';
-	import { REPLAY_STEP_MS, BROWSERS } from '$lib/constants';
+	import { BROWSERS } from '$lib/constants';
 	import { pluralize } from '$lib/copy/common';
 	import {
 		DETAIL_PAGE_TITLE,
@@ -42,9 +41,8 @@
 		casesCountLabel,
 		attemptsLabel,
 		caseLabel,
-		replayScreenshotAlt,
-		pauseOrPlayTitle,
-		replayCounter
+		UNKNOWN_RUNNER_LABEL,
+		workerLabel
 	} from '$lib/copy/reports';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import BackLink from '$lib/components/ui/BackLink.svelte';
@@ -53,6 +51,7 @@
 	import StepKeyword from '$lib/components/ui/StepKeyword.svelte';
 	import StepStatusIcon from '$lib/components/ui/StepStatusIcon.svelte';
 	import BrowserIcon from '$lib/components/icons/BrowserIcon.svelte';
+	import RecordingPlayer from '$lib/components/reports/RecordingPlayer.svelte';
 
 	const reportId = parseInt($page.params.id, 10);
 
@@ -61,84 +60,41 @@
 	let expandedScenarios = new Set();
 
 	// Replay state
+	let allRecordings = [];
 	let replayOpen = false;
 	let replayScenario = null;
-	let replayIdx = 0;
-	let replayPlaying = false;
-	let replayTimer = null;
+	let scenarioRecordings = [];
+	let replayInspecting = false;
 
-	$: replaySteps = replayScenario?.steps ?? [];
-	$: currentReplayStep = replaySteps[replayIdx] ?? null;
-
-	onDestroy(() => {
-		if (replayTimer) clearInterval(replayTimer);
-	});
-
-	function startPlayback() {
-		replayPlaying = true;
-		replayTimer = setInterval(() => {
-			if (replayIdx < (replayScenario?.steps?.length ?? 0) - 1) {
-				replayIdx++;
-			} else {
-				stopPlayback();
-			}
-		}, REPLAY_STEP_MS);
-	}
-
-	function stopPlayback() {
-		replayPlaying = false;
-		if (replayTimer) {
-			clearInterval(replayTimer);
-			replayTimer = null;
-		}
+	function scenarioHasRecording(scenario) {
+		return allRecordings.some((r) => r.scenarioId === scenario.id);
 	}
 
 	function openReplay(scenario) {
-		stopPlayback();
 		replayScenario = scenario;
-		replayIdx = 0;
+		scenarioRecordings = allRecordings
+			.filter((r) => r.scenarioId === scenario.id)
+			.sort((a, b) => a.tabIndex - b.tabIndex);
 		replayOpen = true;
-		startPlayback();
 	}
 
 	function closeReplay() {
-		stopPlayback();
 		replayOpen = false;
 		replayScenario = null;
-	}
-
-	function togglePlayback() {
-		if (replayPlaying) {
-			stopPlayback();
-		} else {
-			if (replayIdx >= replaySteps.length - 1) replayIdx = 0;
-			startPlayback();
-		}
-	}
-
-	function replayPrev() {
-		stopPlayback();
-		if (replayIdx > 0) replayIdx--;
-	}
-
-	function replayNext() {
-		stopPlayback();
-		if (replayIdx < replaySteps.length - 1) replayIdx++;
+		scenarioRecordings = [];
 	}
 
 	function handleKeydown(e) {
 		if (!replayOpen) return;
-		if (e.key === 'ArrowRight') replayNext();
-		else if (e.key === 'ArrowLeft') replayPrev();
-		else if (e.key === ' ') {
-			e.preventDefault();
-			togglePlayback();
-		} else if (e.key === 'Escape') closeReplay();
+		// While inspecting, RecordingPlayer's own Escape handler turns inspect
+		// mode off — only close the modal when that's not in play.
+		if (e.key === 'Escape' && !replayInspecting) closeReplay();
 	}
 
 	onMount(async () => {
 		try {
 			detail = await fetchReportDetail(reportId);
+			allRecordings = await fetchRecordings(reportId);
 		} catch {
 			error = LOAD_ERROR;
 		}
@@ -164,11 +120,11 @@
 	// parallel (multiple workers/runners) — only used as a fallback for reports saved
 	// before this field existed.
 	$: totalDuration = detail?.duration ?? allScenarios.reduce((s, sc) => s + sc.duration, 0);
-	$: groupedFeatures =
-		detail?.features.map((feature) => ({
-			...feature,
-			scenarioGroups: groupedScenarios(feature.scenarios)
-		})) ?? [];
+	// `allRecordings` is referenced here (not just inside scenarioHasRecording)
+	// purely so Svelte's compiler tracks it as a dependency — recordings load
+	// asynchronously after `detail`, and without this the {@const groupHasReplay}
+	// checks inside the each-block tree below never re-evaluate once they arrive.
+	$: runnerGroups = detail && allRecordings ? groupScenariosByRunnerAndWorker(detail.features) : [];
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -412,175 +368,239 @@
 		</details>
 	{/if}
 
-	{#each groupedFeatures as feature, fi}
-		<div
-			class="feature"
-			class:feature-pass={feature.status === 'passed'}
-			class:feature-fail={feature.status !== 'passed'}
-			style={stagger(fi, 60)}
-		>
-			<div class="feature-header">
-				<h2 class="feature-name">
+	{#each runnerGroups as runnerGroup, ri}
+		{#if runnerGroups.length > 1}
+			<div class="group-header runner-group-header">
+				<svg
+					class="group-icon"
+					width="12"
+					height="12"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+				>
+					<rect x="2" y="3" width="20" height="14" rx="2" />
+					<path d="M8 21h8M12 17v4" />
+				</svg>
+				{runnerGroup.runnerName ?? UNKNOWN_RUNNER_LABEL}
+			</div>
+		{/if}
+		{#each runnerGroup.workers as workerGroup, wi}
+			{#if runnerGroup.workers.length > 1}
+				<div class="group-header worker-group-header">
 					<svg
-						width="13"
-						height="13"
+						class="group-icon"
+						width="11"
+						height="11"
 						viewBox="0 0 24 24"
 						fill="none"
 						stroke="currentColor"
 						stroke-width="2"
 						stroke-linecap="round"
 						stroke-linejoin="round"
-						class="feature-icon"
 					>
-						<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-						<polyline points="14 2 14 8 20 8" />
+						<rect x="3" y="3" width="7" height="7" rx="1" />
+						<rect x="14" y="3" width="7" height="7" rx="1" />
+						<rect x="3" y="14" width="7" height="7" rx="1" />
+						<rect x="14" y="14" width="7" height="7" rx="1" />
 					</svg>
-					{feature.name}
-					{#if featureSuiteTag(feature)}
-						<span class="suite-tag">{featureSuiteTag(feature)}</span>
-					{/if}
-				</h2>
-				<div class="feature-right">
-					<span class="feature-file" title={feature.uri}>{featureFile(feature.uri)}</span>
-					<Badge variant={feature.status === 'passed' ? 'pass' : 'fail'}>
-						{feature.status}
-					</Badge>
+					{workerLabel(workerGroup.workerId)}
 				</div>
-			</div>
+			{/if}
+			{#each workerGroup.features as feature, fi}
+				<div
+					class="feature"
+					class:feature-pass={feature.status === 'passed'}
+					class:feature-fail={feature.status !== 'passed'}
+					style={stagger(fi, 60)}
+				>
+					<div class="feature-header">
+						<h2 class="feature-name">
+							<svg
+								width="13"
+								height="13"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								class="feature-icon"
+							>
+								<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+								<polyline points="14 2 14 8 20 8" />
+							</svg>
+							{feature.name}
+							{#if featureSuiteTag(feature)}
+								<span class="suite-tag">{featureSuiteTag(feature)}</span>
+							{/if}
+						</h2>
+						<div class="feature-right">
+							<span class="feature-file" title={feature.uri}>{featureFile(feature.uri)}</span>
+							<Badge variant={feature.status === 'passed' ? 'pass' : 'fail'}>
+								{feature.status}
+							</Badge>
+						</div>
+					</div>
 
-			<div class="scenarios">
-				{#each feature.scenarioGroups as group, si}
-					{@const scenId = `${fi}-${group.key}`}
-					{@const open = expandedScenarios.has(scenId)}
-					{@const groupHasReplay = group.scenarios.some(scenarioHasScreenshots)}
-					<div
-						class="scenario"
-						class:scenario-fail={group.status === 'failed'}
-						style={stagger(fi * 5 + si, 40)}
-					>
-						<div class="scenario-row">
-							<button class="scenario-header" on:click={() => toggleScenario(scenId)}>
-								<StatusDot status={group.status} />
+					<div class="scenarios">
+						{#each feature.scenarioGroups as group, si}
+							{@const scenId = `${ri}-${wi}-${fi}-${group.key}`}
+							{@const open = expandedScenarios.has(scenId)}
+							{@const groupHasReplay = group.scenarios.some(scenarioHasRecording)}
+							<div
+								class="scenario"
+								class:scenario-fail={group.status === 'failed'}
+								style={stagger(fi * 5 + si, 40)}
+							>
+								<div class="scenario-row">
+									<button class="scenario-header" on:click={() => toggleScenario(scenId)}>
+										<StatusDot status={group.status} />
 
-								<span class="scenario-name">
-									{group.name}
-									{#if group.scenarios.length > 1}
-										<span class="scenario-count">{casesCountLabel(group.scenarios.length)}</span>
-									{/if}
-									{#if group.scenarios[0]?.attempts > 1}
-										<span class="scenario-count" title={RETRY_TITLE}>
-											{attemptsLabel(group.scenarios[0].attempts)}
+										<span class="scenario-name">
+											{group.name}
+											{#if group.scenarios.length > 1}
+												<span class="scenario-count">{casesCountLabel(group.scenarios.length)}</span
+												>
+											{/if}
+											{#if group.scenarios[0]?.attempts > 1}
+												<span class="scenario-count" title={RETRY_TITLE}>
+													{attemptsLabel(group.scenarios[0].attempts)}
+												</span>
+											{/if}
 										</span>
-									{/if}
-								</span>
 
-								<div class="scenario-tags">
-									{#each group.tags as tag}
-										<TagChip {tag} />
-									{/each}
+										<div class="scenario-tags">
+											{#each group.tags as tag}
+												<TagChip {tag} />
+											{/each}
+										</div>
+
+										<span class="scenario-duration">{fmtDuration(group.duration)}</span>
+
+										<svg
+											width="13"
+											height="13"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											class="chevron"
+											class:rotated={open}
+										>
+											<polyline points="9 18 15 12 9 6" />
+										</svg>
+									</button>
+
+									{#if groupHasReplay && group.scenarios.length === 1}
+										<button
+											class="replay-btn"
+											title={WATCH_REPLAY_TITLE}
+											on:click={() => openReplay(group.scenarios[0])}
+										>
+											<svg
+												width="11"
+												height="11"
+												viewBox="0 0 24 24"
+												fill="currentColor"
+												stroke="none"
+											>
+												<polygon points="5,3 19,12 5,21" />
+											</svg>
+											{REPLAY_LABEL}
+										</button>
+									{/if}
 								</div>
 
-								<span class="scenario-duration">{fmtDuration(group.duration)}</span>
+								{#if open}
+									<div class="steps" transition:slide={{ duration: 200 }}>
+										{#each group.scenarios as scenario, exampleIndex}
+											{#if group.scenarios.length > 1}
+												<div class="example-header">
+													<StatusDot status={scenario.status} />
+													<span>{caseLabel(exampleIndex + 1)}</span>
+													<span class="scenario-duration">{fmtDuration(scenario.duration)}</span>
+													{#if scenarioHasRecording(scenario)}
+														<button
+															class="replay-btn replay-btn-sm"
+															on:click={() => openReplay(scenario)}
+														>
+															<svg
+																width="9"
+																height="9"
+																viewBox="0 0 24 24"
+																fill="currentColor"
+																stroke="none"
+															>
+																<polygon points="5,3 19,12 5,21" />
+															</svg>
+															{REPLAY_LABEL}
+														</button>
+													{/if}
+												</div>
+											{/if}
 
-								<svg
-									width="13"
-									height="13"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									class="chevron"
-									class:rotated={open}
-								>
-									<polyline points="9 18 15 12 9 6" />
-								</svg>
-							</button>
-
-							{#if groupHasReplay && group.scenarios.length === 1}
-								<button
-									class="replay-btn"
-									title={WATCH_REPLAY_TITLE}
-									on:click={() => openReplay(group.scenarios[0])}
-								>
-									<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-										<polygon points="5,3 19,12 5,21" />
-									</svg>
-									{REPLAY_LABEL}
-								</button>
-							{/if}
-						</div>
-
-						{#if open}
-							<div class="steps" transition:slide={{ duration: 200 }}>
-								{#each group.scenarios as scenario, exampleIndex}
-									{#if group.scenarios.length > 1}
-										<div class="example-header">
-											<StatusDot status={scenario.status} />
-											<span>{caseLabel(exampleIndex + 1)}</span>
-											<span class="scenario-duration">{fmtDuration(scenario.duration)}</span>
-											{#if scenarioHasScreenshots(scenario)}
-												<button
-													class="replay-btn replay-btn-sm"
-													on:click={() => openReplay(scenario)}
+											{#each scenario.steps as step}
+												<div
+													class="step"
+													class:step-fail={step.status === 'failed'}
+													class:step-skip={step.status === 'skipped' || step.status === 'pending'}
 												>
-													<svg
-														width="9"
-														height="9"
-														viewBox="0 0 24 24"
-														fill="currentColor"
-														stroke="none"
-													>
-														<polygon points="5,3 19,12 5,21" />
-													</svg>
-													{REPLAY_LABEL}
-												</button>
-											{/if}
-										</div>
-									{/if}
+													<div class="step-row">
+														<StepStatusIcon status={step.status} />
+														<StepKeyword keyword={step.keyword} />
+														<span class="step-name">{step.name}</span>
+														<span class="step-duration">{fmtDuration(step.duration)}</span>
+													</div>
 
-									{#each scenario.steps as step}
-										<div
-											class="step"
-											class:step-fail={step.status === 'failed'}
-											class:step-skip={step.status === 'skipped' || step.status === 'pending'}
-										>
-											<div class="step-row">
-												<StepStatusIcon status={step.status} />
-												<StepKeyword keyword={step.keyword} />
-												<span class="step-name">{step.name}</span>
-												<span class="step-duration">{fmtDuration(step.duration)}</span>
-											</div>
+													{#if step.error}
+														<pre class="step-error">{step.error}</pre>
+													{/if}
 
-											{#if step.error}
-												<pre class="step-error">{step.error}</pre>
-											{/if}
+													{#if step.dataTable}
+														<table class="step-datatable">
+															<tbody>
+																{#each step.dataTable as row, ri}
+																	<tr class:step-datatable-header={ri === 0}>
+																		{#each row as cell}
+																			<td>{cell}</td>
+																		{/each}
+																	</tr>
+																{/each}
+															</tbody>
+														</table>
+													{/if}
 
-											{#if step.screenshot}
-												<details class="screenshot-wrap">
-													<summary class="screenshot-toggle">{SCREENSHOT_TOGGLE_LABEL}</summary>
-													<img
-														class="screenshot"
-														src={screenshotUrl(step.screenshot)}
-														alt={STEP_SCREENSHOT_ALT}
-													/>
-												</details>
-											{/if}
-										</div>
-									{/each}
-								{/each}
+													{#if step.screenshot}
+														<details class="screenshot-wrap">
+															<summary class="screenshot-toggle">{SCREENSHOT_TOGGLE_LABEL}</summary>
+															<img
+																class="screenshot"
+																src={screenshotUrl(step.screenshot)}
+																alt={STEP_SCREENSHOT_ALT}
+															/>
+														</details>
+													{/if}
+												</div>
+											{/each}
+										{/each}
+									</div>
+								{/if}
 							</div>
-						{/if}
+						{/each}
 					</div>
-				{/each}
-			</div>
-		</div>
+				</div>
+			{/each}
+		{/each}
 	{/each}
 {/if}
 
 {#if replayOpen && replayScenario}
 	<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-	<div class="replay-overlay" transition:fade={{ duration: 150 }} on:click={closeReplay}>
+	<div class="replay-overlay" on:click={closeReplay}>
 		<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
 		<div class="replay-modal" on:click|stopPropagation>
 			<div class="replay-modal-header">
@@ -600,97 +620,15 @@
 				</button>
 			</div>
 
-			<div class="replay-screenshot-area">
-				{#if currentReplayStep?.screenshot}
-					<img
-						class="replay-screenshot"
-						src={screenshotUrl(currentReplayStep.screenshot)}
-						alt={replayScreenshotAlt(replayIdx + 1)}
+			<div class="replay-body">
+				{#if scenarioRecordings.length > 0}
+					<RecordingPlayer
+						{reportId}
+						recordings={scenarioRecordings}
+						steps={replayScenario.steps}
+						bind:inspecting={replayInspecting}
 					/>
-				{:else}
-					<div class="replay-no-screenshot">{NO_SCREENSHOT_MESSAGE}</div>
 				{/if}
-			</div>
-
-			<div class="replay-timeline">
-				<input
-					type="range"
-					class="replay-slider"
-					min="0"
-					max={replaySteps.length - 1}
-					value={replayIdx}
-					style="--fill: {replaySteps.length > 1
-						? (replayIdx / (replaySteps.length - 1)) * 100
-						: 0}%"
-					on:input={(e) => {
-						stopPlayback();
-						replayIdx = Number(e.target.value);
-					}}
-				/>
-			</div>
-
-			<div class="replay-step-info">
-				<StepStatusIcon status={currentReplayStep?.status ?? 'skipped'} />
-				<StepKeyword keyword={currentReplayStep?.keyword ?? ''} />
-				<span class="replay-step-name">{currentReplayStep?.name}</span>
-			</div>
-
-			<div class="replay-nav">
-				<button class="replay-nav-btn" on:click={replayPrev} disabled={replayIdx === 0}>
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-					>
-						<polyline points="15 18 9 12 15 6" />
-					</svg>
-				</button>
-
-				<button
-					class="replay-play-btn"
-					on:click={togglePlayback}
-					title={pauseOrPlayTitle(replayPlaying)}
-				>
-					{#if replayPlaying}
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-							<rect x="6" y="4" width="4" height="16" rx="1" /><rect
-								x="14"
-								y="4"
-								width="4"
-								height="16"
-								rx="1"
-							/>
-						</svg>
-					{:else}
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-							<polygon points="5,3 19,12 5,21" />
-						</svg>
-					{/if}
-				</button>
-
-				<button
-					class="replay-nav-btn"
-					on:click={replayNext}
-					disabled={replayIdx === replaySteps.length - 1}
-				>
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-					>
-						<polyline points="9 18 15 12 9 6" />
-					</svg>
-				</button>
-
-				<span class="replay-counter">{replayCounter(replayIdx + 1, replaySteps.length)}</span>
 			</div>
 		</div>
 	</div>
@@ -846,6 +784,36 @@
 		color: var(--fail);
 	}
 	.muted-color {
+		color: var(--text-muted);
+	}
+
+	.group-header {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding-bottom: 0.4rem;
+		margin-top: 1.75rem;
+		margin-bottom: 0.75rem;
+		font-family: 'JetBrains Mono', monospace;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		border-bottom: 1px solid var(--border);
+	}
+	.group-header:first-child {
+		margin-top: 0;
+	}
+	.group-icon {
+		flex-shrink: 0;
+		opacity: 0.7;
+	}
+	.runner-group-header {
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--text);
+	}
+	.worker-group-header {
+		font-size: 0.7rem;
+		font-weight: 500;
 		color: var(--text-muted);
 	}
 
@@ -1108,6 +1076,25 @@
 		border-left: 2px solid var(--fail);
 	}
 
+	.step-datatable {
+		margin: 0.375rem 0 0.25rem 1.75rem;
+		border-collapse: collapse;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.75rem;
+	}
+
+	.step-datatable td {
+		padding: 0.35rem 0.7rem;
+		border: 1px solid var(--border);
+		color: var(--text);
+	}
+
+	.step-datatable-header td {
+		background: var(--bg-subtle);
+		color: var(--text-muted);
+		font-weight: 600;
+	}
+
 	.screenshot-wrap {
 		margin: 0.5rem 0 0.25rem 1.75rem;
 	}
@@ -1275,23 +1262,18 @@
 	.replay-overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.72);
+		background: var(--bg-elevated);
 		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 200;
-		padding: 1rem;
+		z-index: 500;
 	}
 
 	.replay-modal {
 		background: var(--bg-elevated);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
-		width: min(920px, 100%);
-		max-height: 90vh;
+		width: 100%;
+		height: 100%;
 		display: flex;
 		flex-direction: column;
-		overflow: hidden;
+		overflow: hidden auto;
 		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
 	}
 
@@ -1331,175 +1313,11 @@
 		color: var(--text);
 	}
 
-	.replay-screenshot-area {
+	.replay-body {
 		flex: 1;
 		min-height: 0;
-		background: var(--bg-subtle);
-		display: flex;
-		align-items: center;
-		justify-content: center;
 		overflow: hidden;
-		position: relative;
-	}
-
-	.replay-screenshot {
-		max-width: 100%;
-		max-height: 100%;
-		object-fit: contain;
-		display: block;
-	}
-
-	.replay-no-screenshot {
-		color: var(--text-muted);
-		font-size: 0.8125rem;
-		font-family: 'JetBrains Mono', monospace;
-	}
-
-	.replay-step-info {
 		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.75rem 1.25rem;
-		border-top: 1px solid var(--border);
-		flex-shrink: 0;
-		min-width: 0;
-	}
-
-	.replay-step-name {
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.8125rem;
-		color: var(--text);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	/* ── Timeline slider ── */
-	.replay-timeline {
-		padding: 0.5rem 1.25rem;
-		border-top: 1px solid var(--border);
-		flex-shrink: 0;
-	}
-
-	.replay-slider {
-		display: block;
-		width: 100%;
-		height: 4px;
-		-webkit-appearance: none;
-		appearance: none;
-		background: transparent;
-		border-radius: 2px;
-		cursor: pointer;
-		outline: none;
-	}
-
-	.replay-slider::-webkit-slider-runnable-track {
-		height: 4px;
-		border-radius: 2px;
-		background: linear-gradient(
-			to right,
-			var(--accent) var(--fill, 0%),
-			var(--border) var(--fill, 0%)
-		);
-	}
-
-	.replay-slider::-webkit-slider-thumb {
-		-webkit-appearance: none;
-		width: 14px;
-		height: 14px;
-		margin-top: -5px;
-		border-radius: 50%;
-		background: var(--accent);
-		cursor: pointer;
-		transition: transform 0.1s;
-	}
-
-	.replay-slider:hover::-webkit-slider-thumb {
-		transform: scale(1.25);
-	}
-
-	.replay-slider::-moz-range-track {
-		height: 4px;
-		border-radius: 2px;
-		background: var(--border);
-	}
-
-	.replay-slider::-moz-range-progress {
-		height: 4px;
-		border-radius: 2px;
-		background: var(--accent);
-	}
-
-	.replay-slider::-moz-range-thumb {
-		width: 14px;
-		height: 14px;
-		border-radius: 50%;
-		background: var(--accent);
-		border: none;
-		cursor: pointer;
-	}
-
-	/* ── Nav bar ── */
-	.replay-nav {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.75rem;
-		padding: 0.5rem 1.25rem 0.625rem;
-		border-top: 1px solid var(--border);
-		flex-shrink: 0;
-	}
-
-	.replay-nav-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 30px;
-		height: 30px;
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		color: var(--text);
-		cursor: pointer;
-		transition: background var(--duration-fast);
-	}
-
-	.replay-nav-btn:hover:not(:disabled) {
-		background: var(--bg-elevated);
-	}
-
-	.replay-nav-btn:disabled {
-		opacity: 0.35;
-		cursor: default;
-	}
-
-	.replay-play-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 38px;
-		height: 38px;
-		background: var(--accent);
-		border: none;
-		border-radius: 50%;
-		color: var(--white);
-		cursor: pointer;
-		transition:
-			opacity var(--duration-fast),
-			transform var(--duration-fast);
-	}
-
-	.replay-play-btn:hover {
-		opacity: 0.85;
-		transform: scale(1.05);
-	}
-
-	.replay-counter {
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.78rem;
-		color: var(--text-muted);
-		min-width: 5ch;
-		text-align: center;
-		margin-left: 0.25rem;
+		flex-direction: column;
 	}
 </style>

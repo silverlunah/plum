@@ -17,6 +17,10 @@ const { SCREENSHOTS_DIR } = require('../lib/reportFilename');
 // the two runtimes don't share a module, mirroring how 'image/png' is already
 // duplicated between the two files.
 const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
+// Small, always-attached marker (independent of whether any tab actually
+// recorded events) so a scenario's worker is always recoverable for grouping,
+// even on an instant-failure scenario with an empty recording.
+const WORKER_META_MIME_TYPE = 'application/x-plum-worker+json';
 
 // ---------------------------------------------------------------------------
 // Auto-sync: mark test cases as automated and record history from Cucumber tags
@@ -145,8 +149,34 @@ function scenarioIdTag(scenario) {
 	return (scenario.tags ?? []).map((t) => t.name).find(isTestCaseTag) ?? null;
 }
 
+// Cucumber's legacy JSON `id` is identical for every Examples row of a Scenario
+// Outline — `line` (the row's own line in the feature file) is the only field
+// that actually differs between them, so combine the two for a truly unique key.
+function scenarioUniqueId(scenario) {
+	return `${scenario.id};;${scenario.line}`;
+}
+
 function scenarioFailed(scenario) {
 	return (scenario.steps ?? []).some((s) => s.result?.status === 'failed');
+}
+
+/**
+ * Reads the worker-id marker browser.ts attaches unconditionally in the After
+ * hook (separate from rrweb recordings, which can legitimately be empty).
+ */
+function extractWorkerId(scenario) {
+	const marker = (scenario.steps || [])
+		.filter((s) => s.hidden)
+		.flatMap(
+			(step) => step.embeddings?.filter((e) => e.mime_type === WORKER_META_MIME_TYPE) ?? []
+		)[0];
+	if (!marker) return 1;
+	try {
+		const { workerId } = JSON.parse(Buffer.from(marker.data, 'base64').toString('utf8'));
+		return Number.isFinite(workerId) ? workerId : 1;
+	} catch {
+		return 1;
+	}
 }
 
 /**
@@ -184,7 +214,9 @@ function mergeRawAttempt(accumulated, attemptRawJson, round, attemptsMap) {
 			accumulated.push(accFeature);
 		}
 		for (const scenario of feature.elements ?? []) {
-			accFeature.elements = accFeature.elements.filter((e) => e.id !== scenario.id);
+			accFeature.elements = accFeature.elements.filter(
+				(e) => scenarioUniqueId(e) !== scenarioUniqueId(scenario)
+			);
 			accFeature.elements.push(scenario);
 			const idTag = scenarioIdTag(scenario);
 			if (idTag) attemptsMap[idTag] = round;
@@ -205,8 +237,7 @@ function deleteScreenshotFiles(content) {
 /**
  * Parses one scenario's hidden hook-step rrweb attachments (flushed from
  * browser.ts's flushRecordings via the After hook) into Recording rows ready
- * for prisma.recording.createMany, keyed to this scenario via Cucumber's own
- * stable `scenario.id`.
+ * for prisma.recording.createMany, keyed to this scenario via scenarioUniqueId.
  */
 function extractRecordings(scenario) {
 	const hookRecordings = (scenario.steps || [])
@@ -217,12 +248,20 @@ function extractRecordings(scenario) {
 		.map((embedding) => {
 			try {
 				const decompressed = zlib.gunzipSync(Buffer.from(embedding.data, 'base64'));
-				const { workerId, tabId, tabIndex, events } = JSON.parse(decompressed.toString('utf8'));
+				const { workerId, tabId, tabIndex, events, openedAt, closedAt } = JSON.parse(
+					decompressed.toString('utf8')
+				);
 				return {
-					scenarioId: scenario.id,
+					scenarioId: scenarioUniqueId(scenario),
 					workerId,
 					tabId,
 					tabIndex,
+					// Real Playwright open/close times (browser.ts), not inferred from the
+					// events themselves — a static page can go quiet, or emit nothing at
+					// all, long before it actually closes, which made the last-event
+					// timestamp an unreliable stand-in for how long a tab stayed relevant.
+					startedAt: BigInt(openedAt ?? events[0]?.timestamp ?? 0),
+					endedAt: BigInt(closedAt ?? events[events.length - 1]?.timestamp ?? 0),
 					events: zlib.gzipSync(Buffer.from(JSON.stringify(events), 'utf8'))
 				};
 			} catch (e) {
@@ -296,7 +335,8 @@ function processCucumberJson(raw, attempts = {}) {
 					status,
 					duration: Math.round((step.result?.duration ?? 0) / 1_000_000),
 					error: step.result?.error_message ?? null,
-					screenshot: screenshotFile
+					screenshot: screenshotFile,
+					dataTable: step.arguments?.[0]?.rows?.map((row) => row.cells) ?? null
 				};
 			});
 
@@ -306,13 +346,15 @@ function processCucumberJson(raw, attempts = {}) {
 			}, 'passed');
 
 			return {
-				id: scenario.id,
+				id: scenarioUniqueId(scenario),
 				name: scenario.name,
 				keyword: scenario.keyword,
 				tags: (scenario.tags ?? []).map((t) => t.name),
 				status: worstStatus,
 				duration: steps.reduce((s, st) => s + st.duration, 0),
 				attempts: attempts[scenarioIdTag(scenario)] ?? 1,
+				workerId: extractWorkerId(scenario),
+				runnerName: scenario.__plumRunnerName ?? null,
 				steps
 			};
 		});
@@ -398,6 +440,47 @@ const getReportDetail = async (id) => {
 	if (!report) return null;
 	const { content, ...meta } = report;
 	return { ...meta, features: content?.features ?? [] };
+};
+
+/**
+ * Metadata for every recording on a report — deliberately excludes `events`
+ * (can be large) so the replay UI can work out tab timing/order before
+ * fetching any actual event data.
+ */
+const getRecordings = async (reportId) => {
+	const recordings = await prisma.recording.findMany({
+		where: { reportId },
+		select: {
+			id: true,
+			scenarioId: true,
+			workerId: true,
+			tabId: true,
+			tabIndex: true,
+			startedAt: true,
+			endedAt: true
+		},
+		orderBy: { tabIndex: 'asc' }
+	});
+	// BigInt doesn't survive JSON.stringify — both fit safely in a JS Number
+	// (epoch ms is well under Number.MAX_SAFE_INTEGER).
+	return recordings.map((r) => ({
+		...r,
+		startedAt: r.startedAt === null ? null : Number(r.startedAt),
+		endedAt: r.endedAt === null ? null : Number(r.endedAt)
+	}));
+};
+
+/**
+ * Decompresses one recording's rrweb event array, fetched lazily by the
+ * replay UI only once a tab is actually selected for playback.
+ */
+const getRecordingEvents = async (recordingId) => {
+	const recording = await prisma.recording.findUnique({
+		where: { id: recordingId },
+		select: { events: true }
+	});
+	if (!recording) return null;
+	return JSON.parse(zlib.gunzipSync(recording.events).toString('utf8'));
 };
 
 // ---------------------------------------------------------------------------
@@ -498,15 +581,23 @@ const saveCombinedReport = async ({
 	attemptsByLane = null
 }) => {
 	const featureMap = new Map();
-	for (const content of reports) {
-		if (!content) continue;
+	reports.forEach((content, laneIdx) => {
+		if (!content) return;
 		let parsed;
 		try {
 			parsed = JSON.parse(content);
 		} catch {
-			continue;
+			return;
 		}
+		const lane = runners[laneIdx];
 		for (const feature of parsed) {
+			// Merging loses which lane a scenario came from — the raw Cucumber JSON
+			// has no such field — so stamp it here, before the merge, while we still
+			// know. processCucumberJson reads this to group the report's scenario
+			// list by runner.
+			for (const scenario of feature.elements ?? []) {
+				scenario.__plumRunnerName = lane?.name ?? null;
+			}
 			// Each lane runs from its own temp dir, so the same feature reports a
 			// different absolute uri per runner. Key on the path from `features/`
 			// onward (falling back to name) so one feature's scenarios from every
@@ -518,7 +609,7 @@ const saveCombinedReport = async ({
 				featureMap.set(key, { ...feature, elements: [...(feature.elements ?? [])] });
 			}
 		}
-	}
+	});
 	const combined = [...featureMap.values()];
 
 	let combinedLogs = null;
@@ -606,6 +697,8 @@ module.exports = {
 	getReports,
 	getLatestReportId,
 	getReportDetail,
+	getRecordings,
+	getRecordingEvents,
 	saveReport,
 	saveCombinedReport,
 	attachDurationToLatestReport,
