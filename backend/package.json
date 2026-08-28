@@ -39,7 +39,6 @@
 		"node-cron": "^3.0.3",
 		"picocolors": "^1.1.1",
 		"playwright": "1.50.1",
-		"socket.io": "^4.8.1",
-		"socket.io-client": "^4.8.3"
+		"socket.io": "^4.8.1"
 	}
 }

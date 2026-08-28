@@ -19,6 +19,7 @@ import * as clack from '@clack/prompts';
 import pc from 'picocolors';
 import runnerProcess from '../lib/runnerProcess.js';
 import nodeRegister from '../lib/nodeRegister.js';
+import globalRegistry from '../lib/globalRegistry.js';
 
 const {
 	isLocalUrl,
@@ -37,13 +38,22 @@ const API_URL = process.env.PLUM_API_URL || 'http://localhost:3001';
 
 const cancelled = (v) => clack.isCancel(v);
 
-// The mutating /runners routes accept a registered runner's own token in place
-// of an admin session — this manager has no browser/JWT to present, but a node
-// already gets a token at registration time (see backend/middleware/jwtAuth.js
-// / runnerOrAdmin.js), so reuse that instead of a separate credential.
-const localToken = loadNodeConfig(process.cwd()).token;
+// The mutating /runners routes take a registered runner's own token in place of
+// an admin session (runnerOrAdmin.js), and this manager has no JWT — so find
+// any node token on this machine, falling back to PLUM_MCP_KEY.
+function resolveAuthHeader() {
+	const cwdToken = loadNodeConfig(process.cwd()).token;
+	if (cwdToken) return { Authorization: `Bearer ${cwdToken}` };
+	for (const dir of globalRegistry.getInstalls('node')) {
+		const token = loadNodeConfig(dir).token;
+		if (token) return { Authorization: `Bearer ${token}` };
+	}
+	if (process.env.PLUM_MCP_KEY) return { Authorization: `ApiKey ${process.env.PLUM_MCP_KEY}` };
+	return {};
+}
+const AUTH_HEADER = resolveAuthHeader();
 function authHeaders() {
-	return localToken ? { Authorization: `Bearer ${localToken}` } : {};
+	return AUTH_HEADER;
 }
 
 /**
@@ -291,6 +301,26 @@ async function runAction(r) {
 	}
 }
 
+// Polls a node's own /api/ping until it reports mode:'node' or the timeout
+// elapses — used to confirm a runner actually serves before its registration
+// is kept (see addRunner).
+async function nodeIsUp(baseUrl, token, timeoutMs) {
+	const url = `${baseUrl.replace(/\/+$/, '')}/api/ping`;
+	const headers = token ? { Authorization: `Bearer ${token}` } : {};
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		try {
+			const res = await fetch(url, { headers, signal: AbortSignal.timeout(3000) });
+			if (res.ok) {
+				const body = await res.json().catch(() => ({}));
+				if (body.ok && body.mode === 'node') return true;
+			}
+		} catch {}
+		await new Promise((r) => setTimeout(r, 750));
+	}
+	return false;
+}
+
 async function addRunner() {
 	const suggested = `node-${generateToken().slice(0, 6)}`;
 
@@ -301,12 +331,18 @@ async function addRunner() {
 	});
 	if (cancelled(name)) return;
 
-	const port = await clack.text({
-		message: 'Local port the node listens on',
-		placeholder: '3002',
-		defaultValue: '3002'
-	});
-	if (cancelled(port)) return;
+	let port;
+	for (;;) {
+		port = await clack.text({
+			message: 'Local port the node listens on',
+			placeholder: '3002',
+			defaultValue: '3002'
+		});
+		if (cancelled(port)) return;
+		const pid = findPidOnPort(Number(port));
+		if (!pid) break;
+		clack.log.warn(pc.yellow(`Port ${port} is already in use (pid ${pid}) — choose another.`));
+	}
 
 	const defToken = process.env.NODE_TOKEN || generateToken();
 	const token = await clack.text({
@@ -325,40 +361,74 @@ async function addRunner() {
 	if (cancelled(urlInput)) return;
 
 	const url = resolveNodeUrl(urlInput || defaultUrl);
+	const local = isLocalUrl(url);
 
 	const s = clack.spinner();
 	s.start(`Registering "${name}" with the primary...`);
-	let id;
+	let id, reused;
 	try {
-		const res = await registerWithPrimary({
+		({ id, reused } = await registerWithPrimary({
 			primary: API_URL,
 			name,
 			url,
 			token,
 			browser: 'chromium'
-		});
-		id = res.id;
+		}));
 		s.stop(
-			res.reused
-				? pc.green(`Reusing existing runner "${name}"`)
-				: pc.green(`Registered "${name}" (id ${id})`)
+			reused ? pc.green(`Reusing existing runner "${name}"`) : pc.green(`Registered "${name}"`)
 		);
 	} catch (e) {
 		s.stop(pc.red(`Could not register "${name}": ${e.message}`));
 		return;
 	}
 
-	prepareNodeEnv();
-
-	const startNow = await clack.confirm({ message: 'Start this runner now?' });
-	if (!cancelled(startNow) && startNow) {
-		const entry = startNode({ id, port, token });
-		clack.log.success(pc.green(`Started "${name}" on port ${port} (pid ${entry.pid})`));
+	// Verify the node actually answers before keeping the registration — start a
+	// local one here, expect a remote one to already be up. A failed check rolls
+	// the registration back so no dead runner is left behind.
+	let entry = null;
+	let ok = false;
+	if (local) {
+		prepareNodeEnv();
+		entry = startNode({ id, port, token });
+		s.start(`Waiting for "${name}" to come up on port ${port}...`);
+		ok = await nodeIsUp(`http://localhost:${port}`, token, 20000);
+		s.stop(ok ? pc.green(`"${name}" is up (pid ${entry.pid})`) : pc.red(`"${name}" did not start`));
+	} else {
+		s.start(`Checking for a Plum node at ${url}...`);
+		ok = await nodeIsUp(url, token, 8000);
+		s.stop(ok ? pc.green(`"${name}" is reachable`) : pc.red(`No Plum node answered at ${url}`));
 	}
+
+	if (ok) {
+		clack.log.success(pc.green(`Runner "${name}" is ready.`));
+		return;
+	}
+
+	if (entry) stopNode(id, Number(port));
+	if (!reused) {
+		try {
+			await deleteRunner(id);
+		} catch {}
+	}
+	if (entry?.logFile) clack.note(entry.logFile, 'Node log');
+	clack.log.warn(
+		pc.yellow(
+			reused
+				? `"${name}" stays registered but is unreachable — check the port/URL.`
+				: `"${name}" was not registered — check the port/URL and try again.`
+		)
+	);
 }
 
 async function main() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Manage Runners  ')));
+
+	if (!AUTH_HEADER.Authorization) {
+		clack.log.warn(
+			'No runner credential found on this machine — stop / restart / delete will be rejected.\n' +
+				'Run this from a folder where you started a node, or export PLUM_MCP_KEY.'
+		);
+	}
 
 	for (;;) {
 		const s = clack.spinner();
