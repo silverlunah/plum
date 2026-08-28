@@ -112,7 +112,11 @@ try {
 			// When running from a temp dir there is no tsconfig.json above it, so
 			// ts-node falls back to defaults that may conflict with the Node version.
 			// Point it at the backend tsconfig explicitly.
-			...(execCwd && { TS_NODE_PROJECT: path.resolve(__dirname, '..', '..', 'tsconfig.json') })
+			...(execCwd && { TS_NODE_PROJECT: path.resolve(__dirname, '..', '..', 'tsconfig.json') }),
+			// tests/utils/browser.ts and hooks.ts are a thin pass-through to this —
+			// an absolute path works the same whether cwd is backend/ (local run) or
+			// a temp dir with no relation to backend/ (a dispatched node run).
+			PLUM_RUNTIME_PATH: path.resolve(__dirname, '..', '..', 'lib', 'plumTestRuntime.js')
 		}
 	});
 } catch (error) {
