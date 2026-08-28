@@ -136,10 +136,9 @@ async function handleFullModeStartup(io, testsDir) {
 	watchReports(chokidar, io);
 }
 
-// Screenshot capture was removed in favor of rrweb (RRWEB_MIGRATION_PLAN.md
-// Phase 4) — the report rows referencing these files were already stripped by
-// a Prisma migration, so the files themselves are now pure dead weight. Safe
-// to run every startup: a second pass on an already-gone directory is a no-op.
+// Report rows no longer reference screenshot files (replaced by rrweb
+// recordings), so any leftover files on disk are dead weight. Safe to run
+// every startup: a second pass on an already-gone directory is a no-op.
 function cleanupLegacyScreenshots() {
 	const screenshotsDir = path.join(process.cwd(), 'reports', 'screenshots');
 	if (!fs.existsSync(screenshotsDir)) return;

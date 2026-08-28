@@ -15,6 +15,8 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
+// Wires up Plum's session recording — removing or reordering code here can silently break report replay.
+
 import { Before, After, BeforeStep, ITestCaseHookParameter } from '@cucumber/cucumber';
 import { setup, teardown, flushRecordings, markStepStart } from './browser';
 import dotenv from 'dotenv';
