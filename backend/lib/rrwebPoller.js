@@ -11,7 +11,7 @@ const path = require('path');
 // picked up here.
 function startRRwebPoller(ssDir, onRRwebBatch) {
 	const seenFiles = new Set();
-	return setInterval(() => {
+	function drain() {
 		try {
 			const files = fs
 				.readdirSync(ssDir)
@@ -28,7 +28,12 @@ function startRRwebPoller(ssDir, onRRwebBatch) {
 				} catch {}
 			}
 		} catch {}
-	}, 400);
+	}
+
+	const interval = setInterval(drain, 400);
+	// A scenario faster than one 400ms tick can exit before the interval ever
+	// fires — stop() drains once more so that last batch isn't dropped.
+	return { stop: () => (clearInterval(interval), drain()) };
 }
 
 module.exports = { startRRwebPoller };

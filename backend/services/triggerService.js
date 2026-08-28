@@ -79,7 +79,7 @@ function runAttempt({
 		proc.stderr.on('data', (d) => onLog(`[ERROR] ${d.toString()}`));
 
 		proc.on('close', (code) => {
-			clearInterval(ssPoller);
+			ssPoller.stop();
 			fs.rm(ssDir, { recursive: true, force: true }, () => {});
 			resolve({ code, raw: suppressSave ? readCucumberReportFile() : null });
 		});
