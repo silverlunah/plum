@@ -496,11 +496,11 @@ async function serverUpdate() {
 	const toVersion = readPlumVersion();
 	clack.log.success(`Plum CLI updated: ${fromVersion} → ${toVersion}`);
 
-	// Every install registers its directory here when configured (see
-	// configureServer/configureNode), so this finds them regardless of the cwd
-	// `plum update` happens to be run from.
+	// Servers register their directory here when configured; nodes live in the
+	// named store (~/.plum/nodes/). Both are found regardless of cwd.
 	const { getInstalls } = globalRegistryLib();
-	const { loadNodeConfig } = nodeRegisterLib();
+	const { listNodeNames } = nodeRegisterLib();
+	migrateLegacyNodes();
 
 	let restartedAnything = false;
 
@@ -536,15 +536,10 @@ async function serverUpdate() {
 		}
 	}
 
-	for (const dir of getInstalls('node')) {
-		const nodeCfg = loadNodeConfig(dir);
-		if (!nodeCfg.id) continue;
-
-		// This registry spans the whole machine, not just the directory
-		// `plum update` was run from.
+	for (const nodeName of listNodeNames()) {
 		if (interactiveAllowed()) {
 			const proceed = await clack.confirm({
-				message: `Found a registered node at ${dir} — restart it?`,
+				message: `Restart node "${nodeName}"?`,
 				initialValue: true
 			});
 			if (clack.isCancel(proceed)) cancelAndExit();
@@ -552,18 +547,15 @@ async function serverUpdate() {
 		}
 
 		// Always attempt the restart rather than gating on the local PID
-		// registry: that registry goes stale (manager restarts, pre-existing
-		// installs from before this tracking existed, etc.), and skipping the
-		// restart in those cases silently leaves the OLD node process running
-		// mismatched code — it still answers /api/ping so it looks "online"
-		// while actually being unreachable. `plum node restart` itself falls
-		// back to port-based PID discovery, so it's safe to call unconditionally.
-		clack.log.step(`Restarting node runner at ${dir}…`);
+		// registry: that registry goes stale and skipping the restart silently
+		// leaves the OLD node process running mismatched code — it still answers
+		// /api/ping so it looks "online" while actually being unreachable.
+		clack.log.step(`Restarting node "${nodeName}"…`);
 		try {
-			execSync('plum node restart', { stdio: 'inherit', cwd: dir });
+			execSync(`plum node restart ${nodeName}`, { stdio: 'inherit' });
 			restartedAnything = true;
 		} catch (e) {
-			clack.log.warn(`Could not restart node at ${dir}: ${e.message}`);
+			clack.log.warn(`Could not restart node "${nodeName}": ${e.message}`);
 		}
 	}
 
@@ -588,40 +580,70 @@ async function serverReconfig() {
  *                 Node flow
  * ------------------------------------------------------ */
 
-async function configureNode({ force }) {
-	const { generateToken, detectLanIp, loadNodeConfig, saveNodeConfig } = nodeRegisterLib();
-	const cwd = process.cwd();
+// `plum node <sub> <name>` — the first positional after the subcommand.
+function nodeNameArg() {
+	const a = process.argv[4];
+	return a && !a.startsWith('-') ? a : null;
+}
+
+// Resolves which node a command targets: an explicit name, or the only one on
+// this machine. Prints guidance and returns null when it can't decide.
+function resolveNodeName(explicit) {
+	if (explicit) return explicit;
+	const names = nodeRegisterLib().listNodeNames();
+	if (names.length === 1) return names[0];
+	if (names.length === 0) {
+		clack.log.warn('No nodes configured here yet — run `plum node start <name>`.');
+	} else {
+		clack.log.warn(`Name which node: ${names.map((n) => pc.cyan(n)).join('  ')}`);
+	}
+	return null;
+}
+
+// One-time: pull any legacy `.plum-node.json` (older `plum node start` wrote it
+// into whatever directory it ran in) into ~/.plum/nodes/<name>/.
+function migrateLegacyNodes() {
+	const { migrateLegacyNodes: run } = nodeRegisterLib();
+	const { getInstalls } = globalRegistryLib();
+	const imported = run(getInstalls('node'));
+	if (imported.length) {
+		clack.log.info(`Imported node config: ${imported.join(', ')}`);
+	}
+}
+
+async function configureNode({ force, name: nameArg }) {
+	const { generateToken, detectLanIp, loadNodeByName, saveNodeByName, nodeHome } =
+		nodeRegisterLib();
 	const args = process.argv.slice(3);
-	const saved = loadNodeConfig(cwd);
+
+	let name = nameArg ?? getFlag(args, '--name') ?? null;
+	const interactive =
+		force ||
+		(interactiveAllowed() &&
+			!name &&
+			!anyFlags(args, ['--primary', '--url', '--port', '--token', '--browser']));
+
+	if (!name && interactive) {
+		const v = await clack.text({
+			message: 'Runner name',
+			placeholder: 'node-1',
+			defaultValue: 'node-1'
+		});
+		if (clack.isCancel(v)) cancelAndExit();
+		name = v || 'node-1';
+	}
+	if (!name) name = `node-${generateToken().slice(0, 6)}`;
+
+	const saved = loadNodeByName(name);
 
 	let primary = getFlag(args, '--primary') ?? process.env.PRIMARY_URL ?? saved.primary ?? '';
 	// Not 3001 — that's the primary's default; a co-located node must not collide.
 	let port = getFlag(args, '--port') ?? saved.port ?? '3002';
 	let browser = getFlag(args, '--browser') ?? saved.browser ?? 'chromium';
 	let token = getFlag(args, '--token') ?? process.env.NODE_TOKEN ?? saved.token ?? generateToken();
-	let name = getFlag(args, '--name') ?? saved.name ?? `node-${token.slice(0, 6)}`;
-	// A provided --url is advertised verbatim; otherwise fall back to host:port.
 	let url = getFlag(args, '--url') ?? saved.url ?? '';
 
-	const hasFlags = anyFlags(args, [
-		'--primary',
-		'--url',
-		'--port',
-		'--token',
-		'--name',
-		'--browser'
-	]);
-	const interactive = force || (interactiveAllowed() && !hasFlags);
-
 	if (interactive) {
-		const nameVal = await clack.text({
-			message: 'Runner name',
-			placeholder: name,
-			defaultValue: name
-		});
-		if (clack.isCancel(nameVal)) cancelAndExit();
-		name = nameVal || name;
-
 		const primaryVal = await clack.text({
 			message: 'Your Plum server backend URL',
 			placeholder: primary || 'http://localhost:3001',
@@ -640,7 +662,7 @@ async function configureNode({ force }) {
 
 		const defaultUrl = url || `http://${detectLanIp()}:${port}`;
 		const urlVal = await clack.text({
-			message: 'The URL your Plum server calls to communicate with this node',
+			message: 'The URL your Plum server calls to reach this node',
 			placeholder: defaultUrl,
 			defaultValue: defaultUrl
 		});
@@ -655,7 +677,7 @@ async function configureNode({ force }) {
 		process.exit(1);
 	}
 
-	saveNodeConfig(cwd, {
+	saveNodeByName(name, {
 		id: saved.id ?? null,
 		name,
 		url,
@@ -665,47 +687,32 @@ async function configureNode({ force }) {
 		port,
 		pid: saved.pid ?? null
 	});
-	globalRegistryLib().registerInstall('node', cwd);
+	globalRegistryLib().registerInstall('node', nodeHome(name));
 	return { primary, port, browser, token, name, url };
 }
 
 async function registerNode({ primary, name, url, token, browser, port }) {
-	const { registerWithPrimary, loadNodeConfig, saveNodeConfig } = nodeRegisterLib();
+	const { registerWithPrimary, loadNodeByName, saveNodeByName } = nodeRegisterLib();
 	let registeredId = null;
 
 	if (primary) {
 		const s = clack.spinner();
-		s.start(`Registering with primary at ${primary}...`);
+		s.start(`Registering "${name}" with primary at ${primary}...`);
 		try {
 			const { id, reused } = await registerWithPrimary({ primary, name, url, token, browser });
 			registeredId = id;
-			s.stop(pc.green(reused ? '✓ Reusing existing runner on primary' : '✓ Registered on primary'));
+			s.stop(
+				pc.green(reused ? `✓ Updated "${name}" on primary` : `✓ Registered "${name}" on primary`)
+			);
 		} catch (e) {
 			s.stop(pc.yellow(`Could not register with primary: ${e.message}`));
-			clack.log.warn('Add this runner manually using the details below.');
 		}
 	} else {
-		clack.log.info('No primary set — add this runner manually on your Plum server.');
+		clack.log.warn('No --primary given — the node is configured but not registered anywhere.');
 	}
 
-	clack.note(
-		[
-			registeredId ? `id:      ${registeredId}` : 'id:      (assigned when added on the server)',
-			`name:    ${name}`,
-			`url:     ${url}`,
-			`token:   ${token}`,
-			`browser: ${browser}`
-		].join('\n'),
-		'Runner details'
-	);
-
-	clack.log.info(
-		`The url above must be reachable from the primary. The local port (${port}) is only what this node listens on — forward your proxy/domain to it.`
-	);
-
-	const cwd = process.cwd();
-	saveNodeConfig(cwd, {
-		...loadNodeConfig(cwd),
+	saveNodeByName(name, {
+		...loadNodeByName(name),
 		id: registeredId,
 		name,
 		url,
@@ -717,168 +724,171 @@ async function registerNode({ primary, name, url, token, browser, port }) {
 	return registeredId;
 }
 
-async function nodeStart({ reconfig }) {
-	const backendDir = path.join(plumRoot, 'backend');
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Runner  ')));
+// Register a node with the primary and start its process here — this is the one
+// path both `plum node start` and manage-runners' "Add new runner" run.
+async function bringNodeUp(cfg) {
+	const { prepareEnv, startNode, findPidOnPort, killPort, nodeReachable } = runnerProcessLib();
 
-	const { loadNodeConfig } = nodeRegisterLib();
-	const { statusOf } = runnerProcessLib();
-	const existing = loadNodeConfig(process.cwd());
-
-	// One folder holds one node's config (.plum-node.json). Starting a
-	// different-named node here would overwrite it — orphaning the previous
-	// node's still-running process and losing the config needed to stop it.
-	const wantName = getFlag(process.argv.slice(3), '--name');
-	if (!reconfig && existing.name && wantName && wantName !== existing.name) {
-		clack.log.error(
-			`This folder is set up for node "${existing.name}". Run each node from its own folder:\n\n` +
-				`  mkdir -p ~/plum-nodes/${wantName} && cd ~/plum-nodes/${wantName}\n` +
-				`  plum node start --name ${wantName} …`
-		);
-		clack.outro(pc.red('Not started — use a fresh folder for this node.'));
+	const registeredId = await registerNode(cfg);
+	if (!registeredId) {
+		clack.outro(pc.red('Node not started.'));
 		process.exitCode = 1;
 		return;
 	}
 
-	// Re-running `node start` on an already-running node used to spawn a second
-	// process on the same port (orphaning the first) and re-register a duplicate
-	// runner on the primary. Route to the same menu this command ends on anyway
-	// instead of repeating the whole configure/register/spawn dance.
-	if (!reconfig && existing.id && statusOf(String(existing.id)) === 'running') {
-		clack.log.info(
-			`Node "${existing.name ?? existing.id}" is already running from this folder — opening the runner menu instead of starting a new one.`
-		);
-		await openManageRunnersMenu(existing.primary);
-		clack.outro(`Manage runners anytime: ${pc.cyan('plum manage-runners')}`);
-		return;
-	}
-
-	const cfg = await configureNode({ force: reconfig });
-	const registeredId = await registerNode(cfg);
-
-	const {
-		prepareEnv,
-		startNode: startNodeProc,
-		findPidOnPort,
-		killPort,
-		nodeReachable
-	} = runnerProcessLib();
-
 	clack.log.step('Preparing environment (deps + browsers)...');
 	try {
 		prepareEnv();
-		clack.log.success('Environment ready.');
 	} catch (e) {
 		clack.log.error(
-			`Environment prep failed: ${e.message}\nNot starting the node — it would come up "running" but fail every dispatched test at the browser-launch step.`
+			`Environment prep failed: ${e.message} — not starting (tests would fail at browser launch).`
 		);
 		clack.outro(pc.red('Node not started.'));
 		process.exitCode = 1;
 		return;
 	}
 
-	if (registeredId) {
-		try {
-			// A stale process on this port makes the new node die on EADDRINUSE
-			// after a silent retry loop — clear it first (almost always a
-			// previous instance of this same node).
-			if (findPidOnPort(Number(cfg.port))) {
-				clack.log.step(`Port ${cfg.port} is in use — freeing it...`);
-				await killPort(Number(cfg.port));
-			}
-			const entry = startNodeProc({ id: String(registeredId), port: cfg.port, token: cfg.token });
-			clack.log.step(`Starting "${cfg.name}" (pid ${entry.pid})...`);
-			const up = await nodeReachable(`http://localhost:${cfg.port}`, cfg.token, 15000);
-			if (up) {
-				clack.log.success(
-					pc.green(
-						`Node "${cfg.name}" running in background (pid ${entry.pid}) — logs at ${entry.logFile}`
-					)
-				);
-			} else {
-				clack.log.error(
-					pc.red(
-						`Node "${cfg.name}" did not come up on port ${cfg.port}. Check ${entry.logFile} — the port may still be held by another process.`
-					)
-				);
-				process.exitCode = 1;
-			}
-		} catch (e) {
-			clack.log.warn(`Could not start runner process: ${e.message}`);
-		}
-	} else {
-		clack.log.info('Runner not registered on primary — use the menu below to add and start it.');
+	if (findPidOnPort(Number(cfg.port))) {
+		clack.log.step(`Port ${cfg.port} is in use — freeing it...`);
+		await killPort(Number(cfg.port));
 	}
 
-	await openManageRunnersMenu(cfg.primary);
-	clack.outro(`Manage runners anytime: ${pc.cyan('plum manage-runners')}`);
+	const entry = startNode({ id: String(registeredId), port: cfg.port, token: cfg.token });
+	clack.log.step(`Starting "${cfg.name}" on port ${cfg.port} (pid ${entry.pid})...`);
+	const up = await nodeReachable(`http://localhost:${cfg.port}`, cfg.token, 15000);
+	if (up) {
+		clack.outro(
+			pc.green(`Node "${cfg.name}" running (pid ${entry.pid}) — logs at ${entry.logFile}`)
+		);
+	} else {
+		clack.log.error(
+			pc.red(
+				`Node "${cfg.name}" isn't answering on port ${cfg.port}. Check ${entry.logFile}. ` +
+					`If ${cfg.url} is a proxy/domain, make sure it forwards here on ${cfg.port}.`
+			)
+		);
+		process.exitCode = 1;
+		clack.outro(pc.red('Node started but unverified.'));
+	}
 }
 
-async function nodeRestart() {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Restart  ')));
-	const { loadNodeConfig } = nodeRegisterLib();
-	const { prepareEnv, stopNode, startNode, killPort, nodeReachable } = runnerProcessLib();
-	const cfg = loadNodeConfig(process.cwd());
+async function nodeStart({ reconfig, name }) {
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Runner  ')));
+	migrateLegacyNodes();
+	const cfg = await configureNode({ force: reconfig, name });
+	await bringNodeUp(cfg);
+}
 
+async function nodeRestart({ name: nameArg }) {
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Restart  ')));
+	migrateLegacyNodes();
+	const { loadNodeByName } = nodeRegisterLib();
+	const { prepareEnv, stopNode, startNode, killPort, nodeReachable } = runnerProcessLib();
+
+	const target = resolveNodeName(nameArg);
+	if (!target) return clack.outro(pc.dim('Done.'));
+	const cfg = loadNodeByName(target);
 	if (!cfg.id) {
-		clack.log.warn('No node configured in this folder — run `plum node start` first.');
-		clack.outro(pc.dim('Done.'));
+		clack.outro(pc.yellow(`"${target}" isn't registered — run \`plum node start ${target}\`.`));
 		return;
 	}
 
-	// Passing the port lets stopNode fall back to port-based PID discovery when
-	// the local registry entry is missing or stale (e.g. after `plum update`
-	// reinstalls in a fresh process) — otherwise a still-running old process is
-	// left bound to the port while a new one starts up alongside it.
-	const stopped = stopNode(String(cfg.id), Number(cfg.port));
-	if (stopped) {
-		clack.log.success(`Stopped runner "${cfg.name ?? cfg.id}".`);
-	} else {
-		clack.log.info('Node was not running — starting fresh.');
-	}
-
-	clack.log.step('Refreshing dependencies…');
+	stopNode(String(cfg.id), Number(cfg.port));
 	try {
 		prepareEnv();
 	} catch (e) {
-		clack.log.error(
-			`Dependency refresh failed: ${e.message}\nNot restarting the node — it would come up "running" but fail every dispatched test at the browser-launch step. The node stays stopped until this is fixed and \`plum node restart\` is run again.`
-		);
+		clack.log.error(`Dependency refresh failed: ${e.message}`);
 		clack.outro(pc.red('Node not restarted.'));
 		process.exitCode = 1;
 		return;
 	}
 
-	try {
-		await killPort(Number(cfg.port));
-		const entry = startNode({ id: String(cfg.id), port: cfg.port, token: cfg.token });
-		const up = await nodeReachable(`http://localhost:${cfg.port}`, cfg.token, 15000);
-		if (up) {
-			clack.log.success(
-				pc.green(`Node "${cfg.name}" restarted (pid ${entry.pid}) — logs at ${entry.logFile}`)
-			);
-			clack.outro(pc.green('Node restarted.'));
-		} else {
-			clack.log.error(
-				pc.red(
-					`Node "${cfg.name}" did not come back up on port ${cfg.port}. Check ${entry.logFile}.`
-				)
-			);
-			process.exitCode = 1;
-			clack.outro(pc.red('Node not restarted.'));
-		}
-	} catch (e) {
-		clack.log.warn(`Could not restart node: ${e.message}`);
-		clack.outro(pc.red('Node not restarted.'));
+	await killPort(Number(cfg.port));
+	const entry = startNode({ id: String(cfg.id), port: cfg.port, token: cfg.token });
+	const up = await nodeReachable(`http://localhost:${cfg.port}`, cfg.token, 15000);
+	if (up) {
+		clack.outro(pc.green(`"${target}" restarted (pid ${entry.pid}).`));
+	} else {
+		clack.log.error(
+			pc.red(`"${target}" didn't come back on port ${cfg.port} — check ${entry.logFile}.`)
+		);
+		process.exitCode = 1;
+		clack.outro(pc.red('Restart unverified.'));
 	}
 }
 
-async function nodeReconfig() {
+async function nodeStop({ name: nameArg }) {
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Stop  ')));
+	migrateLegacyNodes();
+	const { loadNodeByName } = nodeRegisterLib();
+	const { stopNode, killPort } = runnerProcessLib();
+
+	const target = resolveNodeName(nameArg);
+	if (!target) return clack.outro(pc.dim('Done.'));
+	const cfg = loadNodeByName(target);
+	const stopped = stopNode(String(cfg.id ?? target), cfg.port ? Number(cfg.port) : null);
+	if (cfg.port) await killPort(Number(cfg.port));
+	clack.outro(stopped ? pc.green(`Stopped "${target}".`) : pc.dim(`"${target}" wasn't running.`));
+}
+
+async function nodeList() {
+	migrateLegacyNodes();
+	const { listNodeNames, loadNodeByName } = nodeRegisterLib();
+	const { statusOf } = runnerProcessLib();
+	const names = listNodeNames();
+	if (names.length === 0) {
+		clack.log.info('No nodes on this machine — add one with `plum node start <name>`.');
+		return;
+	}
+	for (const n of names) {
+		const c = loadNodeByName(n);
+		const running = c.id && statusOf(String(c.id)) === 'running';
+		console.log(
+			`${running ? pc.green('●') : pc.dim('○')} ${n.padEnd(16)} ${pc.dim((c.url || '') + '  :' + (c.port || '?'))}`
+		);
+	}
+}
+
+async function nodeDelete({ name: nameArg }) {
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Delete  ')));
+	migrateLegacyNodes();
+	const { loadNodeByName, deleteNodeByName, nodeHome } = nodeRegisterLib();
+	const { stopNode, killPort } = runnerProcessLib();
+	const { unregisterInstall } = globalRegistryLib();
+
+	const target = nameArg || resolveNodeName(null);
+	if (!target) return clack.outro(pc.dim('Done.'));
+	const cfg = loadNodeByName(target);
+
+	stopNode(String(cfg.id ?? target), cfg.port ? Number(cfg.port) : null);
+	if (cfg.port) await killPort(Number(cfg.port));
+
+	if (cfg.id && cfg.primary) {
+		try {
+			const res = await fetch(`${cfg.primary.replace(/\/$/, '')}/runners/${cfg.id}`, {
+				method: 'DELETE',
+				headers: { Authorization: `Bearer ${cfg.token}` },
+				signal: AbortSignal.timeout(10000)
+			});
+			clack.log[res.ok ? 'success' : 'warn'](
+				res.ok ? 'Removed from primary.' : `Primary responded HTTP ${res.status}`
+			);
+		} catch (e) {
+			clack.log.warn(`Could not reach primary: ${e.message}`);
+		}
+	}
+
+	deleteNodeByName(target);
+	unregisterInstall('node', nodeHome(target));
+	clack.outro(pc.green(`Deleted "${target}" — process, local config, and primary registration.`));
+}
+
+async function nodeReconfig({ name }) {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Reconfigure Node  ')));
-	const cfg = await configureNode({ force: true });
+	migrateLegacyNodes();
+	const cfg = await configureNode({ force: true, name });
 	await registerNode(cfg);
-	clack.log.success("Saved. Run 'plum node start' to launch this node.");
-	clack.outro(pc.dim('Done.'));
+	clack.outro(pc.dim(`Saved. Run \`plum node restart ${cfg.name}\` to apply.`));
 }
 
 // stop/restart/delete on the /runners API want a registered runner's token
@@ -1065,8 +1075,8 @@ switch (command) {
 					'| `plum server reconfig` | Change server URL/ports without starting |',
 					'| `plum stop` | Stop the server |',
 					'| `plum create-step` | Interactively generate a new step definition |',
-					'| `plum node start` | Start a runner node and auto-register it with the server |',
-					'| `plum node stop` | Stop the runner node started from this folder |',
+					'| `plum node start <name>` | Register a runner node and start it here |',
+					'| `plum node list` | List this machine’s nodes |',
 					'',
 					'---',
 					'',
@@ -1305,64 +1315,68 @@ switch (command) {
 		break;
 
 	case 'node': {
+		const nodeName = nodeNameArg();
+		if (subcommand === '-h' || subcommand === '--help') {
+			console.log(
+				[
+					'',
+					`${pc.bold('Usage:')} plum node <command> [name] [options]`,
+					'',
+					'  start [name]     register a node with the primary and start it here',
+					'  list             list this machine’s nodes and their status',
+					'  restart [name]   stop, refresh deps, restart a node',
+					'  stop [name]      stop a node',
+					'  delete <name>    stop it, delete its config, unregister it from the primary',
+					'  reconfig [name]  re-enter settings and re-register, without starting',
+					'',
+					'  Options for start: --primary <url> --url <url> --port <n> --token <s> --browser <chromium|firefox>',
+					''
+				].join('\n')
+			);
+			break;
+		}
 		if (subcommand === 'stop') {
-			clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Runner  ')));
-			const { loadNodeConfig, saveNodeConfig } = nodeRegisterLib();
-			const { stopNode } = runnerProcessLib();
-			const cfg = loadNodeConfig(process.cwd());
-
-			if (cfg.id) {
-				const stopped = stopNode(String(cfg.id), Number(cfg.port));
-				if (stopped) {
-					clack.log.success(`Stopped runner "${cfg.name ?? cfg.id}".`);
-				} else if (cfg.pid) {
-					try {
-						process.kill(cfg.pid, 'SIGTERM');
-						clack.log.success(`Stopped node process (pid ${cfg.pid}).`);
-						saveNodeConfig(process.cwd(), { ...cfg, pid: null });
-					} catch {
-						clack.log.info('No running process found — it may already be stopped.');
-					}
-				} else {
-					clack.log.info('No running process found — it may already be stopped.');
-				}
-			} else if (cfg.pid) {
-				try {
-					process.kill(cfg.pid, 'SIGTERM');
-					clack.log.success(`Stopped node process (pid ${cfg.pid}).`);
-					saveNodeConfig(process.cwd(), { ...cfg, pid: null });
-				} catch {
-					clack.log.info('No running process found — it may already be stopped.');
-				}
-			} else {
-				clack.log.info('No node started from this folder.');
-				clack.log.info(`Use ${pc.cyan('plum manage-runners')} to stop running nodes.`);
-			}
-			clack.outro(pc.dim('Done.'));
+			await nodeStop({ name: nodeName });
 			break;
 		}
-
 		if (subcommand === 'restart') {
-			await nodeRestart();
+			await nodeRestart({ name: nodeName });
 			break;
 		}
-
 		if (subcommand === 'reconfig') {
-			await nodeReconfig();
+			await nodeReconfig({ name: nodeName });
 			break;
 		}
-
-		await nodeStart({ reconfig: false });
+		if (subcommand === 'list' || subcommand === 'ls') {
+			await nodeList();
+			break;
+		}
+		if (subcommand === 'delete' || subcommand === 'rm') {
+			await nodeDelete({ name: nodeName });
+			break;
+		}
+		// `plum node start [name]` or bare `plum node` or `plum node <name>`
+		await nodeStart({
+			reconfig: false,
+			name:
+				subcommand === 'start'
+					? nodeName
+					: subcommand && !subcommand.startsWith('-')
+						? subcommand
+						: null
+		});
 		break;
 	}
 
 	case 'manage-runners': {
-		const { loadNodeConfig } = nodeRegisterLib();
-		const saved = loadNodeConfig(process.cwd());
+		const { listNodeNames, loadNodeByName } = nodeRegisterLib();
+		const firstNode = listNodeNames()
+			.map(loadNodeByName)
+			.find((c) => c.primary);
 		const primaryUrl =
 			getFlag(process.argv.slice(3), '--primary') ??
 			process.env.PLUM_API_URL ??
-			saved.primary ??
+			firstNode?.primary ??
 			'http://localhost:3001';
 		await openManageRunnersMenu(primaryUrl);
 		break;
@@ -1415,19 +1429,24 @@ switch (command) {
 		console.log(
 			'  update               Update Plum and restart whichever is running (server/node)'
 		);
-		console.log('  node start           Start a runner node (interactive), then open runner menu');
-		console.log('    --primary <url>    Primary Plum server to auto-register with');
+		console.log('  node start [name]    Register a node with the primary and start it here');
+		console.log('    --primary <url>    Primary Plum server to register with');
 		console.log('    --url <url>        Address the primary calls back (default: <lan-ip>:<port>;');
 		console.log(
 			'                       pass a domain like https://node1.example behind a TLS proxy)'
 		);
-		console.log('    --port <n>         Local HTTP port the node listens on (default: 3001)');
+		console.log('    --port <n>         Local HTTP port the node listens on (default: 3002)');
 		console.log('    --token <secret>   Auth token (auto-generated + saved if omitted)');
-		console.log('    --name <name>      Runner name shown on the primary (default: node-<rand>)');
 		console.log('    --browser <name>   chromium | firefox (default: chromium)');
-		console.log('  node restart         Stop, refresh deps, and restart the node runner');
-		console.log('  node reconfig        Re-enter node settings + re-register, without starting');
-		console.log('  node stop            Stop the runner node started from this folder');
+		console.log('  node list            List this machine’s nodes and their status');
+		console.log('  node restart [name]  Stop, refresh deps, and restart a node');
+		console.log('  node stop [name]     Stop a node');
+		console.log(
+			'  node delete <name>   Stop it, remove its config, and unregister it from the primary'
+		);
+		console.log(
+			'  node reconfig [name] Re-enter a node’s settings and re-register, without starting'
+		);
 		console.log('  manage-runners       Open the runner management menu');
 		console.log(
 			'    --primary <url>    Primary server URL (default: saved config or localhost:3001)'

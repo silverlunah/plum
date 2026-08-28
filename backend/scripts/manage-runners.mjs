@@ -15,41 +15,37 @@
  * Env:    PLUM_API_URL   primary server API base (default http://localhost:3001)
  */
 
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as clack from '@clack/prompts';
 import pc from 'picocolors';
 import runnerProcess from '../lib/runnerProcess.js';
 import nodeRegister from '../lib/nodeRegister.js';
-import globalRegistry from '../lib/globalRegistry.js';
 
-const {
-	isLocalUrl,
-	parsePort,
-	pruneDead,
-	statusOf,
-	prepareEnv,
-	startNode,
-	stopNode,
-	findPidOnPort,
-	killPort,
-	nodeReachable
-} = runnerProcess;
-const { generateToken, registerWithPrimary, detectLanIp, loadNodeConfig, saveNodeConfig } =
-	nodeRegister;
+const { isLocalUrl, parsePort, pruneDead, statusOf, findPidOnPort } = runnerProcess;
+const { generateToken, detectLanIp, loadNodeByName } = nodeRegister;
 
 const API_URL = process.env.PLUM_API_URL || 'http://localhost:3001';
+
+// This menu is a thin front-end over the `plum node` commands for anything that
+// touches a node on THIS machine (add / start / restart / stop / delete), so
+// there is exactly one code path and it matches `plum node start` exactly.
+const PLUM_BIN = path.resolve(fileURLToPath(import.meta.url), '../../../bin/plum.js');
+function plumNode(...args) {
+	execFileSync(process.execPath, [PLUM_BIN, 'node', ...args], { stdio: 'inherit' });
+}
 
 const cancelled = (v) => clack.isCancel(v);
 
 // The mutating /runners routes accept any registered runner's own token in
 // place of an admin session (runnerOrAdmin.js). Use one: handed in by `plum`
-// (which reads it from the primary's DB when run on the server host), or from
-// a node's own .plum-node.json — this folder, then any other node install.
+// (which reads it from the primary's DB on the server host), or any node's own
+// stored token.
 function resolveRunnerToken() {
 	if (process.env.PLUM_RUNNER_TOKEN) return process.env.PLUM_RUNNER_TOKEN;
-	const cwdToken = loadNodeConfig(process.cwd()).token;
-	if (cwdToken) return cwdToken;
-	for (const dir of globalRegistry.getInstalls('node')) {
-		const token = loadNodeConfig(dir).token;
+	for (const name of nodeRegister.listNodeNames()) {
+		const token = loadNodeByName(name).token;
 		if (token) return token;
 	}
 	return null;
@@ -162,55 +158,27 @@ function statusBadge(r) {
 	return `${dot} ${detail}`;
 }
 
-/**
- * Installs backend deps + the Playwright browser so a freshly started node can
- * actually launch a browser. Runs with inherited stdio (outside any spinner) so
- * npm/playwright progress is visible. A failure is surfaced but non-fatal — the
- * operator can retry or fix it manually.
- */
-function prepareNodeEnv() {
-	clack.log.step('Preparing node environment (deps + browsers)...');
-	try {
-		prepareEnv();
-		clack.log.success(pc.green('Environment ready.'));
-		return true;
-	} catch (e) {
-		clack.log.warn(pc.yellow(`Environment prep failed: ${e.message}`));
-		return false;
-	}
-}
-
 async function runAction(r) {
-	const options = [];
+	const localCfg = loadNodeByName(r.name);
+	const isLocalNode = Boolean(localCfg.id) && localCfg.id === r.id;
 
-	if (r.managed) {
-		// Local, and this manager owns its process — control it directly by PID.
+	const options = [];
+	if (isLocalNode) {
 		options.push(
+			{ value: 'restart', label: pc.yellow(r.online ? 'Restart' : 'Start') },
 			{ value: 'stop', label: pc.red('Stop') },
-			{ value: 'restart', label: pc.yellow('Restart') },
 			{ value: 'log', label: 'Show log path' },
 			{ value: 'ping', label: 'Ping' }
 		);
 	} else if (r.online) {
-		// Remote, or local but started outside this manager (no PID to own) —
-		// either way the runner's own /api/shutdown|restart endpoints are
-		// reachable over the network via the primary's control routes.
 		options.push(
 			{ value: 'stop', label: pc.red('Stop') },
 			{ value: 'restart', label: pc.yellow('Restart') },
 			{ value: 'ping', label: 'Ping' }
 		);
 	} else {
-		// Offline and nothing is listening to control remotely — offer Start
-		// unconditionally rather than gating on address-based "is this local"
-		// detection. That heuristic breaks the moment this machine's address
-		// differs from what was registered (DHCP renewal, VPN, multiple NICs),
-		// permanently trapping an offline runner with no way back. Starting
-		// here is always safe to attempt: it spawns a managed process this menu
-		// can immediately Stop again if the address guess was wrong.
-		options.push({ value: 'start', label: pc.green('Start') }, { value: 'ping', label: 'Ping' });
+		options.push({ value: 'ping', label: 'Ping' });
 	}
-
 	options.push(
 		{ value: 'token', label: 'Show token' },
 		{ value: 'delete', label: pc.red('Delete') },
@@ -220,52 +188,11 @@ async function runAction(r) {
 	const action = await clack.select({ message: `${r.name} — ${r.url}`, options });
 	if (cancelled(action) || action === 'back') return;
 
-	// Prefer the port this runner actually last ran on (remembered in the
-	// local registry even after being stopped) over parsing the URL — the URL
-	// may not carry an explicit port at all, and would otherwise silently fall
-	// back to the primary's own default port.
-	const remembered = runnerProcess.loadRegistry()[r.id]?.port;
-	const port = remembered || parsePort(r.url);
-
-	if (action === 'start') {
-		const s = clack.spinner();
-		s.start(`Freeing port ${port}...`);
-		const killed = await killPort(Number(port));
-		s.stop(killed ? pc.dim(`Freed port ${port}`) : pc.dim(`Port ${port} was already free`));
-
-		prepareNodeEnv();
-		const entry = startNode({ id: r.id, port, token: r.token });
-		clack.log.success(pc.green(`Started "${r.name}" on port ${port} (pid ${entry.pid})`));
-	} else if (action === 'stop') {
-		if (r.managed) {
-			const ok = stopNode(r.id);
-			await killPort(Number(port));
-			clack.log.success(
-				ok ? pc.green(`Stopped "${r.name}"`) : pc.dim(`"${r.name}" was not running`)
-			);
-		} else {
-			const s = clack.spinner();
-			s.start(`Stopping "${r.name}"...`);
+	if (action === 'restart') {
+		if (isLocalNode) {
 			try {
-				await controlRunner(r.id, 'stop');
-				s.stop(pc.green(`Stopped "${r.name}"`));
-			} catch (e) {
-				s.stop(pc.red(`Could not stop "${r.name}": ${e.message}`));
-			} finally {
-				// Belt-and-suspenders: if this runner happens to be local (or
-				// the network shutdown call above silently failed), make sure
-				// nothing is left bound to its port.
-				await killPort(Number(port));
-			}
-		}
-	} else if (action === 'restart') {
-		if (r.managed) {
-			const s = clack.spinner();
-			s.start(`Restarting "${r.name}"...`);
-			stopNode(r.id);
-			await killPort(Number(port));
-			const entry = startNode({ id: r.id, port, token: r.token });
-			s.stop(pc.green(`Restarted "${r.name}" (pid ${entry.pid})`));
+				plumNode('restart', r.name);
+			} catch {}
 		} else {
 			const s = clack.spinner();
 			s.start(`Restarting "${r.name}"...`);
@@ -276,31 +203,50 @@ async function runAction(r) {
 				s.stop(pc.red(`Could not restart "${r.name}": ${e.message}`));
 			}
 		}
+	} else if (action === 'stop') {
+		if (isLocalNode) {
+			try {
+				plumNode('stop', r.name);
+			} catch {}
+		} else {
+			const s = clack.spinner();
+			s.start(`Stopping "${r.name}"...`);
+			try {
+				await controlRunner(r.id, 'stop');
+				s.stop(pc.green(`Stopped "${r.name}"`));
+			} catch (e) {
+				s.stop(pc.red(`Could not stop "${r.name}": ${e.message}`));
+			}
+		}
+	} else if (action === 'delete') {
+		const confirmed = await clack.confirm({
+			message: `Delete "${r.name}" — its process, local config, and primary registration?`,
+			initialValue: false
+		});
+		if (cancelled(confirmed) || !confirmed) return;
+		if (isLocalNode) {
+			try {
+				plumNode('delete', r.name);
+			} catch {}
+		} else {
+			const s = clack.spinner();
+			s.start(`Deleting "${r.name}"...`);
+			try {
+				await deleteRunner(r.id);
+				s.stop(pc.green(`Deleted "${r.name}"`));
+			} catch (e) {
+				s.stop(pc.red(`Could not delete "${r.name}": ${e.message}`));
+			}
+		}
 	} else if (action === 'log') {
-		const entry = runnerProcess.loadRegistry()[r.id];
-		clack.note(entry?.logFile ?? '(no log file)', 'Log file');
+		clack.note(runnerProcess.loadRegistry()[r.id]?.logFile ?? '(no log file)', 'Log file');
 	} else if (action === 'token') {
-		clack.note(r.token, 'Auth token');
+		clack.note(localCfg.token || '(stored on the node’s own machine)', 'Auth token');
 	} else if (action === 'ping') {
 		const s = clack.spinner();
 		s.start(`Pinging "${r.name}"...`);
 		const online = await pingRunner(r.id);
 		s.stop(online ? pc.green(`"${r.name}" is reachable`) : pc.red(`"${r.name}" is unreachable`));
-	} else if (action === 'delete') {
-		const confirmed = await clack.confirm({
-			message: `Delete runner "${r.name}"? This removes it from the server.`,
-			initialValue: false
-		});
-		if (cancelled(confirmed) || !confirmed) return;
-		const s = clack.spinner();
-		s.start(`Deleting "${r.name}"...`);
-		if (r.local) stopNode(r.id, Number(parsePort(r.url)));
-		try {
-			await deleteRunner(r.id);
-			s.stop(pc.green(`Deleted "${r.name}"`));
-		} catch (e) {
-			s.stop(pc.red(`Could not delete "${r.name}": ${e.message}`));
-		}
 	}
 }
 
@@ -317,7 +263,7 @@ async function addRunner() {
 	let port;
 	for (;;) {
 		port = await clack.text({
-			message: 'Local port the node listens on',
+			message: 'Local port this node listens on',
 			placeholder: '3002',
 			defaultValue: '3002'
 		});
@@ -345,79 +291,26 @@ async function addRunner() {
 
 	const url = resolveNodeUrl(urlInput || defaultUrl);
 
-	const s = clack.spinner();
-	s.start(`Registering "${name}" with the primary...`);
-	let id, reused;
+	// Exactly `plum node start` — register, start on this machine, verify,
+	// persist. One code path for both entry points.
 	try {
-		({ id, reused } = await registerWithPrimary({
-			primary: API_URL,
+		plumNode(
+			'start',
 			name,
+			'--primary',
+			API_URL,
+			'--url',
 			url,
+			'--port',
+			String(port),
+			'--token',
 			token,
-			browser: 'chromium'
-		}));
-		s.stop(
-			reused ? pc.green(`Reusing existing runner "${name}"`) : pc.green(`Registered "${name}"`)
+			'--browser',
+			'chromium'
 		);
-	} catch (e) {
-		s.stop(pc.red(`Could not register "${name}": ${e.message}`));
-		return;
+	} catch {
+		clack.log.warn(pc.yellow('Node start reported a problem — see the output above.'));
 	}
-
-	// A node whose URL points at another machine has to be started over there
-	// (`plum node start`), so registering it before it's up is normal — just
-	// tell the operator what to run. Only a node we can start from here gets
-	// started + verified, and rolled back if it never comes up.
-	if (!isLocalUrl(url)) {
-		s.start(`Checking ${url}...`);
-		const up = await nodeReachable(url, token, 5000);
-		s.stop(
-			up
-				? pc.green(`"${name}" registered and answering`)
-				: pc.yellow(`"${name}" registered — no node answering there yet`)
-		);
-		if (!up) {
-			clack.log.info(
-				`Start it on that host:\n  plum node start --name ${name} --url ${url} --port <port> ` +
-					`--primary ${API_URL} --token ${token}`
-			);
-		}
-		return;
-	}
-
-	prepareNodeEnv();
-	if (findPidOnPort(Number(port))) await killPort(Number(port));
-	const entry = startNode({ id, port, token });
-	s.start(`Starting "${name}" on port ${port}...`);
-	const up = await nodeReachable(`http://localhost:${port}`, token, 20000);
-	s.stop(up ? pc.green(`"${name}" is up (pid ${entry.pid})`) : pc.red(`"${name}" did not start`));
-
-	if (up) {
-		// Persist the same way `plum node start` does, so `plum node stop`/
-		// `restart` and `plum update`'s restart sweep can find this node too.
-		saveNodeConfig(process.cwd(), {
-			...loadNodeConfig(process.cwd()),
-			id,
-			name,
-			url,
-			token,
-			primary: API_URL,
-			browser: 'chromium',
-			port
-		});
-		globalRegistry.registerInstall('node', process.cwd());
-		clack.log.success(pc.green(`Runner "${name}" is ready.`));
-		return;
-	}
-
-	stopNode(id, Number(port));
-	if (!reused) {
-		try {
-			await deleteRunner(id);
-		} catch {}
-	}
-	if (entry.logFile) clack.note(entry.logFile, 'Node log');
-	clack.log.warn(pc.yellow(`"${name}" was not registered — check ${entry.logFile} and try again.`));
 }
 
 async function main() {
