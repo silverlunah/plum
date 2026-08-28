@@ -60,7 +60,8 @@ router.get('/report/:jobId', authGuard, (req, res) => {
 // Poll job status and streamed logs
 router.get('/execute/:jobId', authGuard, (req, res) => {
 	const offset = parseInt(req.query.offset || '0', 10);
-	const result = nodeExecutionService.pollJob(req.params.jobId, offset);
+	const rrwebOffset = parseInt(req.query.rrwebOffset || '0', 10);
+	const result = nodeExecutionService.pollJob(req.params.jobId, offset, rrwebOffset);
 	if (!result) return res.status(404).json({ error: 'Job not found' });
 	res.json(result);
 });

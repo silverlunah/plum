@@ -82,6 +82,9 @@ function startJob({
 	jobs[jobId] = {
 		status: JOB_STATUS.RUNNING,
 		logs: '',
+		// Drained by pollJob — the HTTP-poll fallback for a node with no reachable
+		// notifyPublicUrl to stream these back over a socket instead.
+		rrwebBatches: [],
 		exitCode: null,
 		startedAt: Date.now(),
 		meta: { tags: tags || '', browser, workers },
@@ -108,6 +111,7 @@ function startJob({
 	if (workers > 1) env.PARALLEL = String(workers);
 
 	const ssPoller = startRRwebPoller(ssDir, (batch) => {
+		jobs[jobId].rrwebBatches.push(batch);
 		primaryStream?.emit('rrweb-batch', batch);
 	});
 
@@ -123,7 +127,7 @@ function startJob({
 		primaryStream?.emit('log', text);
 	});
 	proc.on('close', (code) => {
-		clearInterval(ssPoller);
+		ssPoller.stop();
 		primaryStream?.close();
 		jobs[jobId].status = code === 0 ? JOB_STATUS.DONE : JOB_STATUS.ERROR;
 		jobs[jobId].exitCode = code;
@@ -151,14 +155,15 @@ function startJob({
 	return jobId;
 }
 
-// Drains and returns logs since `offset` — used by the primary's HTTP polling
-// loop (this node has no socket.io connection back).
-function pollJob(jobId, offset) {
+// Drains and returns logs/rrweb batches since `offset`/`rrwebOffset` — used by
+// the primary's HTTP polling loop (this node has no socket.io connection back).
+function pollJob(jobId, offset, rrwebOffset = 0) {
 	const job = jobs[jobId];
 	if (!job) return null;
 	return {
 		status: job.status,
 		logs: job.logs.slice(offset),
+		rrwebBatches: job.rrwebBatches.slice(rrwebOffset),
 		exitCode: job.exitCode
 	};
 }
