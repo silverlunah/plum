@@ -243,9 +243,15 @@ function runBuiltInAttempt({
 		const proc = spawn('npm', ['run', 'test'], { env, shell: true });
 		activeProcs.add(proc);
 
-		const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-			socket.emit(SOCKET_EVENTS.STEP_SCREENSHOT, { stepName, data });
-		});
+		const ssPoller = startSsPoller(
+			ssDir,
+			({ stepName, data }) => {
+				socket.emit(SOCKET_EVENTS.STEP_SCREENSHOT, { stepName, data });
+			},
+			(batch) => {
+				socket.emit(SOCKET_EVENTS.RUNNER_LANE_RRWEB_BATCH, { id: BUILT_IN_RUNNER_ID, ...batch });
+			}
+		);
 
 		proc.stdout.on('data', (d) => onLog(d.toString()));
 		proc.stderr.on('data', (d) => onLog(`[ERROR] ${d.toString()}`));
@@ -545,9 +551,15 @@ async function runDistributed(
 					const proc = spawn('npm', ['run', 'test'], { env, shell: true });
 					activeProcs.add(proc);
 
-					const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-						socket.emit(SOCKET_EVENTS.RUNNER_LANE_SCREENSHOT, { id: laneId, stepName, data });
-					});
+					const ssPoller = startSsPoller(
+						ssDir,
+						({ stepName, data }) => {
+							socket.emit(SOCKET_EVENTS.RUNNER_LANE_SCREENSHOT, { id: laneId, stepName, data });
+						},
+						(batch) => {
+							socket.emit(SOCKET_EVENTS.RUNNER_LANE_RRWEB_BATCH, { id: laneId, ...batch });
+						}
+					);
 
 					proc.stdout.on('data', (d) => onLog(d.toString()));
 					proc.stderr.on('data', (d) => onLog(`[ERROR] ${d.toString()}`));
@@ -592,6 +604,9 @@ async function runDistributed(
 						},
 						({ stepName, data }) => {
 							socket.emit(SOCKET_EVENTS.RUNNER_LANE_SCREENSHOT, { id: laneId, stepName, data });
+						},
+						(batch) => {
+							socket.emit(SOCKET_EVENTS.RUNNER_LANE_RRWEB_BATCH, { id: laneId, ...batch });
 						}
 					);
 				});

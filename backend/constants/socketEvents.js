@@ -33,6 +33,13 @@ const SOCKET_EVENTS = Object.freeze({
 	BG_RUN_LANE_STATUS: 'bg-run-lane-status',
 	BG_RUN_LANE_SCREENSHOT: 'bg-run-lane-screenshot',
 
+	// Live rrweb streaming (Phase 3) — one shape for every run type, always
+	// carrying a lane id (BUILT_IN_RUNNER_ID for the plain single-run case) and
+	// a workerId, so a single built-in run with --parallel workers is finally
+	// attributable per worker instead of one flat interleaved stream.
+	RUNNER_LANE_RRWEB_BATCH: 'runner-lane-rrweb-batch',
+	BG_RUN_LANE_RRWEB_BATCH: 'bg-run-lane-rrweb-batch',
+
 	// Global notifications (any client, not tied to a specific run)
 	REPORT_READY: 'report-ready'
 });

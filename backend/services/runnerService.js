@@ -11,6 +11,8 @@ const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { bearerHeader } = require('../lib/authHeader');
 const { JOB_STATUS } = require('../constants/jobStatus');
+const settingsService = require('./settingsService');
+const nodeStreamRegistry = require('./nodeStreamRegistry');
 
 // ---------------------------------------------------------------------------
 // Runner CRUD
@@ -198,7 +200,8 @@ async function dispatchAndPoll(
 	{ tags, browser, workers },
 	onLog,
 	onDone,
-	onScreenshot = null
+	onScreenshot = null,
+	onRRwebBatch = null
 ) {
 	// The async poll callback can overlap if a tick takes longer than the interval;
 	// guard so the run resolves exactly once and can't be finalised while a lane
@@ -207,6 +210,7 @@ async function dispatchAndPoll(
 	const finish = (code, content) => {
 		if (settled) return;
 		settled = true;
+		if (jobId) nodeStreamRegistry.unregisterRelay(jobId);
 		onDone(code, content);
 	};
 
@@ -216,6 +220,12 @@ async function dispatchAndPoll(
 		finish(1, null);
 		return;
 	}
+
+	// The node needs to know where to open its own socket back to us — without
+	// this it has no way to reach the primary, since today only the reverse
+	// (primary knowing each node's url) is configured.
+	const { notifyPublicUrl } = await settingsService.getWebhooks();
+	const primaryUrl = notifyPublicUrl ? notifyPublicUrl.replace(/\/$/, '') : null;
 
 	let jobId;
 	try {
@@ -230,7 +240,8 @@ async function dispatchAndPoll(
 				browser,
 				workers,
 				tests: collectTestFiles(),
-				env: loadTestEnv(process.cwd())
+				env: loadTestEnv(process.cwd()),
+				...(primaryUrl ? { primaryUrl } : {})
 			}),
 			signal: AbortSignal.timeout(10000)
 		});
@@ -243,6 +254,12 @@ async function dispatchAndPoll(
 	}
 
 	onLog(`Connected to runner "${runner.name}" — job ${jobId}\n`);
+
+	// With a primaryUrl configured, the node streams logs/rrweb events over its
+	// own socket instead — draining them from the poll too would duplicate them.
+	if (primaryUrl) {
+		nodeStreamRegistry.registerRelay(jobId, { onRRwebBatch, onLog });
+	}
 
 	let logOffset = 0;
 	let polling = false;
@@ -257,7 +274,7 @@ async function dispatchAndPoll(
 			if (!res.ok) return;
 			const body = await res.json();
 
-			if (body.logs) {
+			if (!primaryUrl && body.logs) {
 				onLog(body.logs);
 				logOffset += body.logs.length;
 			}
