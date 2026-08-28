@@ -28,6 +28,9 @@
 	const MIN_PLAYER_WIDTH = 480;
 	const MIN_PLAYER_HEIGHT = 320;
 	const CONTROLLER_HEIGHT = 80;
+	// Covers rrweb's 50ms 'finish' scheduling delay after a paused seek, so it's
+	// never misread as reaching a natural finish.
+	const FINISH_SUPPRESS_MS = 150;
 	// Player would otherwise exactly fill .player-stage, leaving the button row
 	// flush against its edge — shrinks it so centering leaves a margin.
 	const STAGE_BREATHING_ROOM = 24;
@@ -116,8 +119,16 @@
 		// — e.g. after toggling Inspect there may be nothing loaded to render.
 		// Rebuild instead so the right FullSnapshot gets loaded again.
 		if (targetIdx === activeSegmentIndex && ts >= mountedFirst) {
+			if (!autoplay) suppressFinishUntil = Date.now() + FINISH_SUPPRESS_MS;
 			player?.goto(ts - mountedFirst, autoplay);
 			if (stepIndexOverride !== undefined) currentStepIndex = stepIndexOverride;
+			// goto() can cross a mid-stream FullSnapshot (e.g. a tab navigating off
+			// about:blank) and silently reset the iframe document — re-attach.
+			if (inspecting) {
+				teardownInspectListeners();
+				setupInspectListeners();
+				startInspectWatch();
+			}
 		} else {
 			activeSegmentIndex = targetIdx;
 			buildPlayer({
@@ -134,7 +145,14 @@
 		if (stepTimestamps[i] === undefined || !player) return;
 		currentStepIndex = i;
 		// Jump to the next marker — step i's own marker fires before its actions run.
-		const nextTs = stepTimestamps[i + 1] ?? segments[segments.length - 1]?.to;
+		// The last step has none: use the segment's real last event, not its `to`
+		// boundary (can sit past it) — landing at/past the real end reads as a
+		// natural finish instead of a paused seek (see suppressFinishUntil).
+		let nextTs = stepTimestamps[i + 1];
+		if (nextTs === undefined) {
+			const { first, span } = segmentEventBounds(segments[segments.length - 1]);
+			nextTs = first + Math.max(0, span - 1);
+		}
 		if (nextTs === undefined) return;
 		seekToAbsolute(nextTs, false, i);
 	}
@@ -184,6 +202,14 @@
 		doc.addEventListener('click', onClick, true);
 		doc.addEventListener('mouseleave', onLeave);
 		doc.addEventListener('keydown', onKeydown);
+		// rrweb can rebuild the document in place (document.open()/write()) without
+		// the contentDocument reference changing — watchInspectDoc's reference
+		// check alone would miss that a fresh documentElement wiped this marker.
+		try {
+			doc.documentElement.dataset.plumInspectWired = '1';
+		} catch {
+			// cross-origin/detached doc — inspect wiring is best-effort
+		}
 
 		cleanupInspect = () => {
 			doc.removeEventListener('mousemove', onMove);
@@ -220,7 +246,8 @@
 			return;
 		}
 		const doc = currentReplayer()?.iframe?.contentDocument;
-		if (doc && doc !== inspectAttachedDoc) {
+		const stillWired = doc?.documentElement?.dataset.plumInspectWired === '1';
+		if (doc && (doc !== inspectAttachedDoc || !stillWired)) {
 			teardownInspectListeners();
 			setupInspectListeners();
 		}
@@ -277,6 +304,8 @@
 	// during a paused seek's sync catch-up. Only real autoplay should trigger
 	// the auto-advance-to-next-tab below.
 	let awaitingNaturalFinish = false;
+	// Set right before any deliberate paused seek — see FINISH_SUPPRESS_MS.
+	let suppressFinishUntil = 0;
 
 	// rrweb's 50ms finish timeout isn't cancelled by destroying the replayer —
 	// a short segment can be torn down before its own stale finish fires,
@@ -304,6 +333,7 @@
 
 		replayer.on('finish', () => {
 			if (buildGeneration !== myGeneration) return;
+			if (Date.now() < suppressFinishUntil) return;
 			if (!awaitingNaturalFinish) return;
 			if (activeSegmentIndex < segments.length - 1) {
 				const speed = replayer.config.speed;
@@ -462,12 +492,18 @@
 			player.play();
 		} else if (resumeState.finished) {
 			player.setSpeed(resumeState.speed);
+			// A fresh Player starts at its first frame — without this explicit seek,
+			// rebuilding here (e.g. toggling Inspect after a natural finish) would
+			// show a blank first frame instead of staying on the last one.
+			suppressFinishUntil = Date.now() + FINISH_SUPPRESS_MS;
+			player.goto(timeOffset, false);
 			finished = true;
 			livePosition = overallTo;
 			// Restart button moved under this rebuild — recompute its position.
 			requestAnimationFrame(() => positionRestartButton(playPauseButton()));
 		} else {
 			player.setSpeed(resumeState.speed);
+			if (resumeState.paused) suppressFinishUntil = Date.now() + FINISH_SUPPRESS_MS;
 			player.goto(timeOffset, !resumeState.paused);
 		}
 
