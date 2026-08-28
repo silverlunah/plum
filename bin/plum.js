@@ -595,7 +595,8 @@ async function configureNode({ force }) {
 	const saved = loadNodeConfig(cwd);
 
 	let primary = getFlag(args, '--primary') ?? process.env.PRIMARY_URL ?? saved.primary ?? '';
-	let port = getFlag(args, '--port') ?? saved.port ?? '3001';
+	// Not 3001 — that's the primary's default; a co-located node must not collide.
+	let port = getFlag(args, '--port') ?? saved.port ?? '3002';
 	let browser = getFlag(args, '--browser') ?? saved.browser ?? 'chromium';
 	let token = getFlag(args, '--token') ?? process.env.NODE_TOKEN ?? saved.token ?? generateToken();
 	let name = getFlag(args, '--name') ?? saved.name ?? `node-${token.slice(0, 6)}`;
@@ -613,6 +614,14 @@ async function configureNode({ force }) {
 	const interactive = force || (interactiveAllowed() && !hasFlags);
 
 	if (interactive) {
+		const nameVal = await clack.text({
+			message: 'Runner name',
+			placeholder: name,
+			defaultValue: name
+		});
+		if (clack.isCancel(nameVal)) cancelAndExit();
+		name = nameVal || name;
+
 		const primaryVal = await clack.text({
 			message: 'Your Plum server backend URL',
 			placeholder: primary || 'http://localhost:3001',
@@ -732,7 +741,13 @@ async function nodeStart({ reconfig }) {
 	const cfg = await configureNode({ force: reconfig });
 	const registeredId = await registerNode(cfg);
 
-	const { prepareEnv, startNode: startNodeProc } = runnerProcessLib();
+	const {
+		prepareEnv,
+		startNode: startNodeProc,
+		findPidOnPort,
+		killPort,
+		nodeReachable
+	} = runnerProcessLib();
 
 	clack.log.step('Preparing environment (deps + browsers)...');
 	try {
@@ -749,12 +764,30 @@ async function nodeStart({ reconfig }) {
 
 	if (registeredId) {
 		try {
+			// A stale process on this port makes the new node die on EADDRINUSE
+			// after a silent retry loop — clear it first (almost always a
+			// previous instance of this same node).
+			if (findPidOnPort(Number(cfg.port))) {
+				clack.log.step(`Port ${cfg.port} is in use — freeing it...`);
+				await killPort(Number(cfg.port));
+			}
 			const entry = startNodeProc({ id: String(registeredId), port: cfg.port, token: cfg.token });
-			clack.log.success(
-				pc.green(
-					`Node "${cfg.name}" running in background (pid ${entry.pid}) — logs at backend/logs/runner-${registeredId}.log`
-				)
-			);
+			clack.log.step(`Starting "${cfg.name}" (pid ${entry.pid})...`);
+			const up = await nodeReachable(`http://localhost:${cfg.port}`, cfg.token, 15000);
+			if (up) {
+				clack.log.success(
+					pc.green(
+						`Node "${cfg.name}" running in background (pid ${entry.pid}) — logs at ${entry.logFile}`
+					)
+				);
+			} else {
+				clack.log.error(
+					pc.red(
+						`Node "${cfg.name}" did not come up on port ${cfg.port}. Check ${entry.logFile} — the port may still be held by another process.`
+					)
+				);
+				process.exitCode = 1;
+			}
 		} catch (e) {
 			clack.log.warn(`Could not start runner process: ${e.message}`);
 		}
@@ -769,7 +802,7 @@ async function nodeStart({ reconfig }) {
 async function nodeRestart() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Restart  ')));
 	const { loadNodeConfig } = nodeRegisterLib();
-	const { prepareEnv, stopNode, startNode } = runnerProcessLib();
+	const { prepareEnv, stopNode, startNode, killPort, nodeReachable } = runnerProcessLib();
 	const cfg = loadNodeConfig(process.cwd());
 
 	if (!cfg.id) {
@@ -802,17 +835,27 @@ async function nodeRestart() {
 	}
 
 	try {
+		await killPort(Number(cfg.port));
 		const entry = startNode({ id: String(cfg.id), port: cfg.port, token: cfg.token });
-		clack.log.success(
-			pc.green(
-				`Node "${cfg.name}" restarted (pid ${entry.pid}) — logs at backend/logs/runner-${cfg.id}.log`
-			)
-		);
+		const up = await nodeReachable(`http://localhost:${cfg.port}`, cfg.token, 15000);
+		if (up) {
+			clack.log.success(
+				pc.green(`Node "${cfg.name}" restarted (pid ${entry.pid}) — logs at ${entry.logFile}`)
+			);
+			clack.outro(pc.green('Node restarted.'));
+		} else {
+			clack.log.error(
+				pc.red(
+					`Node "${cfg.name}" did not come back up on port ${cfg.port}. Check ${entry.logFile}.`
+				)
+			);
+			process.exitCode = 1;
+			clack.outro(pc.red('Node not restarted.'));
+		}
 	} catch (e) {
 		clack.log.warn(`Could not restart node: ${e.message}`);
+		clack.outro(pc.red('Node not restarted.'));
 	}
-
-	clack.outro(pc.green('Node restarted.'));
 }
 
 async function nodeReconfig() {
@@ -823,13 +866,41 @@ async function nodeReconfig() {
 	clack.outro(pc.dim('Done.'));
 }
 
+// stop/restart/delete on the /runners API want a registered runner's token
+// (runnerOrAdmin). On the primary host those tokens sit in the backend's DB —
+// pull one straight from the running container so the menu can authenticate
+// without a node's .plum-node.json in the current folder. Best-effort: on a
+// node-only box (no server install / no Docker) this no-ops and the menu falls
+// back to a local .plum-node.json.
+function readRunnerTokenFromPrimary() {
+	const { getInstalls } = globalRegistryLib();
+	const script =
+		"require('./services/prisma').runner.findFirst({select:{token:true}})" +
+		".then(r=>{process.stdout.write(r&&r.token||'');process.exit(0)}).catch(()=>process.exit(1))";
+	for (const dir of getInstalls('server')) {
+		try {
+			const token = execSync(`docker compose exec -T backend node -e "${script}"`, {
+				cwd: dir,
+				stdio: ['ignore', 'pipe', 'ignore'],
+				timeout: 15000
+			})
+				.toString()
+				.trim();
+			if (token) return token;
+		} catch {}
+	}
+	return null;
+}
+
 async function openManageRunnersMenu(primaryUrl) {
 	const manageScript = path.join(plumRoot, 'backend', 'scripts', 'manage-runners.mjs');
 	const apiUrl = primaryUrl || 'http://localhost:3001';
-	const menu = spawn(process.execPath, [manageScript], {
-		stdio: 'inherit',
-		env: { ...process.env, PLUM_API_URL: apiUrl }
-	});
+	const env = { ...process.env, PLUM_API_URL: apiUrl };
+	if (!env.PLUM_RUNNER_TOKEN) {
+		const token = readRunnerTokenFromPrimary();
+		if (token) env.PLUM_RUNNER_TOKEN = token;
+	}
+	const menu = spawn(process.execPath, [manageScript], { stdio: 'inherit', env });
 	await new Promise((resolve) => menu.on('exit', resolve));
 }
 

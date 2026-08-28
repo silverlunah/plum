@@ -202,6 +202,29 @@ function prepareEnv() {
 }
 
 /**
+ * Polls a node's own /api/ping (at `baseUrl`, e.g. http://localhost:3002) until
+ * it reports mode:'node', or the timeout elapses. A detached spawn returns a
+ * pid immediately even when the process goes on to die on EADDRINUSE — callers
+ * use this to report honestly whether the node actually came up.
+ */
+async function nodeReachable(baseUrl, token, timeoutMs = 15000) {
+	const url = `${String(baseUrl).replace(/\/+$/, '')}/api/ping`;
+	const headers = token ? { Authorization: `Bearer ${token}` } : {};
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		try {
+			const res = await fetch(url, { headers, signal: AbortSignal.timeout(3000) });
+			if (res.ok) {
+				const body = await res.json().catch(() => ({}));
+				if (body.ok && body.mode === 'node') return true;
+			}
+		} catch {}
+		await new Promise((r) => setTimeout(r, 500));
+	}
+	return false;
+}
+
+/**
  * Spawns a detached node-mode server for the given runner and records its pid.
  * Returns the registry entry.
  */
@@ -316,6 +339,7 @@ module.exports = {
 	parsePort,
 	findPidOnPort,
 	killPort,
+	nodeReachable,
 	pruneDead,
 	statusOf,
 	ensureBackendDeps,
