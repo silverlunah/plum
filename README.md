@@ -79,33 +79,25 @@ Full documentation is available at:
 
 ## Command Reference
 
-| Command                       | Description                                                                                                                                                |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plum init`                   | Initialize a new project in the current folder                                                                                                             |
-| `plum server start`           | Start the full UI stack via Docker                                                                                                                         |
-| `plum server restart`         | Rebuild Docker images and restart the server without prompts                                                                                               |
-| `plum server stop`            | Stop the server (data preserved)                                                                                                                           |
-| `plum server reconfig`        | Re-enter server settings without starting                                                                                                                  |
-| `plum update`                 | Update Plum, then restart each registered server/node on this machine (asks before each, in an interactive shell)                                          |
-| `plum sync-scaffold`          | Check `tests/utils/browser.ts`/`hooks.ts` against Plum's recommended starter pattern; reports what's stale but changes nothing (rarely needed — see below) |
-| `plum sync-scaffold --force`  | Overwrite files reported stale by the above (previous version backed up first)                                                                             |
-| `plum node start`             | Set up connectivity, start a runner node, and open the runner menu                                                                                         |
-| `plum node restart`           | Stop, refresh dependencies, and restart the runner node                                                                                                    |
-| `plum node stop`              | Stop the runner node started from this folder                                                                                                              |
-| `plum node reconfig`          | Re-enter node settings and re-register                                                                                                                     |
-| `plum run-test`               | Run all tests locally without Docker                                                                                                                       |
-| `plum run-test @tag`          | Run tests matching a tag                                                                                                                                   |
-| `plum run-test --parallel N`  | Run tests across N parallel workers                                                                                                                        |
-| `plum run-test --browser <b>` | Run in `chromium` (default) or `firefox`                                                                                                                   |
-| `plum run-test --help`        | Show usage for `run-test`                                                                                                                                  |
-| `plum create-step`            | Interactively scaffold a new step definition                                                                                                               |
-| `plum manage-runners`         | Open the interactive runner management menu                                                                                                                |
-
----
-
-## `tests/utils/plum-modules/`
-
-`tests/utils/browser.ts` and `hooks.ts` are yours — customize them freely, they're never touched automatically. They import Plum's session recording from `tests/utils/plum-modules/`, which is regenerated from the installed Plum version before every run (`plum run-test`, `plum node start`, and every run triggered from the web UI), so recording fixes and features reach existing projects without any update step. Don't edit anything inside `plum-modules/` — it's overwritten on the next run.
+| Command                       | Description                                                                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `plum init`                   | Initialize a new project in the current folder                                                                    |
+| `plum server start`           | Start the full UI stack via Docker                                                                                |
+| `plum server restart`         | Rebuild Docker images and restart the server without prompts                                                      |
+| `plum server stop`            | Stop the server (data preserved)                                                                                  |
+| `plum server reconfig`        | Re-enter server settings without starting                                                                         |
+| `plum update`                 | Update Plum, then restart each registered server/node on this machine (asks before each, in an interactive shell) |
+| `plum node start`             | Set up connectivity, start a runner node, and open the runner menu                                                |
+| `plum node restart`           | Stop, refresh dependencies, and restart the runner node                                                           |
+| `plum node stop`              | Stop the runner node started from this folder                                                                     |
+| `plum node reconfig`          | Re-enter node settings and re-register                                                                            |
+| `plum run-test`               | Run all tests locally without Docker                                                                              |
+| `plum run-test @tag`          | Run tests matching a tag                                                                                          |
+| `plum run-test --parallel N`  | Run tests across N parallel workers                                                                               |
+| `plum run-test --browser <b>` | Run in `chromium` (default) or `firefox`                                                                          |
+| `plum run-test --help`        | Show usage for `run-test`                                                                                         |
+| `plum create-step`            | Interactively scaffold a new step definition                                                                      |
+| `plum manage-runners`         | Open the interactive runner management menu                                                                       |
 
 ---
 

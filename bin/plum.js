@@ -62,114 +62,6 @@ function scaffoldPluginsFile() {
 	clack.log.success('plum.plugins.json created.');
 }
 
-// Files under tests/ that Plum's own scaffold originally wrote — `plum init`
-// only writes these once, so a project scaffolded before a Plum upgrade keeps
-// running whatever version shipped at init time (e.g. an old screenshot-based
-// browser.ts after Plum has moved to rrweb recording) unless something
-// explicitly re-syncs them.
-//
-// These are also exactly the files real projects most often rewrite entirely
-// with their own setup/teardown/cleanup logic — a project's browser.ts can
-// end up exporting things Plum's own template never did (extra page-object
-// helpers, auth header routing, multi-context session handling), which other
-// files in that project then import and depend on. A blind overwrite of a
-// file like that doesn't just discard "unsupported edits" — it silently
-// breaks every file that imports what used to be there, and can disable
-// cleanup logic another system relies on for a clean state. A backup makes
-// that recoverable, but "recoverable after your suite breaks" is still a bad
-// default, so this never overwrites unless explicitly told to.
-const INFRA_SCAFFOLD_FILES = ['utils/browser.ts', 'utils/hooks.ts'];
-
-// Nothing customer-owned ever lives here — it's the same folder run-tests.js
-// force-refreshes before every test run — so unlike INFRA_SCAFFOLD_FILES this
-// is always safe to overwrite unconditionally, no diffing or backup needed.
-// Re-syncing it here too (not just at test-run time) means `plum update` /
-// `plum sync-scaffold` alone are enough to leave a project actually working,
-// without requiring a test run first.
-const PLUM_MANAGED_DIR = 'utils/plum-modules';
-
-function syncPlumModulesDir(testsDir) {
-	const src = path.join(scaffoldTestsPath, PLUM_MANAGED_DIR);
-	const dest = path.join(testsDir, PLUM_MANAGED_DIR);
-	if (!fs.existsSync(src)) return;
-	fs.rmSync(dest, { recursive: true, force: true });
-	fse.copySync(src, dest);
-}
-
-// Reports which INFRA_SCAFFOLD_FILES differ from the installed Plum version's
-// scaffold. With force:true, re-syncs them into the tests/ directory,
-// backing up whatever it overwrites — otherwise this never touches a file,
-// only reports on it, since diffing alone can't tell "untouched and stale"
-// apart from "extensively customized to depend on this exact content."
-// Always re-syncs PLUM_MANAGED_DIR regardless of force, since that part is
-// never customer-owned.
-function syncScaffoldInfraFiles(testsDir, { force = false } = {}) {
-	if (!fs.existsSync(testsDir)) {
-		clack.log.warn(`No \`tests/\` folder found at ${testsDir} — skipping scaffold sync.`);
-		return;
-	}
-
-	syncPlumModulesDir(testsDir);
-
-	let changed = 0;
-	let stale = 0;
-	for (const relPath of INFRA_SCAFFOLD_FILES) {
-		const src = path.join(scaffoldTestsPath, relPath);
-		const dest = path.join(testsDir, relPath);
-		if (!fs.existsSync(src) || !fs.existsSync(dest)) continue;
-
-		const current = fs.readFileSync(dest, 'utf8');
-		const latest = fs.readFileSync(src, 'utf8');
-		if (current === latest) continue;
-
-		// A file that already imports plum-modules/runtime has adopted the
-		// current pattern and will keep differing from the bare scaffold
-		// forever once a customer adds their own code around it — that's
-		// expected and not something to warn about every time. Only a file
-		// that never picked up the import at all needs pointing somewhere.
-		const alreadyWired = current.includes('plum-modules/runtime');
-
-		if (!force) {
-			stale++;
-			if (alreadyWired) {
-				clack.log.info(
-					`${relPath} is customized but already wired to plum-modules/ — nothing to do.`
-				);
-				continue;
-			}
-			clack.log.warn(
-				`${relPath} doesn't import Plum's recording wiring — reports for this project won't ` +
-					`include session replay until it's added. This file is never auto-overwritten, so add it ` +
-					`yourself:\n` +
-					(relPath === 'utils/hooks.ts'
-						? `    Near the top of tests/${relPath}:\n` +
-							`      import * as plum from './plum-modules/runtime';\n` +
-							`      plum.registerHooks();\n` +
-							`    Keep your own Before/After/BeforeStep hooks below that line — Cucumber runs every registered hook.`
-						: `    Near the top of tests/${relPath}:\n` +
-							`      import * as plum from './plum-modules/runtime';\n` +
-							`    Then point your helpers at it, e.g.:\n` +
-							`      export const page = () => plum.page();\n` +
-							`      export const context = () => plum.context();\n` +
-							`      export const browser = () => plum.browser();`)
-			);
-			continue;
-		}
-
-		const backupPath = `${dest}.bak-${Date.now()}`;
-		fs.copyFileSync(dest, backupPath);
-		fs.copyFileSync(src, dest);
-		changed++;
-		clack.log.success(
-			`Updated ${relPath} (previous version backed up to ${path.basename(backupPath)})`
-		);
-	}
-
-	if (changed === 0 && stale === 0) {
-		clack.log.info('Test scaffold wiring is already up to date.');
-	}
-}
-
 // Install user plugins listed in plum.plugins.json into the backend
 function installPlugins() {
 	const pluginsPath = path.join(process.cwd(), 'plum.plugins.json');
@@ -620,15 +512,6 @@ async function serverUpdate() {
 	for (const dir of getInstalls('server')) {
 		if (!fs.existsSync(path.join(dir, '.plum-server.json'))) continue;
 
-		// Runs before the restart confirm below, and regardless of its answer —
-		// this only ever touches plum-modules/ (never customer-owned, see
-		// syncScaffoldInfraFiles) plus a warn-only check on browser.ts/hooks.ts,
-		// so there's nothing here that restarting the server is a prerequisite
-		// for, or that declining the restart should skip.
-		if (fs.existsSync(path.join(dir, 'tests'))) {
-			syncScaffoldInfraFiles(path.join(dir, 'tests'));
-		}
-
 		// This registry is global to the machine, not scoped to the directory
 		// `plum update` was run from — an unrelated project on the same machine
 		// as a registered server would otherwise silently boot that server's
@@ -656,12 +539,6 @@ async function serverUpdate() {
 	for (const dir of getInstalls('node')) {
 		const nodeCfg = loadNodeConfig(dir);
 		if (!nodeCfg.id) continue;
-
-		// Same reasoning as the server loop above: runs regardless of whether
-		// the restart below gets confirmed.
-		if (fs.existsSync(path.join(dir, 'tests'))) {
-			syncScaffoldInfraFiles(path.join(dir, 'tests'));
-		}
 
 		// This registry spans the whole machine, not just the directory
 		// `plum update` was run from.
@@ -1244,14 +1121,6 @@ switch (command) {
 		await serverUpdate();
 		break;
 
-	case 'sync-scaffold': {
-		clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Sync Test Scaffold  ')));
-		const force = anyFlags(process.argv.slice(3), ['--force']);
-		syncScaffoldInfraFiles(userTestsPath, { force });
-		clack.outro(pc.green('Done.'));
-		break;
-	}
-
 	case 'run-test': {
 		const runHelpArgs = process.argv.slice(3);
 		if (anyFlags(runHelpArgs, ['--help', '-h'])) {
@@ -1458,13 +1327,7 @@ switch (command) {
 		console.log('  server stop          Stop the server (data preserved)');
 		console.log('  server reconfig      Re-enter server settings without starting');
 		console.log(
-			'  update               Update Plum, restart whichever is running (server/node), and check tests/ wiring for updates'
-		);
-		console.log(
-			'  sync-scaffold        Check browser.ts/hooks.ts in tests/ against the installed Plum version'
-		);
-		console.log(
-			'    --force            Overwrite files that differ (previous version backed up first)'
+			'  update               Update Plum and restart whichever is running (server/node)'
 		);
 		console.log('  node start           Start a runner node (interactive), then open runner menu');
 		console.log('    --primary <url>    Primary Plum server to auto-register with');
