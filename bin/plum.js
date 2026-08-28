@@ -122,36 +122,12 @@ function syncScaffoldInfraFiles(testsDir, { force = false } = {}) {
 		const latest = fs.readFileSync(src, 'utf8');
 		if (current === latest) continue;
 
-		// A file that already imports plum-modules/runtime has adopted the
-		// current pattern and will keep differing from the bare scaffold
-		// forever once a customer adds their own code around it — that's
-		// expected and not something to warn about every time. Only a file
-		// that never picked up the import at all needs pointing somewhere.
-		const alreadyWired = current.includes('plum-modules/runtime');
-
 		if (!force) {
 			stale++;
-			if (alreadyWired) {
-				clack.log.info(
-					`${relPath} is customized but already wired to plum-modules/ — nothing to do.`
-				);
-				continue;
-			}
 			clack.log.warn(
-				`${relPath} doesn't import Plum's recording wiring — reports for this project won't ` +
-					`include session replay until it's added. This file is never auto-overwritten, so add it ` +
-					`yourself:\n` +
-					(relPath === 'utils/hooks.ts'
-						? `    Near the top of tests/${relPath}:\n` +
-							`      import * as plum from './plum-modules/runtime';\n` +
-							`      plum.registerHooks();\n` +
-							`    Keep your own Before/After/BeforeStep hooks below that line — Cucumber runs every registered hook.`
-						: `    Near the top of tests/${relPath}:\n` +
-							`      import * as plum from './plum-modules/runtime';\n` +
-							`    Then point your helpers at it, e.g.:\n` +
-							`      export const page = () => plum.page();\n` +
-							`      export const context = () => plum.context();\n` +
-							`      export const browser = () => plum.browser();`)
+				`${relPath} differs from Plum's current scaffold — left untouched, since it may be customized ` +
+					`beyond what Plum shipped and other files may depend on what's there now. Run ` +
+					`\`plum sync-scaffold --force\` if you're sure it's safe to overwrite (the current version is backed up first).`
 			);
 			continue;
 		}
