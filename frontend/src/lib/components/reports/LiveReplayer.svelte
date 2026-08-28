@@ -15,6 +15,7 @@
 
 	const META_EVENT_TYPE = 4;
 
+	let viewport;
 	let stage;
 	let container;
 	let player = null;
@@ -23,14 +24,18 @@
 	let nativeHeight = 0;
 	let resizeObserver;
 
-	// rrweb-player renders at the recording's native resolution — scale-and-crop
-	// it to fill the stage (object-fit: cover); letterboxing left visible bars
-	// when the aspect ratios didn't match. Re-run on every stage resize, since
-	// the panel's own layout can still shift its size after the player is built.
+	// rrweb-player renders at the recording's native resolution. Scale it to the
+	// full panel width and anchor it to the top: the browser frame is shown at
+	// true proportions (never zoomed or cropped), and any leftover space is a
+	// single region below the page — not the symmetric top+bottom letterbox
+	// bars a contain-fit leaves. Re-run on every resize.
 	function updateScale() {
-		if (!nativeWidth || !nativeHeight) return;
-		const rect = stage.getBoundingClientRect();
-		const scale = Math.max(rect.width / nativeWidth, rect.height / nativeHeight);
+		if (!nativeWidth || !nativeHeight || !viewport) return;
+		const vp = viewport.getBoundingClientRect();
+		const scale = vp.width / nativeWidth || 0;
+		stage.style.width = `${vp.width}px`;
+		stage.style.height = `${nativeHeight * scale}px`;
+		container.style.transformOrigin = 'top left';
 		container.style.transform = `scale(${scale})`;
 	}
 
@@ -38,8 +43,8 @@
 	// construction) reads events[0].timestamp unconditionally, so the initial
 	// batch must be passed in props rather than fed empty and via addEvent.
 	function buildPlayer() {
-		const rect = stage.getBoundingClientRect();
-		const meta = events[0]?.type === META_EVENT_TYPE ? events[0].data : null;
+		const rect = viewport.getBoundingClientRect();
+		const meta = events.find((e) => e?.type === META_EVENT_TYPE)?.data ?? null;
 		nativeWidth = meta?.width > 0 ? meta.width : rect.width;
 		nativeHeight = meta?.height > 0 ? meta.height : rect.height;
 
@@ -68,8 +73,9 @@
 
 	onMount(() => {
 		buildPlayer();
+		// Observe the viewport, not the stage — the stage's size is what we set.
 		resizeObserver = new ResizeObserver(updateScale);
-		resizeObserver.observe(stage);
+		resizeObserver.observe(viewport);
 	});
 	onDestroy(() => {
 		resizeObserver?.disconnect();
@@ -81,25 +87,41 @@
 	});
 </script>
 
-<div class="live-stage" bind:this={stage}>
-	<div class="live-mount" bind:this={container}></div>
+<div class="live-viewport" bind:this={viewport}>
+	<div class="live-stage" bind:this={stage}>
+		<div class="live-mount" bind:this={container}></div>
+	</div>
 </div>
 
 <style>
-	.live-stage {
-		position: relative;
+	/* Fills the panel; the stage is sized in JS to the panel width at the
+	   recording's true aspect ratio, pinned to the top. */
+	.live-viewport {
 		flex: 1;
+		width: 100%;
+		height: 100%;
 		min-width: 0;
 		min-height: 0;
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		justify-content: center;
-		background: var(--bg-subtle);
+		overflow: hidden;
+	}
+
+	.live-stage {
+		position: relative;
 		overflow: hidden;
 	}
 
 	.live-mount {
-		display: flex;
+		position: absolute;
+		top: 0;
+		left: 0;
+	}
+
+	.live-mount :global(.rr-player) {
+		border-radius: 0 !important;
+		box-shadow: none !important;
 	}
 
 	/* Sandboxed iframe (no allow-scripts/forms/top-navigation) — safe to always
