@@ -15,9 +15,9 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-// Thin pass-through to Plum's own recording wiring, kept inside the installed
-// Plum package rather than copied here.
-require(process.env.PLUM_RUNTIME_PATH as string).registerHooks();
+import * as plum from './plum-modules/runtime';
+
+plum.registerHooks();
 
 // Add your own custom Before/After/BeforeStep hooks below — Cucumber runs
 // every registered hook, so these run alongside Plum's own.

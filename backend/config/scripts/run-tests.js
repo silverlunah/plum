@@ -29,6 +29,19 @@ let testExitCode = 0;
 
 try {
 	const testsRoot = (process.env.TESTS_ROOT || 'tests').replace(/\\/g, '/');
+	const testsRootAbsForSync = path.isAbsolute(testsRoot)
+		? testsRoot
+		: path.resolve(process.cwd(), testsRoot);
+
+	// tests/utils/browser.ts and hooks.ts import Plum's recording wiring from
+	// here — always overwritten from whatever Plum version is actually running
+	// this script, so it's never stale and never something a customer can
+	// accidentally lose track of by not re-running an update command. Safe to
+	// force unconditionally: nothing customer-owned ever lives in this folder.
+	const plumModulesSrc = path.join(__dirname, '..', '..', '_scaffold', 'utils', 'plum-modules');
+	const plumModulesDest = path.join(testsRootAbsForSync, 'utils', 'plum-modules');
+	fs.rmSync(plumModulesDest, { recursive: true, force: true });
+	fs.cpSync(plumModulesSrc, plumModulesDest, { recursive: true });
 
 	// Dispatched tests run from an external dir (e.g. a temp dir on a node) that has
 	// no node_modules of its own — point Node at the backend's modules so imports
@@ -112,11 +125,7 @@ try {
 			// When running from a temp dir there is no tsconfig.json above it, so
 			// ts-node falls back to defaults that may conflict with the Node version.
 			// Point it at the backend tsconfig explicitly.
-			...(execCwd && { TS_NODE_PROJECT: path.resolve(__dirname, '..', '..', 'tsconfig.json') }),
-			// tests/utils/browser.ts and hooks.ts are a thin pass-through to this —
-			// an absolute path works the same whether cwd is backend/ (local run) or
-			// a temp dir with no relation to backend/ (a dispatched node run).
-			PLUM_RUNTIME_PATH: path.resolve(__dirname, '..', '..', 'lib', 'plumTestRuntime.js')
+			...(execCwd && { TS_NODE_PROJECT: path.resolve(__dirname, '..', '..', 'tsconfig.json') })
 		}
 	});
 } catch (error) {
