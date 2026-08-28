@@ -343,7 +343,6 @@ async function addRunner() {
 	if (cancelled(urlInput)) return;
 
 	const url = resolveNodeUrl(urlInput || defaultUrl);
-	const local = isLocalUrl(url);
 
 	const s = clack.spinner();
 	s.start(`Registering "${name}" with the primary...`);
@@ -364,42 +363,47 @@ async function addRunner() {
 		return;
 	}
 
-	// Verify the node actually answers before keeping the registration — start a
-	// local one here, expect a remote one to already be up. A failed check rolls
-	// the registration back so no dead runner is left behind.
-	let entry = null;
-	let ok = false;
-	if (local) {
-		prepareNodeEnv();
-		entry = startNode({ id, port, token });
-		s.start(`Waiting for "${name}" to come up on port ${port}...`);
-		ok = await nodeReachable(`http://localhost:${port}`, token, 20000);
-		s.stop(ok ? pc.green(`"${name}" is up (pid ${entry.pid})`) : pc.red(`"${name}" did not start`));
-	} else {
-		s.start(`Checking for a Plum node at ${url}...`);
-		ok = await nodeReachable(url, token, 8000);
-		s.stop(ok ? pc.green(`"${name}" is reachable`) : pc.red(`No Plum node answered at ${url}`));
+	// A node whose URL points at another machine has to be started over there
+	// (`plum node start`), so registering it before it's up is normal — just
+	// tell the operator what to run. Only a node we can start from here gets
+	// started + verified, and rolled back if it never comes up.
+	if (!isLocalUrl(url)) {
+		s.start(`Checking ${url}...`);
+		const up = await nodeReachable(url, token, 5000);
+		s.stop(
+			up
+				? pc.green(`"${name}" registered and answering`)
+				: pc.yellow(`"${name}" registered — no node answering there yet`)
+		);
+		if (!up) {
+			clack.log.info(
+				`Start it on that host:\n  plum node start --name ${name} --url ${url} --port <port> ` +
+					`--primary ${API_URL} --token ${token}`
+			);
+		}
+		return;
 	}
 
-	if (ok) {
+	prepareNodeEnv();
+	if (findPidOnPort(Number(port))) await killPort(Number(port));
+	const entry = startNode({ id, port, token });
+	s.start(`Starting "${name}" on port ${port}...`);
+	const up = await nodeReachable(`http://localhost:${port}`, token, 20000);
+	s.stop(up ? pc.green(`"${name}" is up (pid ${entry.pid})`) : pc.red(`"${name}" did not start`));
+
+	if (up) {
 		clack.log.success(pc.green(`Runner "${name}" is ready.`));
 		return;
 	}
 
-	if (entry) stopNode(id, Number(port));
+	stopNode(id, Number(port));
 	if (!reused) {
 		try {
 			await deleteRunner(id);
 		} catch {}
 	}
-	if (entry?.logFile) clack.note(entry.logFile, 'Node log');
-	clack.log.warn(
-		pc.yellow(
-			reused
-				? `"${name}" stays registered but is unreachable — check the port/URL.`
-				: `"${name}" was not registered — check the port/URL and try again.`
-		)
-	);
+	if (entry.logFile) clack.note(entry.logFile, 'Node log');
+	clack.log.warn(pc.yellow(`"${name}" was not registered — check ${entry.logFile} and try again.`));
 }
 
 async function main() {
