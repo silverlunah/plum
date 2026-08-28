@@ -27,7 +27,6 @@ export const SUITE_CASES_PER_PAGE = 20;
 export const COPY_TIMEOUT_MS = 1400;
 export const TOAST_TIMEOUT_MS = 4000;
 
-export const REPLAY_STEP_MS = 900;
 export const REDIRECT_DELAY_MS = 3000;
 
 export const WORKERS_MIN = 1;

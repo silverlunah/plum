@@ -19,6 +19,7 @@
 		"vite": "^6.0.0"
 	},
 	"dependencies": {
+		"rrweb-player": "^2.1.1",
 		"socket.io-client": "^4.8.1"
 	}
 }

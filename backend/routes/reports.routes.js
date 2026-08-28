@@ -27,6 +27,29 @@ router.get('/latest', async (req, res) => {
 	}
 });
 
+router.get('/:id/recordings', async (req, res) => {
+	const id = parseInt(req.params.id, 10);
+	if (isNaN(id)) return res.status(400).json({ error: 'Invalid report id' });
+	try {
+		const recordings = await reportService.getRecordings(id);
+		res.json(recordings);
+	} catch {
+		res.status(500).json({ error: 'Failed to fetch recordings' });
+	}
+});
+
+router.get('/:id/recordings/:recordingId/events', async (req, res) => {
+	const recordingId = parseInt(req.params.recordingId, 10);
+	if (isNaN(recordingId)) return res.status(400).json({ error: 'Invalid recording id' });
+	try {
+		const events = await reportService.getRecordingEvents(recordingId);
+		if (!events) return res.status(404).json({ error: 'Recording not found' });
+		res.json({ events });
+	} catch {
+		res.status(500).json({ error: 'Failed to fetch recording events' });
+	}
+});
+
 router.get('/:id', async (req, res) => {
 	const id = parseInt(req.params.id, 10);
 	if (isNaN(id)) return res.status(400).json({ error: 'Invalid report id' });

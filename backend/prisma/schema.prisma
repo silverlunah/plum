@@ -96,6 +96,11 @@ model Recording {
   workerId   Int      @default(1)
   tabId      String   @default("main")
   tabIndex   Int      @default(0)
+  // Epoch ms of this tab's first/last recorded event — lets the replay UI line
+  // multiple tabs up on one absolute timeline and auto-switch between them.
+  // Null on recordings written before this field existed.
+  startedAt  BigInt?
+  endedAt    BigInt?
   events     Bytes
   createdAt  DateTime @default(now())
 
