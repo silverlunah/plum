@@ -261,21 +261,30 @@ async function dispatchAndPoll(
 	}
 
 	let logOffset = 0;
+	let rrwebOffset = 0;
 	let polling = false;
 	const poll = setInterval(async () => {
 		if (polling) return;
 		polling = true;
 		try {
-			const res = await fetch(`${runner.url}/api/execute/${jobId}?offset=${logOffset}`, {
-				headers: bearerHeader(runner.token),
-				signal: AbortSignal.timeout(8000)
-			});
+			const res = await fetch(
+				`${runner.url}/api/execute/${jobId}?offset=${logOffset}&rrwebOffset=${rrwebOffset}`,
+				{
+					headers: bearerHeader(runner.token),
+					signal: AbortSignal.timeout(8000)
+				}
+			);
 			if (!res.ok) return;
 			const body = await res.json();
 
-			if (!primaryUrl && body.logs) {
-				onLog(body.logs);
-				logOffset += body.logs.length;
+			// Skip if a socket relay is active — it already pushed these live.
+			if (!primaryUrl) {
+				if (body.logs) {
+					onLog(body.logs);
+					logOffset += body.logs.length;
+				}
+				for (const batch of body.rrwebBatches ?? []) onRRwebBatch?.(batch);
+				rrwebOffset += body.rrwebBatches?.length ?? 0;
 			}
 
 			if (body.status === JOB_STATUS.DONE || body.status === JOB_STATUS.ERROR) {

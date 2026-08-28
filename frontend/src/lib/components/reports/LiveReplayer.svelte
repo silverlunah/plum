@@ -24,9 +24,9 @@
 	let resizeObserver;
 
 	// rrweb-player renders at the recording's native resolution — scale-and-crop
-	// it to fill the stage (object-fit: cover) instead of letterboxing. Re-run on
-	// every stage resize, since the panel's own layout (tab strips appearing,
-	// window resize) can still shift its size after the player is built.
+	// it to fill the stage (object-fit: cover); letterboxing left visible bars
+	// when the aspect ratios didn't match. Re-run on every stage resize, since
+	// the panel's own layout can still shift its size after the player is built.
 	function updateScale() {
 		if (!nativeWidth || !nativeHeight) return;
 		const rect = stage.getBoundingClientRect();
