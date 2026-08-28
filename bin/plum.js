@@ -575,6 +575,22 @@ async function serverUpdate() {
 	// logic no matter how new the just-installed files on disk actually are.
 	for (const dir of getInstalls('server')) {
 		if (!fs.existsSync(path.join(dir, '.plum-server.json'))) continue;
+
+		// This registry is global to the machine, not scoped to the directory
+		// `plum update` was run from — an unrelated project on the same machine
+		// as a registered server would otherwise silently boot that server's
+		// Docker stack. Ask first whenever there's someone to ask; a
+		// non-interactive run (CI, cron, systemd) has no one to ask and keeps
+		// the previous unconditional behavior.
+		if (interactiveAllowed()) {
+			const proceed = await clack.confirm({
+				message: `Found a registered server at ${dir} — restart it?`,
+				initialValue: true
+			});
+			if (clack.isCancel(proceed)) cancelAndExit();
+			if (!proceed) continue;
+		}
+
 		if (fs.existsSync(path.join(dir, 'tests'))) {
 			syncScaffoldInfraFiles(path.join(dir, 'tests'));
 		}
@@ -590,6 +606,18 @@ async function serverUpdate() {
 	for (const dir of getInstalls('node')) {
 		const nodeCfg = loadNodeConfig(dir);
 		if (!nodeCfg.id) continue;
+
+		// Same reasoning as the server loop above — this registry spans the
+		// whole machine, not just the directory `plum update` was run from.
+		if (interactiveAllowed()) {
+			const proceed = await clack.confirm({
+				message: `Found a registered node at ${dir} — restart it?`,
+				initialValue: true
+			});
+			if (clack.isCancel(proceed)) cancelAndExit();
+			if (!proceed) continue;
+		}
+
 		if (fs.existsSync(path.join(dir, 'tests'))) {
 			syncScaffoldInfraFiles(path.join(dir, 'tests'));
 		}
