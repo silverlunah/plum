@@ -56,11 +56,13 @@ export const caseLabel = (index) => `Case ${index}`;
 export const PLAYER_LOAD_ERROR = 'Could not load this recording.';
 export const INSPECT_TOGGLE_LABEL = 'Inspect element';
 export const RESTART_LABEL = 'Restart replay';
+export const STEPS_RAIL_HEADING = 'Steps';
+export const INSPECTOR_HEADING = 'Inspector';
 export const NO_ELEMENT_SELECTED = 'Click an element in the replay to inspect it.';
 export const ELEMENT_ATTRIBUTES_LABEL = 'Attributes';
 export const ELEMENT_SIZE_LABEL = 'Size';
 export const recordingTabLabel = (tabIndex) =>
-	tabIndex === 0 ? 'Main tab' : `Tab ${tabIndex + 1}`;
+	tabIndex === 0 ? 'Main tab' : `Tab/Window ${tabIndex + 1}`;
 
 // ── Live run ──
 export const LIVE_PAGE_TITLE = 'Live Run — Plum';

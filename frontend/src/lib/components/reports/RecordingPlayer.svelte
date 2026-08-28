@@ -9,16 +9,14 @@
 	import 'rrweb-player/dist/style.css';
 	import { fetchRecordingEvents } from '$lib/api/reports';
 	import { computeRecordingSegments } from '$lib/utils/format';
-	import CodeViewer from '$lib/components/ui/CodeViewer.svelte';
-	import StepKeyword from '$lib/components/ui/StepKeyword.svelte';
-	import StepStatusIcon from '$lib/components/ui/StepStatusIcon.svelte';
+	import { describeElement } from '$lib/utils/inspectElement';
+	import StepsRail from './StepsRail.svelte';
+	import MultiTabTimeline from './MultiTabTimeline.svelte';
+	import ElementInspector from './ElementInspector.svelte';
 	import {
 		PLAYER_LOAD_ERROR,
 		INSPECT_TOGGLE_LABEL,
 		RESTART_LABEL,
-		NO_ELEMENT_SELECTED,
-		ELEMENT_ATTRIBUTES_LABEL,
-		ELEMENT_SIZE_LABEL,
 		recordingTabLabel
 	} from '$lib/copy/reports';
 
@@ -30,6 +28,9 @@
 	const MIN_PLAYER_WIDTH = 480;
 	const MIN_PLAYER_HEIGHT = 320;
 	const CONTROLLER_HEIGHT = 80;
+	// Player would otherwise exactly fill .player-stage, leaving the button row
+	// flush against its edge — shrinks it so centering leaves a margin.
+	const STAGE_BREATHING_ROOM = 24;
 
 	let stage;
 	let container;
@@ -42,14 +43,39 @@
 	let currentStepIndex = -1;
 	let stepTimestamps = [];
 
-	// Recordings placed on one timeline so playback can auto-switch tabs — see computeRecordingSegments.
+	// Placed on one timeline so playback can auto-switch tabs — see computeRecordingSegments.
 	let recordingsById = new Map();
 	let eventsByRecordingId = new Map();
 	let segments = [];
 	let activeSegmentIndex = 0;
 	$: activeRecording = recordingsById.get(segments[activeSegmentIndex]?.recordingId);
 
-	// goto() offsets are relative to the recording's first event — bound to this
+	// buildPlayer's mounted slice can start later than the segment's own `from`
+	// (see its headIdx search) — this is that slice's real local-zero.
+	// seekToAbsolute needs it to know whether an in-place goto() can reach a target.
+	let mountedFirst = 0;
+
+	// rrweb's own timeline resets per segment — this tracks absolute position
+	// continuously across every rebuild, feeding MultiTabTimeline (multi-tab
+	// only; single-tab's one player already has a correct native timeline).
+	let livePosition = 0;
+	let livePositionRaf = null;
+	function tickLivePosition() {
+		// Skip while finished: the finish handler snaps livePosition to overallTo
+		// (endedAt can sit past the last real event) — polling here would
+		// immediately overwrite that.
+		const replayer = currentReplayer();
+		if (replayer && !finished) livePosition = mountedFirst + replayer.getCurrentTime();
+		livePositionRaf = requestAnimationFrame(tickLivePosition);
+	}
+	$: overallFrom = segments[0]?.from ?? 0;
+	$: overallTo = segments[segments.length - 1]?.to ?? 0;
+
+	function currentReplayer() {
+		return player?.getReplayer?.();
+	}
+
+	// goto() offsets are relative to a recording's first event — bounded to this
 	// segment's own slice so a repeat appearance doesn't land in an earlier one.
 	function segmentEventBounds(seg) {
 		const events = eventsByRecordingId.get(seg?.recordingId) ?? [];
@@ -73,25 +99,28 @@
 		return idx;
 	}
 
-	// stepIndexOverride: the target ts is the NEXT step's marker, so deriving the
-	// highlight from it would pick the wrong step (see jumpToStep).
+	// ts is the next step's marker, so deriving the highlight from it would pick
+	// the wrong step — see jumpToStep.
 	function seekToAbsolute(ts, autoplay, stepIndexOverride) {
 		let targetIdx = segments.findIndex((s) => ts >= s.from && ts <= s.to);
 		if (targetIdx === -1) targetIdx = segments.length - 1;
 		if (targetIdx < 0) return;
 
 		const { first, span } = segmentEventBounds(segments[targetIdx]);
-		const localOffset = Math.min(Math.max(0, ts - first), span);
-		const speed = player?.getReplayer?.()?.config.speed ?? 1;
+		const recordingOffset = Math.min(Math.max(0, ts - first), span);
+		const speed = currentReplayer()?.config.speed ?? 1;
 
-		if (targetIdx === activeSegmentIndex) {
-			player?.goto(localOffset, autoplay);
+		// An in-place goto() only works if the mounted slice already covers `ts`
+		// — e.g. after toggling Inspect there may be nothing loaded to render.
+		// Rebuild instead so the right FullSnapshot gets loaded again.
+		if (targetIdx === activeSegmentIndex && ts >= mountedFirst) {
+			player?.goto(ts - mountedFirst, autoplay);
 			if (stepIndexOverride !== undefined) currentStepIndex = stepIndexOverride;
 		} else {
 			activeSegmentIndex = targetIdx;
 			buildPlayer({
 				finished: false,
-				timeOffset: localOffset,
+				timeOffset: recordingOffset,
 				paused: !autoplay,
 				speed,
 				stepIndexOverride
@@ -102,43 +131,14 @@
 	function jumpToStep(i) {
 		if (stepTimestamps[i] === undefined || !player) return;
 		currentStepIndex = i;
-		// Jump to the next marker (or end) — step i's own marker fires before its actions run.
+		// Jump to the next marker — step i's own marker fires before its actions run.
 		const nextTs = stepTimestamps[i + 1] ?? segments[segments.length - 1]?.to;
 		if (nextTs === undefined) return;
-		seekToAbsolute(nextTs, false, i); // paused, so a fast step isn't missed
-	}
-
-	function escapeAttr(v) {
-		return v.replace(/"/g, '&quot;');
-	}
-
-	function shallowMarkup(el) {
-		const tag = el.tagName.toLowerCase();
-		const attrs = Array.from(el.attributes ?? [])
-			.map((a) => ` ${a.name}="${escapeAttr(a.value)}"`)
-			.join('');
-		const childCount = el.children.length;
-		const text = childCount === 0 ? (el.textContent ?? '').trim() : '';
-		const inner =
-			childCount > 0
-				? `\n  <!-- ${childCount} child element${childCount === 1 ? '' : 's'} -->\n`
-				: text
-					? `\n  ${text.slice(0, 200)}\n`
-					: '';
-		return `<${tag}${attrs}>${inner}</${tag}>`;
-	}
-
-	function describeElement(el) {
-		const rect = el.getBoundingClientRect();
-		return {
-			markup: shallowMarkup(el),
-			attributes: Array.from(el.attributes ?? []).map((a) => ({ name: a.name, value: a.value })),
-			box: { width: Math.round(rect.width), height: Math.round(rect.height) }
-		};
+		seekToAbsolute(nextTs, false, i);
 	}
 
 	function setupInspectListeners() {
-		const replayer = player?.getReplayer?.();
+		const replayer = currentReplayer();
 		const iframe = replayer?.iframe;
 		const doc = iframe?.contentDocument;
 		if (!iframe || !doc) return;
@@ -152,8 +152,8 @@
 			const rect = target.getBoundingClientRect();
 			const iframeRect = iframe.getBoundingClientRect();
 			const stageRect = stage.getBoundingClientRect();
-			// rrweb-player scales the iframe to fit — clientWidth/Height are the
-			// pre-scale box, getBoundingClientRect the post-scale one; ratio = scale.
+			// rrweb-player scales the iframe to fit — clientWidth/Height are
+			// pre-scale, getBoundingClientRect post-scale; ratio = scale.
 			const scaleX = iframeRect.width / (iframe.clientWidth || 1);
 			const scaleY = iframeRect.height / (iframe.clientHeight || 1);
 			// Relative to .player-stage so its overflow:hidden clips the highlight.
@@ -203,13 +203,17 @@
 		inspecting = !inspecting;
 		const resumeState = currentPlaybackState();
 		if (resumeState && inspecting) resumeState.paused = true;
+		// jumpToStep pauses exactly at the NEXT marker to show step i's result —
+		// recomputing the highlight from that boundary would read it as step i+1
+		// having started. Preserve the already-correct index instead.
+		if (resumeState) resumeState.stepIndexOverride = currentStepIndex;
 		if (!inspecting) teardownInspectListeners();
 		await tick();
 		buildPlayer(resumeState);
 	}
 
 	function togglePlayPause() {
-		const replayer = player?.getReplayer?.();
+		const replayer = currentReplayer();
 		if (!replayer) return;
 		if (replayer.service.state.matches('paused')) {
 			player.play();
@@ -233,13 +237,38 @@
 	let finished = false;
 	let restartBoxStyle = '';
 
+	// rrweb schedules 'finish' 50ms after casting the array's last event — even
+	// during a paused seek's sync catch-up. Only real autoplay should trigger
+	// the auto-advance-to-next-tab below.
+	let awaitingNaturalFinish = false;
+
+	// rrweb's 50ms finish timeout isn't cancelled by destroying the replayer —
+	// a short segment can be torn down before its own stale finish fires,
+	// double-advancing past whatever's current. Each build gets a generation;
+	// a finish only acts if its replayer is still the live one.
+	let buildGeneration = 0;
+
+	function playPauseButton() {
+		return container?.querySelector('.rr-controller__btns button');
+	}
+
+	function positionRestartButton(btn) {
+		if (!btn) return;
+		const btnRect = btn.getBoundingClientRect();
+		const stageRect = stage.getBoundingClientRect();
+		restartBoxStyle = `top: ${btnRect.top - stageRect.top}px; left: ${btnRect.left - stageRect.left}px; width: ${btnRect.width}px; height: ${btnRect.height}px;`;
+	}
+
 	// Mutating rrweb's play/pause button directly duplicates the icon — overlay our own instead.
 	function setupFinishRestart() {
-		const replayer = player?.getReplayer?.();
-		const playPauseBtn = container?.querySelector('.rr-controller__btns button');
+		const replayer = currentReplayer();
+		const playPauseBtn = playPauseButton();
 		if (!replayer || !playPauseBtn) return;
+		const myGeneration = buildGeneration;
 
 		replayer.on('finish', () => {
+			if (buildGeneration !== myGeneration) return;
+			if (!awaitingNaturalFinish) return;
 			if (activeSegmentIndex < segments.length - 1) {
 				const speed = replayer.config.speed;
 				activeSegmentIndex += 1;
@@ -249,19 +278,33 @@
 				buildPlayer({ finished: false, timeOffset, paused: false, speed });
 				return;
 			}
-			const btnRect = playPauseBtn.getBoundingClientRect();
-			const stageRect = stage.getBoundingClientRect();
-			restartBoxStyle = `top: ${btnRect.top - stageRect.top}px; left: ${btnRect.left - stageRect.left}px; width: ${btnRect.width}px; height: ${btnRect.height}px;`;
+			positionRestartButton(playPauseBtn);
 			finished = true;
+			// endedAt can sit past the last real event, so livePosition otherwise
+			// stalls short of overallTo on natural finish.
+			livePosition = overallTo;
 		});
-		replayer.on('start', () => (finished = false));
-		replayer.on('resume', () => (finished = false));
+		// Derived from the replayer's own lifecycle, not our call sites — the
+		// native play/pause button calls rrweb's own toggle() directly,
+		// bypassing togglePlayPause(). A paused seek still nets out false:
+		// internally it's play() (emits start) then an explicit pause (emits pause).
+		replayer.on('start', () => {
+			finished = false;
+			awaitingNaturalFinish = true;
+		});
+		replayer.on('resume', () => {
+			finished = false;
+			awaitingNaturalFinish = true;
+		});
+		replayer.on('pause', () => {
+			awaitingNaturalFinish = false;
+		});
 	}
 
 	function restartPlayback() {
 		finished = false;
 		if (activeSegmentIndex !== 0) {
-			const speed = player?.getReplayer?.()?.config.speed ?? 1;
+			const speed = currentReplayer()?.config.speed ?? 1;
 			activeSegmentIndex = 0;
 			buildPlayer({ finished: false, timeOffset: 0, paused: false, speed });
 		} else {
@@ -270,12 +313,16 @@
 	}
 
 	function currentPlaybackState() {
-		const replayer = player?.getReplayer?.();
+		const replayer = currentReplayer();
 		if (!replayer) return null;
 		if (finished) return { finished: true, speed: replayer.config.speed };
+		// getCurrentTime() is relative to the mounted slice's first event, not
+		// the recording's true first — re-anchor to what buildPlayer expects,
+		// same as seekToAbsolute's mountedFirst.
+		const { first: recordingFirst } = segmentEventBounds(segments[activeSegmentIndex]);
 		return {
 			finished: false,
-			timeOffset: replayer.getCurrentTime(),
+			timeOffset: mountedFirst + replayer.getCurrentTime() - recordingFirst,
 			paused: replayer.service.state.matches('paused'),
 			speed: replayer.config.speed
 		};
@@ -295,10 +342,15 @@
 
 	// rrweb-player's size is fixed at construction — rebuild to re-measure the stage.
 	function buildPlayer(resumeState = null) {
+		buildGeneration += 1;
 		const stageRect = stage.getBoundingClientRect();
 		const width = Math.max(MIN_PLAYER_WIDTH, Math.floor(stageRect.width));
-		// Subtract rrweb's built-in controller height or it overflows the stage.
-		const height = Math.max(MIN_PLAYER_HEIGHT, Math.floor(stageRect.height) - CONTROLLER_HEIGHT);
+		// Subtract rrweb's controller height — MultiTabTimeline overlays into
+		// that same reserved strip, no extra space needed.
+		const height = Math.max(
+			MIN_PLAYER_HEIGHT,
+			Math.floor(stageRect.height) - CONTROLLER_HEIGHT - STAGE_BREATHING_ROOM
+		);
 
 		if (player) {
 			try {
@@ -320,17 +372,22 @@
 			? upperBound
 			: recordingFirst + (resumeState?.timeOffset ?? 0);
 
-		// A recording with more than one FullSnapshot (an in-page navigation, or a tab
-		// that was still on about:blank when it opened) breaks rrweb-player's paused
-		// goto() if it has to fast-forward across more than one — feed it only from the
-		// last FullSnapshot at or before the target so it never has to.
+		// A recording with >1 FullSnapshot (an in-page navigation, or a tab still
+		// on about:blank when opened) breaks a paused goto() if it has to
+		// fast-forward across more than one — feed only from the last snapshot
+		// at or before the target.
 		let headIdx = 0;
 		for (let i = 0; i < tailEvents.length; i++) {
 			if (tailEvents[i].timestamp > targetAbs) break;
 			if (tailEvents[i].type === 2) headIdx = i > 0 && tailEvents[i - 1].type === 4 ? i - 1 : i;
 		}
-		const events = tailEvents.slice(headIdx);
+		// headIdx can reach into an earlier segment's span, dragging its step
+		// markers along as stray ticks on rrweb's timeline. Custom events never
+		// affect playback (sync catch-up skips them), so dropping ones before
+		// this segment only removes the stray ticks.
+		const events = tailEvents.slice(headIdx).filter((e) => e.type !== 5 || e.timestamp >= seg.from);
 		const first = events[0]?.timestamp ?? recordingFirst;
+		mountedFirst = first;
 		const timeOffset = Math.max(0, targetAbs - first);
 
 		player = new Player({
@@ -370,15 +427,9 @@
 		} else if (resumeState.finished) {
 			player.setSpeed(resumeState.speed);
 			finished = true;
-			// Recompute the restart button position — it moved under this rebuild.
-			requestAnimationFrame(() => {
-				if (!container) return;
-				const btn = container.querySelector('.rr-controller__btns button');
-				if (!btn) return;
-				const btnRect = btn.getBoundingClientRect();
-				const stageRect2 = stage.getBoundingClientRect();
-				restartBoxStyle = `top: ${btnRect.top - stageRect2.top}px; left: ${btnRect.left - stageRect2.left}px; width: ${btnRect.width}px; height: ${btnRect.height}px;`;
-			});
+			livePosition = overallTo;
+			// Restart button moved under this rebuild — recompute its position.
+			requestAnimationFrame(() => positionRestartButton(playPauseButton()));
 		} else {
 			player.setSpeed(resumeState.speed);
 			player.goto(timeOffset, !resumeState.paused);
@@ -400,8 +451,6 @@
 			const results = await Promise.all(
 				recordings.map((r) => fetchRecordingEvents(reportId, r.id))
 			);
-			// Only multi-tab scenarios need this — a normal single-tab recording's own
-			// navigations (e.g. login page -> products page) must stay intact.
 			recordings.forEach((r, i) => eventsByRecordingId.set(r.id, results[i] ?? []));
 		} catch {
 			loadError = true;
@@ -432,44 +481,39 @@
 
 		buildPlayer();
 		loading = false;
+		livePositionRaf = requestAnimationFrame(tickLivePosition);
 	});
 
-	onDestroy(destroyPlayer);
+	onDestroy(() => {
+		if (livePositionRaf !== null) cancelAnimationFrame(livePositionRaf);
+		destroyPlayer();
+	});
 </script>
 
 <svelte:window on:keydown={handleWindowKeydown} />
 
 <div class="recording-player">
 	{#if steps.length > 0}
-		<aside class="steps-rail">
-			<div class="steps-rail-header">Steps</div>
-			<ol class="steps-list">
-				{#each steps as step, i}
-					<li>
-						<button
-							class="rail-step"
-							class:rail-step-active={i === currentStepIndex}
-							disabled={stepTimestamps[i] === undefined}
-							on:click={() => jumpToStep(i)}
-						>
-							<StepStatusIcon status={step.status} />
-							<span class="rail-step-text">
-								<StepKeyword keyword={step.keyword} />
-								<span>{step.name}</span>
-							</span>
-						</button>
-					</li>
-				{/each}
-			</ol>
-		</aside>
+		<StepsRail {steps} {stepTimestamps} {currentStepIndex} on:jump={(e) => jumpToStep(e.detail)} />
 	{/if}
 
 	<div class="player-stage" bind:this={stage}>
-		<div
-			class="player-mount"
-			class:player-mount-multi={segments.length > 1}
-			bind:this={container}
-		></div>
+		<div class="player-column">
+			<div
+				class="player-mount"
+				class:player-mount-multi={segments.length > 1}
+				bind:this={container}
+			></div>
+			{#if segments.length > 1}
+				<MultiTabTimeline
+					from={overallFrom}
+					to={overallTo}
+					position={livePosition}
+					{stepTimestamps}
+					on:seek={(e) => seekToAbsolute(e.detail, false)}
+				/>
+			{/if}
+		</div>
 		{#if segments.length > 1 && activeRecording}
 			<div class="active-tab-badge">{recordingTabLabel(activeRecording.tabIndex)}</div>
 		{/if}
@@ -533,47 +577,7 @@
 	</div>
 
 	{#if inspecting}
-		<aside class="inspector-panel">
-			<div class="inspector-header">
-				<svg
-					width="12"
-					height="12"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
-				</svg>
-				Inspector
-			</div>
-			{#if selectedElement}
-				<CodeViewer code={selectedElement.markup} />
-				<div class="inspector-section">
-					<span class="inspector-section-label">{ELEMENT_SIZE_LABEL}</span>
-					<span class="inspector-size"
-						>{selectedElement.box.width} × {selectedElement.box.height}</span
-					>
-				</div>
-				{#if selectedElement.attributes.length > 0}
-					<div class="inspector-section">
-						<span class="inspector-section-label">{ELEMENT_ATTRIBUTES_LABEL}</span>
-					</div>
-					<dl class="inspector-attrs">
-						{#each selectedElement.attributes as attr}
-							<div class="inspector-attr-row">
-								<dt>{attr.name}</dt>
-								<dd>{attr.value}</dd>
-							</div>
-						{/each}
-					</dl>
-				{/if}
-			{:else}
-				<div class="inspector-empty">{NO_ELEMENT_SELECTED}</div>
-			{/if}
-		</aside>
+		<ElementInspector {selectedElement} />
 	{/if}
 </div>
 
@@ -587,75 +591,6 @@
 		overflow: hidden;
 	}
 
-	/* ── Steps rail ── */
-	.steps-rail {
-		flex-shrink: 0;
-		width: 240px;
-		display: flex;
-		flex-direction: column;
-		background: var(--bg-elevated);
-		overflow-y: auto;
-	}
-
-	.steps-rail-header {
-		flex-shrink: 0;
-		padding: 0.7rem 0.9rem 0.5rem;
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.68rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
-	}
-
-	.steps-list {
-		list-style: none;
-		margin: 0;
-		padding: 0 0.5rem 0.5rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.1rem;
-	}
-
-	.rail-step {
-		width: 100%;
-		display: flex;
-		align-items: flex-start;
-		gap: 0.5rem;
-		padding: 0.4rem 0.5rem;
-		background: none;
-		border: none;
-		border-radius: var(--radius-sm);
-		font: inherit;
-		font-size: 0.78rem;
-		line-height: 1.35;
-		text-align: left;
-		color: var(--text-muted);
-		cursor: pointer;
-		transition: background var(--duration-fast) var(--ease-out);
-	}
-	.rail-step:hover:not(:disabled) {
-		background: var(--bg-subtle);
-	}
-	.rail-step:disabled {
-		cursor: default;
-	}
-
-	.rail-step-text {
-		display: inline-flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: 0.35rem;
-		min-width: 0;
-		word-break: break-word;
-	}
-
-	.rail-step-active {
-		background: var(--accent-soft);
-		color: var(--text);
-		font-weight: 500;
-	}
-
 	/* ── Stage ── */
 	.player-stage {
 		position: relative;
@@ -665,11 +600,31 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--bg-subtle);
+		/* Matches the constructed player's own white chrome so
+		   STAGE_BREATHING_ROOM's margin doesn't look like an unstyled gap. */
+		background: var(--bg-elevated);
+	}
+
+	/* Shrink-wraps to .player-mount's own box so MultiTabTimeline can be
+	   positioned absolutely against it, not the wider stage. */
+	.player-column {
+		position: relative;
+		display: inline-flex;
 	}
 
 	.player-mount {
 		display: flex;
+	}
+
+	/* rrweb's .rr-player/.rr-controller ship a rounded corner + drop shadow,
+	   invisible only while the player filled its container edge-to-edge.
+	   STAGE_BREATHING_ROOM now leaves a margin that reveals both as a smudge. */
+	.player-mount :global(.rr-player) {
+		border-radius: 0 !important;
+		box-shadow: none !important;
+	}
+	.player-mount :global(.rr-controller) {
+		border-radius: 0 !important;
 	}
 
 	/* rrweb sets pointer-events:none inline, blocking scroll — safe to override, iframe is sandboxed. */
@@ -685,10 +640,11 @@
 		gap: 0.5rem;
 	}
 
-	/* Multi-tab only: the mounted player holds its recording's full history, not just
-	   this segment's slice — rrweb's scrubber isn't segment-aware, so dragging it can
-	   land before this segment's start. Disable it; the steps rail navigates correctly. */
-	.player-mount-multi :global(.rr-progress) {
+	/* Multi-tab only: rrweb's timeline can't span multiple tabs (see
+	   livePosition above) — visibility (not display) keeps its layout space
+	   reserved for MultiTabTimeline to overlay into. */
+	.player-mount-multi :global(.rr-timeline) {
+		visibility: hidden !important;
 		pointer-events: none !important;
 	}
 
@@ -788,89 +744,5 @@
 	.inspect-fab-active {
 		background: var(--accent);
 		opacity: 1;
-	}
-
-	/* ── Inspector ── */
-	.inspector-panel {
-		flex-shrink: 0;
-		width: 280px;
-		display: flex;
-		flex-direction: column;
-		gap: 0.65rem;
-		padding: 0.75rem 0.9rem 0.9rem;
-		background: var(--bg-elevated);
-		overflow-y: auto;
-	}
-	/* A long attribute list scrolls the panel, doesn't squeeze the code viewer. */
-	.inspector-panel > * {
-		flex-shrink: 0;
-	}
-	.inspector-panel :global(.code-viewer) {
-		flex-shrink: 0;
-	}
-
-	.inspector-header {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding-bottom: 0.5rem;
-		margin-bottom: 0.1rem;
-		border-bottom: 1px solid var(--border);
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.68rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
-	}
-
-	.inspector-empty {
-		color: var(--text-muted);
-		font-size: 0.8rem;
-		padding: 1rem 0.1rem;
-		line-height: 1.5;
-	}
-
-	.inspector-section {
-		display: flex;
-		align-items: baseline;
-		gap: 0.5rem;
-	}
-	.inspector-section-label {
-		font-size: 0.68rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--text-muted);
-	}
-	.inspector-size {
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.75rem;
-		color: var(--text);
-	}
-
-	.inspector-attrs {
-		margin: 0;
-		display: flex;
-		flex-direction: column;
-	}
-	.inspector-attr-row {
-		display: flex;
-		flex-direction: column;
-		gap: 0.1rem;
-		padding: 0.35rem 0;
-		border-top: 1px solid var(--border);
-	}
-	.inspector-attr-row dt {
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.7rem;
-		color: var(--accent);
-	}
-	.inspector-attr-row dd {
-		margin: 0;
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.72rem;
-		color: var(--text-muted);
-		word-break: break-all;
 	}
 </style>
