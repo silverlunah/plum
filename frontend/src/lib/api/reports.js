@@ -32,10 +32,6 @@ export function reportUrl(id) {
 	return `/reports/${id}`;
 }
 
-export function screenshotUrl(filename) {
-	return `${API_BASE}/screenshots/${filename}`;
-}
-
 export async function fetchReportDetail(id) {
 	const res = await fetch(`${API_BASE}/reports/${id}`);
 	if (!res.ok) throw new Error('Report not found');

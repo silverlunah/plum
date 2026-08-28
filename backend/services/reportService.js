@@ -5,13 +5,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const zlib = require('zlib');
 const prisma = require('./prisma');
 const { isScheduledTrigger, normaliseTrigger } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { REPORT_STATUS } = require('../constants/jobStatus');
-const { SCREENSHOTS_DIR } = require('../lib/reportFilename');
 
 // Matched by string literal in backend/tests/utils/browser.ts (flushRecordings) —
 // the two runtimes don't share a module, mirroring how 'image/png' is already
@@ -112,22 +110,6 @@ async function resolveCronJobId(triggerType) {
 }
 
 /**
- * Walks a screenshot filename out of the content JSON tree.
- * Used when deleting reports to clean up screenshot files.
- */
-function collectScreenshotFiles(content) {
-	const files = [];
-	for (const feature of content?.features ?? []) {
-		for (const scenario of feature?.scenarios ?? []) {
-			for (const step of scenario?.steps ?? []) {
-				if (step.screenshot) files.push(step.screenshot);
-			}
-		}
-	}
-	return files;
-}
-
-/**
  * Stable identity for a Cucumber feature across distributed lanes. Dispatched
  * runs report an absolute temp uri (…/plum-job-<uuid>/features/Login.feature)
  * that differs per runner; the suffix from `features/` onward is stable.
@@ -225,15 +207,6 @@ function mergeRawAttempt(accumulated, attemptRawJson, round, attemptsMap) {
 	return accumulated;
 }
 
-function deleteScreenshotFiles(content) {
-	for (const file of collectScreenshotFiles(content)) {
-		const p = path.join(SCREENSHOTS_DIR, file);
-		try {
-			if (fs.existsSync(p)) fs.unlinkSync(p);
-		} catch {}
-	}
-}
-
 /**
  * Parses one scenario's hidden hook-step rrweb attachments (flushed from
  * browser.ts's flushRecordings via the After hook) into Recording rows ready
@@ -275,15 +248,11 @@ function extractRecordings(scenario) {
 /**
  * Transforms raw Cucumber JSON into our stored format:
  * - Resolves pass/fail status per step/scenario/feature
- * - Extracts base64 screenshots to PNG files on disk
- * - Stores only the filename in the content (not the base64 blob)
  * - Extracts rrweb recordings attached via the After hook
  *
  * Returns { features, status, recordings } where status is 'PASS' | 'FAIL'.
  */
 function processCucumberJson(raw, attempts = {}) {
-	fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
-
 	const recordings = [];
 
 	const features = raw.map((feature) => {
@@ -291,38 +260,8 @@ function processCucumberJson(raw, attempts = {}) {
 			recordings.push(...extractRecordings(scenario));
 
 			const visibleSteps = (scenario.steps || []).filter((s) => !s.hidden);
-			const hookScreenshots = (scenario.steps || [])
-				.filter((s) => s.hidden)
-				.flatMap((step) => step.embeddings?.filter((e) => e.mime_type === 'image/png') ?? []);
-			const failedStepIndex = visibleSteps.findLastIndex((s) => s.result?.status === 'failed');
 
-			const steps = visibleSteps.map((step, index) => {
-				// AfterStep hook attachments land in step.after[].embeddings in Cucumber.js JSON
-				const afterStepScreenshot =
-					(step.after ?? []).flatMap(
-						(a) => a.embeddings?.filter((e) => e.mime_type === 'image/png') ?? []
-					)[0]?.data ?? null;
-
-				const screenshotData =
-					step.embeddings?.find((e) => e.mime_type === 'image/png')?.data ??
-					afterStepScreenshot ??
-					(index === failedStepIndex ? hookScreenshots[0]?.data : null) ??
-					null;
-
-				let screenshotFile = null;
-				if (screenshotData) {
-					screenshotFile = `${crypto.randomUUID()}.png`;
-					try {
-						fs.writeFileSync(
-							path.join(SCREENSHOTS_DIR, screenshotFile),
-							Buffer.from(screenshotData, 'base64')
-						);
-					} catch (e) {
-						console.error(`[report] Failed to write screenshot: ${e.message}`);
-						screenshotFile = null;
-					}
-				}
-
+			const steps = visibleSteps.map((step) => {
 				const rawStatus = step.result?.status ?? 'pending';
 				// Undefined/ambiguous steps rank below 'failed' otherwise, so a step
 				// definition mismatch reports as passing instead of failing.
@@ -335,7 +274,6 @@ function processCucumberJson(raw, attempts = {}) {
 					status,
 					duration: Math.round((step.result?.duration ?? 0) / 1_000_000),
 					error: step.result?.error_message ?? null,
-					screenshot: screenshotFile,
 					dataTable: step.arguments?.[0]?.rows?.map((row) => row.cells) ?? null
 				};
 			});
@@ -553,8 +491,8 @@ const saveReport = async ({
 };
 
 /**
- * Merges Cucumber JSON from all distributed lanes, processes screenshots,
- * and persists one combined report to the database.
+ * Merges Cucumber JSON from all distributed lanes and persists one combined
+ * report to the database.
  *
  * @param {{
  *   reports: (string|null)[],
@@ -659,17 +597,10 @@ const attachDurationToLatestReport = async ({ afterTimestamp, duration }) => {
 // ---------------------------------------------------------------------------
 
 const deleteReport = async (id) => {
-	const report = await prisma.report.findUnique({ where: { id }, select: { content: true } });
-	if (report) deleteScreenshotFiles(report.content);
 	await prisma.report.delete({ where: { id } });
 };
 
 const deleteReports = async (ids) => {
-	const reports = await prisma.report.findMany({
-		where: { id: { in: ids } },
-		select: { content: true }
-	});
-	for (const r of reports) deleteScreenshotFiles(r.content);
 	await prisma.report.deleteMany({ where: { id: { in: ids } } });
 };
 

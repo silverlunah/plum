@@ -123,7 +123,6 @@
 				runTitle: label,
 				startedBy: meta?.startedBy
 			},
-			latestScreenshot: null,
 			rrwebByLane: {}
 		};
 	}
@@ -239,7 +238,7 @@
 		s.on(SOCKET_EVENTS.RUNNER_LANES_INIT, (lanes) => {
 			runnerState.update((r) => ({
 				...r,
-				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '', latestScreenshot: null }))
+				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '' }))
 			}));
 		});
 
@@ -254,19 +253,6 @@
 			runnerState.update((r) => ({
 				...r,
 				lanes: r.lanes.map((l) => (l.id === id ? { ...l, status } : l))
-			}));
-		});
-
-		s.on(SOCKET_EVENTS.STEP_SCREENSHOT, ({ stepName, data }) => {
-			runnerState.update((r) => ({ ...r, latestScreenshot: { stepName, data } }));
-		});
-
-		s.on(SOCKET_EVENTS.RUNNER_LANE_SCREENSHOT, ({ id, stepName, data }) => {
-			runnerState.update((r) => ({
-				...r,
-				lanes: r.lanes.map((l) =>
-					l.id === id ? { ...l, latestScreenshot: { stepName, data } } : l
-				)
 			}));
 		});
 
@@ -293,7 +279,7 @@
 		s.on(SOCKET_EVENTS.BG_RUN_LANES_INIT, ({ runId, lanes }) => {
 			updateBgRun(runId, (run) => ({
 				...run,
-				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '', latestScreenshot: null }))
+				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '' }))
 			}));
 		});
 
@@ -308,19 +294,6 @@
 			updateBgRun(runId, (run) => ({
 				...run,
 				lanes: run.lanes.map((l) => (l.id === laneId ? { ...l, status } : l))
-			}));
-		});
-
-		s.on(SOCKET_EVENTS.BG_RUN_SCREENSHOT, ({ runId, stepName, data }) => {
-			updateBgRun(runId, (run) => ({ ...run, latestScreenshot: { stepName, data } }));
-		});
-
-		s.on(SOCKET_EVENTS.BG_RUN_LANE_SCREENSHOT, ({ runId, laneId, stepName, data }) => {
-			updateBgRun(runId, (run) => ({
-				...run,
-				lanes: run.lanes.map((l) =>
-					l.id === laneId ? { ...l, latestScreenshot: { stepName, data } } : l
-				)
 			}));
 		});
 

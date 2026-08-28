@@ -48,7 +48,6 @@ interface TabRecording {
 let _browser: Browser;
 let _context: BrowserContext;
 let _page: Page;
-let _ssCounter = 0;
 let _liveRRwebCounter = 0;
 let _liveRRwebTimer: ReturnType<typeof setInterval> | null = null;
 let _tabs: Map<Page, TabRecording> = new Map();
@@ -133,9 +132,8 @@ export async function setup(): Promise<void> {
 	_context.on('page', attachRecorder);
 	_page = await _context.newPage();
 
-	// Only when someone's actually watching live (mirrors streamLiveScreenshot's
-	// own PLUM_SS_DIR gate) — a scheduled/background run with no viewer shouldn't
-	// pay for this.
+	// Only when someone's actually watching live — a scheduled/background run
+	// with no viewer shouldn't pay for this.
 	if (process.env.PLUM_SS_DIR) {
 		_liveRRwebTimer = setInterval(flushLiveRRwebEvents, 500);
 	}
@@ -143,9 +141,9 @@ export async function setup(): Promise<void> {
 
 // Sends only what's newly arrived since the last tick, per tab, so the live
 // viewer gets a steady trickle instead of the full buffer growing unbounded —
-// same file-drop mechanism streamLiveScreenshot uses, since the actual browser
-// automation runs several process levels below the primary/node server with no
-// direct pipe back to it.
+// small files dropped in PLUM_SS_DIR, since the actual browser automation runs
+// several process levels below the primary/node server with no direct pipe
+// back to it.
 function flushLiveRRwebEvents(): void {
 	const ssDir = process.env.PLUM_SS_DIR;
 	if (!ssDir) return;
@@ -170,18 +168,6 @@ function flushLiveRRwebEvents(): void {
 	}
 }
 
-export async function screenshotStep(
-	attach: (data: Buffer, mime: string) => Promise<void>
-): Promise<void> {
-	if (!_page) return;
-	try {
-		const screenshot = await _page.screenshot({ type: 'png' });
-		await attach(screenshot, 'image/png');
-	} catch {
-		// page may be navigating or already closed
-	}
-}
-
 /**
  * Injects a labeled rrweb custom event at the current recording timestamp so
  * the replay UI can show which step was running at any point in the timeline.
@@ -202,26 +188,11 @@ export async function markStepStart(stepName: string): Promise<void> {
 	}
 }
 
-export async function streamLiveScreenshot(stepName: string): Promise<void> {
-	const ssDir = process.env.PLUM_SS_DIR;
-	if (!ssDir || !_page) return;
-	try {
-		const seq = `${String(Date.now()).padStart(16, '0')}-${String(++_ssCounter).padStart(4, '0')}`;
-		const screenshot = await _page.screenshot({ type: 'jpeg', quality: 70 });
-		fs.writeFileSync(
-			path.join(ssDir, `${seq}.ss.json`),
-			JSON.stringify({ stepName, data: screenshot.toString('base64') })
-		);
-	} catch {
-		// ignore — live streaming is best-effort
-	}
-}
-
 /**
  * Flushes every tab's buffered rrweb events (one per opened tab/popup) as a
- * gzip-compressed attachment. Reuses the same `attach()` → Cucumber JSON
- * `embeddings[]` → processCucumberJson() pipeline that screenshots already
- * travel through, tagged with a mime type reportService can pick out.
+ * gzip-compressed attachment via the `attach()` → Cucumber JSON `embeddings[]`
+ * → processCucumberJson() pipeline, tagged with a mime type reportService can
+ * pick out.
  */
 export async function flushRecordings(
 	attach: (data: Buffer, mime: string) => Promise<void>
@@ -265,20 +236,6 @@ export async function flushRecordings(
 	}
 }
 
-export async function teardown(
-	attach: (data: Buffer, mime: string) => Promise<void>,
-	failed: boolean
-): Promise<void> {
-	if (failed && _page) {
-		const screenshotDir = 'reports/screenshots';
-		if (!fs.existsSync(screenshotDir)) {
-			fs.mkdirSync(screenshotDir, { recursive: true });
-		}
-		const screenshotPath = path.join(screenshotDir, `screenshot_${Date.now()}.png`);
-		await _page.screenshot({ path: screenshotPath });
-		const screenshotData = fs.readFileSync(screenshotPath);
-		await attach(screenshotData, 'image/png');
-		fs.unlinkSync(screenshotPath);
-	}
+export async function teardown(): Promise<void> {
 	await _browser?.close();
 }

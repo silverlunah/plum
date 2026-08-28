@@ -137,10 +137,6 @@ export function parseRunnerLogs(logs) {
 	return sections;
 }
 
-export function scenarioHasScreenshots(scenario) {
-	return scenario.steps?.some((step) => step.screenshot) ?? false;
-}
-
 /**
  * Buckets a report's features/scenarios by runner (lane) then worker
  * (Cucumber --parallel process), preserving first-seen order. The innermost

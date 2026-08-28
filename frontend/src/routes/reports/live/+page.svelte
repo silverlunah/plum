@@ -51,7 +51,6 @@
 		status: 'idle',
 		lanes: [],
 		currentRun: null,
-		latestScreenshot: null,
 		rrwebByLane: {}
 	};
 
@@ -322,7 +321,7 @@
 		<!-- ── Dual-stream view ── -->
 		<div class="run-view">
 			<!-- Live stream panel -->
-			<div class="screenshot-panel">
+			<div class="stream-panel">
 				{#if activeWorkerEvents.length > 0}
 					<LiveReplayer events={activeWorkerEvents} />
 				{:else}
@@ -731,8 +730,8 @@
 		animation: fadeUp 0.35s var(--ease-out) 0.05s both;
 	}
 
-	/* ── Screenshot panel ── */
-	.screenshot-panel {
+	/* ── Live stream panel ── */
+	.stream-panel {
 		position: relative;
 		background: var(--terminal-bg);
 		display: flex;

@@ -30,7 +30,7 @@ const port = parseInt(process.env.PORT || DEFAULT_PORT, 10);
 // The underlying HTTP server, shared by Express and Socket.io.
 const server = http.createServer(app);
 
-// Real-time transport for live test output, screenshots, and run status.
+// Real-time transport for live test output, the rrweb stream, and run status.
 const io = new Server(server, { cors: { origin: '*' } });
 
 async function start() {

@@ -7,7 +7,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { slide } from 'svelte/transition';
-	import { fetchReportDetail, screenshotUrl, fetchRecordings } from '$lib/api/reports';
+	import { fetchReportDetail, fetchRecordings } from '$lib/api/reports';
 	import {
 		isScheduled,
 		triggerLabel,
@@ -34,9 +34,6 @@
 		RETRY_TITLE,
 		WATCH_REPLAY_TITLE,
 		REPLAY_LABEL,
-		SCREENSHOT_TOGGLE_LABEL,
-		STEP_SCREENSHOT_ALT,
-		NO_SCREENSHOT_MESSAGE,
 		runnersBadge,
 		casesCountLabel,
 		attemptsLabel,
@@ -573,17 +570,6 @@
 															</tbody>
 														</table>
 													{/if}
-
-													{#if step.screenshot}
-														<details class="screenshot-wrap">
-															<summary class="screenshot-toggle">{SCREENSHOT_TOGGLE_LABEL}</summary>
-															<img
-																class="screenshot"
-																src={screenshotUrl(step.screenshot)}
-																alt={STEP_SCREENSHOT_ALT}
-															/>
-														</details>
-													{/if}
 												</div>
 											{/each}
 										{/each}
@@ -1093,24 +1079,6 @@
 		background: var(--bg-subtle);
 		color: var(--text-muted);
 		font-weight: 600;
-	}
-
-	.screenshot-wrap {
-		margin: 0.5rem 0 0.25rem 1.75rem;
-	}
-
-	.screenshot-toggle {
-		font-size: 0.75rem;
-		color: var(--text-muted);
-		cursor: pointer;
-		user-select: none;
-	}
-
-	.screenshot {
-		margin-top: 0.5rem;
-		max-width: 100%;
-		border-radius: var(--radius-sm);
-		border: 1px solid var(--border);
 	}
 
 	.loading-state {

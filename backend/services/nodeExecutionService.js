@@ -9,7 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { io: ioClient } = require('socket.io-client');
-const { startSsPoller } = require('../lib/screenshotPoller');
+const { startRRwebPoller } = require('../lib/rrwebPoller');
 const { TRIGGER_REMOTE } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { JOB_STATUS } = require('../constants/jobStatus');
@@ -46,8 +46,8 @@ function connectPrimaryStream(primaryUrl, jobId) {
 }
 
 // Starts a remote test job dispatched from the primary server: materializes
-// any uploaded test files, spawns `npm run test`, and tracks logs/screenshots
-// for later HTTP polling (see pollJob).
+// any uploaded test files, spawns `npm run test`, and tracks logs for later
+// HTTP polling (see pollJob).
 function startJob({
 	tags,
 	browser = DEFAULT_BROWSER,
@@ -87,8 +87,7 @@ function startJob({
 		meta: { tags: tags || '', browser, workers },
 		tempTestsDir,
 		reportFile,
-		ssDir,
-		pendingScreenshots: []
+		ssDir
 	};
 
 	const env = {
@@ -108,15 +107,9 @@ function startJob({
 	};
 	if (workers > 1) env.PARALLEL = String(workers);
 
-	const ssPoller = startSsPoller(
-		ssDir,
-		(data) => {
-			jobs[jobId]?.pendingScreenshots.push(data);
-		},
-		(batch) => {
-			primaryStream?.emit('rrweb-batch', batch);
-		}
-	);
+	const ssPoller = startRRwebPoller(ssDir, (batch) => {
+		primaryStream?.emit('rrweb-batch', batch);
+	});
 
 	const proc = spawn('npm', ['run', 'test'], { env, shell: true, cwd: BACKEND_DIR });
 	proc.stdout.on('data', (d) => {
@@ -158,17 +151,15 @@ function startJob({
 	return jobId;
 }
 
-// Drains and returns pending screenshots plus logs since `offset` — used by
-// the primary's HTTP polling loop (this node has no socket.io connection back).
+// Drains and returns logs since `offset` — used by the primary's HTTP polling
+// loop (this node has no socket.io connection back).
 function pollJob(jobId, offset) {
 	const job = jobs[jobId];
 	if (!job) return null;
-	const screenshots = job.pendingScreenshots.splice(0);
 	return {
 		status: job.status,
 		logs: job.logs.slice(offset),
-		exitCode: job.exitCode,
-		screenshots
+		exitCode: job.exitCode
 	};
 }
 
