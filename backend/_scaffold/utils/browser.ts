@@ -24,6 +24,10 @@ import * as zlib from 'zlib';
 // (processCucumberJson) — the two runtimes don't share a module, mirroring how
 // 'image/png' is already duplicated between this file and reportService.js.
 const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
+// Small, always-attached marker (independent of whether any tab actually
+// recorded events) so a scenario's worker is always recoverable for grouping,
+// even on an instant-failure scenario with an empty recording.
+const WORKER_META_MIME_TYPE = 'application/x-plum-worker+json';
 // @rrweb/record's package.json only exports its main entry ("."), so a deep
 // require.resolve() of the UMD bundle is blocked by Node's exports map — resolve
 // the (exported) main entry instead and locate the sibling file on disk.
@@ -36,25 +40,46 @@ interface TabRecording {
 	tabId: string;
 	tabIndex: number;
 	events: unknown[];
+	openedAt: number;
+	closedAt: number | null;
+	liveFlushedCount: number;
 }
 
 let _browser: Browser;
 let _context: BrowserContext;
 let _page: Page;
-let _ssCounter = 0;
+let _liveRRwebCounter = 0;
+let _liveRRwebTimer: ReturnType<typeof setInterval> | null = null;
 let _tabs: Map<Page, TabRecording> = new Map();
 let _tabCounter = 0;
 let _workerId = 1;
 
 export const page = (): Page => _page;
+export const context = (): BrowserContext => _context;
 
 function tabIdForIndex(index: number): string {
 	return index === 0 ? 'main' : `tab-${index + 1}`;
 }
 
+// A static page (nothing left to interact with) can go a long time between
+// rrweb events, or emit none at all after its initial load — its own event
+// timestamps are a poor proxy for how long it stayed relevant. Real
+// open/close times let the replay UI line multiple tabs up on one timeline
+// without guessing from event gaps.
 function attachRecorder(pg: Page): void {
 	const tabIndex = _tabCounter++;
-	_tabs.set(pg, { tabId: tabIdForIndex(tabIndex), tabIndex, events: [] });
+	const recording: TabRecording = {
+		tabId: tabIdForIndex(tabIndex),
+		tabIndex,
+		events: [],
+		openedAt: Date.now(),
+		closedAt: null,
+		liveFlushedCount: 0
+	};
+	_tabs.set(pg, recording);
+	pg.on('close', () => {
+		recording.closedAt = Date.now();
+	});
 }
 
 export async function setup(): Promise<void> {
@@ -87,7 +112,12 @@ export async function setup(): Promise<void> {
 	});
 	await _context.addInitScript({ path: RECORD_BUNDLE_PATH });
 	await _context.addInitScript(() => {
-		// @ts-ignore — rrwebRecord is injected by the record.umd.min.cjs bundle above
+		// addInitScript runs in every frame, including hidden ad/tracking iframes.
+		// Recordings are tracked per-Page, so an unguarded sub-frame session would
+		// corrupt the tab's event stream with bogus 0x0 "about:blank" entries.
+		// @ts-ignore
+		if (window.self !== window.top) return;
+		// @ts-ignore
 		if (window.rrwebRecord) {
 			// @ts-ignore
 			window.rrwebRecord.record({
@@ -101,44 +131,90 @@ export async function setup(): Promise<void> {
 
 	_context.on('page', attachRecorder);
 	_page = await _context.newPage();
-}
 
-export async function screenshotStep(
-	attach: (data: Buffer, mime: string) => Promise<void>
-): Promise<void> {
-	if (!_page) return;
-	try {
-		const screenshot = await _page.screenshot({ type: 'png' });
-		await attach(screenshot, 'image/png');
-	} catch {
-		// page may be navigating or already closed
+	// Only when someone's actually watching live — a scheduled/background run
+	// with no viewer shouldn't pay for this.
+	if (process.env.PLUM_SS_DIR) {
+		_liveRRwebTimer = setInterval(flushLiveRRwebEvents, 500);
 	}
 }
 
-export async function streamLiveScreenshot(stepName: string): Promise<void> {
+// Sends only what's newly arrived since the last tick, per tab, so the live
+// viewer gets a steady trickle instead of the full buffer growing unbounded —
+// small files dropped in PLUM_SS_DIR, since the actual browser automation runs
+// several process levels below the primary/node server with no direct pipe
+// back to it.
+function flushLiveRRwebEvents(): void {
 	const ssDir = process.env.PLUM_SS_DIR;
-	if (!ssDir || !_page) return;
+	if (!ssDir) return;
+	for (const recording of _tabs.values()) {
+		const newEvents = recording.events.slice(recording.liveFlushedCount);
+		if (newEvents.length === 0) continue;
+		recording.liveFlushedCount = recording.events.length;
+		try {
+			const seq = `${String(Date.now()).padStart(16, '0')}-${String(++_liveRRwebCounter).padStart(4, '0')}`;
+			fs.writeFileSync(
+				path.join(ssDir, `${seq}.rrweb.json`),
+				JSON.stringify({
+					workerId: _workerId,
+					tabId: recording.tabId,
+					tabIndex: recording.tabIndex,
+					events: newEvents
+				})
+			);
+		} catch {
+			// best-effort — live streaming shouldn't affect the recording itself
+		}
+	}
+}
+
+/**
+ * Injects a labeled rrweb custom event at the current recording timestamp so
+ * the replay UI can show which step was running at any point in the timeline.
+ */
+export async function markStepStart(stepName: string): Promise<void> {
+	if (!_page) return;
 	try {
-		const seq = `${String(Date.now()).padStart(16, '0')}-${String(++_ssCounter).padStart(4, '0')}`;
-		const screenshot = await _page.screenshot({ type: 'jpeg', quality: 70 });
-		fs.writeFileSync(
-			path.join(ssDir, `${seq}.ss.json`),
-			JSON.stringify({ stepName, data: screenshot.toString('base64') })
-		);
+		await _page.evaluate((name) => {
+			// @ts-ignore — rrwebRecord is injected by the record.umd.min.cjs bundle
+			if (window.rrwebRecord?.record?.addCustomEvent) {
+				// @ts-ignore
+				window.rrwebRecord.record.addCustomEvent('step', { name });
+			}
+		}, stepName);
 	} catch {
-		// ignore — live streaming is best-effort
+		// best-effort — a missing marker just means the replay UI won't show a
+		// step label at that point, it doesn't affect the recording itself
 	}
 }
 
 /**
  * Flushes every tab's buffered rrweb events (one per opened tab/popup) as a
- * gzip-compressed attachment. Reuses the same `attach()` → Cucumber JSON
- * `embeddings[]` → processCucumberJson() pipeline that screenshots already
- * travel through, tagged with a mime type reportService can pick out.
+ * gzip-compressed attachment via the `attach()` → Cucumber JSON `embeddings[]`
+ * → processCucumberJson() pipeline, tagged with a mime type reportService can
+ * pick out.
  */
 export async function flushRecordings(
 	attach: (data: Buffer, mime: string) => Promise<void>
 ): Promise<void> {
+	if (_liveRRwebTimer) {
+		clearInterval(_liveRRwebTimer);
+		_liveRRwebTimer = null;
+	}
+	// One last live flush so the stream doesn't miss whatever happened between
+	// the final tick and scenario end.
+	flushLiveRRwebEvents();
+
+	try {
+		await attach(
+			Buffer.from(JSON.stringify({ workerId: _workerId }), 'utf8'),
+			WORKER_META_MIME_TYPE
+		);
+	} catch {
+		// best-effort — a missing worker marker just falls back to workerId 1
+	}
+
+	const flushedAt = Date.now();
 	for (const recording of _tabs.values()) {
 		if (recording.events.length === 0) continue;
 		try {
@@ -146,7 +222,11 @@ export async function flushRecordings(
 				workerId: _workerId,
 				tabId: recording.tabId,
 				tabIndex: recording.tabIndex,
-				events: recording.events
+				events: recording.events,
+				openedAt: recording.openedAt,
+				// A tab still open when the scenario ends (typically the main tab)
+				// stayed relevant through to the flush, not just its last DOM event.
+				closedAt: recording.closedAt ?? flushedAt
 			});
 			const gz = zlib.gzipSync(Buffer.from(payload, 'utf8'));
 			await attach(gz, RRWEB_MIME_TYPE);
@@ -156,20 +236,6 @@ export async function flushRecordings(
 	}
 }
 
-export async function teardown(
-	attach: (data: Buffer, mime: string) => Promise<void>,
-	failed: boolean
-): Promise<void> {
-	if (failed && _page) {
-		const screenshotDir = 'reports/screenshots';
-		if (!fs.existsSync(screenshotDir)) {
-			fs.mkdirSync(screenshotDir, { recursive: true });
-		}
-		const screenshotPath = path.join(screenshotDir, `screenshot_${Date.now()}.png`);
-		await _page.screenshot({ path: screenshotPath });
-		const screenshotData = fs.readFileSync(screenshotPath);
-		await attach(screenshotData, 'image/png');
-		fs.unlinkSync(screenshotPath);
-	}
+export async function teardown(): Promise<void> {
 	await _browser?.close();
 }

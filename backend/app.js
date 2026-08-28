@@ -3,10 +3,8 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-const path = require('path');
 const express = require('express');
 const cors = require('cors');
-const { SCREENSHOTS_DIR } = require('./lib/reportFilename');
 const { isNodeMode } = require('./constants/env');
 const app = express();
 
@@ -15,9 +13,6 @@ app.use(cors({ origin: '*' }));
 // fixtures included) as one JSON body — Express's 100kb default 413s well
 // before a real test suite does.
 app.use(express.json({ limit: '500mb' }));
-
-// Serve screenshot files written during report processing
-app.use('/screenshots', express.static(SCREENSHOTS_DIR));
 
 // Routes
 const nodeRoutes = require('./routes/node.routes');

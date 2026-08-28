@@ -12,7 +12,6 @@
  * runs in-process inside the Plum backend, not as a separate subprocess.
  */
 
-const fs = require('fs');
 const path = require('path');
 
 // Use absolute paths to bypass the SDK's wildcard export mapping
@@ -29,7 +28,6 @@ const { McpServer } = require(path.join(sdkCjs, 'server', 'mcp.js'));
 const { z } = require('zod');
 const { TRIGGER_TYPE } = require('../constants/triggers');
 const { JOB_STATUS } = require('../constants/jobStatus');
-const { SCREENSHOTS_DIR } = require('../lib/reportFilename');
 const testSuiteService = require('../services/testSuiteService');
 const testCaseService = require('../services/testCaseService');
 const triggerService = require('../services/triggerService');
@@ -82,13 +80,6 @@ function summariseReport(report) {
 		failures: failedDetails
 	};
 }
-
-// ---------------------------------------------------------------------------
-// Screenshots
-// ---------------------------------------------------------------------------
-
-const SCREENSHOT_FILENAME_RE = /^[\w.-]+\.(png|jpg|jpeg)$/i;
-const SCREENSHOT_MIME_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
 
 // ---------------------------------------------------------------------------
 // Server setup
@@ -450,11 +441,9 @@ function createMcpServer({ userId }) {
 		'get_report_scenario_detail',
 		[
 			'Get full per-scenario, per-step detail for a Plum test report — the data needed to diagnose',
-			"and self-heal a failing test: every step's status, duration, full error message, and",
-			'screenshot URL (if one was captured for that step).',
+			"and self-heal a failing test: every step's status, duration, and full error message.",
 			'',
-			'Use get_report_screenshot to fetch the actual screenshot image for a filename returned here,',
-			'and get_report_logs for the raw test-run stdout/stderr.'
+			'Use get_report_logs for the raw test-run stdout/stderr.'
 		].join('\n'),
 		{
 			reportId: z.number().int().describe('Numeric report ID'),
@@ -482,46 +471,13 @@ function createMcpServer({ userId }) {
 							name: st.name,
 							status: st.status,
 							duration: st.duration,
-							error: st.error ?? null,
-							screenshot: st.screenshot ?? null
+							error: st.error ?? null
 						}))
 					}))
 			);
 
 			return {
 				content: [{ type: 'text', text: JSON.stringify({ reportId, scenarios }, null, 2) }]
-			};
-		}
-	);
-
-	server.tool(
-		'get_report_screenshot',
-		'Fetch a screenshot captured during a test step and return it as an image, so it can be viewed ' +
-			"directly. Get the filename from get_report_scenario_detail's step.screenshot field.",
-		{
-			filename: z.string().describe('Screenshot filename, e.g. "3f9c1e2a-....png"')
-		},
-		async ({ filename }) => {
-			if (!SCREENSHOT_FILENAME_RE.test(filename)) {
-				throw new Error(`Invalid screenshot filename: ${filename}`);
-			}
-			const filePath = path.join(SCREENSHOTS_DIR, filename);
-			let buffer;
-			try {
-				buffer = await fs.promises.readFile(filePath);
-			} catch {
-				throw new Error(`Screenshot not found: ${filename}`);
-			}
-			const ext = filename.split('.').pop().toLowerCase();
-
-			return {
-				content: [
-					{
-						type: 'image',
-						data: buffer.toString('base64'),
-						mimeType: SCREENSHOT_MIME_TYPES[ext]
-					}
-				]
 			};
 		}
 	);

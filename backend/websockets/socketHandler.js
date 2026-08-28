@@ -13,7 +13,7 @@ const reportService = require('../services/reportService');
 const settingsService = require('../services/settingsService');
 const notificationService = require('../services/notificationService');
 const activeRunsService = require('../services/activeRunsService');
-const { startSsPoller } = require('../lib/screenshotPoller');
+const { startRRwebPoller } = require('../lib/rrwebPoller');
 const { runWithRetries } = require('../lib/retryRunner');
 const { TRIGGER_TYPE, BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
@@ -243,8 +243,8 @@ function runBuiltInAttempt({
 		const proc = spawn('npm', ['run', 'test'], { env, shell: true });
 		activeProcs.add(proc);
 
-		const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-			socket.emit(SOCKET_EVENTS.STEP_SCREENSHOT, { stepName, data });
+		const ssPoller = startRRwebPoller(ssDir, (batch) => {
+			socket.emit(SOCKET_EVENTS.RUNNER_LANE_RRWEB_BATCH, { id: BUILT_IN_RUNNER_ID, ...batch });
 		});
 
 		proc.stdout.on('data', (d) => onLog(d.toString()));
@@ -545,8 +545,8 @@ async function runDistributed(
 					const proc = spawn('npm', ['run', 'test'], { env, shell: true });
 					activeProcs.add(proc);
 
-					const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-						socket.emit(SOCKET_EVENTS.RUNNER_LANE_SCREENSHOT, { id: laneId, stepName, data });
+					const ssPoller = startRRwebPoller(ssDir, (batch) => {
+						socket.emit(SOCKET_EVENTS.RUNNER_LANE_RRWEB_BATCH, { id: laneId, ...batch });
 					});
 
 					proc.stdout.on('data', (d) => onLog(d.toString()));
@@ -590,8 +590,8 @@ async function runDistributed(
 								makeSyntheticFailReport(lane.name, chunkIds, 'could not fetch report from runner');
 							resolve({ code, rawJson: JSON.parse(raw) });
 						},
-						({ stepName, data }) => {
-							socket.emit(SOCKET_EVENTS.RUNNER_LANE_SCREENSHOT, { id: laneId, stepName, data });
+						(batch) => {
+							socket.emit(SOCKET_EVENTS.RUNNER_LANE_RRWEB_BATCH, { id: laneId, ...batch });
 						}
 					);
 				});

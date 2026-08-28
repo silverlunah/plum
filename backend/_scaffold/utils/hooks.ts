@@ -15,11 +15,31 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-import { Before, After, AfterStep, ITestCaseHookParameter } from '@cucumber/cucumber';
-import { setup, teardown, screenshotStep, streamLiveScreenshot, flushRecordings } from './browser';
+import { Before, After, BeforeStep, ITestCaseHookParameter } from '@cucumber/cucumber';
+import { setup, teardown, flushRecordings, markStepStart } from './browser';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+/**
+ * Pickle steps carry no keyword (Cucumber normalizes Given/When/Then/And/But
+ * away during Gherkin → Pickle compilation) — recover it by walking the
+ * gherkinDocument for the AST node the pickle step was compiled from.
+ */
+function resolveStepKeyword(gherkinDocument: any, pickleStep: any): string {
+	const astNodeId = pickleStep?.astNodeIds?.[0];
+	if (!astNodeId) return '';
+	const steps: any[] = [];
+	for (const child of gherkinDocument?.feature?.children ?? []) {
+		if (child.background) steps.push(...child.background.steps);
+		if (child.scenario) steps.push(...child.scenario.steps);
+		for (const ruleChild of child.rule?.children ?? []) {
+			if (ruleChild.background) steps.push(...ruleChild.background.steps);
+			if (ruleChild.scenario) steps.push(...ruleChild.scenario.steps);
+		}
+	}
+	return steps.find((s) => s.id === astNodeId)?.keyword?.trim() ?? '';
+}
 
 Before(async ({ pickle }: ITestCaseHookParameter) => {
 	const tags = pickle.tags.map((t) => t.name).join(' ');
@@ -27,13 +47,19 @@ Before(async ({ pickle }: ITestCaseHookParameter) => {
 	await setup();
 });
 
-AfterStep(async function ({ pickleStep, result }: { pickleStep: any; result: any }) {
-	if (result?.status === 'SKIPPED') return;
-	await screenshotStep(this.attach.bind(this));
-	await streamLiveScreenshot(pickleStep?.text ?? '');
+BeforeStep(async function ({
+	pickleStep,
+	gherkinDocument
+}: {
+	pickleStep: any;
+	gherkinDocument: any;
+}) {
+	const keyword = resolveStepKeyword(gherkinDocument, pickleStep);
+	const text = pickleStep?.text ?? '';
+	await markStepStart(keyword ? `${keyword} ${text}` : text);
 });
 
-After(async function (scenario: ITestCaseHookParameter) {
+After(async function () {
 	await flushRecordings(this.attach.bind(this));
-	await teardown(this.attach.bind(this), scenario.result?.status === 'FAILED');
+	await teardown();
 });

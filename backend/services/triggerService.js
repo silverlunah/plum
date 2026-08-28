@@ -8,8 +8,8 @@ const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
 const { randomUUID } = require('crypto');
-const { startSsPoller } = require('../lib/screenshotPoller');
-const { TRIGGER_TYPE } = require('../constants/triggers');
+const { startRRwebPoller } = require('../lib/rrwebPoller');
+const { TRIGGER_TYPE, BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { PLUM_MODE_NODE } = require('../constants/env');
 const { SOCKET_EVENTS } = require('../constants/socketEvents');
@@ -52,7 +52,7 @@ function runAttempt({
 	baseUrl,
 	suppressSave,
 	onLog,
-	onScreenshot
+	onRRwebBatch
 }) {
 	return new Promise((resolve) => {
 		const ssDir = path.join(os.tmpdir(), `plum-trigger-ss-${jobId}-${Date.now()}`);
@@ -73,7 +73,7 @@ function runAttempt({
 
 		const proc = spawn('npm', ['run', 'test'], { env, shell: true, cwd: BACKEND_DIR });
 
-		const ssPoller = startSsPoller(ssDir, onScreenshot);
+		const ssPoller = startRRwebPoller(ssDir, onRRwebBatch);
 
 		proc.stdout.on('data', (d) => onLog(d.toString()));
 		proc.stderr.on('data', (d) => onLog(`[ERROR] ${d.toString()}`));
@@ -96,7 +96,7 @@ function runNoRetry({
 	baseUrl,
 	startedAt,
 	onLog,
-	onScreenshot
+	onRRwebBatch
 }) {
 	runAttempt({
 		jobId,
@@ -108,7 +108,7 @@ function runNoRetry({
 		baseUrl,
 		suppressSave: false,
 		onLog,
-		onScreenshot
+		onRRwebBatch
 	}).then(async ({ code }) => {
 		let reportId = null;
 		try {
@@ -142,7 +142,7 @@ function runWithRetriesAndSave({
 	maxRetries,
 	startedAt,
 	onLog,
-	onScreenshot
+	onRRwebBatch
 }) {
 	runWithRetries({
 		maxRetries,
@@ -157,7 +157,7 @@ function runWithRetriesAndSave({
 				baseUrl,
 				suppressSave: true,
 				onLog,
-				onScreenshot
+				onRRwebBatch
 			});
 			return { code, rawJson: raw ? JSON.parse(raw) : [] };
 		},
@@ -192,8 +192,8 @@ function runWithRetriesAndSave({
 
 // Starts a background test run for the HTTP trigger API and returns the jobId
 // immediately — the run continues asynchronously, reporting progress via
-// socket.io events (bg-run-start/log/screenshot/done) and the job store
-// (polled through getJob).
+// socket.io events (bg-run-start/log/done) and the job store (polled through
+// getJob).
 async function startRun({
 	tag = '',
 	browser = DEFAULT_BROWSER,
@@ -219,8 +219,14 @@ async function startRun({
 	const onLog = (text) => {
 		if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_LOG, { runId: jobId, log: text });
 	};
-	const onScreenshot = ({ stepName, data }) => {
-		if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_SCREENSHOT, { runId: jobId, stepName, data });
+	const onRRwebBatch = (batch) => {
+		if (_io) {
+			_io.emit(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, {
+				runId: jobId,
+				id: BUILT_IN_RUNNER_ID,
+				...batch
+			});
+		}
 	};
 
 	const runParams = {
@@ -233,7 +239,7 @@ async function startRun({
 		baseUrl,
 		startedAt,
 		onLog,
-		onScreenshot
+		onRRwebBatch
 	};
 	if (maxRetries === 0) {
 		runNoRetry(runParams);

@@ -32,14 +32,23 @@ export function reportUrl(id) {
 	return `/reports/${id}`;
 }
 
-export function screenshotUrl(filename) {
-	return `${API_BASE}/screenshots/${filename}`;
-}
-
 export async function fetchReportDetail(id) {
 	const res = await fetch(`${API_BASE}/reports/${id}`);
 	if (!res.ok) throw new Error('Report not found');
 	return res.json();
+}
+
+export async function fetchRecordings(reportId) {
+	const res = await fetch(`${API_BASE}/reports/${reportId}/recordings`);
+	if (!res.ok) throw new Error('Failed to fetch recordings');
+	return res.json();
+}
+
+export async function fetchRecordingEvents(reportId, recordingId) {
+	const res = await fetch(`${API_BASE}/reports/${reportId}/recordings/${recordingId}/events`);
+	if (!res.ok) throw new Error('Failed to fetch recording events');
+	const { events } = await res.json();
+	return events;
 }
 
 export async function deleteReport(id) {

@@ -216,8 +216,10 @@
 		IMPORT_BLOCK_TITLE,
 		IMPORT_BLOCK_DESC,
 		CHOOSE_FILE_LABEL,
-		BACKUP_DISCLAIMER_PREFIX,
-		BACKUP_DISCLAIMER_SUFFIX,
+		INCLUDE_REPORTS_LABEL,
+		INCLUDE_REPORTS_HINT,
+		includeReportsDisclaimer,
+		saveIncludeReportsLabel,
 		S3_STORAGE_CARD_TITLE,
 		S3_STORAGE_DESC_PREFIX,
 		ENDPOINT_URL_LABEL,
@@ -349,9 +351,11 @@
 		backupS3Bucket: '',
 		backupS3AccessKey: '',
 		backupS3SecretKey: '',
-		backupS3Prefix: ''
+		backupS3Prefix: '',
+		backupIncludeReports: false
 	};
 	let backupConfigSaving = false;
+	let includeReportsSaving = false;
 	let backupS3SecretKeySet = false;
 	let backupTestingS3 = false;
 	let backupRunningNow = false;
@@ -427,7 +431,8 @@
 				backupS3Bucket: bc.backupS3Bucket,
 				backupS3AccessKey: bc.backupS3AccessKey,
 				backupS3SecretKey: '',
-				backupS3Prefix: bc.backupS3Prefix
+				backupS3Prefix: bc.backupS3Prefix,
+				backupIncludeReports: bc.backupIncludeReports
 			};
 		} catch {}
 		if ($auth.user) {
@@ -820,6 +825,23 @@
 			showToast('error', e.message || BACKUP_CONFIG_SAVE_FAILED);
 		} finally {
 			backupConfigSaving = false;
+		}
+	}
+
+	async function handleSaveIncludeReports() {
+		includeReportsSaving = true;
+		try {
+			const payload = { ...backupConfig };
+			if (!payload.backupS3SecretKey) delete payload.backupS3SecretKey;
+			const result = await saveBackupConfig(payload);
+			if (result.error) throw new Error(result.error);
+			if (backupConfig.backupS3SecretKey) backupS3SecretKeySet = true;
+			backupConfig = { ...backupConfig, backupS3SecretKey: '' };
+			showToast('success', BACKUP_CONFIG_SAVED_TOAST);
+		} catch (e) {
+			showToast('error', e.message || BACKUP_CONFIG_SAVE_FAILED);
+		} finally {
+			includeReportsSaving = false;
 		}
 	}
 
@@ -1885,10 +1907,36 @@
 							</div>
 						</div>
 					</div>
+
+					<div class="include-reports-row">
+						<label class="field-label backup-toggle-label" for="include-reports">
+							<span>
+								{INCLUDE_REPORTS_LABEL}
+								<span class="field-hint">{INCLUDE_REPORTS_HINT}</span>
+							</span>
+							<button
+								id="include-reports"
+								class="toggle-btn"
+								class:active={backupConfig.backupIncludeReports}
+								on:click={() =>
+									(backupConfig.backupIncludeReports = !backupConfig.backupIncludeReports)}
+								role="switch"
+								aria-checked={backupConfig.backupIncludeReports}
+							>
+								<span class="toggle-thumb"></span>
+							</button>
+						</label>
+						<Button
+							variant="ghost"
+							on:click={handleSaveIncludeReports}
+							disabled={includeReportsSaving}
+						>
+							{saveIncludeReportsLabel(includeReportsSaving)}
+						</Button>
+					</div>
+
 					<p class="backup-disclaimer">
-						{BACKUP_DISCLAIMER_PREFIX}
-						<code>pg_dump</code>
-						{BACKUP_DISCLAIMER_SUFFIX}
+						{includeReportsDisclaimer(backupConfig.backupIncludeReports)}
 					</p>
 				</div>
 
@@ -2509,6 +2557,23 @@
 		background: var(--bg-subtle);
 		padding: 0.1em 0.3em;
 		border-radius: 3px;
+	}
+
+	.include-reports-row {
+		display: flex;
+		align-items: center;
+		gap: 1.25rem;
+		margin-top: 1.25rem;
+		padding-top: 1.25rem;
+		border-top: 1px solid var(--border);
+	}
+	.include-reports-row .backup-toggle-label {
+		flex: 1;
+	}
+	.include-reports-row .field-label > span {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
 	}
 
 	.backup-disclaimer {

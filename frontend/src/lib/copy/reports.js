@@ -18,6 +18,9 @@ export const TREND_HINT = '← older · newer →';
 export const NO_REPORTS_MESSAGE = 'No reports yet. Run a test to generate one.';
 export const SELECT_ALL_TITLE = 'Select all on this page';
 export const SELECT_ROW_TITLE = 'Select';
+export const LEGACY_SCREENSHOTS_NOTICE =
+	'Screenshots have been replaced by full session replay. Reports created before this change no longer have screenshots — steps and logs are still available.';
+export const DISMISS_NOTICE_TITLE = 'Dismiss';
 export const DELETE_REPORT_TITLE = 'Delete report';
 
 export const deleteReportsTitle = (count) =>
@@ -43,17 +46,23 @@ export const RUN_LOGS_LABEL = 'Run Logs';
 export const RETRY_TITLE = 'Failed and was automatically retried before the final result';
 export const WATCH_REPLAY_TITLE = 'Watch replay';
 export const REPLAY_LABEL = 'Replay';
-export const SCREENSHOT_TOGGLE_LABEL = 'Screenshot';
-export const STEP_SCREENSHOT_ALT = 'Step screenshot';
-export const NO_SCREENSHOT_MESSAGE = 'No screenshot captured for this step';
 
 export const runnersBadge = (count) => `${count} runners`;
 export const casesCountLabel = (count) => `${count} cases`;
 export const attemptsLabel = (count) => `${count} attempts`;
 export const caseLabel = (index) => `Case ${index}`;
-export const replayScreenshotAlt = (index) => `Step ${index} screenshot`;
-export const pauseOrPlayTitle = (playing) => (playing ? 'Pause' : 'Play');
-export const replayCounter = (index, total) => `${index} / ${total}`;
+
+// ── Recording replay ──
+export const PLAYER_LOAD_ERROR = 'Could not load this recording.';
+export const INSPECT_TOGGLE_LABEL = 'Inspect element';
+export const RESTART_LABEL = 'Restart replay';
+export const STEPS_RAIL_HEADING = 'Steps';
+export const INSPECTOR_HEADING = 'Inspector';
+export const NO_ELEMENT_SELECTED = 'Click an element in the replay to inspect it.';
+export const ELEMENT_ATTRIBUTES_LABEL = 'Attributes';
+export const ELEMENT_SIZE_LABEL = 'Size';
+export const recordingTabLabel = (tabIndex) =>
+	tabIndex === 0 ? 'Main tab' : `Tab/Window ${tabIndex + 1}`;
 
 // ── Live run ──
 export const LIVE_PAGE_TITLE = 'Live Run — Plum';
@@ -68,14 +77,15 @@ export const CANCEL_RUN_LABEL = 'Cancel run';
 export const ALL_TESTS_PASSED = 'All tests passed';
 export const SOME_TESTS_FAILED = 'Some tests failed';
 export const VIEW_REPORT_NOW_LABEL = 'View Report Now';
-export const LIVE_STEP_LABEL = 'Step';
-export const LIVE_BROWSER_VIEW_ALT = 'Live browser view';
 export const AWAITING_STREAM_LABEL = 'Awaiting stream...';
 export const NO_STREAM_LABEL = 'No stream...';
 export const RUNNER_LABEL = 'Runner';
 export const RUNNING_LABEL = 'Running…';
 export const FINISHED_LABEL = 'Finished';
 export const WAITING_FOR_OUTPUT = '(waiting for output…)';
+
+export const UNKNOWN_RUNNER_LABEL = 'Unknown runner';
+export const workerLabel = (id) => `Worker ${id}`;
 
 export const runsInProgressHeading = (count) =>
 	count === 1 ? 'A run in progress' : `${count} runs in progress`;

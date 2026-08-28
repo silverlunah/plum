@@ -8,11 +8,34 @@ const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 
 // ---------------------------------------------------------------------------
-// Export — all data except reports (reports are too large; use pg_dump instead)
+// Export
 // ---------------------------------------------------------------------------
 
-const exportAll = async () => {
-	const [cronJobs, project, testSuites, testRuns, users, runners] = await Promise.all([
+// Reports (with their rrweb recordings) are opt-in — they can be large, and
+// this used to be a hard no ("reports are too large, use pg_dump") back when
+// screenshots lived as external files on disk. That's no longer true (Phase 4
+// of the rrweb migration moved everything into Postgres), so it's now just a
+// size tradeoff the admin can choose. Recording.events is gzip-compressed
+// BYTEA — base64 it for JSON transport; startedAt/endedAt are BigInt, which
+// JSON.stringify can't serialize natively.
+async function exportReports() {
+	const reports = await prisma.report.findMany({
+		orderBy: { createdAt: 'asc' },
+		include: { recordings: true }
+	});
+	return reports.map(({ recordings, ...report }) => ({
+		...report,
+		recordings: recordings.map(({ events, startedAt, endedAt, ...rec }) => ({
+			...rec,
+			events: events.toString('base64'),
+			startedAt: startedAt?.toString() ?? null,
+			endedAt: endedAt?.toString() ?? null
+		}))
+	}));
+}
+
+const exportAll = async (includeReports = false) => {
+	const [cronJobs, project, testSuites, testRuns, users, runners, reports] = await Promise.all([
 		prisma.cronJob.findMany({ orderBy: { createdAt: 'asc' } }),
 		prisma.project.findUnique({ where: { id: 1 } }),
 		prisma.testSuite.findMany({
@@ -29,14 +52,16 @@ const exportAll = async () => {
 			include: { entries: { orderBy: { order: 'asc' } } }
 		}),
 		prisma.user.findMany({ orderBy: { createdAt: 'asc' } }),
-		prisma.runner.findMany({ orderBy: { createdAt: 'asc' } })
+		prisma.runner.findMany({ orderBy: { createdAt: 'asc' } }),
+		includeReports ? exportReports() : Promise.resolve(null)
 	]);
 
 	return {
-		version: '2',
+		version: '3',
 		exportedAt: new Date().toISOString(),
-		disclaimer:
-			'Reports are not included in this backup. Use pg_dump on the PostgreSQL volume to back up report history.',
+		disclaimer: includeReports
+			? 'Reports and recordings are included in this backup.'
+			: 'Reports are not included in this backup. Enable "Include reports" in Settings → Backup, or use pg_dump on the PostgreSQL volume, to back up report history.',
 		cronJobs: cronJobs.map(({ id, createdAt, updatedAt, reports: _, runnerId: __, ...r }) => r),
 		project: project
 			? {
@@ -62,7 +87,8 @@ const exportAll = async () => {
 		testRuns: testRuns.map(({ entries, history: _, ...run }) => ({
 			...run,
 			entries: entries.map(({ executedAt, ...entry }) => ({ ...entry, executedAt }))
-		}))
+		})),
+		...(reports !== null && { reports })
 	};
 };
 
@@ -71,7 +97,15 @@ const exportAll = async () => {
 // ---------------------------------------------------------------------------
 
 const importAll = async (
-	{ cronJobs = [], project = null, users = [], runners = [], testSuites = [], testRuns = [] },
+	{
+		cronJobs = [],
+		project = null,
+		users = [],
+		runners = [],
+		testSuites = [],
+		testRuns = [],
+		reports = []
+	},
 	cronService
 ) => {
 	await prisma.$transaction(
@@ -186,8 +220,41 @@ const importAll = async (
 					});
 				}
 			}
+
+			// 7. Reports + recordings (opt-in — only present if this backup
+			// included them). Recordings are always deleted and recreated
+			// rather than upserted — same pattern as test steps above.
+			for (const report of reports) {
+				const { recordings = [], cronJobId: _staleCronJobId, ...reportData } = report;
+
+				// cronJobId can't be trusted as exported — cron jobs above are
+				// upserted keyed on taskName, not id, so the id a report recorded
+				// at export time may no longer point at the right row (or any
+				// row). Re-resolve it the same way reportService does when a
+				// report is first created: a scheduled report's triggerType is
+				// always its cron job's taskName.
+				const cronJob = reportData.triggerType
+					? await tx.cronJob.findUnique({ where: { taskName: reportData.triggerType } })
+					: null;
+
+				const data = { ...reportData, cronJobId: cronJob?.id ?? null };
+				await tx.report.upsert({ where: { id: data.id }, create: data, update: data });
+
+				await tx.recording.deleteMany({ where: { reportId: data.id } });
+				for (const rec of recordings) {
+					await tx.recording.create({
+						data: {
+							...rec,
+							reportId: data.id,
+							events: Buffer.from(rec.events, 'base64'),
+							startedAt: rec.startedAt !== null ? BigInt(rec.startedAt) : null,
+							endedAt: rec.endedAt !== null ? BigInt(rec.endedAt) : null
+						}
+					});
+				}
+			}
 		},
-		{ timeout: 30000 }
+		{ timeout: 60000 }
 	);
 
 	if (cronService) await cronService.reload();

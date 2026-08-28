@@ -17,10 +17,33 @@ export const runnerState = writable({
 	latestReportId: null, // number | null — set after test finishes
 	status: 'idle', // 'idle' | 'running' | 'pass' | 'fail'
 	lastRunId: '',
-	lanes: [], // [{ id, name, testCount, status, logs, latestScreenshot }] multi-runner only
+	lanes: [], // [{ id, name, testCount, status, logs }] multi-runner only
 	currentRun: null, // { tag, workers, browser, runners } — set while running
-	latestScreenshot: null // { stepName, data: base64 } for single built-in runner
+	// { [laneId]: { [workerId]: { events: [] } } } — always keyed by laneId even
+	// for a plain single-runner run (BUILT_IN_RUNNER_ID), so the live view's
+	// Runner/Worker tabs don't need a separate code path for that case.
+	rrwebByLane: {}
 });
+
+// Merges a batch of rrweb events into the right lane/worker bucket, creating
+// it on first sight — Svelte only re-renders on a *new* object/array
+// reference, so this rebuilds the path down to the mutated bucket rather than
+// pushing in place. Shared by runnerState (interactive) and backgroundRuns.
+export function mergeRRwebBatch(rrwebByLane, { id: laneId, workerId, events }) {
+	const lane = rrwebByLane[laneId] ?? {};
+	const worker = lane[workerId] ?? { events: [] };
+	return {
+		...rrwebByLane,
+		[laneId]: {
+			...lane,
+			[workerId]: { events: [...worker.events, ...events] }
+		}
+	};
+}
+
+export function appendRRwebBatch(batch) {
+	runnerState.update((s) => ({ ...s, rrwebByLane: mergeRRwebBatch(s.rrwebByLane, batch) }));
+}
 
 export const runnerConfig = writable({
 	workers: 1,
@@ -58,7 +81,7 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 		lastRunId: runId,
 		lanes: [],
 		currentRun: { tag: runId, workers, browser, runners: selectedRunners, runTitle },
-		latestScreenshot: null
+		rrwebByLane: {}
 	});
 	panelExpanded.set(true);
 

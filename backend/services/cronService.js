@@ -14,7 +14,7 @@ const reportService = require('./reportService');
 const settingsService = require('./settingsService');
 const notificationService = require('./notificationService');
 const activeRunsService = require('./activeRunsService');
-const { startSsPoller } = require('../lib/screenshotPoller');
+const { startRRwebPoller } = require('../lib/rrwebPoller');
 const { BUILT_IN_RUNNER_ID, TRIGGER_REMOTE, TRIGGER_TYPE } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { PLUM_MODE_NODE } = require('../constants/env');
@@ -82,8 +82,14 @@ function runSingleBuiltInAttempt({ taskName, currentTag, workers, browser, suppr
 
 		const task = spawn('npm', ['run', 'test'], { env, shell: true });
 
-		const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-			if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_SCREENSHOT, { runId: taskName, stepName, data });
+		const ssPoller = startRRwebPoller(ssDir, (batch) => {
+			if (_io) {
+				_io.emit(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, {
+					runId: taskName,
+					id: BUILT_IN_RUNNER_ID,
+					...batch
+				});
+			}
 		});
 
 		task.stdout.on('data', (d) => {
@@ -354,14 +360,14 @@ async function runDistributed({
 
 					const task = spawn('npm', ['run', 'test'], { env, shell: true });
 
-					const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-						if (_io)
-							_io.emit(SOCKET_EVENTS.BG_RUN_LANE_SCREENSHOT, {
+					const ssPoller = startRRwebPoller(ssDir, (batch) => {
+						if (_io) {
+							_io.emit(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, {
 								runId: taskName,
-								laneId,
-								stepName,
-								data
+								id: laneId,
+								...batch
 							});
+						}
 					});
 
 					task.stdout.on('data', (d) => {
@@ -401,14 +407,14 @@ async function runDistributed({
 						{ tags: currentTag, browser, workers },
 						onLog,
 						(code, content) => resolve({ code, rawJson: content ? JSON.parse(content) : [] }),
-						({ stepName, data }) => {
-							if (_io)
-								_io.emit(SOCKET_EVENTS.BG_RUN_LANE_SCREENSHOT, {
+						(batch) => {
+							if (_io) {
+								_io.emit(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, {
 									runId: taskName,
-									laneId,
-									stepName,
-									data
+									id: laneId,
+									...batch
 								});
+							}
 						}
 					);
 				});

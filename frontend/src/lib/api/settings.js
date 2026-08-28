@@ -53,7 +53,8 @@ export async function fetchBackupConfig() {
 			backupS3SecretKeySet: false,
 			backupS3Prefix: '',
 			backupLastRunAt: null,
-			backupLastStatus: ''
+			backupLastStatus: '',
+			backupIncludeReports: false
 		};
 	return res.json();
 }
