@@ -30,7 +30,8 @@ const {
 	startNode,
 	stopNode,
 	findPidOnPort,
-	killPort
+	killPort,
+	nodeReachable
 } = runnerProcess;
 const { generateToken, registerWithPrimary, detectLanIp, loadNodeConfig } = nodeRegister;
 
@@ -38,22 +39,23 @@ const API_URL = process.env.PLUM_API_URL || 'http://localhost:3001';
 
 const cancelled = (v) => clack.isCancel(v);
 
-// The mutating /runners routes take a registered runner's own token in place of
-// an admin session (runnerOrAdmin.js), and this manager has no JWT — so find
-// any node token on this machine, falling back to PLUM_MCP_KEY.
-function resolveAuthHeader() {
+// The mutating /runners routes accept any registered runner's own token in
+// place of an admin session (runnerOrAdmin.js). Use one: handed in by `plum`
+// (which reads it from the primary's DB when run on the server host), or from
+// a node's own .plum-node.json — this folder, then any other node install.
+function resolveRunnerToken() {
+	if (process.env.PLUM_RUNNER_TOKEN) return process.env.PLUM_RUNNER_TOKEN;
 	const cwdToken = loadNodeConfig(process.cwd()).token;
-	if (cwdToken) return { Authorization: `Bearer ${cwdToken}` };
+	if (cwdToken) return cwdToken;
 	for (const dir of globalRegistry.getInstalls('node')) {
 		const token = loadNodeConfig(dir).token;
-		if (token) return { Authorization: `Bearer ${token}` };
+		if (token) return token;
 	}
-	if (process.env.PLUM_MCP_KEY) return { Authorization: `ApiKey ${process.env.PLUM_MCP_KEY}` };
-	return {};
+	return null;
 }
-const AUTH_HEADER = resolveAuthHeader();
+const RUNNER_TOKEN = resolveRunnerToken();
 function authHeaders() {
-	return AUTH_HEADER;
+	return RUNNER_TOKEN ? { Authorization: `Bearer ${RUNNER_TOKEN}` } : {};
 }
 
 /**
@@ -301,26 +303,6 @@ async function runAction(r) {
 	}
 }
 
-// Polls a node's own /api/ping until it reports mode:'node' or the timeout
-// elapses — used to confirm a runner actually serves before its registration
-// is kept (see addRunner).
-async function nodeIsUp(baseUrl, token, timeoutMs) {
-	const url = `${baseUrl.replace(/\/+$/, '')}/api/ping`;
-	const headers = token ? { Authorization: `Bearer ${token}` } : {};
-	const deadline = Date.now() + timeoutMs;
-	while (Date.now() < deadline) {
-		try {
-			const res = await fetch(url, { headers, signal: AbortSignal.timeout(3000) });
-			if (res.ok) {
-				const body = await res.json().catch(() => ({}));
-				if (body.ok && body.mode === 'node') return true;
-			}
-		} catch {}
-		await new Promise((r) => setTimeout(r, 750));
-	}
-	return false;
-}
-
 async function addRunner() {
 	const suggested = `node-${generateToken().slice(0, 6)}`;
 
@@ -391,11 +373,11 @@ async function addRunner() {
 		prepareNodeEnv();
 		entry = startNode({ id, port, token });
 		s.start(`Waiting for "${name}" to come up on port ${port}...`);
-		ok = await nodeIsUp(`http://localhost:${port}`, token, 20000);
+		ok = await nodeReachable(`http://localhost:${port}`, token, 20000);
 		s.stop(ok ? pc.green(`"${name}" is up (pid ${entry.pid})`) : pc.red(`"${name}" did not start`));
 	} else {
 		s.start(`Checking for a Plum node at ${url}...`);
-		ok = await nodeIsUp(url, token, 8000);
+		ok = await nodeReachable(url, token, 8000);
 		s.stop(ok ? pc.green(`"${name}" is reachable`) : pc.red(`No Plum node answered at ${url}`));
 	}
 
@@ -423,10 +405,10 @@ async function addRunner() {
 async function main() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Manage Runners  ')));
 
-	if (!AUTH_HEADER.Authorization) {
+	if (!RUNNER_TOKEN) {
 		clack.log.warn(
-			'No runner credential found on this machine — stop / restart / delete will be rejected.\n' +
-				'Run this from a folder where you started a node, or export PLUM_MCP_KEY.'
+			'No runner token available — stop / restart / delete will be rejected.\n' +
+				'Run `plum manage-runners` on the primary host, or from a folder where you started a node.'
 		);
 	}
 
