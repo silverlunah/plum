@@ -62,6 +62,48 @@ function scaffoldPluginsFile() {
 	clack.log.success('plum.plugins.json created.');
 }
 
+// Files under tests/ that are Plum's own wiring rather than customer content —
+// `plum init` only writes these once, so a project scaffolded before a Plum
+// upgrade keeps running whatever version shipped at init time (e.g. an old
+// screenshot-based browser.ts after Plum has moved to rrweb recording) unless
+// something explicitly re-syncs them. Never touches customer-owned files
+// (features/, pages/, step_definitions/, utils/constants.ts, utils/utils.ts).
+const INFRA_SCAFFOLD_FILES = ['utils/browser.ts', 'utils/hooks.ts'];
+
+// Re-syncs INFRA_SCAFFOLD_FILES from the installed Plum version's scaffold
+// into an existing tests/ directory, backing up anything it overwrites so a
+// customer's own edits to these files (unsupported, but possible) aren't
+// silently lost.
+function syncScaffoldInfraFiles(testsDir) {
+	if (!fs.existsSync(testsDir)) {
+		clack.log.warn(`No \`tests/\` folder found at ${testsDir} — skipping scaffold sync.`);
+		return;
+	}
+
+	let updated = 0;
+	for (const relPath of INFRA_SCAFFOLD_FILES) {
+		const src = path.join(scaffoldTestsPath, relPath);
+		const dest = path.join(testsDir, relPath);
+		if (!fs.existsSync(src) || !fs.existsSync(dest)) continue;
+
+		const current = fs.readFileSync(dest, 'utf8');
+		const latest = fs.readFileSync(src, 'utf8');
+		if (current === latest) continue;
+
+		const backupPath = `${dest}.bak-${Date.now()}`;
+		fs.copyFileSync(dest, backupPath);
+		fs.copyFileSync(src, dest);
+		updated++;
+		clack.log.success(
+			`Updated ${relPath} (previous version backed up to ${path.basename(backupPath)})`
+		);
+	}
+
+	if (updated === 0) {
+		clack.log.info('Test scaffold wiring is already up to date.');
+	}
+}
+
 // Install user plugins listed in plum.plugins.json into the backend
 function installPlugins() {
 	const pluginsPath = path.join(process.cwd(), 'plum.plugins.json');
@@ -511,6 +553,9 @@ async function serverUpdate() {
 	// logic no matter how new the just-installed files on disk actually are.
 	for (const dir of getInstalls('server')) {
 		if (!fs.existsSync(path.join(dir, '.plum-server.json'))) continue;
+		if (fs.existsSync(path.join(dir, 'tests'))) {
+			syncScaffoldInfraFiles(path.join(dir, 'tests'));
+		}
 		clack.log.step(`Rebuilding server at ${dir}…`);
 		try {
 			execSync('plum server restart', { stdio: 'inherit', cwd: dir });
@@ -523,6 +568,9 @@ async function serverUpdate() {
 	for (const dir of getInstalls('node')) {
 		const nodeCfg = loadNodeConfig(dir);
 		if (!nodeCfg.id) continue;
+		if (fs.existsSync(path.join(dir, 'tests'))) {
+			syncScaffoldInfraFiles(path.join(dir, 'tests'));
+		}
 		// Always attempt the restart rather than gating on the local PID
 		// registry: that registry goes stale (manager restarts, pre-existing
 		// installs from before this tracking existed, etc.), and skipping the
@@ -1093,6 +1141,12 @@ switch (command) {
 		await serverUpdate();
 		break;
 
+	case 'sync-scaffold':
+		clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Sync Test Scaffold  ')));
+		syncScaffoldInfraFiles(userTestsPath);
+		clack.outro(pc.green('Done.'));
+		break;
+
 	case 'run-test': {
 		const runHelpArgs = process.argv.slice(3);
 		if (anyFlags(runHelpArgs, ['--help', '-h'])) {
@@ -1299,7 +1353,10 @@ switch (command) {
 		console.log('  server stop          Stop the server (data preserved)');
 		console.log('  server reconfig      Re-enter server settings without starting');
 		console.log(
-			'  update               Update Plum and restart whichever is running (server/node)'
+			'  update               Update Plum, restart whichever is running (server/node), and re-sync tests/ wiring'
+		);
+		console.log(
+			'  sync-scaffold        Re-sync browser.ts/hooks.ts in tests/ from the installed Plum version'
 		);
 		console.log('  node start           Start a runner node (interactive), then open runner menu');
 		console.log('    --primary <url>    Primary Plum server to auto-register with');
