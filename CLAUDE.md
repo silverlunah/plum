@@ -137,7 +137,7 @@ Never write comments that:
 - Describe the current task or fix ("added for the live page", "handles issue #123")
 - Are multi-line docblocks explaining parameters
 
-The GPL license header at the top of every file is a legal requirement — do not remove it.
+The MIT license header at the top of every file is a legal requirement — do not remove it. `npm run add-license` (config: `license-config.json`) applies and verifies it and runs in the pre-commit hook. Match the existing style for the file type: `/* … */` for JS/TS/CSS, `<!-- … -->` for Svelte, `# …` for shell/YAML/Dockerfiles/dotfiles, `// …` for `schema.prisma` (Prisma's formatter rewrites `/* */`, so it's kept out of `add-license` and headered by hand). JSON files carry no header.
 
 ---
 
