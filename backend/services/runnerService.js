@@ -11,8 +11,6 @@ const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { bearerHeader } = require('../lib/authHeader');
 const { JOB_STATUS } = require('../constants/jobStatus');
-const settingsService = require('./settingsService');
-const nodeStreamRegistry = require('./nodeStreamRegistry');
 
 // ---------------------------------------------------------------------------
 // Runner CRUD
@@ -209,7 +207,6 @@ async function dispatchAndPoll(
 	const finish = (code, content) => {
 		if (settled) return;
 		settled = true;
-		if (jobId) nodeStreamRegistry.unregisterRelay(jobId);
 		onDone(code, content);
 	};
 
@@ -219,12 +216,6 @@ async function dispatchAndPoll(
 		finish(1, null);
 		return;
 	}
-
-	// The node needs to know where to open its own socket back to us — without
-	// this it has no way to reach the primary, since today only the reverse
-	// (primary knowing each node's url) is configured.
-	const { notifyPublicUrl } = await settingsService.getWebhooks();
-	const primaryUrl = notifyPublicUrl ? notifyPublicUrl.replace(/\/$/, '') : null;
 
 	let jobId;
 	try {
@@ -239,8 +230,7 @@ async function dispatchAndPoll(
 				browser,
 				workers,
 				tests: collectTestFiles(),
-				env: loadTestEnv(process.cwd()),
-				...(primaryUrl ? { primaryUrl } : {})
+				env: loadTestEnv(process.cwd())
 			}),
 			signal: AbortSignal.timeout(10000)
 		});
@@ -254,15 +244,11 @@ async function dispatchAndPoll(
 
 	onLog(`Connected to runner "${runner.name}" — job ${jobId}\n`);
 
-	// With a primaryUrl configured, the node streams logs/rrweb events over its
-	// own socket instead — draining them from the poll too would duplicate them.
-	if (primaryUrl) {
-		nodeStreamRegistry.registerRelay(jobId, { onRRwebBatch, onLog });
-	}
-
 	let logOffset = 0;
 	let rrwebOffset = 0;
 	let polling = false;
+	// Tight interval: the live viewer reads logs and rrweb batches straight off
+	// this poll — primary→node, so nothing has to connect the other way.
 	const poll = setInterval(async () => {
 		if (polling) return;
 		polling = true;
@@ -277,15 +263,12 @@ async function dispatchAndPoll(
 			if (!res.ok) return;
 			const body = await res.json();
 
-			// Skip if a socket relay is active — it already pushed these live.
-			if (!primaryUrl) {
-				if (body.logs) {
-					onLog(body.logs);
-					logOffset += body.logs.length;
-				}
-				for (const batch of body.rrwebBatches ?? []) onRRwebBatch?.(batch);
-				rrwebOffset += body.rrwebBatches?.length ?? 0;
+			if (body.logs) {
+				onLog(body.logs);
+				logOffset += body.logs.length;
 			}
+			for (const batch of body.rrwebBatches ?? []) onRRwebBatch?.(batch);
+			rrwebOffset += body.rrwebBatches?.length ?? 0;
 
 			if (body.status === JOB_STATUS.DONE || body.status === JOB_STATUS.ERROR) {
 				clearInterval(poll);
@@ -297,7 +280,7 @@ async function dispatchAndPoll(
 		} finally {
 			polling = false;
 		}
-	}, 2500);
+	}, 1000);
 }
 
 module.exports = {

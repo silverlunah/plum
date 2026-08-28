@@ -43,12 +43,10 @@ function wireRealtimeServices(io, isNodeMode) {
 	if (isNodeMode) return { cronService: null, backupCronService: null };
 
 	const socketHandler = require('../websockets/socketHandler.js');
-	const nodeSocketHandler = require('../websockets/nodeSocketHandler.js');
 	const cronService = require('../services/cronService');
 	const backupCronService = require('../services/backupCronService');
 
 	socketHandler(io);
-	nodeSocketHandler(io);
 	cronService.setSocketIO(io);
 	require('../routes/trigger.routes').setSocketIO(io);
 

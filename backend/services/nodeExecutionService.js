@@ -8,7 +8,6 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
-const { io: ioClient } = require('socket.io-client');
 const { startRRwebPoller } = require('../lib/rrwebPoller');
 const { TRIGGER_REMOTE } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
@@ -24,40 +23,17 @@ function getJob(jobId) {
 	return jobs[jobId];
 }
 
-// Opens this node's own outbound connection back to the primary for this job
-// — logs/rrweb events are pushed the moment they happen instead of waiting to
-// be polled. Uses the same token this node already validates incoming HTTP
-// calls against (see authGuard), so there's no separate credential to manage.
-// Best-effort: if the primary is unreachable this way, the job still runs —
-// dispatchAndPoll falls back to draining logs from the HTTP poll when it
-// never registered a socket relay for this jobId.
-function connectPrimaryStream(primaryUrl, jobId) {
-	try {
-		const socket = ioClient(`${primaryUrl}/node-stream`, {
-			auth: { token: process.env.NODE_TOKEN },
-			reconnectionAttempts: 5,
-			timeout: 8000
-		});
-		socket.on('connect', () => socket.emit('join', jobId));
-		return socket;
-	} catch {
-		return null;
-	}
-}
-
 // Starts a remote test job dispatched from the primary server: materializes
-// any uploaded test files, spawns `npm run test`, and tracks logs for later
-// HTTP polling (see pollJob).
+// any uploaded test files, spawns `npm run test`, and tracks logs + rrweb
+// batches for HTTP polling (see pollJob).
 function startJob({
 	tags,
 	browser = DEFAULT_BROWSER,
 	workers = 1,
 	tests = null,
-	env: userEnv = {},
-	primaryUrl = null
+	env: userEnv = {}
 }) {
 	const jobId = crypto.randomUUID();
-	const primaryStream = primaryUrl ? connectPrimaryStream(primaryUrl, jobId) : null;
 
 	// path.resolve ensures absolute even if TMPDIR env var is set to a relative path
 	const tmpdir = path.resolve(os.tmpdir());
@@ -82,8 +58,7 @@ function startJob({
 	jobs[jobId] = {
 		status: JOB_STATUS.RUNNING,
 		logs: '',
-		// Drained by pollJob — the HTTP-poll fallback for a node with no reachable
-		// notifyPublicUrl to stream these back over a socket instead.
+		// Both drained by pollJob — the primary has no socket back to this node.
 		rrwebBatches: [],
 		exitCode: null,
 		startedAt: Date.now(),
@@ -112,23 +87,17 @@ function startJob({
 
 	const ssPoller = startRRwebPoller(ssDir, (batch) => {
 		jobs[jobId].rrwebBatches.push(batch);
-		primaryStream?.emit('rrweb-batch', batch);
 	});
 
 	const proc = spawn('npm', ['run', 'test'], { env, shell: true, cwd: BACKEND_DIR });
 	proc.stdout.on('data', (d) => {
-		const text = d.toString();
-		jobs[jobId].logs += text;
-		primaryStream?.emit('log', text);
+		jobs[jobId].logs += d.toString();
 	});
 	proc.stderr.on('data', (d) => {
-		const text = d.toString();
-		jobs[jobId].logs += text;
-		primaryStream?.emit('log', text);
+		jobs[jobId].logs += d.toString();
 	});
 	proc.on('close', (code) => {
 		ssPoller.stop();
-		primaryStream?.close();
 		jobs[jobId].status = code === 0 ? JOB_STATUS.DONE : JOB_STATUS.ERROR;
 		jobs[jobId].exitCode = code;
 
