@@ -97,7 +97,8 @@ const getBackupConfig = async () => {
 		backupS3SecretKeySet: project.backupS3SecretKey.length > 0,
 		backupS3Prefix: project.backupS3Prefix,
 		backupLastRunAt: project.backupLastRunAt,
-		backupLastStatus: project.backupLastStatus
+		backupLastStatus: project.backupLastStatus,
+		backupIncludeReports: project.backupIncludeReports
 	};
 };
 
@@ -109,7 +110,8 @@ const updateBackupConfig = async ({
 	backupS3Bucket,
 	backupS3AccessKey,
 	backupS3SecretKey,
-	backupS3Prefix
+	backupS3Prefix,
+	backupIncludeReports
 }) => {
 	const update = {
 		...(backupEnabled !== undefined && { backupEnabled }),
@@ -119,7 +121,8 @@ const updateBackupConfig = async ({
 		...(backupS3Bucket !== undefined && { backupS3Bucket }),
 		...(backupS3AccessKey !== undefined && { backupS3AccessKey }),
 		...(backupS3SecretKey && { backupS3SecretKey }),
-		...(backupS3Prefix !== undefined && { backupS3Prefix })
+		...(backupS3Prefix !== undefined && { backupS3Prefix }),
+		...(backupIncludeReports !== undefined && { backupIncludeReports })
 	};
 	return prisma.project.upsert({
 		where: { id: 1 },

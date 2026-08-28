@@ -21,7 +21,7 @@ const runBackup = async () => {
 	if (!project?.backupEnabled) return;
 
 	try {
-		const data = await backupService.exportAll();
+		const data = await backupService.exportAll(project.backupIncludeReports);
 		const key = await backupService.uploadToS3(data, project);
 
 		await prisma.project.update({
