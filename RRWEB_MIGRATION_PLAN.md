@@ -77,9 +77,11 @@ Each phase is its own Vikunja ticket, branch, and PR.
   - Also cleaned up along the way (found via full-repo sweep, same spirit even if not explicitly listed): dead `LIVE_STEP_LABEL`/`LIVE_BROWSER_VIEW_ALT` copy, and renamed the live page's leftover `.screenshot-panel` class (now 100% rrweb) to `.stream-panel`
   - Verified: backend `node --check` clean on every edited file, `svelte-check` 0 errors, Docker rebuild clean startup, a real live run end-to-end (stream + logs + report save) still works with no console errors
   - Old reports with a `screenshot` filename still in their stored `content` JSON degrade gracefully (field just goes unused, no crash) — actually stripping those refs is Phase 5's job, not this one's
-- [ ] **Phase 5 — Existing-report migration + notice**
-  - Startup migration: strip `screenshot` refs from old `Report.content`, delete everything in `SCREENSHOTS_DIR`
-  - One-time dismissible in-app notice explaining legacy reports now only contain steps/logs
+- [x] **Phase 5 — Existing-report migration + notice** _(branch `278-rrweb-migration-phase-5-existing-report-migration-notice`)_
+  - Hand-written Prisma migration (`20260828150000_strip_screenshot_refs_from_reports`) walks every `Report.content.features[].scenarios[].steps[]` in Postgres via nested `jsonb_agg`/`jsonb_set`/`step - 'screenshot'` and strips the `screenshot` key in place — steps/logs/everything else untouched. Dry-run tested with a `SELECT` against real data before writing it as a migration.
+  - `serverBootstrap.js`'s `handleFullModeStartup()` deletes the old `reports/screenshots/` directory on every boot (naturally idempotent — a no-op once it's already gone, no flag needed)
+  - One-time dismissible notice banner on the reports list (`LEGACY_SCREENSHOTS_NOTICE`), dismissal persisted via `localStorage` the same way `RunnerPanel.svelte` already does for its own UI state
+  - Verified against real dev data: 55 reports, 53 had a `screenshot` key somewhere — all 53 stripped cleanly (confirmed via direct SQL query post-migration), the 2,449-file `reports/screenshots/` dir was actually deleted on boot, and both old and new report detail pages render with no console errors
 - [ ] **Phase 6 — Backup revisit**
   - Reconsider including `Report`/`Recording` in `backupService.exportAll()`, likely behind an opt-in toggle
 - [ ] **Phase 7 — Docs & cleanup (final)**

@@ -18,6 +18,9 @@ export const TREND_HINT = '← older · newer →';
 export const NO_REPORTS_MESSAGE = 'No reports yet. Run a test to generate one.';
 export const SELECT_ALL_TITLE = 'Select all on this page';
 export const SELECT_ROW_TITLE = 'Select';
+export const LEGACY_SCREENSHOTS_NOTICE =
+	'Screenshots have been replaced by full session replay. Reports created before this change no longer have screenshots — steps and logs are still available.';
+export const DISMISS_NOTICE_TITLE = 'Dismiss';
 export const DELETE_REPORT_TITLE = 'Delete report';
 
 export const deleteReportsTitle = (count) =>

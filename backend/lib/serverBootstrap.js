@@ -127,12 +127,25 @@ function handleNodeModeStartup(port) {
 
 async function handleFullModeStartup(io, testsDir) {
 	syncAutomatedFlags();
+	cleanupLegacyScreenshots();
 
 	const chokidar = await loadChokidar();
 	if (!chokidar) return;
 
 	watchTestFiles(chokidar, testsDir);
 	watchReports(chokidar, io);
+}
+
+// Screenshot capture was removed in favor of rrweb (RRWEB_MIGRATION_PLAN.md
+// Phase 4) — the report rows referencing these files were already stripped by
+// a Prisma migration, so the files themselves are now pure dead weight. Safe
+// to run every startup: a second pass on an already-gone directory is a no-op.
+function cleanupLegacyScreenshots() {
+	const screenshotsDir = path.join(process.cwd(), 'reports', 'screenshots');
+	if (!fs.existsSync(screenshotsDir)) return;
+	fs.rm(screenshotsDir, { recursive: true, force: true }, (err) => {
+		if (!err) console.log('🧹 Removed legacy screenshots directory');
+	});
 }
 
 function syncAutomatedFlags() {
