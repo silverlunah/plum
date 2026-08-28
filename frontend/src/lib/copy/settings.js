@@ -141,7 +141,7 @@ export const SLACK_WEBHOOK_HINT = 'Leave blank to disable Slack notifications';
 export const SLACK_WEBHOOK_PLACEHOLDER = 'https://hooks.slack.com/services/…';
 export const PUBLIC_URL_LABEL = 'Public URL';
 export const PUBLIC_URL_HINT =
-	'Base URL of this Plum instance, used to link reports in notifications';
+	'Base URL of this Plum instance — used to link reports in notifications, and by remote runner nodes to stream live test output back here';
 export const PUBLIC_URL_PLACEHOLDER = 'https://plum.yourcompany.com';
 export const INTEGRATIONS_SAVED_TOAST = 'Integration settings saved.';
 export const INTEGRATIONS_SAVE_FAILED = 'Failed to save integration settings.';

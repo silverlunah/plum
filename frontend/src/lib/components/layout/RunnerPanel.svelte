@@ -17,7 +17,9 @@
 		triggerRun,
 		reportsVersion,
 		runsVersion,
-		backgroundRuns
+		backgroundRuns,
+		appendRRwebBatch,
+		mergeRRwebBatch
 	} from '$lib/stores/runner';
 	import { fetchLatestReportId, reportUrl } from '$lib/api/reports';
 	import { fetchRunners } from '$lib/api/runners';
@@ -121,7 +123,8 @@
 				runTitle: label,
 				startedBy: meta?.startedBy
 			},
-			latestScreenshot: null
+			latestScreenshot: null,
+			rrwebByLane: {}
 		};
 	}
 
@@ -267,6 +270,8 @@
 			}));
 		});
 
+		s.on(SOCKET_EVENTS.RUNNER_LANE_RRWEB_BATCH, (batch) => appendRRwebBatch(batch));
+
 		s.on(SOCKET_EVENTS.REPORT_READY, () => reportsVersion.update((v) => v + 1));
 
 		function updateBgRun(runId, updater) {
@@ -316,6 +321,13 @@
 				lanes: run.lanes.map((l) =>
 					l.id === laneId ? { ...l, latestScreenshot: { stepName, data } } : l
 				)
+			}));
+		});
+
+		s.on(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, ({ runId, ...batch }) => {
+			updateBgRun(runId, (run) => ({
+				...run,
+				rrwebByLane: mergeRRwebBatch(run.rrwebByLane, batch)
 			}));
 		});
 

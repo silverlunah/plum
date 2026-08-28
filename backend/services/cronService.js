@@ -82,9 +82,21 @@ function runSingleBuiltInAttempt({ taskName, currentTag, workers, browser, suppr
 
 		const task = spawn('npm', ['run', 'test'], { env, shell: true });
 
-		const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-			if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_SCREENSHOT, { runId: taskName, stepName, data });
-		});
+		const ssPoller = startSsPoller(
+			ssDir,
+			({ stepName, data }) => {
+				if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_SCREENSHOT, { runId: taskName, stepName, data });
+			},
+			(batch) => {
+				if (_io) {
+					_io.emit(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, {
+						runId: taskName,
+						id: BUILT_IN_RUNNER_ID,
+						...batch
+					});
+				}
+			}
+		);
 
 		task.stdout.on('data', (d) => {
 			process.stdout.write(d);
@@ -354,15 +366,27 @@ async function runDistributed({
 
 					const task = spawn('npm', ['run', 'test'], { env, shell: true });
 
-					const ssPoller = startSsPoller(ssDir, ({ stepName, data }) => {
-						if (_io)
-							_io.emit(SOCKET_EVENTS.BG_RUN_LANE_SCREENSHOT, {
-								runId: taskName,
-								laneId,
-								stepName,
-								data
-							});
-					});
+					const ssPoller = startSsPoller(
+						ssDir,
+						({ stepName, data }) => {
+							if (_io)
+								_io.emit(SOCKET_EVENTS.BG_RUN_LANE_SCREENSHOT, {
+									runId: taskName,
+									laneId,
+									stepName,
+									data
+								});
+						},
+						(batch) => {
+							if (_io) {
+								_io.emit(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, {
+									runId: taskName,
+									id: laneId,
+									...batch
+								});
+							}
+						}
+					);
 
 					task.stdout.on('data', (d) => {
 						process.stdout.write(d);
@@ -409,6 +433,15 @@ async function runDistributed({
 									stepName,
 									data
 								});
+						},
+						(batch) => {
+							if (_io) {
+								_io.emit(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, {
+									runId: taskName,
+									id: laneId,
+									...batch
+								});
+							}
 						}
 					);
 				});

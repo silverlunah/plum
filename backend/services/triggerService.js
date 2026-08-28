@@ -9,7 +9,7 @@ const os = require('os');
 const { spawn } = require('child_process');
 const { randomUUID } = require('crypto');
 const { startSsPoller } = require('../lib/screenshotPoller');
-const { TRIGGER_TYPE } = require('../constants/triggers');
+const { TRIGGER_TYPE, BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { PLUM_MODE_NODE } = require('../constants/env');
 const { SOCKET_EVENTS } = require('../constants/socketEvents');
@@ -52,7 +52,8 @@ function runAttempt({
 	baseUrl,
 	suppressSave,
 	onLog,
-	onScreenshot
+	onScreenshot,
+	onRRwebBatch
 }) {
 	return new Promise((resolve) => {
 		const ssDir = path.join(os.tmpdir(), `plum-trigger-ss-${jobId}-${Date.now()}`);
@@ -73,7 +74,7 @@ function runAttempt({
 
 		const proc = spawn('npm', ['run', 'test'], { env, shell: true, cwd: BACKEND_DIR });
 
-		const ssPoller = startSsPoller(ssDir, onScreenshot);
+		const ssPoller = startSsPoller(ssDir, onScreenshot, onRRwebBatch);
 
 		proc.stdout.on('data', (d) => onLog(d.toString()));
 		proc.stderr.on('data', (d) => onLog(`[ERROR] ${d.toString()}`));
@@ -96,7 +97,8 @@ function runNoRetry({
 	baseUrl,
 	startedAt,
 	onLog,
-	onScreenshot
+	onScreenshot,
+	onRRwebBatch
 }) {
 	runAttempt({
 		jobId,
@@ -108,7 +110,8 @@ function runNoRetry({
 		baseUrl,
 		suppressSave: false,
 		onLog,
-		onScreenshot
+		onScreenshot,
+		onRRwebBatch
 	}).then(async ({ code }) => {
 		let reportId = null;
 		try {
@@ -142,7 +145,8 @@ function runWithRetriesAndSave({
 	maxRetries,
 	startedAt,
 	onLog,
-	onScreenshot
+	onScreenshot,
+	onRRwebBatch
 }) {
 	runWithRetries({
 		maxRetries,
@@ -157,7 +161,8 @@ function runWithRetriesAndSave({
 				baseUrl,
 				suppressSave: true,
 				onLog,
-				onScreenshot
+				onScreenshot,
+				onRRwebBatch
 			});
 			return { code, rawJson: raw ? JSON.parse(raw) : [] };
 		},
@@ -222,6 +227,15 @@ async function startRun({
 	const onScreenshot = ({ stepName, data }) => {
 		if (_io) _io.emit(SOCKET_EVENTS.BG_RUN_SCREENSHOT, { runId: jobId, stepName, data });
 	};
+	const onRRwebBatch = (batch) => {
+		if (_io) {
+			_io.emit(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, {
+				runId: jobId,
+				id: BUILT_IN_RUNNER_ID,
+				...batch
+			});
+		}
+	};
 
 	const runParams = {
 		jobId,
@@ -233,7 +247,8 @@ async function startRun({
 		baseUrl,
 		startedAt,
 		onLog,
-		onScreenshot
+		onScreenshot,
+		onRRwebBatch
 	};
 	if (maxRetries === 0) {
 		runNoRetry(runParams);

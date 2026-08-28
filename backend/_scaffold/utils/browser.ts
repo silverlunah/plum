@@ -42,12 +42,15 @@ interface TabRecording {
 	events: unknown[];
 	openedAt: number;
 	closedAt: number | null;
+	liveFlushedCount: number;
 }
 
 let _browser: Browser;
 let _context: BrowserContext;
 let _page: Page;
 let _ssCounter = 0;
+let _liveRRwebCounter = 0;
+let _liveRRwebTimer: ReturnType<typeof setInterval> | null = null;
 let _tabs: Map<Page, TabRecording> = new Map();
 let _tabCounter = 0;
 let _workerId = 1;
@@ -71,7 +74,8 @@ function attachRecorder(pg: Page): void {
 		tabIndex,
 		events: [],
 		openedAt: Date.now(),
-		closedAt: null
+		closedAt: null,
+		liveFlushedCount: 0
 	};
 	_tabs.set(pg, recording);
 	pg.on('close', () => {
@@ -128,6 +132,42 @@ export async function setup(): Promise<void> {
 
 	_context.on('page', attachRecorder);
 	_page = await _context.newPage();
+
+	// Only when someone's actually watching live (mirrors streamLiveScreenshot's
+	// own PLUM_SS_DIR gate) — a scheduled/background run with no viewer shouldn't
+	// pay for this.
+	if (process.env.PLUM_SS_DIR) {
+		_liveRRwebTimer = setInterval(flushLiveRRwebEvents, 500);
+	}
+}
+
+// Sends only what's newly arrived since the last tick, per tab, so the live
+// viewer gets a steady trickle instead of the full buffer growing unbounded —
+// same file-drop mechanism streamLiveScreenshot uses, since the actual browser
+// automation runs several process levels below the primary/node server with no
+// direct pipe back to it.
+function flushLiveRRwebEvents(): void {
+	const ssDir = process.env.PLUM_SS_DIR;
+	if (!ssDir) return;
+	for (const recording of _tabs.values()) {
+		const newEvents = recording.events.slice(recording.liveFlushedCount);
+		if (newEvents.length === 0) continue;
+		recording.liveFlushedCount = recording.events.length;
+		try {
+			const seq = `${String(Date.now()).padStart(16, '0')}-${String(++_liveRRwebCounter).padStart(4, '0')}`;
+			fs.writeFileSync(
+				path.join(ssDir, `${seq}.rrweb.json`),
+				JSON.stringify({
+					workerId: _workerId,
+					tabId: recording.tabId,
+					tabIndex: recording.tabIndex,
+					events: newEvents
+				})
+			);
+		} catch {
+			// best-effort — live streaming shouldn't affect the recording itself
+		}
+	}
 }
 
 export async function screenshotStep(
@@ -186,6 +226,14 @@ export async function streamLiveScreenshot(stepName: string): Promise<void> {
 export async function flushRecordings(
 	attach: (data: Buffer, mime: string) => Promise<void>
 ): Promise<void> {
+	if (_liveRRwebTimer) {
+		clearInterval(_liveRRwebTimer);
+		_liveRRwebTimer = null;
+	}
+	// One last live flush so the stream doesn't miss whatever happened between
+	// the final tick and scenario end.
+	flushLiveRRwebEvents();
+
 	try {
 		await attach(
 			Buffer.from(JSON.stringify({ workerId: _workerId }), 'utf8'),
