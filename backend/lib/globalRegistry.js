@@ -41,6 +41,14 @@ function registerInstall(type, dir) {
 	}
 }
 
+/** Forgets `dir` as a known `type` install location. */
+function unregisterInstall(type, dir) {
+	const data = load();
+	if (!data[type]?.includes(dir)) return;
+	data[type] = data[type].filter((d) => d !== dir);
+	save(data);
+}
+
 /** Known install dirs for `type`, pruned of any that no longer exist on disk. */
 function getInstalls(type) {
 	const data = load();
@@ -52,4 +60,4 @@ function getInstalls(type) {
 	return dirs;
 }
 
-module.exports = { REGISTRY_PATH, registerInstall, getInstalls };
+module.exports = { REGISTRY_PATH, registerInstall, unregisterInstall, getInstalls };

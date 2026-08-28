@@ -32,10 +32,16 @@ const getAll = async () => {
 
 const normaliseUrl = (url) => (url ?? '').replace(/\/+$/, '');
 
+// Upsert on name+url. Re-registering the same node (`plum node start` run
+// again, a stop/recreate) must refresh its token in place — a second row or a
+// kept-stale token leaves the primary pinging with the wrong credential and the
+// node showing "unreachable".
 const create = async ({ name, url, token, browser = DEFAULT_BROWSER }) => {
-	const runner = await prisma.runner.create({
-		data: { name, url: normaliseUrl(url), token, browser }
-	});
+	const normalisedUrl = normaliseUrl(url);
+	const existing = await prisma.runner.findFirst({ where: { name, url: normalisedUrl } });
+	const runner = existing
+		? await prisma.runner.update({ where: { id: existing.id }, data: { token, browser } })
+		: await prisma.runner.create({ data: { name, url: normalisedUrl, token, browser } });
 	return toPublicRunner(runner);
 };
 
