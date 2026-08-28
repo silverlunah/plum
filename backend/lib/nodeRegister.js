@@ -46,12 +46,74 @@ function loadNodeConfig(dir) {
 }
 
 function saveNodeConfig(dir, cfg) {
+	fs.mkdirSync(dir, { recursive: true });
 	fs.writeFileSync(configPath(dir), JSON.stringify(cfg, null, 2) + '\n', 'utf8');
 }
 
+// ---------------------------------------------------------------------------
+// Named node store — one dir per node under ~/.plum/nodes/<name>/, so a machine
+// can run several nodes without the operator juggling working directories (a
+// second `plum node start` from the same folder used to overwrite the first
+// node's config and orphan its process).
+// ---------------------------------------------------------------------------
+
+function nodesRoot() {
+	return path.join(os.homedir(), '.plum', 'nodes');
+}
+
+/** The config dir for a node by name (created on save). */
+function nodeHome(name) {
+	return path.join(nodesRoot(), name);
+}
+
+/** Names of every node this machine has a config for. */
+function listNodeNames() {
+	try {
+		return fs
+			.readdirSync(nodesRoot(), { withFileTypes: true })
+			.filter(
+				(e) => e.isDirectory() && fs.existsSync(path.join(nodesRoot(), e.name, CONFIG_FILENAME))
+			)
+			.map((e) => e.name);
+	} catch {
+		return [];
+	}
+}
+
+function loadNodeByName(name) {
+	return loadNodeConfig(nodeHome(name));
+}
+
+function saveNodeByName(name, cfg) {
+	saveNodeConfig(nodeHome(name), cfg);
+}
+
+/** Removes a node's whole config dir. */
+function deleteNodeByName(name) {
+	fs.rmSync(nodeHome(name), { recursive: true, force: true });
+}
+
 /**
- * Registers the node with the primary, reusing an existing runner whose name+url
- * match instead of creating a duplicate.
+ * One-time move of any legacy `.plum-node.json` (written into an arbitrary
+ * working directory by older `plum node start`) into the named store. Returns
+ * the names it imported. Leaves the old files in place.
+ */
+function migrateLegacyNodes(legacyDirs) {
+	const imported = [];
+	for (const dir of legacyDirs || []) {
+		if (dir.startsWith(nodesRoot())) continue;
+		const cfg = loadNodeConfig(dir);
+		if (!cfg.name || fs.existsSync(configPath(nodeHome(cfg.name)))) continue;
+		saveNodeByName(cfg.name, cfg);
+		imported.push(cfg.name);
+	}
+	return imported;
+}
+
+/**
+ * Registers the node with the primary. POST /runners upserts on name+url, so
+ * re-running this refreshes the token on the existing runner rather than
+ * duplicating it — `reused` is reported for messaging only.
  *
  * @returns {Promise<{ id: string, reused: boolean }>}
  * @throws {Error} when the primary is unreachable or rejects the request
@@ -59,12 +121,14 @@ function saveNodeConfig(dir, cfg) {
 async function registerWithPrimary({ primary, name, url, token, browser }) {
 	const base = primary.replace(/\/$/, '');
 
-	let existing = null;
-	const listRes = await fetch(`${base}/runners`, { signal: AbortSignal.timeout(10000) });
-	if (!listRes.ok) throw new Error(`primary returned HTTP ${listRes.status} listing runners`);
-	const { runners = [] } = await listRes.json();
-	existing = runners.find((r) => r.name === name && r.url === url) ?? null;
-	if (existing) return { id: existing.id, reused: true };
+	let reused = false;
+	try {
+		const listRes = await fetch(`${base}/runners`, { signal: AbortSignal.timeout(10000) });
+		if (listRes.ok) {
+			const { runners = [] } = await listRes.json();
+			reused = runners.some((r) => r.name === name && r.url === url);
+		}
+	} catch {}
 
 	const res = await fetch(`${base}/runners`, {
 		method: 'POST',
@@ -76,7 +140,7 @@ async function registerWithPrimary({ primary, name, url, token, browser }) {
 	if (!res.ok || body.error) {
 		throw new Error(body.error || `primary returned HTTP ${res.status}`);
 	}
-	return { id: body.runner.id, reused: false };
+	return { id: body.runner.id, reused };
 }
 
 module.exports = {
@@ -85,5 +149,12 @@ module.exports = {
 	detectLanIp,
 	loadNodeConfig,
 	saveNodeConfig,
+	nodesRoot,
+	nodeHome,
+	listNodeNames,
+	loadNodeByName,
+	saveNodeByName,
+	deleteNodeByName,
+	migrateLegacyNodes,
 	registerWithPrimary
 };
