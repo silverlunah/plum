@@ -33,7 +33,8 @@ const {
 	killPort,
 	nodeReachable
 } = runnerProcess;
-const { generateToken, registerWithPrimary, detectLanIp, loadNodeConfig } = nodeRegister;
+const { generateToken, registerWithPrimary, detectLanIp, loadNodeConfig, saveNodeConfig } =
+	nodeRegister;
 
 const API_URL = process.env.PLUM_API_URL || 'http://localhost:3001';
 
@@ -392,6 +393,19 @@ async function addRunner() {
 	s.stop(up ? pc.green(`"${name}" is up (pid ${entry.pid})`) : pc.red(`"${name}" did not start`));
 
 	if (up) {
+		// Persist the same way `plum node start` does, so `plum node stop`/
+		// `restart` and `plum update`'s restart sweep can find this node too.
+		saveNodeConfig(process.cwd(), {
+			...loadNodeConfig(process.cwd()),
+			id,
+			name,
+			url,
+			token,
+			primary: API_URL,
+			browser: 'chromium',
+			port
+		});
+		globalRegistry.registerInstall('node', process.cwd());
 		clack.log.success(pc.green(`Runner "${name}" is ready.`));
 		return;
 	}
