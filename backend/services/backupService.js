@@ -197,18 +197,16 @@ const importAll = async (
 // S3 upload — S3-compatible object storage (AWS, R2, B2, MinIO)
 // ---------------------------------------------------------------------------
 
-const uploadToS3 = async (jsonData, config) => {
-	const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
-
-	const {
-		backupS3Endpoint,
-		backupS3Region,
-		backupS3Bucket,
-		backupS3AccessKey,
-		backupS3SecretKey,
-		backupS3Prefix
-	} = config;
-
+// A custom endpoint means R2/B2/MinIO/on-prem, not real AWS S3 — those
+// virtually always need path-style addressing (bucket.endpoint/... resolves
+// nowhere for a self-hosted host like a docker service name). Real AWS S3
+// (no custom endpoint) keeps the SDK's virtual-hosted-style default.
+function buildS3ClientConfig({
+	backupS3Endpoint,
+	backupS3Region,
+	backupS3AccessKey,
+	backupS3SecretKey
+}) {
 	const clientConfig = {
 		region: backupS3Region || 'auto',
 		credentials: {
@@ -216,9 +214,17 @@ const uploadToS3 = async (jsonData, config) => {
 			secretAccessKey: backupS3SecretKey
 		}
 	};
-	if (backupS3Endpoint) clientConfig.endpoint = backupS3Endpoint;
+	if (backupS3Endpoint) {
+		clientConfig.endpoint = backupS3Endpoint;
+		clientConfig.forcePathStyle = true;
+	}
+	return clientConfig;
+}
 
-	const client = new S3Client(clientConfig);
+const uploadToS3 = async (jsonData, config) => {
+	const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
+	const { backupS3Bucket, backupS3Prefix } = config;
+	const client = new S3Client(buildS3ClientConfig(config));
 
 	const date = new Date().toISOString().slice(0, 10);
 	const prefix = backupS3Prefix ? backupS3Prefix.replace(/\/?$/, '/') : '';
@@ -236,28 +242,39 @@ const uploadToS3 = async (jsonData, config) => {
 	return key;
 };
 
+// Lists backups previously uploaded by uploadToS3, newest first — the data
+// needed for a "restore from S3" flow that doesn't require the admin to pull
+// the file down through the S3 console/CLI themselves first.
+const listS3Backups = async (config) => {
+	const { S3Client, ListObjectsV2Command } = await import('@aws-sdk/client-s3');
+	const { backupS3Bucket, backupS3Prefix } = config;
+	const client = new S3Client(buildS3ClientConfig(config));
+	const prefix = backupS3Prefix ? backupS3Prefix.replace(/\/?$/, '/') : '';
+
+	const res = await client.send(
+		new ListObjectsV2Command({ Bucket: backupS3Bucket, Prefix: prefix })
+	);
+
+	return (res.Contents ?? [])
+		.filter((o) => o.Key.endsWith('.json'))
+		.map((o) => ({ key: o.Key, size: o.Size, lastModified: o.LastModified }))
+		.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
+};
+
+// Fetches and parses one backup previously uploaded by uploadToS3.
+const downloadFromS3 = async (key, config) => {
+	const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
+	const { backupS3Bucket } = config;
+	const client = new S3Client(buildS3ClientConfig(config));
+	const res = await client.send(new GetObjectCommand({ Bucket: backupS3Bucket, Key: key }));
+	const text = await res.Body.transformToString('utf8');
+	return JSON.parse(text);
+};
+
 const testS3Connection = async (config) => {
 	const { S3Client, PutObjectCommand, DeleteObjectCommand } = await import('@aws-sdk/client-s3');
-
-	const {
-		backupS3Endpoint,
-		backupS3Region,
-		backupS3Bucket,
-		backupS3AccessKey,
-		backupS3SecretKey,
-		backupS3Prefix
-	} = config;
-
-	const clientConfig = {
-		region: backupS3Region || 'auto',
-		credentials: {
-			accessKeyId: backupS3AccessKey,
-			secretAccessKey: backupS3SecretKey
-		}
-	};
-	if (backupS3Endpoint) clientConfig.endpoint = backupS3Endpoint;
-
-	const client = new S3Client(clientConfig);
+	const { backupS3Bucket, backupS3Prefix } = config;
+	const client = new S3Client(buildS3ClientConfig(config));
 	const prefix = backupS3Prefix ? backupS3Prefix.replace(/\/?$/, '/') : '';
 	const key = `${prefix}.plum-connection-test`;
 
@@ -276,4 +293,11 @@ const testS3Connection = async (config) => {
 	} catch {}
 };
 
-module.exports = { exportAll, importAll, uploadToS3, testS3Connection };
+module.exports = {
+	exportAll,
+	importAll,
+	uploadToS3,
+	listS3Backups,
+	downloadFromS3,
+	testS3Connection
+};
