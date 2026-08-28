@@ -43,9 +43,6 @@ export const RUN_LOGS_LABEL = 'Run Logs';
 export const RETRY_TITLE = 'Failed and was automatically retried before the final result';
 export const WATCH_REPLAY_TITLE = 'Watch replay';
 export const REPLAY_LABEL = 'Replay';
-export const SCREENSHOT_TOGGLE_LABEL = 'Screenshot';
-export const STEP_SCREENSHOT_ALT = 'Step screenshot';
-export const NO_SCREENSHOT_MESSAGE = 'No screenshot captured for this step';
 
 export const runnersBadge = (count) => `${count} runners`;
 export const casesCountLabel = (count) => `${count} cases`;
@@ -77,8 +74,6 @@ export const CANCEL_RUN_LABEL = 'Cancel run';
 export const ALL_TESTS_PASSED = 'All tests passed';
 export const SOME_TESTS_FAILED = 'Some tests failed';
 export const VIEW_REPORT_NOW_LABEL = 'View Report Now';
-export const LIVE_STEP_LABEL = 'Step';
-export const LIVE_BROWSER_VIEW_ALT = 'Live browser view';
 export const AWAITING_STREAM_LABEL = 'Awaiting stream...';
 export const NO_STREAM_LABEL = 'No stream...';
 export const RUNNER_LABEL = 'Runner';

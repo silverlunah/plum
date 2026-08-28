@@ -7,7 +7,6 @@ const path = require('path');
 const fs = require('fs');
 
 const REPORTS_DIR = path.resolve(process.cwd(), 'reports');
-const SCREENSHOTS_DIR = path.join(REPORTS_DIR, 'screenshots');
 
 /**
  * Reads the transient cucumber_report.json written by the most recent local test run.
@@ -22,4 +21,4 @@ function readCucumberReportFile() {
 	}
 }
 
-module.exports = { REPORTS_DIR, SCREENSHOTS_DIR, readCucumberReportFile };
+module.exports = { REPORTS_DIR, readCucumberReportFile };

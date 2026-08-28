@@ -68,9 +68,15 @@ Each phase is its own Vikunja ticket, branch, and PR.
   - Verified end-to-end for the **built-in runner** (single and multi-worker) via direct DOM measurement of the cover-scale across a full run, not just screenshots
   - **Not yet verified**: the remote/external runner node path (needs `notifyPublicUrl` configured + a running node process) — backend code is written and syntax/svelte-checked only
   - Found and fixed along the way: a fast-failing test can finish before the 500ms poll flush ever fires, so very short runs may show no live frames at all — inherent to the poll-based transport, not a regression, not chased further this phase
-- [ ] **Phase 4 — Removal & cleanup**
-  - Delete `screenshotStep()`, screenshot-file logic in `reportService.js`, `SCREENSHOTS_DIR`, the `/screenshots` static route, `screenshotUrl()`, dead copy/constants
-  - Confirm and remove the vestigial unused `backend/playwright.config.js`
+- [x] **Phase 4 — Removal & cleanup** _(branch `277-rrweb-migration-phase-4-removal-cleanup`)_
+  - Deleted `screenshotStep()`, `streamLiveScreenshot()`, and the screenshot-on-failure block in `teardown()` from `backend/_scaffold/utils/browser.ts` (+ synced to the gitignored `backend/tests/` working copy); `AfterStep` hook in `hooks.ts` removed entirely since nothing else was left in it
+  - Deleted screenshot extraction/write logic from `reportService.processCucumberJson()`, `collectScreenshotFiles()`/`deleteScreenshotFiles()`, `SCREENSHOTS_DIR` (`reportFilename.js` + `app.js`'s `/screenshots` static route), `screenshotUrl()` (frontend), the screenshot rendering block + `SCREENSHOT_TOGGLE_LABEL`/`STEP_SCREENSHOT_ALT`/`NO_SCREENSHOT_MESSAGE` copy in `reports/[id]/+page.svelte`, `scenarioHasScreenshots()` (dead, zero call sites), and the `get_report_screenshot` MCP tool
+  - Deleted the four screenshot socket events (`STEP_SCREENSHOT`, `RUNNER_LANE_SCREENSHOT`, `BG_RUN_SCREENSHOT`, `BG_RUN_LANE_SCREENSHOT`) and all their emit/listen call sites and `latestScreenshot` state, across `socketHandler.js`, `triggerService.js`, `cronService.js`, `runnerService.dispatchAndPoll()`, `nodeExecutionService.js`, and `RunnerPanel.svelte`
+  - `backend/lib/screenshotPoller.js` → renamed to `rrwebPoller.js` (`startSsPoller` → `startRRwebPoller`) now that it's 100% rrweb — it was already shared/dual-purpose going into this phase, screenshots were just the half being cut
+  - Confirmed and removed the vestigial unused `backend/playwright.config.js`
+  - Also cleaned up along the way (found via full-repo sweep, same spirit even if not explicitly listed): dead `LIVE_STEP_LABEL`/`LIVE_BROWSER_VIEW_ALT` copy, and renamed the live page's leftover `.screenshot-panel` class (now 100% rrweb) to `.stream-panel`
+  - Verified: backend `node --check` clean on every edited file, `svelte-check` 0 errors, Docker rebuild clean startup, a real live run end-to-end (stream + logs + report save) still works with no console errors
+  - Old reports with a `screenshot` filename still in their stored `content` JSON degrade gracefully (field just goes unused, no crash) — actually stripping those refs is Phase 5's job, not this one's
 - [ ] **Phase 5 — Existing-report migration + notice**
   - Startup migration: strip `screenshot` refs from old `Report.content`, delete everything in `SCREENSHOTS_DIR`
   - One-time dismissible in-app notice explaining legacy reports now only contain steps/logs

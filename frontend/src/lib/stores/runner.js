@@ -17,9 +17,8 @@ export const runnerState = writable({
 	latestReportId: null, // number | null — set after test finishes
 	status: 'idle', // 'idle' | 'running' | 'pass' | 'fail'
 	lastRunId: '',
-	lanes: [], // [{ id, name, testCount, status, logs, latestScreenshot }] multi-runner only
+	lanes: [], // [{ id, name, testCount, status, logs }] multi-runner only
 	currentRun: null, // { tag, workers, browser, runners } — set while running
-	latestScreenshot: null, // { stepName, data: base64 } for single built-in runner
 	// { [laneId]: { [workerId]: { events: [] } } } — always keyed by laneId even
 	// for a plain single-runner run (BUILT_IN_RUNNER_ID), so the live view's
 	// Runner/Worker tabs don't need a separate code path for that case.
@@ -82,7 +81,6 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 		lastRunId: runId,
 		lanes: [],
 		currentRun: { tag: runId, workers, browser, runners: selectedRunners, runTitle },
-		latestScreenshot: null,
 		rrwebByLane: {}
 	});
 	panelExpanded.set(true);

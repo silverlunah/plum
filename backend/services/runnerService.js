@@ -200,7 +200,6 @@ async function dispatchAndPoll(
 	{ tags, browser, workers },
 	onLog,
 	onDone,
-	onScreenshot = null,
 	onRRwebBatch = null
 ) {
 	// The async poll callback can overlap if a tick takes longer than the interval;
@@ -277,10 +276,6 @@ async function dispatchAndPoll(
 			if (!primaryUrl && body.logs) {
 				onLog(body.logs);
 				logOffset += body.logs.length;
-			}
-
-			if (onScreenshot && Array.isArray(body.screenshots)) {
-				for (const ss of body.screenshots) onScreenshot(ss);
 			}
 
 			if (body.status === JOB_STATUS.DONE || body.status === JOB_STATUS.ERROR) {

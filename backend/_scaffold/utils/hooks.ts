@@ -15,15 +15,8 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-import { Before, After, AfterStep, BeforeStep, ITestCaseHookParameter } from '@cucumber/cucumber';
-import {
-	setup,
-	teardown,
-	screenshotStep,
-	streamLiveScreenshot,
-	flushRecordings,
-	markStepStart
-} from './browser';
+import { Before, After, BeforeStep, ITestCaseHookParameter } from '@cucumber/cucumber';
+import { setup, teardown, flushRecordings, markStepStart } from './browser';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -66,13 +59,7 @@ BeforeStep(async function ({
 	await markStepStart(keyword ? `${keyword} ${text}` : text);
 });
 
-AfterStep(async function ({ pickleStep, result }: { pickleStep: any; result: any }) {
-	if (result?.status === 'SKIPPED') return;
-	await screenshotStep(this.attach.bind(this));
-	await streamLiveScreenshot(pickleStep?.text ?? '');
-});
-
-After(async function (scenario: ITestCaseHookParameter) {
+After(async function () {
 	await flushRecordings(this.attach.bind(this));
-	await teardown(this.attach.bind(this), scenario.result?.status === 'FAILED');
+	await teardown();
 });
