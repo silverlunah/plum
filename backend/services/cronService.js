@@ -101,7 +101,7 @@ function runSingleBuiltInAttempt({ taskName, currentTag, workers, browser, suppr
 			onLog(`[ERROR] ${d.toString()}`);
 		});
 		task.on('close', (code) => {
-			clearInterval(ssPoller);
+			ssPoller.stop();
 			fs.rm(ssDir, { recursive: true, force: true }, () => {});
 			resolve({ code, raw: suppressSave ? readCucumberReportFile() : null });
 		});
@@ -379,7 +379,7 @@ async function runDistributed({
 						onLog(`[ERROR] ${d.toString()}`);
 					});
 					task.on('close', (code) => {
-						clearInterval(ssPoller);
+						ssPoller.stop();
 						fs.rm(ssDir, { recursive: true, force: true }, () => {});
 						const raw = readCucumberReportFile() ?? '[]';
 						resolve({ code, rawJson: JSON.parse(raw) });

@@ -251,7 +251,7 @@ function runBuiltInAttempt({
 		proc.stderr.on('data', (d) => onLog(`[ERROR] ${d.toString()}`));
 
 		proc.on('close', (code) => {
-			clearInterval(ssPoller);
+			ssPoller.stop();
 			fs.rm(ssDir, { recursive: true, force: true }, () => {});
 			activeProcs.delete(proc);
 			resolve({ code, raw: suppressSave ? readCucumberReportFile() : null });
@@ -553,7 +553,7 @@ async function runDistributed(
 					proc.stderr.on('data', (d) => onLog(`[ERROR] ${d.toString()}`));
 
 					proc.on('close', (code) => {
-						clearInterval(ssPoller);
+						ssPoller.stop();
 						fs.rm(ssDir, { recursive: true, force: true }, () => {});
 						activeProcs.delete(proc);
 						const content =
