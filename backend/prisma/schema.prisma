@@ -1,19 +1,16 @@
-/*
-This file is part of Plum.
-
-Plum is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-Plum is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with Plum. If not, see https://www.gnu.org/licenses/.
-*/
+/**
+ * This file is part of Plum.
+ * Plum is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * Plum is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ * You should have received a copy of the GNU General Public License
+ * along with Plum. If not, see https://www.gnu.org/licenses/.
+ */
 generator client {
   provider = "prisma-client-js"
 }
@@ -109,29 +106,30 @@ model Recording {
 }
 
 model Project {
-  id                 Int       @id @default(autoincrement())
-  name               String    @default("")
-  logoUrl            String    @default("")
-  timezone           String    @default("UTC")
-  testCasePrefix     String    @default("TC")
-  testSuitePrefix    String    @default("TS")
-  caseSeqNext        Int       @default(0)
-  suiteSeqNext       Int       @default(0)
-  discordWebhookUrl  String    @default("")
-  slackWebhookUrl    String    @default("")
-  notifyPublicUrl    String    @default("")
-  backupEnabled      Boolean   @default(false)
-  backupCron         String    @default("0 2 * * *")
-  backupS3Endpoint   String    @default("")
-  backupS3Region     String    @default("")
-  backupS3Bucket     String    @default("")
-  backupS3AccessKey  String    @default("")
-  backupS3SecretKey  String    @default("")
-  backupS3Prefix     String    @default("")
-  backupLastRunAt    DateTime?
-  backupLastStatus   String    @default("")
-  mcpKey             String    @default("")
-  maxRetries         Int       @default(0)
+  id                   Int       @id @default(autoincrement())
+  name                 String    @default("")
+  logoUrl              String    @default("")
+  timezone             String    @default("UTC")
+  testCasePrefix       String    @default("TC")
+  testSuitePrefix      String    @default("TS")
+  caseSeqNext          Int       @default(0)
+  suiteSeqNext         Int       @default(0)
+  discordWebhookUrl    String    @default("")
+  slackWebhookUrl      String    @default("")
+  notifyPublicUrl      String    @default("")
+  backupEnabled        Boolean   @default(false)
+  backupCron           String    @default("0 2 * * *")
+  backupS3Endpoint     String    @default("")
+  backupS3Region       String    @default("")
+  backupS3Bucket       String    @default("")
+  backupS3AccessKey    String    @default("")
+  backupS3SecretKey    String    @default("")
+  backupS3Prefix       String    @default("")
+  backupLastRunAt      DateTime?
+  backupLastStatus     String    @default("")
+  backupIncludeReports Boolean   @default(false)
+  mcpKey               String    @default("")
+  maxRetries           Int       @default(0)
 }
 
 model User {
@@ -146,8 +144,8 @@ model User {
   suites          TestSuite[]
   cases           TestCase[]
   runs            TestRun[]
-  executedEntries TestRunEntry[]   @relation("entryExecutor")
-  assignedEntries TestRunEntry[]   @relation("entryAssignee")
+  executedEntries TestRunEntry[]    @relation("entryExecutor")
+  assignedEntries TestRunEntry[]    @relation("entryAssignee")
   caseHistories   TestCaseHistory[]
 }
 
@@ -167,21 +165,21 @@ model TestSuite {
 }
 
 model TestCase {
-  id           String            @id @default(cuid())
-  displayId    String            @unique
-  title        String
-  description  String            @default("")
-  priority     String            @default("Medium")
-  isAutomated  Boolean           @default(false)
-  suiteId      String
-  suite        TestSuite         @relation(fields: [suiteId], references: [id], onDelete: Cascade)
-  createdById  String
-  createdBy    User              @relation(fields: [createdById], references: [id])
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  steps        TestStep[]
-  runEntries   TestRunEntry[]
-  history      TestCaseHistory[]
+  id          String            @id @default(cuid())
+  displayId   String            @unique
+  title       String
+  description String            @default("")
+  priority    String            @default("Medium")
+  isAutomated Boolean           @default(false)
+  suiteId     String
+  suite       TestSuite         @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User              @relation(fields: [createdById], references: [id])
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  steps       TestStep[]
+  runEntries  TestRunEntry[]
+  history     TestCaseHistory[]
 
   @@index([suiteId])
 }
@@ -198,13 +196,13 @@ model TestStep {
 }
 
 model TestRun {
-  id          String         @id @default(cuid())
+  id          String            @id @default(cuid())
   title       String
-  status      String         @default("backlog")
+  status      String            @default("backlog")
   createdById String
-  createdBy   User           @relation(fields: [createdById], references: [id])
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdBy   User              @relation(fields: [createdById], references: [id])
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
   entries     TestRunEntry[]
   history     TestCaseHistory[]
   reports     Report[]
@@ -232,19 +230,19 @@ model TestRunEntry {
 }
 
 model TestCaseHistory {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   caseId       String
-  case         TestCase  @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  case         TestCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
   runId        String?
-  run          TestRun?  @relation(fields: [runId], references: [id], onDelete: SetNull)
+  run          TestRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
   reportId     Int?
-  report       Report?   @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  report       Report?  @relation(fields: [reportId], references: [id], onDelete: SetNull)
   result       String
-  source       String    @default("manual")
-  notes        String    @default("")
+  source       String   @default("manual")
+  notes        String   @default("")
   executedById String?
-  executedBy   User?     @relation(fields: [executedById], references: [id])
-  executedAt   DateTime  @default(now())
+  executedBy   User?    @relation(fields: [executedById], references: [id])
+  executedAt   DateTime @default(now())
 
   @@index([caseId])
   @@index([runId])

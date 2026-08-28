@@ -14,7 +14,8 @@ const { requireAdmin } = require('../middleware/requireAdmin');
 
 router.get('/export', jwtAuth, requireAdmin, async (req, res) => {
 	try {
-		const data = await backupService.exportAll();
+		const { backupIncludeReports } = await settingsService.getBackupConfig();
+		const data = await backupService.exportAll(backupIncludeReports);
 		const fileName = `plum-backup-${new Date().toISOString().slice(0, 10)}.json`;
 		res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
 		res.setHeader('Content-Type', 'application/json');
