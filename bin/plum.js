@@ -725,6 +725,21 @@ async function nodeStart({ reconfig }) {
 	const { statusOf } = runnerProcessLib();
 	const existing = loadNodeConfig(process.cwd());
 
+	// One folder holds one node's config (.plum-node.json). Starting a
+	// different-named node here would overwrite it — orphaning the previous
+	// node's still-running process and losing the config needed to stop it.
+	const wantName = getFlag(process.argv.slice(3), '--name');
+	if (!reconfig && existing.name && wantName && wantName !== existing.name) {
+		clack.log.error(
+			`This folder is set up for node "${existing.name}". Run each node from its own folder:\n\n` +
+				`  mkdir -p ~/plum-nodes/${wantName} && cd ~/plum-nodes/${wantName}\n` +
+				`  plum node start --name ${wantName} …`
+		);
+		clack.outro(pc.red('Not started — use a fresh folder for this node.'));
+		process.exitCode = 1;
+		return;
+	}
+
 	// Re-running `node start` on an already-running node used to spawn a second
 	// process on the same port (orphaning the first) and re-register a duplicate
 	// runner on the primary. Route to the same menu this command ends on anyway
