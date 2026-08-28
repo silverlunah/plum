@@ -40,17 +40,17 @@ function attachListenRetry(server, port) {
 }
 
 function wireRealtimeServices(io, isNodeMode) {
-	if (isNodeMode) return { cronService: null, backupCronService: null };
+	if (isNodeMode) return { cronService: null, backupCronService: null, runQueueService: null };
 
 	const socketHandler = require('../websockets/socketHandler.js');
 	const cronService = require('../services/cronService');
 	const backupCronService = require('../services/backupCronService');
+	const runQueueService = require('../services/runQueueService');
 
 	socketHandler(io);
-	cronService.setSocketIO(io);
-	require('../routes/trigger.routes').setSocketIO(io);
+	runQueueService.setSocketIO(io);
 
-	return { cronService, backupCronService };
+	return { cronService, backupCronService, runQueueService };
 }
 
 async function initCronServices(cronService, backupCronService) {

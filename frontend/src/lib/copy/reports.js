@@ -91,3 +91,12 @@ export const runsInProgressHeading = (count) =>
 	count === 1 ? 'A run in progress' : `${count} runs in progress`;
 export const workersCountLabel = (count) => `${count} ${pluralize(count, 'worker')}`;
 export const redirectingIn = (seconds) => `Redirecting in ${seconds}s…`;
+
+// ── Queued / not-found run ──
+export const QUEUED_HEADING = 'Waiting for a runner';
+export const QUEUED_BODY = 'This run starts as soon as every runner it needs is free.';
+export const RUN_NOT_FOUND_HEADING = 'Run not found';
+export const RUN_NOT_FOUND_BODY =
+	'This run has finished or was never started. Check the reports list for its results.';
+export const RUN_SKIPPED_HEADING = 'Run skipped';
+export const queuePositionLine = (n) => (n > 0 ? `Position ${n} in the queue` : 'Next up');

@@ -5,14 +5,18 @@
 
 const express = require('express');
 const router = express.Router();
-const activeRunsService = require('../services/activeRunsService');
+const runQueueService = require('../services/runQueueService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 
-// Runs carry a real user's display name (`startedBy`) — gate this the same way as
-// other identity-bearing routes (test-suites, test-runs, users), not left open like
-// the purely operational GET routes (reports, tests) that never touch user identity.
-router.get('/', jwtAuth, (req, res) => {
-	res.json({ runs: activeRunsService.listActiveRuns() });
+// Queued + running rows carry a real user's display name (`startedBy`) — gate
+// this the same way as other identity-bearing routes, not left open like the
+// purely operational GET routes.
+router.get('/', jwtAuth, async (req, res, next) => {
+	try {
+		res.json({ runs: await runQueueService.listActive() });
+	} catch (e) {
+		next(e);
+	}
 });
 
 module.exports = router;

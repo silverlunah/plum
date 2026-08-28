@@ -4,24 +4,21 @@
  -->
 
 <script>
-	import { afterUpdate, onDestroy } from 'svelte';
+	import { afterUpdate, onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { fly } from 'svelte/transition';
-	import { runnerState, cancelRun, backgroundRuns } from '$lib/stores/runner';
+	import { backgroundRuns, cancelRun } from '$lib/stores/runner';
+	import { fetchActiveRuns } from '$lib/api/activeRuns';
 	import { reportUrl } from '$lib/api/reports';
-	import { REDIRECT_DELAY_MS, BUILTIN_RUNNER_ID } from '$lib/constants';
+	import { REDIRECT_DELAY_MS } from '$lib/constants';
 	import LiveReplayer from '$lib/components/reports/LiveReplayer.svelte';
-	import { ALL_TESTS_LABEL, pluralize } from '$lib/copy/common';
+	import { ALL_TESTS_LABEL } from '$lib/copy/common';
 	import {
 		REPORTS_BACK_LABEL,
 		PASSED_LABEL,
 		FAILED_LABEL,
 		LIVE_PAGE_TITLE,
-		NO_TESTS_RUNNING_HEADING,
-		NO_TESTS_RUNNING_BODY,
-		VIEW_PAST_REPORTS_LINK,
-		SELECT_RUN_HINT,
 		LIVE_BADGE_LABEL,
 		CANCEL_RUN_LABEL,
 		ALL_TESTS_PASSED,
@@ -33,26 +30,20 @@
 		RUNNING_LABEL,
 		FINISHED_LABEL,
 		WAITING_FOR_OUTPUT,
-		runsInProgressHeading,
+		QUEUED_HEADING,
+		QUEUED_BODY,
+		RUN_NOT_FOUND_HEADING,
+		RUN_NOT_FOUND_BODY,
+		RUN_SKIPPED_HEADING,
+		VIEW_PAST_REPORTS_LINK,
+		queuePositionLine,
 		workersCountLabel,
 		redirectingIn,
 		runnersBadge,
 		workerLabel
 	} from '$lib/copy/reports';
-	import { triggerLabel } from '$lib/utils/format';
 	import BackLink from '$lib/components/ui/BackLink.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
-
-	const EMPTY_BG_STATE = {
-		output: '',
-		running: false,
-		testCompleted: false,
-		latestReportId: null,
-		status: 'idle',
-		lanes: [],
-		currentRun: null,
-		rrwebByLane: {}
-	};
 
 	let terminalEl;
 	let laneTerminalEl;
@@ -61,40 +52,47 @@
 	let countdownInterval = null;
 	let activeTab = null;
 	let activeWorkerId = null;
+	let hydrated = false;
+	let queuePosition = 0;
+	let posInterval = null;
 
-	$: bgRunId = $page.url.searchParams.get('run');
-	$: state = bgRunId ? ($backgroundRuns[bgRunId] ?? EMPTY_BG_STATE) : $runnerState;
-	$: isMulti = state.lanes.length > 0;
-	$: runningBgList = Object.entries($backgroundRuns).filter(([, r]) => r.running);
-	$: showPicker = !bgRunId && !state.running && !state.testCompleted && runningBgList.length > 0;
-	$: showIdle = !state.running && !state.testCompleted && !showPicker;
+	$: runId = $page.params.id;
+	$: run = $backgroundRuns[runId] ?? null;
+	$: status = run?.status ?? null;
+	$: lanes = run?.lanes ?? [];
+	$: isMulti = lanes.length > 1;
 
-	$: if (showPicker && runningBgList.length === 1) {
-		goto(`/reports/live?run=${runningBgList[0][0]}`);
+	async function refreshQueuePosition() {
+		try {
+			const runs = await fetchActiveRuns();
+			hydrated = true;
+			const mine = runs.find((r) => r.runId === runId);
+			queuePosition = mine?.position ?? 0;
+		} catch {
+			hydrated = true;
+		}
 	}
+
+	onMount(() => {
+		refreshQueuePosition();
+		posInterval = setInterval(() => {
+			if (status === 'queued') refreshQueuePosition();
+		}, 4000);
+	});
 
 	// Keep active tab pointing at a valid lane
 	$: {
-		if (state.lanes.length === 0) {
-			activeTab = null;
-		} else if (!state.lanes.find((l) => l.id === activeTab)) {
-			activeTab = state.lanes[0].id;
-		}
+		if (lanes.length === 0) activeTab = null;
+		else if (!lanes.find((l) => l.id === activeTab)) activeTab = lanes[0].id;
 	}
-	$: activeLane = state.lanes.find((l) => l.id === activeTab) ?? null;
+	$: activeLane = lanes.find((l) => l.id === activeTab) ?? null;
 
-	// rrwebByLane is always keyed by lane id, even for a plain single-runner
-	// run (BUILTIN_RUNNER_ID) — so worker tabs work the same way regardless of
-	// whether this run actually has multiple runner lanes.
-	$: activeLaneId = isMulti ? activeTab : BUILTIN_RUNNER_ID;
-	$: laneWorkers = state.rrwebByLane[activeLaneId] ?? {};
+	$: activeLaneId = isMulti ? activeTab : lanes[0]?.id;
+	$: laneWorkers = (activeLaneId && run?.rrwebByLane[activeLaneId]) || {};
 	$: workerIds = Object.keys(laneWorkers).sort((a, b) => Number(a) - Number(b));
 	$: {
-		if (workerIds.length === 0) {
-			activeWorkerId = null;
-		} else if (!workerIds.includes(activeWorkerId)) {
-			activeWorkerId = workerIds[0];
-		}
+		if (workerIds.length === 0) activeWorkerId = null;
+		else if (!workerIds.includes(activeWorkerId)) activeWorkerId = workerIds[0];
 	}
 	$: activeWorkerEvents = activeWorkerId ? (laneWorkers[activeWorkerId]?.events ?? []) : [];
 
@@ -103,107 +101,97 @@
 		if (laneTerminalEl) laneTerminalEl.scrollTop = laneTerminalEl.scrollHeight;
 	});
 
-	$: if (state.testCompleted && state.latestReportId && !redirectTimer) {
+	$: if (status === 'done' && run?.testCompleted && run?.latestReportId && !redirectTimer) {
 		redirectCountdown = REDIRECT_DELAY_MS / 1000;
 		countdownInterval = setInterval(() => {
 			redirectCountdown--;
 			if (redirectCountdown <= 0) clearInterval(countdownInterval);
 		}, 1000);
-		redirectTimer = setTimeout(() => goto(reportUrl(state.latestReportId)), REDIRECT_DELAY_MS);
+		redirectTimer = setTimeout(() => goto(reportUrl(run.latestReportId)), REDIRECT_DELAY_MS);
 	}
 
 	onDestroy(() => {
 		if (redirectTimer) clearTimeout(redirectTimer);
 		if (countdownInterval) clearInterval(countdownInterval);
+		if (posInterval) clearInterval(posInterval);
 	});
 
 	function goNow() {
 		if (redirectTimer) clearTimeout(redirectTimer);
 		if (countdownInterval) clearInterval(countdownInterval);
-		goto(reportUrl(state.latestReportId));
+		goto(reportUrl(run.latestReportId));
 	}
 </script>
 
 <svelte:head><title>{LIVE_PAGE_TITLE}</title></svelte:head>
 
-{#if showIdle}
+{#if !run}
 	<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
-	<div class="idle-state">
-		<div class="idle-icon">
-			<svg
-				width="40"
-				height="40"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="1.5"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<circle cx="12" cy="12" r="10" />
-				<polyline points="12 6 12 12 16 14" />
-			</svg>
-		</div>
-		<h2>{NO_TESTS_RUNNING_HEADING}</h2>
-		<p>{NO_TESTS_RUNNING_BODY}</p>
-		<a href="/reports" class="idle-link">{VIEW_PAST_REPORTS_LINK}</a>
+	<div class="notice-state">
+		{#if hydrated}
+			<h2>{RUN_NOT_FOUND_HEADING}</h2>
+			<p>{RUN_NOT_FOUND_BODY}</p>
+			<a href="/reports" class="notice-link">{VIEW_PAST_REPORTS_LINK}</a>
+		{:else}
+			<div class="pulse-dot"></div>
+		{/if}
 	</div>
-{:else if showPicker}
+{:else if status === 'queued'}
 	<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
-	<div class="cron-running-state">
-		<div class="cron-running-icon"><span class="cron-pulse-dot"></span></div>
-		<h2>{runsInProgressHeading(runningBgList.length)}</h2>
-		<div class="cron-task-list">
-			{#each runningBgList as [runId, run] (runId)}
-				<a href="/reports/live?run={runId}" class="cron-task-chip"
-					>{run.label} · {triggerLabel(run.kind)}</a
-				>
-			{/each}
-		</div>
-		<p>{SELECT_RUN_HINT}</p>
+	<div class="notice-state">
+		<div class="pulse-dot warn"></div>
+		<h2>{QUEUED_HEADING}</h2>
+		<p>{QUEUED_BODY}</p>
+		<p class="queue-pos">{queuePositionLine(queuePosition)}</p>
+		<button class="cancel-btn" on:click={() => cancelRun(runId)}>{CANCEL_RUN_LABEL}</button>
+	</div>
+{:else if status === 'done' && !run.latestReportId}
+	<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
+	<div class="notice-state">
+		<h2>{run.verdict === 'cancelled' ? CANCEL_RUN_LABEL : RUN_SKIPPED_HEADING}</h2>
+		<a href="/reports" class="notice-link">{VIEW_PAST_REPORTS_LINK}</a>
 	</div>
 {:else}
 	<div class="live-fullscreen">
-		<!-- ── Run header ── -->
 		<div
 			class="run-header"
-			class:header-pass={state.status === 'pass'}
-			class:header-fail={state.status === 'fail'}
+			class:header-pass={run.verdict === 'pass'}
+			class:header-fail={run.verdict === 'fail'}
 		>
 			<div class="header-left">
 				<div class="header-back">
 					<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
 				</div>
 
-				{#if state.running}
+				{#if status === 'running'}
 					<span class="live-badge"><span class="live-dot"></span>{LIVE_BADGE_LABEL}</span>
-				{:else if state.status === 'pass'}
+				{:else if run.verdict === 'pass'}
 					<Badge variant="pass">{PASSED_LABEL}</Badge>
 				{:else}
 					<Badge variant="fail">{FAILED_LABEL}</Badge>
 				{/if}
 
-				{#if state.currentRun}
+				{#if run.currentRun}
 					<div class="run-info">
-						{#if state.currentRun.runTitle}
-							<span class="run-title-label">{state.currentRun.runTitle}</span>
+						{#if run.currentRun.runTitle}
+							<span class="run-title-label">{run.currentRun.runTitle}</span>
 							<span class="run-sep">·</span>
 						{/if}
-						<span class="run-tag-label">{state.currentRun.tag || ALL_TESTS_LABEL}</span>
+						<span class="run-tag-label">{run.currentRun.tag || ALL_TESTS_LABEL}</span>
 						<span class="run-sep">·</span>
-						<span class="run-detail">{workersCountLabel(state.currentRun.workers)}</span>
+						<span class="run-detail">{workersCountLabel(run.currentRun.workers)}</span>
 						<span class="run-sep">·</span>
-						<span class="run-detail">{state.currentRun.browser}</span>
-						{#if state.lanes.length > 1}
+						<span class="run-detail">{run.currentRun.browser}</span>
+						{#if lanes.length > 1}
 							<span class="run-sep">·</span>
-							<span class="run-detail">{runnersBadge(state.lanes.length)}</span>
+							<span class="run-detail">{runnersBadge(lanes.length)}</span>
 						{/if}
 					</div>
 				{/if}
 			</div>
 
-			{#if state.running && !bgRunId}
-				<button class="cancel-btn" on:click={cancelRun}>
+			{#if status === 'running'}
+				<button class="cancel-btn" on:click={() => cancelRun(runId)}>
 					<svg
 						width="12"
 						height="12"
@@ -223,16 +211,15 @@
 			{/if}
 		</div>
 
-		<!-- ── Completion bar ── -->
-		{#if state.testCompleted && state.latestReportId}
+		{#if status === 'done' && run.testCompleted && run.latestReportId}
 			<div
 				class="completion-bar"
-				class:pass-bar={state.status === 'pass'}
-				class:fail-bar={state.status === 'fail'}
+				class:pass-bar={run.verdict === 'pass'}
+				class:fail-bar={run.verdict === 'fail'}
 				transition:fly={{ y: -8, duration: 250 }}
 			>
 				<div class="completion-left">
-					{#if state.status === 'pass'}
+					{#if run.verdict === 'pass'}
 						<svg
 							width="16"
 							height="16"
@@ -279,10 +266,9 @@
 			</div>
 		{/if}
 
-		<!-- ── Multi-runner tabs ── -->
 		{#if isMulti}
 			<div class="lane-tabs">
-				{#each state.lanes as lane}
+				{#each lanes as lane}
 					<button
 						class="lane-tab"
 						class:active={activeTab === lane.id}
@@ -303,7 +289,6 @@
 			</div>
 		{/if}
 
-		<!-- ── Worker tabs (only when this lane has more than one) ── -->
 		{#if workerIds.length > 1}
 			<div class="lane-tabs worker-tabs">
 				{#each workerIds as workerId}
@@ -318,9 +303,7 @@
 			</div>
 		{/if}
 
-		<!-- ── Dual-stream view ── -->
 		<div class="run-view">
-			<!-- Live stream panel -->
 			<div class="stream-panel">
 				{#if activeWorkerEvents.length > 0}
 					<LiveReplayer events={activeWorkerEvents} />
@@ -340,12 +323,11 @@
 							<rect x="2" y="5" width="20" height="14" rx="2" />
 							<circle cx="12" cy="12" r="3" />
 						</svg>
-						<span>{state.running ? AWAITING_STREAM_LABEL : NO_STREAM_LABEL}</span>
+						<span>{status === 'running' ? AWAITING_STREAM_LABEL : NO_STREAM_LABEL}</span>
 					</div>
 				{/if}
 			</div>
 
-			<!-- Terminal panel -->
 			<div class="terminal-panel">
 				<div class="terminal-bar">
 					<span class="dot red"></span>
@@ -355,7 +337,7 @@
 						{#if isMulti}
 							{activeLane?.name ?? RUNNER_LABEL}
 						{:else}
-							{state.running ? RUNNING_LABEL : FINISHED_LABEL}
+							{status === 'running' ? RUNNING_LABEL : FINISHED_LABEL}
 						{/if}
 					</span>
 				</div>
@@ -363,7 +345,9 @@
 					<pre class="terminal" bind:this={laneTerminalEl}>{activeLane?.logs ||
 							WAITING_FOR_OUTPUT}</pre>
 				{:else}
-					<pre class="terminal" bind:this={terminalEl}>{state.output}</pre>
+					<pre class="terminal" bind:this={terminalEl}>{lanes[0]?.logs ||
+							run.output ||
+							WAITING_FOR_OUTPUT}</pre>
 				{/if}
 			</div>
 		</div>
@@ -371,8 +355,7 @@
 {/if}
 
 <style>
-	/* ── Idle state ── */
-	.idle-state {
+	.notice-state {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -381,52 +364,40 @@
 		text-align: center;
 		gap: 0.75rem;
 	}
-	.idle-icon {
-		color: var(--text-muted);
-		opacity: 0.4;
-		margin-bottom: 0.5rem;
-	}
-	.idle-state h2 {
+	.notice-state h2 {
 		font-size: 1.5rem;
 		font-weight: 400;
 	}
-	.idle-state p {
+	.notice-state p {
 		font-size: 0.9375rem;
 		color: var(--text-muted);
 		max-width: 360px;
 	}
-	.idle-link {
+	.queue-pos {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.85rem;
+		color: var(--text);
+	}
+	.notice-link {
 		font-size: 0.875rem;
 		color: var(--accent);
 		text-decoration: none;
 		margin-top: 0.5rem;
 	}
-	.idle-link:hover {
+	.notice-link:hover {
 		text-decoration: underline;
 	}
-
-	/* ── Cron running state ── */
-	.cron-running-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		padding: 5rem 1rem;
-		text-align: center;
-		gap: 0.75rem;
-	}
-	.cron-running-icon {
-		margin-bottom: 0.5rem;
-	}
-	.cron-pulse-dot {
-		display: inline-block;
+	.pulse-dot {
 		width: 18px;
 		height: 18px;
 		border-radius: 50%;
-		background: var(--pass);
-		animation: pulse-pass 1.4s ease-in-out infinite;
+		background: var(--accent);
+		animation: pulse-dot 1.4s ease-in-out infinite;
 	}
-	@keyframes pulse-pass {
+	.pulse-dot.warn {
+		background: var(--warn);
+	}
+	@keyframes pulse-dot {
 		0%,
 		100% {
 			opacity: 1;
@@ -437,41 +408,7 @@
 			transform: scale(0.8);
 		}
 	}
-	.cron-running-state h2 {
-		font-size: 1.5rem;
-		font-weight: 400;
-	}
-	.cron-task-list {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		justify-content: center;
-	}
-	.cron-task-chip {
-		font-size: 0.8125rem;
-		font-weight: 500;
-		color: var(--accent);
-		background: var(--accent-soft);
-		border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-		border-radius: var(--radius-pill);
-		padding: 0.2rem 0.65rem;
-		text-decoration: none;
-		cursor: pointer;
-		transition: background var(--duration-fast);
-	}
-	.cron-task-chip:hover {
-		background: color-mix(in srgb, var(--accent) 15%, var(--accent-soft));
-	}
-	.cron-running-state p {
-		font-size: 0.9375rem;
-		color: var(--text-muted);
-		max-width: 360px;
-	}
 
-	/* ── Fullscreen run shell ──
-	   Breaks out of PageShell's centered 1200px column so the live stream gets
-	   the whole viewport; height is pinned to the viewport (minus Nav) so the
-	   stream/log split scrolls internally instead of the page. */
 	.live-fullscreen {
 		width: 100vw;
 		position: relative;
@@ -486,7 +423,6 @@
 		flex-direction: column;
 	}
 
-	/* ── Run header ── */
 	.run-header {
 		display: flex;
 		align-items: center;
@@ -599,7 +535,6 @@
 		color: var(--white);
 	}
 
-	/* ── Completion bar ── */
 	.completion-bar {
 		display: flex;
 		align-items: center;
@@ -656,7 +591,6 @@
 		background: rgba(0, 0, 0, 0.06);
 	}
 
-	/* ── Lane tabs ── */
 	.lane-tabs {
 		display: flex;
 		gap: 2px;
@@ -718,9 +652,6 @@
 		opacity: 0.55;
 	}
 
-	/* ── Dual-stream view ──
-	   Fills whatever vertical space live-fullscreen has left over after the
-	   header/tabs above it, rather than a fixed viewport-relative height. */
 	.run-view {
 		display: grid;
 		grid-template-columns: 1fr 340px;
@@ -730,7 +661,6 @@
 		animation: fadeUp 0.35s var(--ease-out) 0.05s both;
 	}
 
-	/* ── Live stream panel ── */
 	.stream-panel {
 		position: relative;
 		background: var(--terminal-bg);
@@ -751,7 +681,6 @@
 		font-family: 'JetBrains Mono', monospace;
 	}
 
-	/* ── Terminal panel ── */
 	.terminal-panel {
 		display: flex;
 		flex-direction: column;

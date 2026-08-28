@@ -41,10 +41,14 @@ async function start() {
 	attachListenRetry(server, port);
 
 	// Connect socket.io to the runner/cron services (a no-op in node mode).
-	const { cronService, backupCronService } = wireRealtimeServices(io, isNodeMode);
+	const { cronService, backupCronService, runQueueService } = wireRealtimeServices(io, isNodeMode);
 
 	// Start the scheduled test and backup cron jobs.
 	await initCronServices(cronService, backupCronService);
+
+	// Reconcile the persisted run queue: clear rows left "running" by a crash,
+	// then resume anything still queued.
+	if (runQueueService) await runQueueService.init(io);
 
 	// Load the saved MCP API key into the environment for the MCP server.
 	await bootstrapMcpKey(isNodeMode);

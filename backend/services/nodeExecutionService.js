@@ -90,6 +90,7 @@ function startJob({
 	});
 
 	const proc = spawn('npm', ['run', 'test'], { env, shell: true, cwd: BACKEND_DIR });
+	jobs[jobId].proc = proc;
 	proc.stdout.on('data', (d) => {
 		jobs[jobId].logs += d.toString();
 	});
@@ -137,4 +138,15 @@ function pollJob(jobId, offset, rrwebOffset = 0) {
 	};
 }
 
-module.exports = { startJob, getJob, pollJob };
+// Primary server asks a node to stop a job when the user cancels a run. The
+// proc's own close handler still runs and marks the job done/errored.
+function cancelJob(jobId) {
+	const job = jobs[jobId];
+	if (!job) return false;
+	try {
+		job.proc?.kill('SIGTERM');
+	} catch {}
+	return true;
+}
+
+module.exports = { startJob, getJob, pollJob, cancelJob };

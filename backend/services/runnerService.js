@@ -201,10 +201,11 @@ async function fetchReportContent(runner, jobId, onLog) {
  */
 async function dispatchAndPoll(
 	runnerId,
-	{ tags, browser, workers },
+	{ tags, browser, workers, baseUrl },
 	onLog,
 	onDone,
-	onRRwebBatch = null
+	onRRwebBatch = null,
+	onJobId = null
 ) {
 	// The async poll callback can overlap if a tick takes longer than the interval;
 	// guard so the run resolves exactly once and can't be finalised while a lane
@@ -236,7 +237,7 @@ async function dispatchAndPoll(
 				browser,
 				workers,
 				tests: collectTestFiles(),
-				env: loadTestEnv(process.cwd())
+				env: { ...loadTestEnv(process.cwd()), ...(baseUrl ? { BASE_URL: baseUrl } : {}) }
 			}),
 			signal: AbortSignal.timeout(10000)
 		});
@@ -248,6 +249,7 @@ async function dispatchAndPoll(
 		return;
 	}
 
+	onJobId?.(jobId);
 	onLog(`Connected to runner "${runner.name}" — job ${jobId}\n`);
 
 	let logOffset = 0;
@@ -289,6 +291,21 @@ async function dispatchAndPoll(
 	}, 1000);
 }
 
+// Best-effort remote cancel — tells the node to SIGTERM the job's test process.
+// The polling loop in dispatchAndPoll still finalises the lane when the node
+// reports the job done/errored, so a failed cancel here is not fatal.
+async function cancelRemoteJob(runnerId, jobId) {
+	const runner = await getById(runnerId);
+	if (!runner) return;
+	try {
+		await fetch(`${runner.url}/api/cancel/${jobId}`, {
+			method: 'POST',
+			headers: bearerHeader(runner.token),
+			signal: AbortSignal.timeout(8000)
+		});
+	} catch {}
+}
+
 module.exports = {
 	getAll,
 	create,
@@ -300,5 +317,6 @@ module.exports = {
 	ping,
 	stop,
 	restart,
-	dispatchAndPoll
+	dispatchAndPoll,
+	cancelRemoteJob
 };
