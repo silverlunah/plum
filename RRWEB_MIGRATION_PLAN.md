@@ -57,12 +57,17 @@ Each phase is its own Vikunja ticket, branch, and PR.
   - [x] Fixed a pre-existing bug found along the way: Cucumber's legacy JSON `id` is identical for every Scenario Outline Examples row, corrupting recording/retry attribution — now keyed on `id;;line`
   - [x] Step data tables (`dataTable`) now captured and rendered
   - Ready to open PR / PR open — see #96 for full detail and the multi-tab replay bugs fixed in the second commit
-- [ ] **Phase 3 — Live view migration**
+- [x] **Phase 3 — Live view migration** _(branch `276-rrweb-migration-phase-3-live-view-migration`, PR #97)_
   - Scope cut from the original plan (user decision): **no element inspector in live view** — just the rrweb stream, run logs, and Runner → Worker tab navigation. No browser-tab-level strip, no inspect overlay/code viewer. Inspector stays a Phase 2 (static report replay) feature only.
-  - Scoped runner→backend Socket.IO telemetry channel (see decision table)
+  - Scoped runner→backend Socket.IO telemetry channel: new `/node-stream` namespace (`nodeSocketHandler.js`), token-authed with the existing runner credential; `nodeStreamRegistry.js` relays batches keyed by jobId. Built-in runner reuses the existing local 500ms file-poller instead (no socket hop needed in-process); both paths converge on the same `RUNNER_LANE_RRWEB_BATCH`/`BG_RUN_LANE_RRWEB_BATCH` socket events to the browser
+  - A node learns the primary's own reachable URL by reusing the existing `notifyPublicUrl` Settings field (webhooks) rather than adding a new one — same intent, no schema change
   - New socket events for batched rrweb event streaming, mirrored in `backend/constants/socketEvents.js` and `frontend/src/lib/socketEvents.js`
-  - `RunnerPanel.svelte` buffers events per (lane, worker) instead of `latestScreenshot`
-  - Live page swaps the `<img>` panel for a live-mode `rrweb-player`, Runner → Worker tabs only (no Browser-tab level)
+  - `RunnerPanel.svelte`/`runner.js` store buffer events per (lane, worker) in `rrwebByLane` instead of `latestScreenshot`
+  - New `LiveReplayer.svelte` — `rrweb-player` in live mode (`liveMode: true`, `player.addEvent()` as batches arrive), rendered at the recording's native resolution and scaled via `ResizeObserver` to fully cover its panel (no letterboxing)
+  - Live page redesigned to full-bleed fullscreen (breaks out of the centered `PageShell`), stream + slim log sidebar filling the whole viewport, Runner → Worker tabs only (no Browser-tab level)
+  - Verified end-to-end for the **built-in runner** (single and multi-worker) via direct DOM measurement of the cover-scale across a full run, not just screenshots
+  - **Not yet verified**: the remote/external runner node path (needs `notifyPublicUrl` configured + a running node process) — backend code is written and syntax/svelte-checked only
+  - Found and fixed along the way: a fast-failing test can finish before the 500ms poll flush ever fires, so very short runs may show no live frames at all — inherent to the poll-based transport, not a regression, not chased further this phase
 - [ ] **Phase 4 — Removal & cleanup**
   - Delete `screenshotStep()`, screenshot-file logic in `reportService.js`, `SCREENSHOTS_DIR`, the `/screenshots` static route, `screenshotUrl()`, dead copy/constants
   - Confirm and remove the vestigial unused `backend/playwright.config.js`
