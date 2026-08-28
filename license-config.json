@@ -33,6 +33,7 @@
 		"**/*.md",
 		"**/prisma/migrations/**",
 		"**/prisma/schema.prisma",
-		"**/.npmignore"
+		"**/.npmignore",
+		"**/.npmrc"
 	]
 }
