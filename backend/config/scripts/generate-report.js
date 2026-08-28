@@ -36,7 +36,7 @@ if (!process.env.DATABASE_URL) {
 		const reportService = require('../../services/reportService');
 		const triggerType = normaliseTrigger(process.env.TRIGGER);
 		const rawTag = process.env.TAG || '@all-tests';
-		const nodeCount = Math.max(
+		const workerCount = Math.max(
 			1,
 			parseInt(process.env.REPORT_RUNNERS || process.env.PARALLEL || '1', 10) || 1
 		);
@@ -45,7 +45,7 @@ if (!process.env.DATABASE_URL) {
 			rawCucumberJson: raw,
 			tags: rawTag,
 			triggerType,
-			nodeCount,
+			workerCount,
 			browser: process.env.BROWSER || DEFAULT_BROWSER,
 			runnerName: process.env.RUNNER_NAME || null,
 			runnerId: process.env.RUNNER_ID || null,

@@ -16,7 +16,7 @@
  */
 
 import { Before, After, AfterStep, ITestCaseHookParameter } from '@cucumber/cucumber';
-import { setup, teardown, screenshotStep, streamLiveScreenshot } from './browser';
+import { setup, teardown, screenshotStep, streamLiveScreenshot, flushRecordings } from './browser';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -34,5 +34,6 @@ AfterStep(async function ({ pickleStep, result }: { pickleStep: any; result: any
 });
 
 After(async function (scenario: ITestCaseHookParameter) {
+	await flushRecordings(this.attach.bind(this));
 	await teardown(this.attach.bind(this), scenario.result?.status === 'FAILED');
 });

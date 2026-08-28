@@ -57,7 +57,12 @@ model Report {
   status      String
   tags        String
   triggerType String            @default("manual-trigger")
-  runners     Int               @default(1)
+  // runnerCount = distinct runner machines/lanes in this run (built-in counts as one).
+  // workerCount = Cucumber --parallel workers within each runner. Two independent
+  // axes of parallelism — kept as separate columns since one DB column used to mean
+  // one or the other depending on which code path wrote it.
+  runnerCount Int               @default(1)
+  workerCount Int               @default(1)
   browser     String            @default("chromium")
   runnerName  String?
   runnerId    String?
@@ -71,12 +76,31 @@ model Report {
   duration    Int?
   createdAt   DateTime          @default(now())
   testHistory TestCaseHistory[]
+  recordings  Recording[]
 
   @@index([createdAt])
   @@index([status])
   @@index([testRunId])
   @@index([runnerId])
   @@index([cronJobId])
+}
+
+// One row per (report, scenario, worker, browser tab) — a scenario that opens
+// extra tabs, or runs under a multi-worker runner, produces multiple rows.
+// `events` is a gzip-compressed JSON array of rrweb events.
+model Recording {
+  id         Int      @id @default(autoincrement())
+  reportId   Int
+  report     Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  scenarioId String
+  workerId   Int      @default(1)
+  tabId      String   @default("main")
+  tabIndex   Int      @default(0)
+  events     Bytes
+  createdAt  DateTime @default(now())
+
+  @@index([reportId])
+  @@index([reportId, scenarioId])
 }
 
 model Project {

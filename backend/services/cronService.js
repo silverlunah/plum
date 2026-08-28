@@ -191,6 +191,7 @@ async function runSingleBuiltIn({ taskName, tags, workers, browser, notifyDiscor
 			rawCucumberJson: rawJson,
 			tags,
 			triggerType: taskName,
+			workerCount: workers,
 			browser,
 			duration: Date.now() - startedAt,
 			attempts
@@ -282,6 +283,7 @@ async function runDistributed({
 				.saveCombinedReport({
 					reports: collectedReports,
 					runners: laneInfos,
+					workers,
 					overallCode,
 					tag: tags,
 					triggerType: taskName,

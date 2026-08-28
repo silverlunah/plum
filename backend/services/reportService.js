@@ -6,11 +6,17 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const prisma = require('./prisma');
 const { isScheduledTrigger, normaliseTrigger } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { REPORT_STATUS } = require('../constants/jobStatus');
 const { SCREENSHOTS_DIR } = require('../lib/reportFilename');
+
+// Matched by string literal in backend/tests/utils/browser.ts (flushRecordings) —
+// the two runtimes don't share a module, mirroring how 'image/png' is already
+// duplicated between the two files.
+const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
 
 // ---------------------------------------------------------------------------
 // Auto-sync: mark test cases as automated and record history from Cucumber tags
@@ -197,18 +203,54 @@ function deleteScreenshotFiles(content) {
 }
 
 /**
+ * Parses one scenario's hidden hook-step rrweb attachments (flushed from
+ * browser.ts's flushRecordings via the After hook) into Recording rows ready
+ * for prisma.recording.createMany, keyed to this scenario via Cucumber's own
+ * stable `scenario.id`.
+ */
+function extractRecordings(scenario) {
+	const hookRecordings = (scenario.steps || [])
+		.filter((s) => s.hidden)
+		.flatMap((step) => step.embeddings?.filter((e) => e.mime_type === RRWEB_MIME_TYPE) ?? []);
+
+	return hookRecordings
+		.map((embedding) => {
+			try {
+				const decompressed = zlib.gunzipSync(Buffer.from(embedding.data, 'base64'));
+				const { workerId, tabId, tabIndex, events } = JSON.parse(decompressed.toString('utf8'));
+				return {
+					scenarioId: scenario.id,
+					workerId,
+					tabId,
+					tabIndex,
+					events: zlib.gzipSync(Buffer.from(JSON.stringify(events), 'utf8'))
+				};
+			} catch (e) {
+				console.error(`[report] Failed to parse rrweb recording: ${e.message}`);
+				return null;
+			}
+		})
+		.filter(Boolean);
+}
+
+/**
  * Transforms raw Cucumber JSON into our stored format:
  * - Resolves pass/fail status per step/scenario/feature
  * - Extracts base64 screenshots to PNG files on disk
  * - Stores only the filename in the content (not the base64 blob)
+ * - Extracts rrweb recordings attached via the After hook
  *
- * Returns { features, status } where status is 'PASS' | 'FAIL'.
+ * Returns { features, status, recordings } where status is 'PASS' | 'FAIL'.
  */
 function processCucumberJson(raw, attempts = {}) {
 	fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
 
+	const recordings = [];
+
 	const features = raw.map((feature) => {
 		const scenarios = (feature.elements || []).map((scenario) => {
+			recordings.push(...extractRecordings(scenario));
+
 			const visibleSteps = (scenario.steps || []).filter((s) => !s.hidden);
 			const hookScreenshots = (scenario.steps || [])
 				.filter((s) => s.hidden)
@@ -264,6 +306,7 @@ function processCucumberJson(raw, attempts = {}) {
 			}, 'passed');
 
 			return {
+				id: scenario.id,
 				name: scenario.name,
 				keyword: scenario.keyword,
 				tags: (scenario.tags ?? []).map((t) => t.name),
@@ -283,7 +326,7 @@ function processCucumberJson(raw, attempts = {}) {
 	});
 
 	const hasFailures = features.some((f) => f.status === 'failed');
-	return { features, status: hasFailures ? REPORT_STATUS.FAIL : REPORT_STATUS.PASS };
+	return { features, recordings, status: hasFailures ? REPORT_STATUS.FAIL : REPORT_STATUS.PASS };
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +338,8 @@ const reportListSelect = {
 	status: true,
 	tags: true,
 	triggerType: true,
-	runners: true,
+	runnerCount: true,
+	workerCount: true,
 	browser: true,
 	runnerName: true,
 	createdAt: true,
@@ -340,7 +384,8 @@ const getReportDetail = async (id) => {
 			status: true,
 			tags: true,
 			triggerType: true,
-			runners: true,
+			runnerCount: true,
+			workerCount: true,
 			browser: true,
 			runnerName: true,
 			createdAt: true,
@@ -366,7 +411,8 @@ const getReportDetail = async (id) => {
  *   rawCucumberJson: object[],
  *   tags: string,
  *   triggerType: string,
- *   nodeCount?: number,
+ *   runnerCount?: number,
+ *   workerCount?: number,
  *   browser?: string,
  *   runnerName?: string,
  *   runnerId?: string,
@@ -377,7 +423,8 @@ const saveReport = async ({
 	rawCucumberJson,
 	tags,
 	triggerType,
-	nodeCount,
+	runnerCount = 1,
+	workerCount = 1,
 	browser,
 	runnerName,
 	runnerId,
@@ -388,7 +435,11 @@ const saveReport = async ({
 	attempts = {}
 }) => {
 	const normTrigger = normaliseTrigger(triggerType);
-	const { features, status: derivedStatus } = processCucumberJson(rawCucumberJson, attempts);
+	const {
+		features,
+		recordings,
+		status: derivedStatus
+	} = processCucumberJson(rawCucumberJson, attempts);
 	const status = forceFail ? REPORT_STATUS.FAIL : derivedStatus;
 	const cronJobId = await resolveCronJobId(normTrigger);
 
@@ -397,7 +448,8 @@ const saveReport = async ({
 			status,
 			tags: (tags ?? '').replace(/^\(|\)$/g, '') || '@all-tests',
 			triggerType: normTrigger,
-			runners: nodeCount ?? 1,
+			runnerCount,
+			workerCount,
 			browser: browser ?? DEFAULT_BROWSER,
 			runnerName: runnerName ?? null,
 			runnerId: runnerId ?? null,
@@ -408,6 +460,11 @@ const saveReport = async ({
 			duration
 		}
 	});
+	if (recordings.length > 0) {
+		await prisma.recording.createMany({
+			data: recordings.map((r) => ({ ...r, reportId: report.id }))
+		});
+	}
 	syncAutomatedTags(report.id, features, testRunId ?? null);
 	return report;
 };
@@ -419,6 +476,7 @@ const saveReport = async ({
  * @param {{
  *   reports: (string|null)[],
  *   runners: { id: string, name: string, dbId: string|null }[],
+ *   workers?: number,
  *   overallCode: number,
  *   tag: string,
  *   triggerType: string,
@@ -429,6 +487,7 @@ const saveReport = async ({
 const saveCombinedReport = async ({
 	reports,
 	runners,
+	workers = 1,
 	overallCode,
 	tag,
 	triggerType,
@@ -478,7 +537,8 @@ const saveCombinedReport = async ({
 		rawCucumberJson: combined,
 		tags: tag,
 		triggerType,
-		nodeCount: runners.length,
+		runnerCount: runners.length,
+		workerCount: workers,
 		browser,
 		runnerName: runners.map((r) => r.name).join(', '),
 		runnerId: null,

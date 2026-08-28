@@ -18,13 +18,44 @@
 import { chromium, firefox, webkit, Browser, BrowserContext, Page } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as zlib from 'zlib';
+
+// Same mime type is matched by string literal in backend/services/reportService.js
+// (processCucumberJson) — the two runtimes don't share a module, mirroring how
+// 'image/png' is already duplicated between this file and reportService.js.
+const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
+// @rrweb/record's package.json only exports its main entry ("."), so a deep
+// require.resolve() of the UMD bundle is blocked by Node's exports map — resolve
+// the (exported) main entry instead and locate the sibling file on disk.
+const RECORD_BUNDLE_PATH = path.join(
+	path.dirname(require.resolve('@rrweb/record')),
+	'record.umd.min.cjs'
+);
+
+interface TabRecording {
+	tabId: string;
+	tabIndex: number;
+	events: unknown[];
+}
 
 let _browser: Browser;
 let _context: BrowserContext;
 let _page: Page;
 let _ssCounter = 0;
+let _tabs: Map<Page, TabRecording> = new Map();
+let _tabCounter = 0;
+let _workerId = 1;
 
 export const page = (): Page => _page;
+
+function tabIdForIndex(index: number): string {
+	return index === 0 ? 'main' : `tab-${index + 1}`;
+}
+
+function attachRecorder(pg: Page): void {
+	const tabIndex = _tabCounter++;
+	_tabs.set(pg, { tabId: tabIdForIndex(tabIndex), tabIndex, events: [] });
+}
 
 export async function setup(): Promise<void> {
 	const isHeadless = process.env.IS_HEADLESS?.toLowerCase() !== 'false';
@@ -33,6 +64,42 @@ export async function setup(): Promise<void> {
 		browserName === 'firefox' ? firefox : browserName === 'webkit' ? webkit : chromium;
 	_browser = await browserType.launch({ headless: isHeadless });
 	_context = await _browser.newContext();
+
+	_tabs = new Map();
+	_tabCounter = 0;
+	// Cucumber forks one OS process per --parallel worker and injects this env
+	// var into each — 0-indexed, so display/report as 1-based like the rest of
+	// the worker-count UI.
+	const parsedWorkerId = parseInt(process.env.CUCUMBER_WORKER_ID ?? '', 10);
+	_workerId = Number.isFinite(parsedWorkerId) ? parsedWorkerId + 1 : 1;
+
+	// Context-level exposeBinding/addInitScript apply to every page in the
+	// context automatically — current and future (popups, target=_blank tabs) —
+	// so recording setup never races a new tab's first navigation.
+	await _context.exposeBinding('__plumEmitRRwebEvent', (source, eventJson: string) => {
+		const recording = source.page && _tabs.get(source.page);
+		if (!recording) return;
+		try {
+			recording.events.push(JSON.parse(eventJson));
+		} catch {
+			// malformed event — drop it, recording is best-effort
+		}
+	});
+	await _context.addInitScript({ path: RECORD_BUNDLE_PATH });
+	await _context.addInitScript(() => {
+		// @ts-ignore — rrwebRecord is injected by the record.umd.min.cjs bundle above
+		if (window.rrwebRecord) {
+			// @ts-ignore
+			window.rrwebRecord.record({
+				emit: (event: unknown) => {
+					// @ts-ignore — exposed by BrowserContext.exposeBinding above
+					window.__plumEmitRRwebEvent(JSON.stringify(event));
+				}
+			});
+		}
+	});
+
+	_context.on('page', attachRecorder);
 	_page = await _context.newPage();
 }
 
@@ -60,6 +127,32 @@ export async function streamLiveScreenshot(stepName: string): Promise<void> {
 		);
 	} catch {
 		// ignore — live streaming is best-effort
+	}
+}
+
+/**
+ * Flushes every tab's buffered rrweb events (one per opened tab/popup) as a
+ * gzip-compressed attachment. Reuses the same `attach()` → Cucumber JSON
+ * `embeddings[]` → processCucumberJson() pipeline that screenshots already
+ * travel through, tagged with a mime type reportService can pick out.
+ */
+export async function flushRecordings(
+	attach: (data: Buffer, mime: string) => Promise<void>
+): Promise<void> {
+	for (const recording of _tabs.values()) {
+		if (recording.events.length === 0) continue;
+		try {
+			const payload = JSON.stringify({
+				workerId: _workerId,
+				tabId: recording.tabId,
+				tabIndex: recording.tabIndex,
+				events: recording.events
+			});
+			const gz = zlib.gzipSync(Buffer.from(payload, 'utf8'));
+			await attach(gz, RRWEB_MIME_TYPE);
+		} catch {
+			// a failed recording flush shouldn't fail the scenario
+		}
 	}
 }
 
