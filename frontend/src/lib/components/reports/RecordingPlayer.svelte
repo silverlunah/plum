@@ -40,6 +40,8 @@
 	let selectedElement = null;
 	let hoverBox = null;
 	let cleanupInspect = null;
+	let inspectAttachedDoc = null;
+	let inspectWatchRaf = null;
 	let currentStepIndex = -1;
 	let stepTimestamps = [];
 
@@ -142,6 +144,7 @@
 		const iframe = replayer?.iframe;
 		const doc = iframe?.contentDocument;
 		if (!iframe || !doc) return;
+		inspectAttachedDoc = doc;
 
 		const onMove = (e) => {
 			const target = e.target;
@@ -192,10 +195,40 @@
 	}
 
 	function teardownInspectListeners() {
+		inspectAttachedDoc = null;
 		if (cleanupInspect) {
 			cleanupInspect();
 			cleanupInspect = null;
 		}
+	}
+
+	function stopInspectWatch() {
+		if (inspectWatchRaf !== null) {
+			cancelAnimationFrame(inspectWatchRaf);
+			inspectWatchRaf = null;
+		}
+	}
+
+	// Safety net alongside the immediate re-attach in buildPlayer: if the
+	// iframe's Document ever ends up different from the one our listeners
+	// are on (e.g. rrweb replacing it for a later FullSnapshot), self-heal
+	// on the next frame rather than leaving Inspect silently unresponsive
+	// until something else triggers a rebuild.
+	function watchInspectDoc() {
+		if (!inspecting) {
+			inspectWatchRaf = null;
+			return;
+		}
+		const doc = currentReplayer()?.iframe?.contentDocument;
+		if (doc && doc !== inspectAttachedDoc) {
+			teardownInspectListeners();
+			setupInspectListeners();
+		}
+		inspectWatchRaf = requestAnimationFrame(watchInspectDoc);
+	}
+
+	function startInspectWatch() {
+		if (inspectWatchRaf === null) inspectWatchRaf = requestAnimationFrame(watchInspectDoc);
 	}
 
 	// Rebuild since rrweb-player's canvas won't reflow to the resized stage on its own.
@@ -207,7 +240,10 @@
 		// recomputing the highlight from that boundary would read it as step i+1
 		// having started. Preserve the already-correct index instead.
 		if (resumeState) resumeState.stepIndexOverride = currentStepIndex;
-		if (!inspecting) teardownInspectListeners();
+		if (!inspecting) {
+			teardownInspectListeners();
+			stopInspectWatch();
+		}
 		await tick();
 		buildPlayer(resumeState);
 	}
@@ -435,12 +471,13 @@
 			player.goto(timeOffset, !resumeState.paused);
 		}
 
-		// Re-attach to the fresh iframe; wait a frame for a paused goto() to settle first.
+		// Re-attach to the fresh iframe. watchInspectDoc (started below) keeps
+		// this correct afterward too, in case the iframe's Document changes
+		// again past this point.
 		if (inspecting) {
-			requestAnimationFrame(() => {
-				teardownInspectListeners();
-				setupInspectListeners();
-			});
+			teardownInspectListeners();
+			setupInspectListeners();
+			startInspectWatch();
 		}
 	}
 
@@ -486,6 +523,7 @@
 
 	onDestroy(() => {
 		if (livePositionRaf !== null) cancelAnimationFrame(livePositionRaf);
+		stopInspectWatch();
 		destroyPlayer();
 	});
 </script>
