@@ -1,20 +1,29 @@
 /*
  * This file is part of Plum.
- * Licensed under the MIT License. See LICENSE file in the project root for details.
+ *
+ * Plum is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Plum is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-// The actual implementation behind tests/utils/browser.ts and hooks.ts.
-// Customer test projects only get a thin pass-through to this module (see
-// backend/_scaffold/utils/) — keeping the real wiring here means every
-// `npm install -g plum-e2e@latest` picks up fixes/changes immediately,
-// without needing to re-sync anything into an existing customer project.
+// DO NOT EDIT — see README.md in this directory. Plum overwrites this whole
+// folder before every run, so any change here is silently discarded.
 
-const fs = require('fs');
-const path = require('path');
-const zlib = require('zlib');
-const dotenv = require('dotenv');
-const { chromium, firefox, webkit } = require('playwright');
-const { Before, After, BeforeStep } = require('@cucumber/cucumber');
+import { chromium, firefox, webkit, Browser, BrowserContext, Page } from 'playwright';
+import { Before, After, BeforeStep, ITestCaseHookParameter } from '@cucumber/cucumber';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as zlib from 'zlib';
+import dotenv from 'dotenv';
 
 dotenv.config();
 
@@ -31,19 +40,29 @@ const RECORD_BUNDLE_PATH = path.join(
 	'record.umd.min.cjs'
 );
 
-let _browser;
-let _context;
-let _page;
+interface TabRecording {
+	tabId: string;
+	tabIndex: number;
+	events: unknown[];
+	openedAt: number;
+	closedAt: number | null;
+	liveFlushedCount: number;
+}
+
+let _browser: Browser;
+let _context: BrowserContext;
+let _page: Page;
 let _liveRRwebCounter = 0;
-let _liveRRwebTimer = null;
-let _tabs = new Map();
+let _liveRRwebTimer: ReturnType<typeof setInterval> | null = null;
+let _tabs: Map<Page, TabRecording> = new Map();
 let _tabCounter = 0;
 let _workerId = 1;
 
-const page = () => _page;
-const context = () => _context;
+export const page = (): Page => _page;
+export const context = (): BrowserContext => _context;
+export const browser = (): Browser => _browser;
 
-function tabIdForIndex(index) {
+function tabIdForIndex(index: number): string {
 	return index === 0 ? 'main' : `tab-${index + 1}`;
 }
 
@@ -52,9 +71,9 @@ function tabIdForIndex(index) {
 // timestamps are a poor proxy for how long it stayed relevant. Real
 // open/close times let the replay UI line multiple tabs up on one timeline
 // without guessing from event gaps.
-function attachRecorder(pg) {
+function attachRecorder(pg: Page): void {
 	const tabIndex = _tabCounter++;
-	const recording = {
+	const recording: TabRecording = {
 		tabId: tabIdForIndex(tabIndex),
 		tabIndex,
 		events: [],
@@ -68,7 +87,7 @@ function attachRecorder(pg) {
 	});
 }
 
-async function setup() {
+export async function setup(): Promise<void> {
 	const isHeadless = process.env.IS_HEADLESS?.toLowerCase() !== 'false';
 	const browserName = (process.env.BROWSER || 'chromium').toLowerCase();
 	const browserType =
@@ -87,7 +106,7 @@ async function setup() {
 	// Context-level exposeBinding/addInitScript apply to every page in the
 	// context automatically — current and future (popups, target=_blank tabs) —
 	// so recording setup never races a new tab's first navigation.
-	await _context.exposeBinding('__plumEmitRRwebEvent', (source, eventJson) => {
+	await _context.exposeBinding('__plumEmitRRwebEvent', (source, eventJson: string) => {
 		const recording = source.page && _tabs.get(source.page);
 		if (!recording) return;
 		try {
@@ -101,11 +120,14 @@ async function setup() {
 		// addInitScript runs in every frame, including hidden ad/tracking iframes.
 		// Recordings are tracked per-Page, so an unguarded sub-frame session would
 		// corrupt the tab's event stream with bogus 0x0 "about:blank" entries.
+		// @ts-ignore
 		if (window.self !== window.top) return;
+		// @ts-ignore
 		if (window.rrwebRecord) {
+			// @ts-ignore
 			window.rrwebRecord.record({
-				emit: (event) => {
-					// exposed by BrowserContext.exposeBinding above
+				emit: (event: unknown) => {
+					// @ts-ignore — exposed by BrowserContext.exposeBinding above
 					window.__plumEmitRRwebEvent(JSON.stringify(event));
 				}
 			});
@@ -124,7 +146,7 @@ async function setup() {
 
 // Sends only what's newly arrived since the last tick, per tab, so the live
 // viewer gets a steady trickle instead of the full buffer growing unbounded.
-function flushLiveRRwebEvents() {
+function flushLiveRRwebEvents(): void {
 	const ssDir = process.env.PLUM_SS_DIR;
 	if (!ssDir) return;
 	for (const recording of _tabs.values()) {
@@ -148,13 +170,17 @@ function flushLiveRRwebEvents() {
 	}
 }
 
-// Injects a labeled rrweb custom event at the current recording timestamp so
-// the replay UI can show which step was running at any point in the timeline.
-async function markStepStart(stepName) {
+/**
+ * Injects a labeled rrweb custom event at the current recording timestamp so
+ * the replay UI can show which step was running at any point in the timeline.
+ */
+export async function markStepStart(stepName: string): Promise<void> {
 	if (!_page) return;
 	try {
 		await _page.evaluate((name) => {
+			// @ts-ignore — rrwebRecord is injected by the record.umd.min.cjs bundle
 			if (window.rrwebRecord?.record?.addCustomEvent) {
+				// @ts-ignore
 				window.rrwebRecord.record.addCustomEvent('step', { name });
 			}
 		}, stepName);
@@ -164,10 +190,14 @@ async function markStepStart(stepName) {
 	}
 }
 
-// Flushes every tab's buffered rrweb events (one per opened tab/popup) as a
-// gzip-compressed Cucumber attachment, tagged with the mime type Plum's
-// server looks for.
-async function flushRecordings(attach) {
+/**
+ * Flushes every tab's buffered rrweb events (one per opened tab/popup) as a
+ * gzip-compressed Cucumber attachment, tagged with the mime type Plum's
+ * server looks for.
+ */
+export async function flushRecordings(
+	attach: (data: Buffer, mime: string) => Promise<void>
+): Promise<void> {
 	if (_liveRRwebTimer) {
 		clearInterval(_liveRRwebTimer);
 		_liveRRwebTimer = null;
@@ -207,17 +237,17 @@ async function flushRecordings(attach) {
 	}
 }
 
-async function teardown() {
+export async function teardown(): Promise<void> {
 	await _browser?.close();
 }
 
 // Pickle steps carry no keyword (Cucumber normalizes Given/When/Then/And/But
 // away during Gherkin → Pickle compilation) — recover it by walking the
 // gherkinDocument for the AST node the pickle step was compiled from.
-function resolveStepKeyword(gherkinDocument, pickleStep) {
+function resolveStepKeyword(gherkinDocument: any, pickleStep: any): string {
 	const astNodeId = pickleStep?.astNodeIds?.[0];
 	if (!astNodeId) return '';
-	const steps = [];
+	const steps: any[] = [];
 	for (const child of gherkinDocument?.feature?.children ?? []) {
 		if (child.background) steps.push(...child.background.steps);
 		if (child.scenario) steps.push(...child.scenario.steps);
@@ -229,17 +259,25 @@ function resolveStepKeyword(gherkinDocument, pickleStep) {
 	return steps.find((s) => s.id === astNodeId)?.keyword?.trim() ?? '';
 }
 
-// Registers Plum's own Before/BeforeStep/After hooks. Call once from the
-// project's own tests/utils/hooks.ts — Cucumber supports multiple Before/After
-// hooks, so a customer's own hooks can still be added alongside this.
-function registerHooks() {
-	Before(async ({ pickle }) => {
+/**
+ * Registers Plum's own Before/BeforeStep/After hooks. Call once from your
+ * own tests/utils/hooks.ts — Cucumber supports multiple Before/After hooks,
+ * so your own hooks can still be added alongside this.
+ */
+export function registerHooks(): void {
+	Before(async ({ pickle }: ITestCaseHookParameter) => {
 		const tags = pickle.tags.map((t) => t.name).join(' ');
 		console.log(`\n▶ ${pickle.name}${tags ? `  ${tags}` : ''}`);
 		await setup();
 	});
 
-	BeforeStep(async function ({ pickleStep, gherkinDocument }) {
+	BeforeStep(async function ({
+		pickleStep,
+		gherkinDocument
+	}: {
+		pickleStep: any;
+		gherkinDocument: any;
+	}) {
 		const keyword = resolveStepKeyword(gherkinDocument, pickleStep);
 		const text = pickleStep?.text ?? '';
 		await markStepStart(keyword ? `${keyword} ${text}` : text);
@@ -250,13 +288,3 @@ function registerHooks() {
 		await teardown();
 	});
 }
-
-module.exports = {
-	page,
-	context,
-	setup,
-	teardown,
-	flushRecordings,
-	markStepStart,
-	registerHooks
-};

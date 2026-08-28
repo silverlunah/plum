@@ -15,12 +15,11 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
-// Thin pass-through to Plum's own recording wiring, kept inside the installed
-// Plum package rather than copied here — this file exists so page objects
-// have a stable `page()`/`context()` to import.
-import type { Page, BrowserContext } from 'playwright';
+import type { Page, BrowserContext, Browser } from 'playwright';
+import * as plum from './plum-modules/runtime';
 
-const runtime = require(process.env.PLUM_RUNTIME_PATH as string);
+export const page = (): Page => plum.page();
+export const context = (): BrowserContext => plum.context();
+export const browser = (): Browser => plum.browser();
 
-export const page = (): Page => runtime.page();
-export const context = (): BrowserContext => runtime.context();
+// Add your own page/context helpers below.
