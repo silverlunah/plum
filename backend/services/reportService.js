@@ -11,8 +11,9 @@ const { isScheduledTrigger, normaliseTrigger } = require('../constants/triggers'
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { REPORT_STATUS } = require('../constants/jobStatus');
 
-// Matched by string literal in backend/_scaffold/utils/plum-modules/runtime.ts
-// (flushRecordings) — the two runtimes don't share a module.
+// Matched by string literal in backend/tests/utils/browser.ts (flushRecordings) —
+// the two runtimes don't share a module, mirroring how 'image/png' is already
+// duplicated between the two files.
 const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
 // Small, always-attached marker (independent of whether any tab actually
 // recorded events) so a scenario's worker is always recoverable for grouping,
