@@ -219,6 +219,36 @@ model TestRunEntry {
   @@index([caseId])
 }
 
+// One row per run request (manual, cron, external, mcp). A run stays `queued`
+// until every runner it targets is free, then flips to `running`, then `done`.
+// DB-backed so the queue survives a restart — stale `running` rows are
+// reconciled to `done` on boot and queued rows resume.
+model RunQueue {
+  id            String    @id
+  kind          String
+  triggerType   String    @default("manual-trigger")
+  label         String    @default("")
+  status        String    @default("queued")
+  tag           String    @default("")
+  workers       Int       @default(1)
+  browser       String    @default("chromium")
+  runnerIds     String    @default("built-in")
+  testRunId     String?
+  baseUrl       String?
+  runTitle      String?
+  startedBy     String?
+  notifyDiscord Boolean   @default(false)
+  notifySlack   Boolean   @default(false)
+  reportId      Int?
+  exitCode      Int?
+  note          String?
+  queuedAt      DateTime  @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+
+  @@index([status, queuedAt])
+}
+
 model TestCaseHistory {
   id           String   @id @default(cuid())
   caseId       String

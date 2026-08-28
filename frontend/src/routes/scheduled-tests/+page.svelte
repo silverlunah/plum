@@ -14,7 +14,7 @@
 	} from '$lib/api/schedules';
 	import { fetchRunners } from '$lib/api/runners';
 	import { fetchIntegrations } from '$lib/api/settings';
-	import { backgroundRuns } from '$lib/stores/runner';
+	import { backgroundRuns, findActiveCronRun } from '$lib/stores/runner';
 	import { BROWSERS, BUILTIN_RUNNER_ID, TOAST_TIMEOUT_MS } from '$lib/constants';
 	import {
 		BUILTIN_RUNNER_LABEL,
@@ -494,7 +494,7 @@
 								</button>
 							</td>
 							<td class="job-name">
-								{#if $backgroundRuns[job.taskName]?.running}
+								{#if findActiveCronRun($backgroundRuns, job.taskName)}
 									<span class="running-dot" title={RUNNING_NOW_TITLE}></span>
 								{/if}
 								{job.taskName}

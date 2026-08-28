@@ -4,31 +4,45 @@
  */
 
 import { writable, get } from 'svelte/store';
-import { BROWSERS } from '$lib/constants';
+import { BROWSERS, TRIGGER_TYPES } from '$lib/constants';
 import { SOCKET_EVENTS } from '$lib/socketEvents';
+import { MANUAL_RUN_LABEL } from '$lib/copy/runners';
 import { auth } from './auth';
 
 export const socket = writable(null);
 
-export const runnerState = writable({
-	output: '',
-	running: false,
-	testCompleted: false,
-	latestReportId: null, // number | null — set after test finishes
-	status: 'idle', // 'idle' | 'running' | 'pass' | 'fail'
-	lastRunId: '',
-	lanes: [], // [{ id, name, testCount, status, logs }] multi-runner only
-	currentRun: null, // { tag, workers, browser, runners } — set while running
-	// { [laneId]: { [workerId]: { events: [] } } } — always keyed by laneId even
-	// for a plain single-runner run (BUILT_IN_RUNNER_ID), so the live view's
-	// Runner/Worker tabs don't need a separate code path for that case.
-	rrwebByLane: {}
-});
+// runId → run entry. One store for every run whatever its origin (manual, cron,
+// REST, MCP): each is a queued job streamed over the bg-run-* events. Seeded
+// optimistically by triggerRun, then kept current by the socket handlers in
+// RunnerPanel.
+export const backgroundRuns = writable({});
 
-// Merges a batch of rrweb events into the right lane/worker bucket, creating
-// it on first sight — Svelte only re-renders on a *new* object/array
-// reference, so this rebuilds the path down to the mutated bucket rather than
-// pushing in place. Shared by runnerState (interactive) and backgroundRuns.
+export function makeRunEntry({ kind, label, meta, status }) {
+	return {
+		kind,
+		label,
+		status, // 'queued' | 'running' | 'done'
+		testCompleted: false,
+		latestReportId: null,
+		verdict: 'idle', // 'idle' | 'pass' | 'fail' | 'cancelled'
+		output: '',
+		lanes: [], // [{ id, name, testCount, status, logs }]
+		currentRun: {
+			tag: meta?.tag ?? '',
+			workers: meta?.workers,
+			browser: meta?.browser,
+			runTitle: label,
+			startedBy: meta?.startedBy ?? null
+		},
+		// { [laneId]: { [workerId]: { events: [] } } } — always keyed by laneId
+		// even for a single-runner run, so the live view's Runner/Worker tabs
+		// don't need a separate code path for that case.
+		rrwebByLane: {}
+	};
+}
+
+// Rebuilds the path down to the mutated bucket (Svelte only re-renders on a new
+// reference) rather than pushing in place.
 export function mergeRRwebBatch(rrwebByLane, { id: laneId, workerId, events }) {
 	const lane = rrwebByLane[laneId] ?? {};
 	const worker = lane[workerId] ?? { events: [] };
@@ -39,10 +53,6 @@ export function mergeRRwebBatch(rrwebByLane, { id: laneId, workerId, events }) {
 			[workerId]: { events: [...worker.events, ...events] }
 		}
 	};
-}
-
-export function appendRRwebBatch(batch) {
-	runnerState.update((s) => ({ ...s, rrwebByLane: mergeRRwebBatch(s.rrwebByLane, batch) }));
 }
 
 export const runnerConfig = writable({
@@ -59,34 +69,31 @@ export const builtInEnabled = writable(true);
 export const reportsVersion = writable(0);
 export const runsVersion = writable(0);
 
-// Map of runId → runnerState-shaped object (plus kind/label) for every
-// non-manual run currently executing (scheduled cron jobs, REST/MCP-triggered
-// runs) — these are spawned server-side with no single browser socket to
-// stream to, so they're tracked separately from `runnerState`.
-export const backgroundRuns = writable({});
-
+// Enqueues a run and returns its id so the caller can navigate to /live/<id>.
+// The run stays `queued` until every runner it targets is free.
 export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 	const s = get(socket);
-	if (!s) return;
+	if (!s) return null;
 
 	const { workers, testID, browser, selectedRunners } = get(runnerConfig);
-	const runId = (id !== undefined ? id : testID).trim().replace(/\sOR\s/gi, (m) => m.toLowerCase());
+	const tag = (id !== undefined ? id : testID).trim().replace(/\sOR\s/gi, (m) => m.toLowerCase());
+	const runId = crypto.randomUUID();
+	const startedBy = get(auth).user?.name ?? null;
 
-	runnerState.set({
-		output: `Running: ${runId || '(all tests)'}\n`,
-		running: true,
-		testCompleted: false,
-		latestReportId: null,
-		status: 'running',
-		lastRunId: runId,
-		lanes: [],
-		currentRun: { tag: runId, workers, browser, runners: selectedRunners, runTitle },
-		rrwebByLane: {}
-	});
+	backgroundRuns.update((r) => ({
+		...r,
+		[runId]: makeRunEntry({
+			kind: TRIGGER_TYPES.MANUAL,
+			label: runTitle || tag || MANUAL_RUN_LABEL,
+			meta: { tag, workers, browser, startedBy },
+			status: 'queued'
+		})
+	}));
 	panelExpanded.set(true);
 
 	s.emit(SOCKET_EVENTS.RUN_TEST, {
-		tag: runId,
+		runId,
+		tag,
 		workers,
 		browser,
 		runners: selectedRunners,
@@ -94,11 +101,20 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 		notifyDiscord: notify.notifyDiscord ?? false,
 		notifySlack: notify.notifySlack ?? false,
 		runTitle,
-		startedBy: get(auth).user?.name ?? null
+		startedBy
 	});
+
+	return runId;
 }
 
-export function cancelRun() {
+export function cancelRun(id) {
 	const s = get(socket);
-	if (s) s.emit(SOCKET_EVENTS.CANCEL_TEST);
+	if (s && id) s.emit(SOCKET_EVENTS.CANCEL_TEST, { runId: id });
+}
+
+// Cron runs get a generated run id, not the task name — match one by kind + label.
+export function findActiveCronRun(runs, taskName) {
+	return Object.values(runs).find(
+		(r) => r.kind === TRIGGER_TYPES.CRON && r.label === taskName && r.status !== 'done'
+	);
 }

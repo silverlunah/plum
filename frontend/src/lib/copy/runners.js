@@ -28,6 +28,8 @@ export const RUN_LABEL = 'Run';
 export const MANUAL_RUN_LABEL = 'Manual run';
 export const NO_TESTS_RUNNING = 'No tests currently running';
 export const LIVE_LABEL = 'Live';
+export const QUEUED_LABEL = 'Queued';
+export const CANCEL_RUN_LABEL = 'Cancel run';
 
 export const automatedCaseCount = (count) => `${count} automated`;
 export const discordNotifyTitle = (active) =>
@@ -38,13 +40,14 @@ export const runnersCountLabel = (count) => `${count} runners`;
 export const runKindLabel = (kind) => `${triggerLabel(kind)} run`;
 export const startedByLabel = (name) => `started by ${name}`;
 export const collapseOrExpandLabel = (expanded) => (expanded ? 'Collapse panel' : 'Expand panel');
+export const queuePositionLabel = (n) => (n > 0 ? `Queued · #${n}` : 'Queued');
 
-export function statusLabel(state, anyBgRunning, anyBgCronRunning) {
-	if (state.running) return 'Running';
-	if (state.status === 'pass') return 'Passed';
-	if (state.status === 'fail') return 'Failed';
-	if (anyBgCronRunning) return 'Scheduled';
-	if (anyBgRunning) return 'Running';
+export function statusLabel({ running, queued, verdict }) {
+	if (running > 0 && queued > 0) return `${running} running · ${queued} queued`;
+	if (running > 0) return running === 1 ? 'Running' : `${running} running`;
+	if (queued > 0) return queued === 1 ? 'Queued' : `${queued} queued`;
+	if (verdict === 'pass') return 'Passed';
+	if (verdict === 'fail') return 'Failed';
 	return 'Ready';
 }
 

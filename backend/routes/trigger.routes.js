@@ -37,11 +37,14 @@ router.post('/', jwtAuth, async (req, res, next) => {
 	}
 });
 
-router.get('/:jobId', jwtAuth, (req, res) => {
-	const job = triggerService.getJob(req.params.jobId);
-	if (!job) return res.status(404).json({ error: 'Job not found' });
-	res.json(job);
+router.get('/:jobId', jwtAuth, async (req, res, next) => {
+	try {
+		const job = await triggerService.getJob(req.params.jobId);
+		if (!job) return res.status(404).json({ error: 'Job not found' });
+		res.json(job);
+	} catch (e) {
+		next(e);
+	}
 });
 
 module.exports = router;
-router.setSocketIO = triggerService.setSocketIO;
