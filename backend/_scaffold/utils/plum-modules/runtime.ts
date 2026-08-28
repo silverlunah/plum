@@ -87,13 +87,18 @@ function attachRecorder(pg: Page): void {
 	});
 }
 
-export async function setup(): Promise<void> {
+// contextOptions is passed straight to Browser.newContext() — use it for
+// project-specific needs (viewport, permissions, etc.) rather than creating
+// a second context yourself, so rrweb recording (wired below) still covers it.
+export async function setup(
+	contextOptions: Parameters<Browser['newContext']>[0] = {}
+): Promise<void> {
 	const isHeadless = process.env.IS_HEADLESS?.toLowerCase() !== 'false';
 	const browserName = (process.env.BROWSER || 'chromium').toLowerCase();
 	const browserType =
 		browserName === 'firefox' ? firefox : browserName === 'webkit' ? webkit : chromium;
 	_browser = await browserType.launch({ headless: isHeadless });
-	_context = await _browser.newContext();
+	_context = await _browser.newContext(contextOptions);
 
 	_tabs = new Map();
 	_tabCounter = 0;
@@ -260,9 +265,24 @@ function resolveStepKeyword(gherkinDocument: any, pickleStep: any): string {
 }
 
 /**
+ * "Given/When/Then <step text>" for a BeforeStep's (pickleStep, gherkinDocument)
+ * pair — pass straight to markStepStart(). Exported for a project that writes
+ * its own BeforeStep instead of using registerHooks(), so it doesn't need to
+ * duplicate the keyword-recovery logic to get the same replay labels.
+ */
+export function stepLabel(gherkinDocument: any, pickleStep: any): string {
+	const keyword = resolveStepKeyword(gherkinDocument, pickleStep);
+	const text = pickleStep?.text ?? '';
+	return keyword ? `${keyword} ${text}` : text;
+}
+
+/**
  * Registers Plum's own Before/BeforeStep/After hooks. Call once from your
  * own tests/utils/hooks.ts — Cucumber supports multiple Before/After hooks,
- * so your own hooks can still be added alongside this.
+ * so your own hooks can still be added alongside this. If you need custom
+ * context options (viewport, permissions, etc.) or to run something between
+ * browser launch and the first page load, call setup()/markStepStart()/
+ * flushRecordings()/teardown() from your own hooks instead of this.
  */
 export function registerHooks(): void {
 	Before(async ({ pickle }: ITestCaseHookParameter) => {
@@ -278,9 +298,7 @@ export function registerHooks(): void {
 		pickleStep: any;
 		gherkinDocument: any;
 	}) {
-		const keyword = resolveStepKeyword(gherkinDocument, pickleStep);
-		const text = pickleStep?.text ?? '';
-		await markStepStart(keyword ? `${keyword} ${text}` : text);
+		await markStepStart(stepLabel(gherkinDocument, pickleStep));
 	});
 
 	After(async function () {
