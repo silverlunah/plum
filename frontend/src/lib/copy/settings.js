@@ -261,6 +261,19 @@ const SECRET_KEY_SET_PLACEHOLDER = '••••••••';
 const SECRET_KEY_UNSET_PLACEHOLDER = 'Enter secret key';
 const TESTING_LABEL = 'Testing…';
 
+export const RESTORE_FROM_S3_CARD_TITLE = 'Restore from S3';
+export const RESTORE_FROM_S3_DESC =
+	'Restores directly from a backup already uploaded to S3 — no need to download it yourself first. Existing records are overwritten. Cron jobs are re-scheduled after restore.';
+export const CONFIGURE_S3_FIRST_RESTORE_MESSAGE = 'Configure S3 storage above to restore from it.';
+export const NO_S3_BACKUPS_MESSAGE = 'No backups found at this bucket/prefix.';
+export const REFRESH_LABEL = 'Refresh';
+export const RESTORE_CONFIRM_TITLE = 'Restore this backup?';
+export const restoreConfirmBody = (key) =>
+	`This will overwrite current cron jobs, test cases, test runs, users, runners, and project settings with the contents of "${key}". This cannot be undone.`;
+export const RESTORE_SUCCESS_TOAST = 'Restored from S3 successfully.';
+export const RESTORE_FAILED_FALLBACK = 'Restore failed.';
+export const LIST_S3_BACKUPS_FAILED = 'Failed to list S3 backups.';
+
 export const SCHEDULED_BACKUP_CARD_TITLE = 'Scheduled Backup';
 export const CONFIGURE_S3_FIRST_MESSAGE = 'Configure S3 storage above to enable scheduled backups.';
 export const ENABLE_SCHEDULED_BACKUP_LABEL = 'Enable scheduled backup';
@@ -293,3 +306,6 @@ export const saveS3ConfigLabel = (saving) => (saving ? SAVING_LABEL : SAVE_S3_CO
 export const uploadedToLabel = (destination) => `uploaded to ${destination}`;
 export const uploadS3NowLabel = (running) => (running ? UPLOADING_LABEL : UPLOAD_TO_S3_NOW_LABEL);
 export const saveScheduleLabel = (saving) => (saving ? SAVING_LABEL : SAVE_SCHEDULE_LABEL);
+export const restoreLabel = (restoring) => (restoring ? 'Restoring…' : 'Restore');
+export const refreshingLabel = (loading) => (loading ? 'Loading…' : REFRESH_LABEL);
+export const backupSizeLabel = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;

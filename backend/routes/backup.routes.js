@@ -87,6 +87,51 @@ router.post('/test-s3', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
+router.get('/s3-backups', jwtAuth, requireAdmin, async (req, res) => {
+	try {
+		const config = await settingsService.getProjectRaw();
+		const required = ['backupS3Bucket', 'backupS3AccessKey', 'backupS3SecretKey'];
+		const missing = required.filter((k) => !config[k]);
+		if (missing.length > 0) {
+			return res
+				.status(400)
+				.json({ error: `S3 is not configured (missing: ${missing.join(', ')})` });
+		}
+		const backups = await backupService.listS3Backups(config);
+		res.json({ backups });
+	} catch (error) {
+		console.error('Failed to list S3 backups:', error);
+		res.status(500).json({ error: error.message || 'Failed to list S3 backups' });
+	}
+});
+
+router.post('/s3-restore', jwtAuth, requireAdmin, async (req, res) => {
+	try {
+		const { key } = req.body;
+		if (!key) return res.status(400).json({ error: 'Missing backup key' });
+
+		const config = await settingsService.getProjectRaw();
+		const required = ['backupS3Bucket', 'backupS3AccessKey', 'backupS3SecretKey'];
+		const missing = required.filter((k) => !config[k]);
+		if (missing.length > 0) {
+			return res
+				.status(400)
+				.json({ error: `S3 is not configured (missing: ${missing.join(', ')})` });
+		}
+
+		const data = await backupService.downloadFromS3(key, config);
+		const { cronJobs, project, users, runners, testSuites, testRuns } = data;
+		await backupService.importAll(
+			{ cronJobs, project, users, runners, testSuites, testRuns },
+			cronService
+		);
+		res.json({ message: 'Restore successful' });
+	} catch (error) {
+		console.error('S3 restore failed:', error);
+		res.status(500).json({ error: error.message || 'Restore failed' });
+	}
+});
+
 router.post('/run-now', jwtAuth, requireAdmin, async (req, res) => {
 	try {
 		await backupCronService.runBackup();

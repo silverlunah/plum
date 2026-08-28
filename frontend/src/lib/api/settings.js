@@ -81,6 +81,20 @@ export async function runBackupNow() {
 	return res.json();
 }
 
+export async function fetchS3Backups() {
+	const res = await fetch(`${API_BASE}/backup/s3-backups`, { headers: authHeaders() });
+	return res.json();
+}
+
+export async function restoreFromS3(key) {
+	const res = await fetch(`${API_BASE}/backup/s3-restore`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', ...authHeaders() },
+		body: JSON.stringify({ key })
+	});
+	return res.json();
+}
+
 export async function fetchIntegrations() {
 	const res = await fetch(`${API_BASE}/settings/integrations`, { headers: authHeaders() });
 	if (!res.ok) return { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };

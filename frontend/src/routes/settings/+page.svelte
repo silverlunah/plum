@@ -18,6 +18,8 @@
 		saveBackupConfig,
 		testBackupS3,
 		runBackupNow,
+		fetchS3Backups,
+		restoreFromS3,
 		fetchMcpConfig,
 		generateMcpKey as generateMcpKeyApi
 	} from '$lib/api/settings';
@@ -240,6 +242,15 @@
 		S3_CONNECTION_FAILED,
 		BACKUP_CONFIG_SAVED_TOAST,
 		BACKUP_CONFIG_SAVE_FAILED,
+		RESTORE_FROM_S3_CARD_TITLE,
+		RESTORE_FROM_S3_DESC,
+		CONFIGURE_S3_FIRST_RESTORE_MESSAGE,
+		NO_S3_BACKUPS_MESSAGE,
+		RESTORE_CONFIRM_TITLE,
+		restoreConfirmBody,
+		RESTORE_SUCCESS_TOAST,
+		RESTORE_FAILED_FALLBACK,
+		LIST_S3_BACKUPS_FAILED,
 		SCHEDULED_BACKUP_CARD_TITLE,
 		CONFIGURE_S3_FIRST_MESSAGE,
 		ENABLE_SCHEDULED_BACKUP_LABEL,
@@ -264,7 +275,10 @@
 		saveS3ConfigLabel,
 		uploadedToLabel,
 		uploadS3NowLabel,
-		saveScheduleLabel
+		saveScheduleLabel,
+		restoreLabel,
+		refreshingLabel,
+		backupSizeLabel
 	} from '$lib/copy/settings';
 
 	/** @type {'project' | 'runners' | 'repository' | 'integrations' | 'mcp' | 'account' | 'users' | 'backup'} */
@@ -345,6 +359,13 @@
 	let backupS3TestMessage = '';
 	let backupLastRunAt = null;
 	let backupLastStatus = '';
+
+	let s3Backups = [];
+	let s3BackupsLoaded = false;
+	let loadingS3Backups = false;
+	let restoringKey = null;
+	let restoreConfirmOpen = false;
+	let restoreTarget = null;
 
 	let runners = [];
 	let runnerForm = { name: '', url: '', token: '', browser: 'chromium' };
@@ -844,6 +865,48 @@
 		backupConfig.backupS3AccessKey &&
 		backupS3SecretKeySet
 	);
+
+	// Fetch the list once, the first time S3 looks configured — the Refresh
+	// button covers reloading after a new upload or a bucket/prefix change.
+	$: if (s3Configured && !s3BackupsLoaded) {
+		s3BackupsLoaded = true;
+		loadS3Backups();
+	}
+
+	async function loadS3Backups() {
+		loadingS3Backups = true;
+		try {
+			const result = await fetchS3Backups();
+			if (result.error) throw new Error(result.error);
+			s3Backups = result.backups ?? [];
+		} catch (e) {
+			showToast('error', e.message || LIST_S3_BACKUPS_FAILED);
+		} finally {
+			loadingS3Backups = false;
+		}
+	}
+
+	function openRestoreConfirm(backup) {
+		restoreTarget = backup;
+		restoreConfirmOpen = true;
+	}
+
+	async function handleRestoreFromS3() {
+		if (!restoreTarget) return;
+		restoringKey = restoreTarget.key;
+		try {
+			const result = await restoreFromS3(restoreTarget.key);
+			if (result.error) throw new Error(result.error);
+			showToast('success', RESTORE_SUCCESS_TOAST);
+			project = await fetchProject();
+			restoreConfirmOpen = false;
+			restoreTarget = null;
+		} catch (e) {
+			showToast('error', e.message || RESTORE_FAILED_FALLBACK);
+		} finally {
+			restoringKey = null;
+		}
+	}
 
 	$: mcpConfigSnippet = JSON.stringify(
 		{
@@ -1947,6 +2010,64 @@
 					{/if}
 				</div>
 
+				<!-- Restore from S3 -->
+				<ConfirmModal
+					bind:open={restoreConfirmOpen}
+					title={RESTORE_CONFIRM_TITLE}
+					confirmLabel={restoreLabel(false)}
+					loading={!!restoringKey}
+					on:confirm={handleRestoreFromS3}
+				>
+					{#if restoreTarget}
+						{restoreConfirmBody(restoreTarget.key)}
+					{/if}
+				</ConfirmModal>
+
+				<div class="card settings-card" class:card-disabled={!s3Configured}>
+					<div class="card-title-row">
+						<p class="card-title">{RESTORE_FROM_S3_CARD_TITLE}</p>
+						{#if s3Configured}
+							<Button variant="ghost" on:click={loadS3Backups} disabled={loadingS3Backups}>
+								{refreshingLabel(loadingS3Backups)}
+							</Button>
+						{/if}
+					</div>
+
+					{#if !s3Configured}
+						<p class="backup-block-desc">{CONFIGURE_S3_FIRST_RESTORE_MESSAGE}</p>
+					{:else}
+						<p class="backup-block-desc" style="margin-bottom: 1rem;">{RESTORE_FROM_S3_DESC}</p>
+
+						{#if s3Backups.length === 0}
+							<p class="backup-block-desc">
+								{loadingS3Backups ? refreshingLabel(true) : NO_S3_BACKUPS_MESSAGE}
+							</p>
+						{:else}
+							<ul class="s3-backup-list">
+								{#each s3Backups as backup (backup.key)}
+									<li class="s3-backup-row">
+										<div class="s3-backup-info">
+											<span class="s3-backup-key">{backup.key}</span>
+											<span class="s3-backup-meta">
+												{new Date(backup.lastModified).toLocaleString()} · {backupSizeLabel(
+													backup.size
+												)}
+											</span>
+										</div>
+										<Button
+											variant="ghost"
+											on:click={() => openRestoreConfirm(backup)}
+											disabled={restoringKey === backup.key}
+										>
+											{restoreLabel(restoringKey === backup.key)}
+										</Button>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					{/if}
+				</div>
+
 				<!-- Scheduled backup -->
 				<div class="card settings-card" class:card-disabled={!s3Configured}>
 					<p class="card-title">{SCHEDULED_BACKUP_CARD_TITLE}</p>
@@ -2420,6 +2541,58 @@
 
 	.s3-test-error {
 		color: var(--fail);
+	}
+
+	.card-title-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-bottom: 0.75rem;
+	}
+	.card-title-row .card-title {
+		margin-bottom: 0;
+	}
+
+	.s3-backup-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.s3-backup-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.625rem 0.875rem;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+	}
+
+	.s3-backup-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		min-width: 0;
+	}
+
+	.s3-backup-key {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.8125rem;
+		color: var(--text);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.s3-backup-meta {
+		font-size: 0.75rem;
+		color: var(--text-muted);
 	}
 
 	.backup-last-run {
