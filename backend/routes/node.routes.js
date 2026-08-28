@@ -49,6 +49,13 @@ router.post('/execute', authGuard, (req, res) => {
 	res.json({ jobId, status: 'started' });
 });
 
+// Stop a running job (primary server relays a user's cancel)
+router.post('/cancel/:jobId', authGuard, (req, res) => {
+	const ok = nodeExecutionService.cancelJob(req.params.jobId);
+	if (!ok) return res.status(404).json({ error: 'Job not found' });
+	res.json({ ok: true });
+});
+
 // Fetch the final report content after a job completes
 router.get('/report/:jobId', authGuard, (req, res) => {
 	const job = nodeExecutionService.getJob(req.params.jobId);

@@ -10,18 +10,18 @@
 	import { SOCKET_EVENTS } from '$lib/socketEvents';
 	import {
 		socket,
-		runnerState,
 		runnerConfig,
 		panelExpanded,
 		builtInEnabled,
 		triggerRun,
+		cancelRun,
 		reportsVersion,
 		runsVersion,
 		backgroundRuns,
-		appendRRwebBatch,
+		makeRunEntry,
 		mergeRRwebBatch
 	} from '$lib/stores/runner';
-	import { fetchLatestReportId, reportUrl } from '$lib/api/reports';
+	import { reportUrl } from '$lib/api/reports';
 	import { fetchRunners } from '$lib/api/runners';
 	import { fetchRuns, fetchRun } from '$lib/api/repository';
 	import { fetchIntegrations } from '$lib/api/settings';
@@ -33,17 +33,9 @@
 		WORKERS_MIN,
 		WORKERS_MAX,
 		RUN_PICKER_LIMIT,
-		RUN_TAG_DISPLAY_LIMIT,
-		REDIRECT_DELAY_MS,
-		TRIGGER_TYPES
+		REDIRECT_DELAY_MS
 	} from '$lib/constants';
-	import {
-		ALL_TESTS_LABEL,
-		BUILTIN_RUNNER_LABEL,
-		CLEAR_LABEL,
-		DISCORD_LABEL,
-		SLACK_LABEL
-	} from '$lib/copy/common';
+	import { BUILTIN_RUNNER_LABEL, CLEAR_LABEL, DISCORD_LABEL, SLACK_LABEL } from '$lib/copy/common';
 	import {
 		RUN_ALL_TITLE,
 		RUN_ALL_CONFIRM_LABEL,
@@ -60,18 +52,18 @@
 		RUNNERS_LABEL,
 		NOTIFY_LABEL,
 		NO_AUTOMATED_CASES_TITLE,
-		RUNNING_LABEL,
 		RUN_LABEL,
 		MANUAL_RUN_LABEL,
 		NO_TESTS_RUNNING,
-		LIVE_LABEL,
+		QUEUED_LABEL,
+		CANCEL_RUN_LABEL,
 		automatedCaseCount,
 		discordNotifyTitle,
 		slackNotifyTitle,
-		runnersCountLabel,
 		runKindLabel,
 		startedByLabel,
 		collapseOrExpandLabel,
+		queuePositionLabel,
 		statusLabel as computeStatusLabel,
 		runnerSummary as computeRunnerSummary
 	} from '$lib/copy/runners';
@@ -104,28 +96,7 @@
 	}
 
 	let _unsubConfig, _unsubExpanded, _unsubBuiltIn, _socket;
-
-	/** Shape shared by the live `bg-run-start` socket handler and the on-mount hydration fetch below. */
-	function makeBgRunEntry(kind, label, meta) {
-		return {
-			kind,
-			label,
-			output: '',
-			running: true,
-			testCompleted: false,
-			latestReportId: null,
-			status: 'running',
-			lanes: [],
-			currentRun: {
-				tag: meta?.tag,
-				workers: meta?.workers,
-				browser: meta?.browser,
-				runTitle: label,
-				startedBy: meta?.startedBy
-			},
-			rrwebByLane: {}
-		};
-	}
+	let lastFinished = null; // { reportId, verdict } — most recent completed run, for the bar's View Report shortcut
 
 	onMount(() => {
 		try {
@@ -158,17 +129,16 @@
 			.then((i) => (integrations = i))
 			.catch(() => {});
 
-		// Hydrate any runs already in progress on the backend (e.g. this tab just
-		// loaded/refreshed after a run had already started) so they don't appear to
-		// have vanished — live socket events alone only reach tabs connected at the
-		// moment a run begins.
+		// Hydrate runs already queued or running on the backend (e.g. this tab just
+		// loaded/refreshed) — live socket events alone only reach tabs connected at
+		// the moment an event fires.
 		fetchActiveRuns()
 			.then((runs) => {
 				if (runs.length === 0) return;
 				backgroundRuns.update((r) => {
 					const next = { ...r };
-					for (const { runId, kind, label, meta } of runs) {
-						if (!next[runId]) next[runId] = makeBgRunEntry(kind, label, meta);
+					for (const { runId, kind, label, meta, status } of runs) {
+						if (!next[runId]) next[runId] = makeRunEntry({ kind, label, meta, status });
 					}
 					return next;
 				});
@@ -205,59 +175,6 @@
 		_socket = s;
 		socket.set(s);
 
-		s.on(SOCKET_EVENTS.LOG, (data) => {
-			runnerState.update((r) => ({ ...r, output: r.output + data + '\n' }));
-		});
-
-		s.on(SOCKET_EVENTS.DONE, (payload) => {
-			// Distributed runs send { code, reportId }; the built-in path sends a bare code.
-			const code = typeof payload === 'object' && payload !== null ? payload.code : payload;
-			const providedId =
-				typeof payload === 'object' && payload !== null ? payload.reportId : undefined;
-			const passed = code === 0 || code === null;
-			const cancelled = code === 130;
-			const resolveId =
-				providedId !== undefined && providedId !== null
-					? Promise.resolve(providedId)
-					: fetchLatestReportId().catch(() => null);
-			resolveId.then((id) => {
-				runnerState.update((r) => ({
-					...r,
-					output:
-						r.output +
-						(cancelled ? '' : passed ? '\n✓ All tests passed\n' : '\n✗ Some tests failed\n'),
-					running: false,
-					testCompleted: !cancelled,
-					latestReportId: cancelled ? null : id,
-					status: cancelled ? 'idle' : passed ? 'pass' : 'fail',
-					currentRun: cancelled ? null : r.currentRun
-				}));
-			});
-		});
-
-		s.on(SOCKET_EVENTS.RUNNER_LANES_INIT, (lanes) => {
-			runnerState.update((r) => ({
-				...r,
-				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '' }))
-			}));
-		});
-
-		s.on(SOCKET_EVENTS.RUNNER_LANE_LOG, ({ id, log }) => {
-			runnerState.update((r) => ({
-				...r,
-				lanes: r.lanes.map((l) => (l.id === id ? { ...l, logs: l.logs + log } : l))
-			}));
-		});
-
-		s.on(SOCKET_EVENTS.RUNNER_LANE_STATUS, ({ id, status }) => {
-			runnerState.update((r) => ({
-				...r,
-				lanes: r.lanes.map((l) => (l.id === id ? { ...l, status } : l))
-			}));
-		});
-
-		s.on(SOCKET_EVENTS.RUNNER_LANE_RRWEB_BATCH, (batch) => appendRRwebBatch(batch));
-
 		s.on(SOCKET_EVENTS.REPORT_READY, () => reportsVersion.update((v) => v + 1));
 
 		function updateBgRun(runId, updater) {
@@ -267,9 +184,20 @@
 			});
 		}
 
-		s.on(SOCKET_EVENTS.BG_RUN_START, ({ runId, kind, label, meta }) => {
-			backgroundRuns.update((r) => ({ ...r, [runId]: makeBgRunEntry(kind, label, meta) }));
+		function upsertBgRun(runId, { kind, label, meta }, status) {
+			backgroundRuns.update((r) => ({
+				...r,
+				[runId]: r[runId] ? { ...r[runId], status } : makeRunEntry({ kind, label, meta, status })
+			}));
 			panelExpanded.set(true);
+		}
+
+		s.on(SOCKET_EVENTS.BG_RUN_QUEUED, ({ runId, kind, label, meta }) => {
+			upsertBgRun(runId, { kind, label, meta }, 'queued');
+		});
+
+		s.on(SOCKET_EVENTS.BG_RUN_START, ({ runId, kind, label, meta }) => {
+			upsertBgRun(runId, { kind, label, meta }, 'running');
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_LOG, ({ runId, log }) => {
@@ -283,18 +211,32 @@
 			}));
 		});
 
+		// Upsert the lane — a tab that connected mid-run (or after a refresh)
+		// missed bg-run-lanes-init, so create the lane on first sight rather than
+		// dropping its logs.
+		function patchLane(run, laneId, patch) {
+			const lanes = run.lanes.some((l) => l.id === laneId)
+				? run.lanes.map((l) => (l.id === laneId ? { ...l, ...patch(l) } : l))
+				: [
+						...run.lanes,
+						{
+							id: laneId,
+							name: laneId,
+							testCount: 0,
+							status: 'running',
+							logs: '',
+							...patch({ logs: '' })
+						}
+					];
+			return { ...run, lanes };
+		}
+
 		s.on(SOCKET_EVENTS.BG_RUN_LANE_LOG, ({ runId, laneId, log }) => {
-			updateBgRun(runId, (run) => ({
-				...run,
-				lanes: run.lanes.map((l) => (l.id === laneId ? { ...l, logs: l.logs + log } : l))
-			}));
+			updateBgRun(runId, (run) => patchLane(run, laneId, (l) => ({ logs: (l.logs || '') + log })));
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_LANE_STATUS, ({ runId, laneId, status }) => {
-			updateBgRun(runId, (run) => ({
-				...run,
-				lanes: run.lanes.map((l) => (l.id === laneId ? { ...l, status } : l))
-			}));
+			updateBgRun(runId, (run) => patchLane(run, laneId, () => ({ status })));
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, ({ runId, ...batch }) => {
@@ -309,14 +251,15 @@
 			const cancelled = code === 130;
 			updateBgRun(runId, (run) => ({
 				...run,
-				running: false,
+				status: 'done',
 				testCompleted: !cancelled,
 				latestReportId: cancelled ? null : reportId,
-				status: cancelled ? 'idle' : passed ? 'pass' : 'fail'
+				verdict: cancelled ? 'cancelled' : passed ? 'pass' : 'fail'
 			}));
+			if (!cancelled && reportId) lastFinished = { reportId, verdict: passed ? 'pass' : 'fail' };
 			if (!cancelled) reportsVersion.update((v) => v + 1);
-			// Keep the finished entry around briefly so a viewer on /reports/live?run=
-			// still sees the completion bar/redirect, then drop it from the bottom bar.
+			// Keep the finished entry around briefly so a viewer on /live/<id> still
+			// sees the completion bar/redirect, then drop it from the bottom bar.
 			setTimeout(() => {
 				backgroundRuns.update((r) => {
 					const next = { ...r };
@@ -334,22 +277,14 @@
 		_socket?.disconnect();
 	});
 
-	$: state = $runnerState;
 	$: cfg = $runnerConfig;
 
-	$: truncatedRunTag = (() => {
-		if (!state.currentRun?.tag) return ALL_TESTS_LABEL;
-		const parts = state.currentRun.tag.split(/ or /i);
-		if (parts.length <= RUN_TAG_DISPLAY_LIMIT) return state.currentRun.tag;
-		return (
-			parts.slice(0, RUN_TAG_DISPLAY_LIMIT).join(' or ') +
-			` +${parts.length - RUN_TAG_DISPLAY_LIMIT} more`
-		);
-	})();
-	$: runningBgEntries = Object.entries($backgroundRuns).filter(([, r]) => r.running);
-	$: anyBgRunning = runningBgEntries.length > 0;
-	$: anyBgCronRunning = runningBgEntries.some(([, r]) => r.kind === TRIGGER_TYPES.CRON);
-	$: anyRunning = state.running || anyBgRunning;
+	$: activeRunEntries = Object.entries($backgroundRuns).filter(
+		([, r]) => r.status === 'queued' || r.status === 'running'
+	);
+	$: runningCount = activeRunEntries.filter(([, r]) => r.status === 'running').length;
+	$: queuedCount = activeRunEntries.filter(([, r]) => r.status === 'queued').length;
+	$: anyRunning = activeRunEntries.length > 0;
 
 	$: if ($runsVersion >= 0)
 		fetchRuns({ limit: RUN_PICKER_LIMIT })
@@ -357,17 +292,21 @@
 			.catch(() => {});
 
 	$: statusColor =
-		state.status === 'pass'
-			? 'var(--pass)'
-			: state.status === 'fail'
-				? 'var(--fail)'
-				: state.running
-					? 'var(--accent)'
-					: anyBgRunning
-						? 'var(--pass)'
+		runningCount > 0
+			? 'var(--accent)'
+			: queuedCount > 0
+				? 'var(--warn)'
+				: lastFinished?.verdict === 'pass'
+					? 'var(--pass)'
+					: lastFinished?.verdict === 'fail'
+						? 'var(--fail)'
 						: 'var(--border)';
 
-	$: statusLabel = computeStatusLabel(state, anyBgRunning, anyBgCronRunning);
+	$: statusLabel = computeStatusLabel({
+		running: runningCount,
+		queued: queuedCount,
+		verdict: lastFinished?.verdict
+	});
 
 	$: currentBrowser = BROWSERS.find((b) => b.id === cfg.browser) ?? BROWSERS[0];
 
@@ -408,7 +347,7 @@
 	}
 
 	function handleKeydown(e) {
-		if (e.key === 'Enter' && !state.running && !selectedRun) handleRunClick();
+		if (e.key === 'Enter' && !selectedRun) handleRunClick();
 	}
 
 	function adjustWorkers(delta) {
@@ -449,9 +388,9 @@
 <div class="panel" class:expanded={$panelExpanded}>
 	<div
 		class="scan-line"
-		class:scanning={state.running}
-		class:line-pass={state.status === 'pass' && !state.running}
-		class:line-fail={state.status === 'fail' && !state.running}
+		class:scanning={runningCount > 0}
+		class:line-pass={lastFinished?.verdict === 'pass' && !anyRunning}
+		class:line-fail={lastFinished?.verdict === 'fail' && !anyRunning}
 	></div>
 
 	<!-- ── Control bar ── -->
@@ -459,16 +398,13 @@
 		<!-- Left: status + view report -->
 		<div class="bar-left">
 			<div class="bar-status">
-				<span class="status-dot" class:pulse={state.running} style="background:{statusColor}"
+				<span class="status-dot" class:pulse={runningCount > 0} style="background:{statusColor}"
 				></span>
 				<span class="status-word" style="color:{statusColor}">{statusLabel}</span>
-				{#if state.lastRunId || state.currentRun?.runTitle}
-					<span class="run-tag">{state.currentRun?.runTitle || state.lastRunId}</span>
-				{/if}
 			</div>
-			{#if state.testCompleted && state.latestReportId}
+			{#if !anyRunning && lastFinished?.reportId}
 				<a
-					href={reportUrl(state.latestReportId)}
+					href={reportUrl(lastFinished.reportId)}
 					class="view-report-btn"
 					transition:fly={{ x: -6, duration: 200 }}
 				>
@@ -549,7 +485,6 @@
 						placeholder="@tag or leave blank for all tests"
 						on:input={(e) => runnerConfig.update((c) => ({ ...c, testID: e.currentTarget.value }))}
 						on:keydown={handleKeydown}
-						disabled={state.running}
 					/>
 				</div>
 			{/if}
@@ -563,9 +498,8 @@
 						class:open={runPickOpen}
 						class:has-remote={!!selectedRun}
 						on:click={() => {
-							if (!state.running) runPickOpen = !runPickOpen;
+							runPickOpen = !runPickOpen;
 						}}
-						disabled={state.running}
 					>
 						<span>{selectedRun ? selectedRun.title : NO_RUN_SELECTED_LABEL}</span>
 						<svg
@@ -618,13 +552,13 @@
 					<button
 						class="step-btn"
 						on:click={() => adjustWorkers(-1)}
-						disabled={cfg.workers <= WORKERS_MIN || state.running}>−</button
+						disabled={cfg.workers <= WORKERS_MIN}>−</button
 					>
 					<span class="step-val">{cfg.workers}</span>
 					<button
 						class="step-btn"
 						on:click={() => adjustWorkers(1)}
-						disabled={cfg.workers >= WORKERS_MAX || state.running}>+</button
+						disabled={cfg.workers >= WORKERS_MAX}>+</button
 					>
 				</div>
 			</div>
@@ -639,9 +573,8 @@
 						class="dropdown-trigger"
 						class:open={browserOpen}
 						on:click={() => {
-							if (!state.running) browserOpen = !browserOpen;
+							browserOpen = !browserOpen;
 						}}
-						disabled={state.running}
 					>
 						<span>{currentBrowser.label}</span>
 						<svg
@@ -688,9 +621,8 @@
 							class:open={runnersOpen}
 							class:has-remote={cfg.selectedRunners.some((r) => r !== BUILTIN_RUNNER_ID)}
 							on:click={() => {
-								if (!state.running) runnersOpen = !runnersOpen;
+								runnersOpen = !runnersOpen;
 							}}
-							disabled={state.running}
 						>
 							<span>{runnerSummary}</span>
 							<svg
@@ -748,8 +680,7 @@
 								class="notify-btn"
 								class:active={notifyDiscord}
 								on:click={() => (notifyDiscord = !notifyDiscord)}
-								title={discordNotifyTitle(notifyDiscord)}
-								disabled={state.running}>{DISCORD_LABEL}</button
+								title={discordNotifyTitle(notifyDiscord)}>{DISCORD_LABEL}</button
 							>
 						{/if}
 						{#if integrations.slackWebhookUrl}
@@ -758,8 +689,7 @@
 								class="notify-btn"
 								class:active={notifySlack}
 								on:click={() => (notifySlack = !notifySlack)}
-								title={slackNotifyTitle(notifySlack)}
-								disabled={state.running}>{SLACK_LABEL}</button
+								title={slackNotifyTitle(notifySlack)}>{SLACK_LABEL}</button
 							>
 						{/if}
 					</div>
@@ -768,25 +698,17 @@
 
 			<div class="ctrl-divider"></div>
 
-			<!-- Run button -->
+			<!-- Run button — a run while one is active just queues another -->
 			<button
 				class="run-btn"
-				class:is-running={state.running}
 				on:click={handleRunClick}
-				disabled={state.running ||
-					selectedRunLoading ||
-					(selectedRun && selectedRun.tags?.length === 0)}
+				disabled={selectedRunLoading || (selectedRun && selectedRun.tags?.length === 0)}
 				title={selectedRun && selectedRun.tags?.length === 0 ? NO_AUTOMATED_CASES_TITLE : undefined}
 			>
-				{#if state.running}
-					<span class="run-spinner"></span>
-					{RUNNING_LABEL}
-				{:else}
-					<svg width="9" height="10" viewBox="0 0 10 12" fill="currentColor" stroke="none">
-						<polygon points="0,0 10,6 0,12" />
-					</svg>
-					{RUN_LABEL}
-				{/if}
+				<svg width="9" height="10" viewBox="0 0 10 12" fill="currentColor" stroke="none">
+					<polygon points="0,0 10,6 0,12" />
+				</svg>
+				{RUN_LABEL}
 			</button>
 		</div>
 
@@ -817,72 +739,65 @@
 	<!-- ── Expanded: active runs only ── -->
 	{#if $panelExpanded}
 		<div class="body" transition:slide={{ duration: 200 }}>
-			{#if state.running}
-				<!-- Manual test running -->
-				<a href="/reports/live" class="run-card active-run">
-					<span class="run-card-dot pulse-accent"></span>
-					<div class="run-card-info">
-						<span class="run-card-label">{state.currentRun?.runTitle || MANUAL_RUN_LABEL}</span>
-						{#if state.currentRun}
-							<span class="run-card-meta">
-								{truncatedRunTag}
-								<span class="meta-dot">·</span>
-								{state.currentRun.workers}w
-								<span class="meta-dot">·</span>
-								{state.currentRun.browser}
-								{#if state.currentRun.runners?.length > 1}
-									<span class="meta-dot">·</span>
-									{runnersCountLabel(state.currentRun.runners.length)}
-								{/if}
-							</span>
-						{/if}
-					</div>
-					<Badge variant="tag">{LIVE_LABEL}</Badge>
-					<svg
-						width="13"
-						height="13"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						class="run-card-arrow"
-					>
-						<line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-					</svg>
-				</a>
-			{/if}
-
-			{#each runningBgEntries as [runId, run] (runId)}
-				<a
-					href="/reports/live?run={runId}"
-					class="run-card cron-run"
+			{#each activeRunEntries as [runId, run], i (runId)}
+				<div
+					class="run-card"
+					class:active-run={run.status === 'running'}
+					class:queued-run={run.status === 'queued'}
 					transition:fly={{ x: -4, duration: 160 }}
 				>
-					<span class="run-card-dot pulse-pass"></span>
-					<div class="run-card-info">
-						<span class="run-card-label">{run.label}</span>
-						<span class="run-card-meta">
-							{runKindLabel(run.kind)}
-							{#if run.currentRun?.startedBy}
-								<span class="meta-dot">·</span> {startedByLabel(run.currentRun.startedBy)}
-							{/if}
-						</span>
-					</div>
-					<Badge variant={triggerVariant(run.kind)}>{triggerLabel(run.kind)}</Badge>
-					<svg
-						width="13"
-						height="13"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						class="run-card-arrow"
+					<span
+						class="run-card-dot"
+						class:pulse-accent={run.status === 'running'}
+						class:queued-dot={run.status === 'queued'}
+					></span>
+					<a href="/live/{runId}" class="run-card-main">
+						<div class="run-card-info">
+							<span class="run-card-label">{run.label || MANUAL_RUN_LABEL}</span>
+							<span class="run-card-meta">
+								{run.status === 'queued'
+									? queuePositionLabel(
+											activeRunEntries.slice(0, i).filter(([, r]) => r.status === 'queued').length +
+												1
+										)
+									: runKindLabel(run.kind)}
+								{#if run.currentRun?.startedBy}
+									<span class="meta-dot">·</span> {startedByLabel(run.currentRun.startedBy)}
+								{/if}
+							</span>
+						</div>
+						<Badge variant={run.status === 'queued' ? 'tag' : triggerVariant(run.kind)}>
+							{run.status === 'queued' ? QUEUED_LABEL : triggerLabel(run.kind)}
+						</Badge>
+						<svg
+							width="13"
+							height="13"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							class="run-card-arrow"
+						>
+							<line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+						</svg>
+					</a>
+					<button
+						class="run-card-cancel"
+						title={CANCEL_RUN_LABEL}
+						aria-label={CANCEL_RUN_LABEL}
+						on:click={() => cancelRun(runId)}
 					>
-						<line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-					</svg>
-				</a>
+						<svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+							<path
+								d="M1 1l12 12M13 1L1 13"
+								stroke="currentColor"
+								stroke-width="1.6"
+								stroke-linecap="round"
+							/>
+						</svg>
+					</button>
+				</div>
 			{/each}
 
 			{#if !anyRunning}
@@ -1009,20 +924,6 @@
 		text-transform: uppercase;
 		transition: color 0.4s ease;
 		white-space: nowrap;
-	}
-
-	.run-tag {
-		font-size: 0.7rem;
-		font-family: 'JetBrains Mono', monospace;
-		color: var(--text-muted);
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-pill);
-		padding: 0.1rem 0.45rem;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		max-width: 160px;
 	}
 
 	.view-report-btn {
@@ -1319,20 +1220,9 @@
 	.run-btn:hover:not(:disabled) {
 		opacity: 0.88;
 	}
-	.run-btn:disabled,
-	.run-btn.is-running {
+	.run-btn:disabled {
 		opacity: 0.6;
 		cursor: default;
-	}
-
-	.run-spinner {
-		width: 10px;
-		height: 10px;
-		border: 1.5px solid rgba(255, 255, 255, 0.35);
-		border-top-color: var(--white);
-		border-radius: 50%;
-		animation: spin 0.65s linear infinite;
-		flex-shrink: 0;
 	}
 
 	@keyframes spin {
@@ -1429,14 +1319,13 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
 		background: var(--bg-subtle);
-		text-decoration: none;
 		color: inherit;
 		transition:
 			background var(--duration-fast),
 			border-color var(--duration-fast);
 	}
 
-	a.run-card:hover {
+	.run-card:hover {
 		background: var(--bg-elevated);
 		border-color: var(--accent);
 	}
@@ -1444,8 +1333,39 @@
 	.run-card.active-run {
 		border-left: 3px solid var(--accent);
 	}
-	.run-card.cron-run {
+	.run-card.queued-run {
 		border-left: 3px solid var(--warn);
+	}
+
+	.run-card-main {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex: 1;
+		min-width: 0;
+		text-decoration: none;
+		color: inherit;
+	}
+
+	.run-card-cancel {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 22px;
+		height: 22px;
+		flex-shrink: 0;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			color var(--duration-fast),
+			border-color var(--duration-fast);
+	}
+	.run-card-cancel:hover {
+		color: var(--fail);
+		border-color: var(--fail);
 	}
 
 	.run-card-dot {
@@ -1453,6 +1373,7 @@
 		height: 8px;
 		border-radius: 50%;
 		flex-shrink: 0;
+		background: var(--border);
 	}
 
 	.pulse-accent {
@@ -1460,9 +1381,8 @@
 		animation: dotPulse 1.6s ease-in-out infinite;
 	}
 
-	.pulse-pass {
-		background: var(--pass);
-		animation: dotPulse 1.6s ease-in-out infinite;
+	.queued-dot {
+		background: var(--warn);
 	}
 
 	.run-card-info {
@@ -1501,7 +1421,7 @@
 			color var(--duration-fast);
 	}
 
-	a.run-card:hover .run-card-arrow {
+	.run-card:hover .run-card-arrow {
 		transform: translateX(3px);
 		color: var(--accent);
 	}

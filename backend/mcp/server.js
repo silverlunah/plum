@@ -41,8 +41,8 @@ async function pollJob(jobId, { maxMs = 600_000, intervalMs = 5_000 } = {}) {
 	const deadline = Date.now() + maxMs;
 	while (Date.now() < deadline) {
 		await new Promise((r) => setTimeout(r, intervalMs));
-		const job = triggerService.getJob(jobId);
-		if (job.status !== JOB_STATUS.RUNNING) return job;
+		const job = await triggerService.getJob(jobId);
+		if (job && job.status !== JOB_STATUS.RUNNING) return job;
 	}
 	return { status: 'timeout', jobId };
 }
@@ -379,7 +379,7 @@ function createMcpServer({ userId }) {
 			jobId: z.string().uuid().describe('Job ID returned by run_tests')
 		},
 		async ({ jobId }) => {
-			const job = triggerService.getJob(jobId);
+			const job = await triggerService.getJob(jobId);
 			if (!job) throw new Error('Job not found');
 			return { content: [{ type: 'text', text: JSON.stringify(job, null, 2) }] };
 		}

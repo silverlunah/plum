@@ -8,30 +8,18 @@
 // mirrors backend/constants/socketEvents.js by hand — keep both in sync when
 // adding or renaming an event.
 export const SOCKET_EVENTS = Object.freeze({
-	// Interactive single-run (built-in runner, one browser tab watching)
+	// Client → server: request a run / cancel a run by id
 	RUN_TEST: 'run-test',
 	CANCEL_TEST: 'cancel-test',
-	LOG: 'log',
-	DONE: 'done',
 
-	// Multi-lane distributed run (single interactive run, several runners)
-	RUNNER_LANES_INIT: 'runner-lanes-init',
-	RUNNER_LANE_LOG: 'runner-lane-log',
-	RUNNER_LANE_STATUS: 'runner-lane-status',
-
-	// Background runs (cron / REST / MCP triggered, no single owning socket)
+	// Server → every client: one run's lifecycle, keyed by runId
+	BG_RUN_QUEUED: 'bg-run-queued',
 	BG_RUN_START: 'bg-run-start',
 	BG_RUN_LOG: 'bg-run-log',
 	BG_RUN_DONE: 'bg-run-done',
 	BG_RUN_LANES_INIT: 'bg-run-lanes-init',
 	BG_RUN_LANE_LOG: 'bg-run-lane-log',
 	BG_RUN_LANE_STATUS: 'bg-run-lane-status',
-
-	// Live rrweb streaming — one shape for every run type, always
-	// carrying a lane id (BUILT_IN_RUNNER_ID for the plain single-run case) and
-	// a workerId, so a single built-in run with --parallel workers is finally
-	// attributable per worker instead of one flat interleaved stream.
-	RUNNER_LANE_RRWEB_BATCH: 'runner-lane-rrweb-batch',
 	BG_RUN_LANE_RRWEB_BATCH: 'bg-run-lane-rrweb-batch',
 
 	// Global notifications (any client, not tied to a specific run)
