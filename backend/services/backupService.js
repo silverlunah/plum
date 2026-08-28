@@ -13,11 +13,10 @@ const { DEFAULT_BROWSER } = require('../constants/defaults');
 
 // Reports (with their rrweb recordings) are opt-in — they can be large, and
 // this used to be a hard no ("reports are too large, use pg_dump") back when
-// screenshots lived as external files on disk. That's no longer true (Phase 4
-// of the rrweb migration moved everything into Postgres), so it's now just a
-// size tradeoff the admin can choose. Recording.events is gzip-compressed
-// BYTEA — base64 it for JSON transport; startedAt/endedAt are BigInt, which
-// JSON.stringify can't serialize natively.
+// screenshots lived as external files on disk. Now everything lives in
+// Postgres, so it's just a size tradeoff the admin can choose. Recording.events
+// is gzip-compressed BYTEA — base64 it for JSON transport; startedAt/endedAt
+// are BigInt, which JSON.stringify can't serialize natively.
 async function exportReports() {
 	const reports = await prisma.report.findMany({
 		orderBy: { createdAt: 'asc' },

@@ -15,18 +15,17 @@
  * along with Plum. If not, see https://www.gnu.org/licenses/.
  */
 
+// Wires up Plum's session recording — removing or reordering code here can silently break report replay.
+
 import { chromium, firefox, webkit, Browser, BrowserContext, Page } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
 
-// Same mime type is matched by string literal in backend/services/reportService.js
-// (processCucumberJson) — the two runtimes don't share a module, mirroring how
-// 'image/png' is already duplicated between this file and reportService.js.
+// Must match the mime type Plum's server expects — do not change.
 const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
-// Small, always-attached marker (independent of whether any tab actually
-// recorded events) so a scenario's worker is always recoverable for grouping,
-// even on an instant-failure scenario with an empty recording.
+// Always attached, even for a scenario with no recorded events, so the
+// worker that ran it is still recoverable for grouping.
 const WORKER_META_MIME_TYPE = 'application/x-plum-worker+json';
 // @rrweb/record's package.json only exports its main entry ("."), so a deep
 // require.resolve() of the UMD bundle is blocked by Node's exports map — resolve
@@ -140,10 +139,7 @@ export async function setup(): Promise<void> {
 }
 
 // Sends only what's newly arrived since the last tick, per tab, so the live
-// viewer gets a steady trickle instead of the full buffer growing unbounded —
-// small files dropped in PLUM_SS_DIR, since the actual browser automation runs
-// several process levels below the primary/node server with no direct pipe
-// back to it.
+// viewer gets a steady trickle instead of the full buffer growing unbounded.
 function flushLiveRRwebEvents(): void {
 	const ssDir = process.env.PLUM_SS_DIR;
 	if (!ssDir) return;
@@ -190,9 +186,8 @@ export async function markStepStart(stepName: string): Promise<void> {
 
 /**
  * Flushes every tab's buffered rrweb events (one per opened tab/popup) as a
- * gzip-compressed attachment via the `attach()` → Cucumber JSON `embeddings[]`
- * → processCucumberJson() pipeline, tagged with a mime type reportService can
- * pick out.
+ * gzip-compressed Cucumber attachment, tagged with the mime type Plum's
+ * server looks for.
  */
 export async function flushRecordings(
 	attach: (data: Buffer, mime: string) => Promise<void>

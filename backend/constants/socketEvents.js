@@ -29,7 +29,7 @@ const SOCKET_EVENTS = Object.freeze({
 	BG_RUN_LANE_LOG: 'bg-run-lane-log',
 	BG_RUN_LANE_STATUS: 'bg-run-lane-status',
 
-	// Live rrweb streaming (Phase 3) — one shape for every run type, always
+	// Live rrweb streaming — one shape for every run type, always
 	// carrying a lane id (BUILT_IN_RUNNER_ID for the plain single-run case) and
 	// a workerId, so a single built-in run with --parallel workers is finally
 	// attributable per worker instead of one flat interleaved stream.
