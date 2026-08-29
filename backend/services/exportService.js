@@ -204,7 +204,6 @@ const BLANK = '';
 function testCaseCsvRows(data) {
 	const rows = [TEST_CASE_CSV_HEADER];
 	for (const suite of data.suites) {
-		if (rows.length > 1) rows.push([]);
 		let suiteShown = false;
 		for (const c of suite.cases) {
 			const caseHead = [c.displayId, c.title, c.priority, yesNo(c.isAutomated)];
@@ -310,7 +309,6 @@ const REPORT_CSV_HEADER = [
 function reportCsvRows(data) {
 	const rows = [REPORT_CSV_HEADER];
 	for (const feature of data.features) {
-		if (rows.length > 1) rows.push([]);
 		let featureShown = false;
 		for (const sc of feature.scenarios) {
 			const steps = sc.steps.length ? sc.steps : [null];
