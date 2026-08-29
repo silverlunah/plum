@@ -11,7 +11,11 @@
 	import { downloadTestCaseExport } from '$lib/api/repository';
 	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
 	import { exportFailedToast, exportedToast } from '$lib/copy/common';
-	import { IMPORT_TEST_CASES_LINK, IMPORT_TEST_CASES_HREF } from '$lib/copy/repository';
+	import {
+		IMPORT_TEST_CASES_LINK,
+		IMPORT_TEST_CASES_HREF,
+		EXPORT_TEST_CASES_WHAT
+	} from '$lib/copy/repository';
 	import { runsVersion } from '$lib/stores/runner';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import { REPO_PAGE_SIZE } from '$lib/constants';
@@ -181,9 +185,9 @@
 		exporting = true;
 		try {
 			await downloadTestCaseExport('all', null, format);
-			notify('success', exportedToast('Test cases'));
+			notify('success', exportedToast(EXPORT_TEST_CASES_WHAT));
 		} catch {
-			notify('error', exportFailedToast('test cases'));
+			notify('error', exportFailedToast(EXPORT_TEST_CASES_WHAT.toLowerCase()));
 		} finally {
 			exporting = false;
 		}
@@ -440,9 +444,9 @@
 		<p class="header-desc">{HEADER_DESC}</p>
 	</div>
 	<div class="header-actions">
-		<a class="import-link" href={IMPORT_TEST_CASES_HREF}>{IMPORT_TEST_CASES_LINK}</a>
-		<ExportMenu busy={exporting} on:select={(e) => handleExport(e.detail)} />
 		{#if tab === 'suites'}
+			<a class="import-link" href={IMPORT_TEST_CASES_HREF}>{IMPORT_TEST_CASES_LINK}</a>
+			<ExportMenu busy={exporting} on:select={(e) => handleExport(e.detail)} />
 			<Button on:click={() => (suiteModalOpen = true)}>{NEW_SUITE_LABEL}</Button>
 		{:else}
 			<Button on:click={() => (runModalOpen = true)}>{NEW_RUN_LABEL}</Button>
