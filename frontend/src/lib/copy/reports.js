@@ -61,19 +61,6 @@ export const REPORT_EXPORT_MENU_ITEMS = [
 	{ id: 'json', label: 'JSON', hint: 'Structured summary' }
 ];
 
-// ── Replay download (screenshot / video) ──
-export const REPLAY_DOWNLOAD_LABEL = 'Download';
-export const SCREENSHOT_LABEL = 'Screenshot';
-export const SCREENSHOT_HINT = 'PNG of the current frame';
-export const RECORD_VIDEO_LABEL = 'Record video';
-export const RECORD_VIDEO_HINT = 'WebM — experimental, stays in your browser';
-export const VIDEO_MULTITAB_UNSUPPORTED = 'Video export is only available for single-tab replays.';
-export const SCREENSHOT_SAVED_TOAST = 'Screenshot saved.';
-export const SCREENSHOT_FAILED_TOAST = 'Could not capture this frame.';
-export const VIDEO_TASK_RENDERING = 'Rendering replay video…';
-export const VIDEO_TASK_DONE = 'Replay video downloaded';
-export const VIDEO_TASK_FAILED = 'Replay video render failed';
-export const VIDEO_TASK_EXPERIMENTAL = 'Experimental — quality varies. Nothing is uploaded.';
 export const DISMISS_LABEL = 'Dismiss';
 export const RESTART_LABEL = 'Restart replay';
 export const STEPS_RAIL_HEADING = 'Steps';
