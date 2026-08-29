@@ -4,13 +4,13 @@
  */
 
 /**
- * Interactive manager for local node runners.
+ * Interactive manager for Plum nodes.
  *
- * Registers new runners with the Plum primary and starts / stops / restarts the
- * node processes that back local runners, all from one menu.
+ * Registers new nodes with the Plum primary and starts / stops / restarts the
+ * node processes, all from one menu.
  *
- * Usage:  node scripts/manage-runners.mjs
- *    or:  npm run manage-runners     (from the backend directory)
+ * Usage:  node scripts/manage-nodes.mjs
+ *    or:  npm run manage-nodes     (from the backend directory)
  *
  * Env:    PLUM_API_URL   primary server API base (default http://localhost:3001)
  */
@@ -24,7 +24,7 @@ import runnerProcess from '../lib/runnerProcess.js';
 import nodeRegister from '../lib/nodeRegister.js';
 
 const { isLocalUrl, parsePort, pruneDead, statusOf, findPidOnPort } = runnerProcess;
-const { generateToken, detectLanIp, loadNodeByName } = nodeRegister;
+const { generateToken, loadNodeByName } = nodeRegister;
 
 const API_URL = process.env.PLUM_API_URL || 'http://localhost:3001';
 
@@ -53,21 +53,6 @@ function resolveRunnerToken() {
 const RUNNER_TOKEN = resolveRunnerToken();
 function authHeaders() {
 	return RUNNER_TOKEN ? { Authorization: `Bearer ${RUNNER_TOKEN}` } : {};
-}
-
-/**
- * When the primary runs in Docker it cannot reach `localhost` on the host —
- * only substitute when the user explicitly enters localhost/127.0.0.1.
- */
-function resolveNodeUrl(url) {
-	try {
-		const u = new URL(url);
-		if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
-			u.hostname = 'host.docker.internal';
-		}
-		return u.toString().replace(/\/+$/, '');
-	} catch {}
-	return url.replace(/\/+$/, '');
 }
 
 async function fetchRunners() {
@@ -250,28 +235,52 @@ async function runAction(r) {
 	}
 }
 
-async function addRunner() {
+async function addNode() {
 	const suggested = `node-${generateToken().slice(0, 6)}`;
 
+	const mode = await clack.select({
+		message: 'Is this node for a production / network setup, or this local machine?',
+		options: [
+			{ value: 'production', label: 'Production / Network' },
+			{ value: 'local', label: 'Local machine' }
+		],
+		initialValue: 'local'
+	});
+	if (cancelled(mode)) return;
+
 	const name = await clack.text({
-		message: 'Runner name',
+		message: 'Node name or alias — call it whatever you like',
 		placeholder: suggested,
 		defaultValue: suggested
 	});
 	if (cancelled(name)) return;
 
-	let port;
-	for (;;) {
-		port = await clack.text({
-			message: 'Local port this node listens on',
-			placeholder: '3002',
-			defaultValue: '3002'
+	let primary;
+	if (mode === 'production') {
+		primary = await clack.text({
+			message:
+				'Plum server backend URL or IP address, including the port (with http:// or https://)',
+			placeholder: 'https://plum.example.com'
 		});
-		if (cancelled(port)) return;
-		const pid = findPidOnPort(Number(port));
-		if (!pid) break;
-		clack.log.warn(pc.yellow(`Port ${port} is already in use (pid ${pid}) — choose another.`));
+		if (cancelled(primary)) return;
+		primary = String(primary).trim();
+	} else {
+		const bp = await clack.text({
+			message: 'Port your Plum backend runs on (default 3001 — run `docker compose ps` if unsure)',
+			placeholder: '3001',
+			defaultValue: '3001'
+		});
+		if (cancelled(bp)) return;
+		primary = `http://localhost:${(bp || '3001').trim()}`;
 	}
+
+	const port = await clack.text({
+		message:
+			'Port this node will listen on — any process already using it will be stopped on start',
+		placeholder: '3002',
+		defaultValue: '3002'
+	});
+	if (cancelled(port)) return;
 
 	const defToken = process.env.NODE_TOKEN || generateToken();
 	const token = await clack.text({
@@ -281,15 +290,19 @@ async function addRunner() {
 	});
 	if (cancelled(token)) return;
 
-	const defaultUrl = `http://${detectLanIp()}:${port}`;
-	const urlInput = await clack.text({
-		message: 'URL the Plum server uses to reach this node',
-		placeholder: defaultUrl,
-		defaultValue: defaultUrl
-	});
-	if (cancelled(urlInput)) return;
-
-	const url = resolveNodeUrl(urlInput || defaultUrl);
+	let url;
+	if (mode === 'production') {
+		url = await clack.text({
+			message: 'URL your Plum server uses to reach this node (e.g. https://node-1.example.com)',
+			placeholder: `https://${name}.example.com`
+		});
+		if (cancelled(url)) return;
+		url = String(url).trim().replace(/\/+$/, '');
+	} else {
+		// Local primary runs in Docker — it reaches a host node via
+		// host.docker.internal, not localhost.
+		url = `http://host.docker.internal:${port}`;
+	}
 
 	// Exactly `plum node start` — register, start on this machine, verify,
 	// persist. One code path for both entry points.
@@ -297,8 +310,10 @@ async function addRunner() {
 		plumNode(
 			'start',
 			name,
+			'--mode',
+			mode,
 			'--primary',
-			API_URL,
+			primary,
 			'--url',
 			url,
 			'--port',
@@ -314,22 +329,22 @@ async function addRunner() {
 }
 
 async function main() {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Manage Runners  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Manage Nodes  ')));
 
 	if (!RUNNER_TOKEN) {
 		clack.log.warn(
-			'No runner token available — stop / restart / delete will be rejected.\n' +
-				'Run `plum manage-runners` on the primary host, or from a folder where you started a node.'
+			'No node token available — stop / restart / delete will be rejected.\n' +
+				'Run `plum manage-nodes` on the primary host, or from a folder where you started a node.'
 		);
 	}
 
 	for (;;) {
 		const s = clack.spinner();
-		s.start(`Loading runners from ${API_URL}...`);
+		s.start(`Loading nodes from ${API_URL}...`);
 		let runners;
 		try {
 			runners = await describeRunners();
-			s.stop(`Runners at ${API_URL}`);
+			s.stop(`Nodes at ${API_URL}`);
 		} catch (e) {
 			s.stop(pc.red(`Could not reach Plum server at ${API_URL}`));
 			clack.log.error(e.message);
@@ -337,17 +352,17 @@ async function main() {
 			process.exit(1);
 		}
 
-		if (runners.length === 0) clack.log.info(pc.dim('No runners registered yet.'));
+		if (runners.length === 0) clack.log.info(pc.dim('No nodes registered yet.'));
 
 		const choice = await clack.select({
-			message: runners.length ? 'Select a runner' : 'No runners yet',
+			message: runners.length ? 'Select a node' : 'No nodes yet',
 			options: [
 				...runners.map((r) => ({
 					value: r.id,
 					label: r.name,
 					hint: statusBadge(r)
 				})),
-				{ value: '__add__', label: pc.green('+ Add new runner') },
+				{ value: '__add__', label: pc.green('+ Add new node') },
 				{ value: '__refresh__', label: pc.cyan('↻ Refresh') },
 				{ value: '__quit__', label: pc.dim('Quit') }
 			]
@@ -356,7 +371,7 @@ async function main() {
 		if (cancelled(choice) || choice === '__quit__') break;
 		if (choice === '__refresh__') continue;
 		if (choice === '__add__') {
-			await addRunner();
+			await addNode();
 			continue;
 		}
 
