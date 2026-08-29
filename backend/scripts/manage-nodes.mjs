@@ -294,7 +294,9 @@ async function addNode() {
 	let url;
 	if (mode === 'production') {
 		url = await clack.text({
-			message: 'URL your Plum server uses to reach this node (e.g. https://node-1.example.com)',
+			message:
+				'Public URL or IP the Plum server uses to reach this node — include the scheme ' +
+				'(http:// or https://). Add the :port unless a reverse proxy terminates it on 80/443.',
 			placeholder: `https://${name}.example.com`
 		});
 		if (cancelled(url)) return;

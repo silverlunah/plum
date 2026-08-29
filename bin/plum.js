@@ -782,7 +782,7 @@ async function configureNode({ force, name: nameArg }) {
 
 		if (mode === 'production') {
 			url = await promptPublicUrl(
-				'URL your Plum server uses to reach this node (e.g. https://node-1.example.com)',
+				'Public URL or IP the Plum server uses to reach this node',
 				url && !url.includes('host.docker.internal') ? url : 'https://node-1.example.com'
 			);
 		} else {
