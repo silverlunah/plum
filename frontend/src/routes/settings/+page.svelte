@@ -50,6 +50,7 @@
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { API_BASE, BROWSERS, MAX_TEST_RETRIES, COPY_TIMEOUT_MS } from '$lib/constants';
+	import { copyText } from '$lib/utils/clipboard';
 	import Button from '$lib/components/ui/Button.svelte';
 	import { notify } from '$lib/stores/notifications';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
@@ -822,21 +823,21 @@
 	}
 
 	function handleCopyMcpKey() {
-		navigator.clipboard.writeText(mcpKey).then(() => {
+		copyText(mcpKey).then(() => {
 			mcpKeyCopied = true;
 			setTimeout(() => (mcpKeyCopied = false), COPY_TIMEOUT_MS);
 		});
 	}
 
 	function handleCopyMcpSnippet() {
-		navigator.clipboard.writeText(mcpConfigSnippet).then(() => {
+		copyText(mcpConfigSnippet).then(() => {
 			mcpSnippetCopied = true;
 			setTimeout(() => (mcpSnippetCopied = false), COPY_TIMEOUT_MS);
 		});
 	}
 
 	function handleCopyCiSnippet() {
-		navigator.clipboard.writeText(ciWorkflowSnippet).then(() => {
+		copyText(ciWorkflowSnippet).then(() => {
 			ciSnippetCopied = true;
 			setTimeout(() => (ciSnippetCopied = false), COPY_TIMEOUT_MS);
 		});
