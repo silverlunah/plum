@@ -18,8 +18,7 @@ router.get('/:id/export', jwtAuth, async (req, res, next) => {
 			format: exportFormat(req),
 			filenameBase: `run-${data.run?.title ?? req.params.id}`,
 			json: () => data,
-			csv: () => exportService.testCaseCsv(data),
-			xlsx: () => exportService.testCaseXlsx(data)
+			csv: () => exportService.testCaseCsv(data)
 		});
 	} catch (e) {
 		next(e);

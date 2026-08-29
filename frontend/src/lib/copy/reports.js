@@ -57,7 +57,7 @@ export const PLAYER_LOAD_ERROR = 'Could not load this recording.';
 export const INSPECT_TOGGLE_LABEL = 'Inspect element';
 
 export const REPORT_EXPORT_MENU_ITEMS = [
-	{ id: 'csv', label: 'CSV', hint: 'One row per step' },
+	{ id: 'csv', label: 'CSV', hint: 'Download report' },
 	{ id: 'json', label: 'JSON', hint: 'Structured summary' }
 ];
 

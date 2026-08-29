@@ -29,8 +29,7 @@ export const PASSWORD_LABEL = 'Password';
 export const EXPORT_LABEL = 'Export';
 export const EXPORTING_LABEL = 'Exporting…';
 export const EXPORT_MENU_ITEMS = [
-	{ id: 'xlsx', label: 'Excel', hint: 'One sheet per suite' },
-	{ id: 'csv', label: 'CSV', hint: 'One flat table' },
+	{ id: 'csv', label: 'CSV', hint: 'Spreadsheet — one row per step' },
 	{ id: 'json', label: 'JSON', hint: 'Structured — re-importable' }
 ];
 export const exportFailedToast = (what) => `Could not export ${what}.`;
