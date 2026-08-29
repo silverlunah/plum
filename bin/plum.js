@@ -152,7 +152,7 @@ async function promptPublicUrl(message, initial) {
 		const v = await clack.text({
 			message:
 				`${message} — include the scheme (http:// or https://). ` +
-				'Add the :port from above unless a reverse proxy terminates it on 80/443.',
+				'Add the :port unless a reverse proxy terminates it on 80/443.',
 			placeholder: initial,
 			defaultValue: initial
 		});
@@ -755,7 +755,7 @@ async function configureNode({ force, name: nameArg }) {
 
 		if (mode === 'production') {
 			primary = await promptPublicUrl(
-				'Plum server backend URL or IP address (include the port)',
+				'Public URL or IP of the Plum backend / API',
 				primary || 'https://plum.example.com'
 			);
 		} else {
