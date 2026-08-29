@@ -7,47 +7,10 @@
 	import { fly } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
 	import { notifications, dismissNotification } from '$lib/stores/notifications';
-	import { replayVideoJob, cancelReplayVideo, dismissReplayVideo } from '$lib/stores/replayVideo';
-	import { CANCEL_LABEL } from '$lib/copy/common';
-	import {
-		DISMISS_LABEL,
-		VIDEO_TASK_RENDERING,
-		VIDEO_TASK_DONE,
-		VIDEO_TASK_FAILED,
-		VIDEO_TASK_EXPERIMENTAL
-	} from '$lib/copy/reports';
-
-	$: job = $replayVideoJob;
-	$: pct = Math.round((job?.progress ?? 0) * 100);
+	import { DISMISS_LABEL } from '$lib/copy/reports';
 </script>
 
 <div class="stack">
-	{#if job}
-		<div class="card" transition:fly={{ y: 12, duration: 200 }}>
-			{#if job.status === 'rendering'}
-				<div class="row">
-					<span class="spinner" aria-hidden="true"></span>
-					<span class="msg">{VIDEO_TASK_RENDERING} {pct}%</span>
-					<button class="link text" on:click={cancelReplayVideo}>{CANCEL_LABEL}</button>
-				</div>
-				<div class="bar"><span class="fill" style="width:{pct}%"></span></div>
-				<p class="sub">{VIDEO_TASK_EXPERIMENTAL}</p>
-			{:else if job.status === 'done'}
-				<div class="row">
-					<span class="dot success"></span>
-					<span class="msg">{VIDEO_TASK_DONE}</span>
-				</div>
-			{:else}
-				<div class="row">
-					<span class="dot error"></span>
-					<span class="msg">{VIDEO_TASK_FAILED}</span>
-					<button class="link text" on:click={dismissReplayVideo}>{DISMISS_LABEL}</button>
-				</div>
-				{#if job.error}<p class="sub">{job.error}</p>{/if}
-			{/if}
-		</div>
-	{/if}
-
 	{#each $notifications as n (n.id)}
 		<div class="card" animate:flip={{ duration: 180 }} transition:fly={{ y: 12, duration: 200 }}>
 			<div class="row">
@@ -102,11 +65,6 @@
 		color: var(--text);
 		line-height: 1.35;
 	}
-	.sub {
-		margin-top: 0.4rem;
-		color: var(--text-muted);
-		font-size: 0.72rem;
-	}
 
 	.dot {
 		width: 7px;
@@ -135,43 +93,7 @@
 		padding: 0;
 		flex-shrink: 0;
 	}
-	.link.text {
-		font-size: 0.75rem;
-	}
 	.link:hover {
 		color: var(--accent);
-	}
-
-	.bar {
-		margin-top: 0.55rem;
-		height: 4px;
-		border-radius: var(--radius-pill);
-		background: var(--bg-subtle);
-		overflow: hidden;
-	}
-	.fill {
-		display: block;
-		height: 100%;
-		background: var(--accent);
-		transition: width 0.2s var(--ease-out);
-	}
-	.spinner {
-		width: 12px;
-		height: 12px;
-		flex-shrink: 0;
-		border: 2px solid var(--border);
-		border-top-color: var(--accent);
-		border-radius: 50%;
-		animation: spin 0.7s linear infinite;
-	}
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.spinner {
-			animation-duration: 2s;
-		}
 	}
 </style>

@@ -123,10 +123,4 @@
 		border-radius: 0 !important;
 		box-shadow: none !important;
 	}
-
-	/* Sandboxed iframe (no allow-scripts/forms/top-navigation) — safe to always
-	   allow pointer interaction so a taller live page can still be scrolled. */
-	.live-mount :global(iframe) {
-		pointer-events: auto !important;
-	}
 </style>
