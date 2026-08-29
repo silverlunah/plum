@@ -23,7 +23,6 @@ export const IMPORT_TEST_CASES_LINK = 'Import from file';
 export const IMPORT_TEST_CASES_HREF = '/settings?section=testcases';
 export const EXPORT_TEST_CASES_WHAT = 'Test cases';
 export const EXPORT_SUITE_WHAT = 'Suite';
-export const EXPORT_RUN_WHAT = 'Test run';
 export const SUITES_TAB_LABEL = 'Suites';
 export const RUNS_TAB_LABEL = 'Test Runs';
 export const SEARCH_PLACEHOLDER = 'Search by ID or name…';

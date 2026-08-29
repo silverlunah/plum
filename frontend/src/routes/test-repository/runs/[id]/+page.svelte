@@ -13,15 +13,11 @@
 		fetchAllSuitesWithCases,
 		recordEntryResult,
 		assignEntry,
-		fetchMembers,
-		downloadTestCaseExport
+		fetchMembers
 	} from '$lib/api/repository';
 	import { runsVersion } from '$lib/stores/runner';
 	import { auth } from '$lib/stores/auth';
 	import Button from '$lib/components/ui/Button.svelte';
-	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
-	import { exportFailedToast, exportedToast } from '$lib/copy/common';
-	import { EXPORT_RUN_WHAT } from '$lib/copy/repository';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import { notify } from '$lib/stores/notifications';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
@@ -151,19 +147,6 @@
 		if (expandedExecEntries.has(entryId)) expandedExecEntries.delete(entryId);
 		else expandedExecEntries.add(entryId);
 		expandedExecEntries = new Set(expandedExecEntries);
-	}
-
-	let exporting = false;
-	async function handleExport(format) {
-		exporting = true;
-		try {
-			await downloadTestCaseExport('run', run.id, format);
-			notify('success', exportedToast(EXPORT_RUN_WHAT));
-		} catch {
-			notify('error', exportFailedToast('this run'));
-		} finally {
-			exporting = false;
-		}
 	}
 
 	onMount(async () => {
@@ -422,7 +405,6 @@
 			</button>
 		</div>
 		<div class="run-header-actions">
-			<ExportMenu busy={exporting} on:select={(e) => handleExport(e.detail)} />
 			{#if isLocked}
 				<Button variant="ghost" on:click={handleReopenRun}>{REOPEN_LABEL}</Button>
 			{:else if mode === 'build'}
