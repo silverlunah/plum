@@ -19,8 +19,7 @@ const CONFIG_FILENAME = '.plum-server.json';
 function defaults() {
 	return {
 		headless: false,
-		// 'local' (localhost URLs, derived automatically) or 'production'
-		// (operator supplies the public API/UI URLs).
+		// 'local' derives localhost URLs; 'production' takes operator-supplied ones.
 		mode: 'local',
 		backendPort: '3001',
 		frontendPort: '3002',
