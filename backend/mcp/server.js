@@ -32,6 +32,7 @@ const testSuiteService = require('../services/testSuiteService');
 const testCaseService = require('../services/testCaseService');
 const triggerService = require('../services/triggerService');
 const reportService = require('../services/reportService');
+const exportService = require('../services/exportService');
 
 // ---------------------------------------------------------------------------
 // Polling helper for test runs
@@ -503,6 +504,49 @@ function createMcpServer({ userId }) {
 				logs = logs.split('\n').slice(-tail).join('\n');
 			}
 			return { content: [{ type: 'text', text: logs || '(no logs captured for this report)' }] };
+		}
+	);
+
+	// -- Exports --------------------------------------------------------------
+
+	server.tool(
+		'export_test_cases',
+		'Export test cases as CSV (one row per step) or JSON. Scope: the whole repository, one suite, or one test run (a run also carries each case’s recorded result). The JSON form can be re-imported.',
+		{
+			format: z.enum(['csv', 'json']).describe('csv or json'),
+			scope: z.enum(['all', 'suite', 'run']).optional().describe('Default: all'),
+			id: z
+				.string()
+				.optional()
+				.describe('Suite or run id — required when scope is "suite" or "run"')
+		},
+		async ({ format, scope = 'all', id }) => {
+			if ((scope === 'suite' || scope === 'run') && !id) {
+				throw new Error(`scope "${scope}" needs an id`);
+			}
+			const data = await exportService.buildTestCaseExport(scope, {
+				suiteId: id,
+				runId: id
+			});
+			if (!data) throw new Error('Nothing found for that scope/id');
+			const text =
+				format === 'csv' ? exportService.testCaseCsv(data) : JSON.stringify(data, null, 2);
+			return { content: [{ type: 'text', text }] };
+		}
+	);
+
+	server.tool(
+		'export_report',
+		'Export a Plum test report as CSV (one row per step) or a minimal JSON summary suitable for sharing.',
+		{
+			reportId: z.number().int().describe('Numeric report ID'),
+			format: z.enum(['csv', 'json']).describe('csv or json')
+		},
+		async ({ reportId, format }) => {
+			const data = await exportService.buildReportExport(reportId);
+			if (!data) throw new Error('Report not found');
+			const text = format === 'csv' ? exportService.reportCsv(data) : JSON.stringify(data, null, 2);
+			return { content: [{ type: 'text', text }] };
 		}
 	);
 

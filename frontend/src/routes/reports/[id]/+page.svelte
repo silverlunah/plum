@@ -7,7 +7,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { slide } from 'svelte/transition';
-	import { fetchReportDetail, fetchRecordings } from '$lib/api/reports';
+	import { fetchReportDetail, fetchRecordings, downloadReportExport } from '$lib/api/reports';
 	import {
 		isScheduled,
 		triggerLabel,
@@ -39,10 +39,14 @@
 		attemptsLabel,
 		caseLabel,
 		UNKNOWN_RUNNER_LABEL,
-		workerLabel
+		workerLabel,
+		REPORT_EXPORT_MENU_ITEMS
 	} from '$lib/copy/reports';
+	import { exportFailedToast, exportedToast } from '$lib/copy/common';
+	import { notify } from '$lib/stores/notifications';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import BackLink from '$lib/components/ui/BackLink.svelte';
+	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
 	import StatusDot from '$lib/components/ui/StatusDot.svelte';
 	import TagChip from '$lib/components/ui/TagChip.svelte';
 	import StepKeyword from '$lib/components/ui/StepKeyword.svelte';
@@ -62,6 +66,19 @@
 	let replayScenario = null;
 	let scenarioRecordings = [];
 	let replayInspecting = false;
+
+	let exporting = false;
+	async function handleExport(format) {
+		exporting = true;
+		try {
+			await downloadReportExport(reportId, format);
+			notify('success', exportedToast('Report'));
+		} catch {
+			notify('error', exportFailedToast('this report'));
+		} finally {
+			exporting = false;
+		}
+	}
 
 	function scenarioHasRecording(scenario) {
 		return allRecordings.some((r) => r.scenarioId === scenario.id);
@@ -128,7 +145,16 @@
 
 <svelte:head><title>{DETAIL_PAGE_TITLE}</title></svelte:head>
 
-<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
+<div class="detail-top">
+	<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
+	{#if detail}
+		<ExportMenu
+			items={REPORT_EXPORT_MENU_ITEMS}
+			busy={exporting}
+			on:select={(e) => handleExport(e.detail)}
+		/>
+	{/if}
+</div>
 
 {#if error}
 	<div class="error-state">{error}</div>
@@ -612,6 +638,7 @@
 						{reportId}
 						recordings={scenarioRecordings}
 						steps={replayScenario.steps}
+						scenarioName={replayScenario.name}
 						bind:inspecting={replayInspecting}
 					/>
 				{/if}
@@ -621,6 +648,14 @@
 {/if}
 
 <style>
+	.detail-top {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-bottom: 1rem;
+	}
+
 	.report-header {
 		border-radius: var(--radius-lg);
 		border: 1px solid var(--border);

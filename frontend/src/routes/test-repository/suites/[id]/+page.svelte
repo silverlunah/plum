@@ -15,15 +15,19 @@
 		fetchTestCase,
 		updateTestCase,
 		saveSteps,
-		deleteTestCase
+		deleteTestCase,
+		downloadTestCaseExport
 	} from '$lib/api/repository';
+	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
+	import { exportFailedToast, exportedToast } from '$lib/copy/common';
+	import { EXPORT_SUITE_WHAT } from '$lib/copy/repository';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
-	import Toast from '$lib/components/ui/Toast.svelte';
+	import { notify } from '$lib/stores/notifications';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
-	import { TOAST_TIMEOUT_MS, SUITE_CASES_PER_PAGE, CASE_HISTORY_BARS_MAX } from '$lib/constants';
+	import { SUITE_CASES_PER_PAGE, CASE_HISTORY_BARS_MAX } from '$lib/constants';
 	import {
 		CANCEL_LABEL,
 		SAVE_LABEL,
@@ -104,7 +108,6 @@
 
 	let suite = null;
 	let loading = true;
-	let toast = null;
 
 	let caseModalOpen = false;
 	let caseForm = { title: '', description: '', priority: 'Medium' };
@@ -183,16 +186,24 @@
 	let editSuiteForm = {};
 	let editSuiteSaving = false;
 
-	function showToast(type, message) {
-		toast = { type, message };
-		setTimeout(() => (toast = null), TOAST_TIMEOUT_MS);
+	let exporting = false;
+	async function handleExport(format) {
+		exporting = true;
+		try {
+			await downloadTestCaseExport('suite', suite.id, format);
+			notify('success', exportedToast(EXPORT_SUITE_WHAT));
+		} catch {
+			notify('error', exportFailedToast('this suite'));
+		} finally {
+			exporting = false;
+		}
 	}
 
 	onMount(async () => {
 		try {
 			suite = await fetchSuite(suiteId);
 		} catch {
-			showToast('error', FAILED_TO_LOAD_SUITE);
+			notify('error', FAILED_TO_LOAD_SUITE);
 		} finally {
 			loading = false;
 		}
@@ -214,7 +225,7 @@
 			casesPage = Math.ceil(suite.cases.length / SUITE_CASES_PER_PAGE);
 			caseModalOpen = false;
 			caseForm = { title: '', description: '', priority: 'Medium' };
-			showToast('success', caseCreatedToast(tc.displayId));
+			notify('success', caseCreatedToast(tc.displayId));
 		} catch (e) {
 			caseFormError = e.message;
 		} finally {
@@ -232,7 +243,7 @@
 			selectedCase = await fetchTestCase(tc.id);
 			stepsForm = (selectedCase.steps ?? []).map((s) => ({ ...s }));
 		} catch {
-			showToast('error', FAILED_TO_LOAD_CASE);
+			notify('error', FAILED_TO_LOAD_CASE);
 		} finally {
 			selectedCaseLoading = false;
 		}
@@ -257,9 +268,9 @@
 				cases: suite.cases.map((c) => (c.id === selectedCase.id ? { ...c, ...updated } : c))
 			};
 			editingCase = false;
-			showToast('success', TEST_CASE_UPDATED_TOAST);
+			notify('success', TEST_CASE_UPDATED_TOAST);
 		} catch (e) {
-			showToast('error', e.message);
+			notify('error', e.message);
 		} finally {
 			editCaseSaving = false;
 		}
@@ -280,9 +291,9 @@
 			selectedCase = { ...selectedCase, steps: saved };
 			stepsForm = saved.map((s) => ({ ...s }));
 			editingSteps = false;
-			showToast('success', STEPS_SAVED_TOAST);
+			notify('success', STEPS_SAVED_TOAST);
 		} catch (e) {
-			showToast('error', e.message);
+			notify('error', e.message);
 		} finally {
 			stepsSaving = false;
 		}
@@ -297,9 +308,9 @@
 				_count: { cases: suite._count.cases - 1 }
 			};
 			if (selectedCase?.id === id) selectedCase = null;
-			showToast('success', caseDeletedToast(displayId));
+			notify('success', caseDeletedToast(displayId));
 		} catch {
-			showToast('error', FAILED_TO_DELETE_CASE);
+			notify('error', FAILED_TO_DELETE_CASE);
 		}
 		confirmDeleteCase = null;
 		confirmDeleteCaseOpen = false;
@@ -323,11 +334,11 @@
 				_count: { cases: suite._count.cases - 1 }
 			};
 			if (selectedCase?.id === moveCaseTarget.id) selectedCase = null;
-			showToast('success', caseMovedToast(moveCaseTarget.displayId, targetSuite?.name ?? ''));
+			notify('success', caseMovedToast(moveCaseTarget.displayId, targetSuite?.name ?? ''));
 			moveCaseOpen = false;
 			moveCaseTarget = null;
 		} catch (e) {
-			showToast('error', e.message ?? FAILED_TO_MOVE_CASE);
+			notify('error', e.message ?? FAILED_TO_MOVE_CASE);
 		} finally {
 			moveCaseSaving = false;
 		}
@@ -339,9 +350,9 @@
 			const updated = await updateSuite(suiteId, editSuiteForm);
 			suite = { ...suite, ...updated };
 			editSuiteOpen = false;
-			showToast('success', SUITE_UPDATED_TOAST);
+			notify('success', SUITE_UPDATED_TOAST);
 		} catch (e) {
-			showToast('error', e.message);
+			notify('error', e.message);
 		} finally {
 			editSuiteSaving = false;
 		}
@@ -366,8 +377,6 @@
 </script>
 
 <svelte:head><title>{suiteDetailTitle(suite)}</title></svelte:head>
-
-<Toast {toast} />
 
 <ConfirmModal
 	bind:open={confirmDeleteCaseOpen}
@@ -521,6 +530,9 @@
 					/></svg
 				>
 			</button>
+			<div class="suite-export">
+				<ExportMenu busy={exporting} on:select={(e) => handleExport(e.detail)} />
+			</div>
 		</div>
 		{#if suite.description}
 			<p class="suite-desc">{suite.description}</p>
@@ -1012,6 +1024,10 @@
 		gap: 0.625rem;
 		margin-bottom: 0.5rem;
 		flex-wrap: wrap;
+	}
+
+	.suite-export {
+		margin-left: auto;
 	}
 
 	.suite-title {

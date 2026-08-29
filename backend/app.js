@@ -8,7 +8,7 @@ const cors = require('cors');
 const { isNodeMode } = require('./constants/env');
 const app = express();
 
-app.use(cors({ origin: '*' }));
+app.use(cors({ origin: '*', exposedHeaders: ['Content-Disposition'] }));
 // Dispatching a run to a node ships the whole tests/ tree (base64-encoded,
 // fixtures included) as one JSON body — Express's 100kb default 413s well
 // before a real test suite does.

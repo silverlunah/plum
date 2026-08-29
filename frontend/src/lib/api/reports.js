@@ -4,6 +4,7 @@
  */
 
 import { API_BASE, REPORTS_PER_PAGE } from '$lib/constants';
+import { downloadFromEndpoint } from '$lib/utils/download';
 
 function withDate(r) {
 	return { ...r, date: new Date(r.createdAt).toLocaleString() };
@@ -49,6 +50,12 @@ export async function fetchRecordingEvents(reportId, recordingId) {
 	if (!res.ok) throw new Error('Failed to fetch recording events');
 	const { events } = await res.json();
 	return events;
+}
+
+export async function downloadReportExport(id, format) {
+	await downloadFromEndpoint(`${API_BASE}/reports/${id}/export?format=${format}`, {
+		fallbackName: `report-${id}.${format}`
+	});
 }
 
 export async function deleteReport(id) {
