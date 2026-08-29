@@ -79,28 +79,28 @@ Full documentation is available at:
 
 ## Command Reference
 
-| Command                       | Description                                                                                   |
-| ----------------------------- | --------------------------------------------------------------------------------------------- |
-| `plum init`                   | Initialize a new project in the current folder                                                |
-| `plum server start`           | Start the full UI stack via Docker                                                            |
-| `plum server restart`         | Rebuild Docker images and restart the server without prompts                                  |
-| `plum server stop`            | Stop the server (data preserved)                                                              |
-| `plum server reconfig`        | Re-enter server settings without starting                                                     |
-| `plum update`                 | Update Plum, then restart every registered server and node on this machine (asks before each) |
-| `plum node start [name]`      | Register a node with the server and start it on this machine                                  |
-| `plum node list`              | List this machine's nodes and their status                                                    |
-| `plum node restart [name]`    | Stop, refresh dependencies, and restart a node                                                |
-| `plum node stop [name]`       | Stop a node                                                                                   |
-| `plum node delete <name>`     | Stop the node, delete its local config, and unregister it from the server                     |
-| `plum node reconfig [name]`   | Re-enter a node's settings and re-register, without starting it                               |
-| `plum run-test`               | Run all tests locally without Docker                                                          |
-| `plum run-test @tag`          | Run tests matching a tag                                                                      |
-| `plum run-test --parallel N`  | Run tests across N parallel workers                                                           |
-| `plum run-test --browser <b>` | Run in `chromium` (default) or `firefox`                                                      |
-| `plum run-test --help`        | Show usage for `run-test`                                                                     |
-| `plum create-step`            | Interactively scaffold a new step definition                                                  |
-| `plum create-test`            | Interactively scaffold a full feature (`.feature` + Page + Steps)                             |
-| `plum manage-nodes`           | Open the interactive node management menu                                                     |
+| Command                       | Description                                                                                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `plum init`                   | Initialize a new project in the current folder                                                                                                   |
+| `plum server start`           | Start the full UI stack via Docker                                                                                                               |
+| `plum server restart`         | Rebuild Docker images and restart the server without prompts                                                                                     |
+| `plum server stop`            | Stop the server (data preserved)                                                                                                                 |
+| `plum server reconfig`        | Re-enter server settings without starting                                                                                                        |
+| `plum update`                 | Update Plum if a newer version is published, then restart every registered server and node (asks before each); no-ops when already on the latest |
+| `plum node start [name]`      | Register a node with the server and start it on this machine                                                                                     |
+| `plum node list`              | List this machine's nodes and their status                                                                                                       |
+| `plum node restart [name]`    | Stop, refresh dependencies, and restart a node                                                                                                   |
+| `plum node stop [name]`       | Stop a node                                                                                                                                      |
+| `plum node delete <name>`     | Stop the node, delete its local config, and unregister it from the server                                                                        |
+| `plum node reconfig [name]`   | Re-enter a node's settings and re-register, without starting it                                                                                  |
+| `plum run-test`               | Run all tests locally without Docker                                                                                                             |
+| `plum run-test @tag`          | Run tests matching a tag                                                                                                                         |
+| `plum run-test --parallel N`  | Run tests across N parallel workers                                                                                                              |
+| `plum run-test --browser <b>` | Run in `chromium` (default) or `firefox`                                                                                                         |
+| `plum run-test --help`        | Show usage for `run-test`                                                                                                                        |
+| `plum create-step`            | Interactively scaffold a new step definition                                                                                                     |
+| `plum create-test`            | Interactively scaffold a full feature (`.feature` + Page + Steps)                                                                                |
+| `plum manage-nodes`           | Open the interactive node management menu                                                                                                        |
 
 ---
 

@@ -532,7 +532,7 @@ async function serverRestart() {
 const NPM_INSTALL_RETRIES = 3;
 const NPM_INSTALL_RETRY_DELAY_MS = 5000;
 
-function npmInstallLatestWithRetry() {
+async function npmInstallLatestWithRetry() {
 	for (let attempt = 1; attempt <= NPM_INSTALL_RETRIES; attempt++) {
 		try {
 			execSync('npm install -g plum-e2e@latest', { stdio: 'inherit' });
@@ -542,7 +542,7 @@ function npmInstallLatestWithRetry() {
 				clack.log.warn(
 					`npm install failed (attempt ${attempt}/${NPM_INSTALL_RETRIES}) — this is often a transient registry propagation delay right after a new release. Retrying in ${NPM_INSTALL_RETRY_DELAY_MS / 1000}s…`
 				);
-				execSync(`sleep ${NPM_INSTALL_RETRY_DELAY_MS / 1000}`);
+				await new Promise((r) => setTimeout(r, NPM_INSTALL_RETRY_DELAY_MS));
 			}
 		}
 	}
@@ -553,12 +553,31 @@ function readPlumVersion() {
 	return JSON.parse(fs.readFileSync(path.join(plumRoot, 'package.json'), 'utf8')).version;
 }
 
+/** Latest version published to npm, or null when the registry can't be reached. */
+function fetchLatestPublishedVersion() {
+	try {
+		return execSync('npm view plum-e2e version', {
+			encoding: 'utf8',
+			stdio: ['ignore', 'pipe', 'ignore']
+		}).trim();
+	} catch {
+		return null;
+	}
+}
+
 async function serverUpdate() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Update  ')));
 
 	const fromVersion = readPlumVersion();
-	clack.log.step(`Fetching latest Plum version… (currently ${fromVersion})`);
-	if (!npmInstallLatestWithRetry()) {
+	clack.log.step(`Checking for a newer Plum release… (you have ${fromVersion})`);
+
+	const latest = fetchLatestPublishedVersion();
+	if (latest && latest === fromVersion) {
+		clack.outro(pc.green(`Already on the latest version (${fromVersion}). Nothing to do.`));
+		return;
+	}
+
+	if (!(await npmInstallLatestWithRetry())) {
 		clack.log.error(
 			`Failed to install the latest version after ${NPM_INSTALL_RETRIES} attempts. Try again shortly, or run "npm install -g plum-e2e@latest" manually to see the full error.`
 		);
@@ -1231,6 +1250,7 @@ switch (command) {
 					'- **Test Cases** — Document steps (Action / Test Data / Expected Output), set priority, and assign a Cucumber `@tag` to link automation.',
 					'- **Test Runs** — Build a run from any combination of cases, execute them one by one (pass/fail/blocked/skip), and track history.',
 					'- **Auto-linking** — When a build completes, Plum matches Cucumber scenario tags against `automatedTag` values on your test cases and marks them as automated.',
+					'- **Export / import** — Export test cases (whole repository or one suite) as CSV or JSON from the Suites tab. The JSON re-imports from **Settings → Test Cases** — a case whose ID already exists is skipped; anything else is imported with a fresh ID.',
 					'',
 					'To link a test case to automation, set its **Automated tag** (e.g. `test-login-1`) to match the `@tag` on the Cucumber scenario.',
 					'',
