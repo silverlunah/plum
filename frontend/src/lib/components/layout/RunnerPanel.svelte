@@ -406,6 +406,7 @@
 				<a
 					href={reportUrl(lastFinished.reportId)}
 					class="view-report-btn"
+					on:click={() => panelExpanded.set(false)}
 					transition:fly={{ x: -6, duration: 200 }}
 				>
 					{VIEW_REPORT_LABEL}
@@ -751,7 +752,7 @@
 						class:pulse-accent={run.status === 'running'}
 						class:queued-dot={run.status === 'queued'}
 					></span>
-					<a href="/live/{runId}" class="run-card-main">
+					<a href="/live/{runId}" class="run-card-main" on:click={() => panelExpanded.set(false)}>
 						<div class="run-card-info">
 							<span class="run-card-label">{run.label || MANUAL_RUN_LABEL}</span>
 							<span class="run-card-meta">

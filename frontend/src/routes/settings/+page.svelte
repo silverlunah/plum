@@ -7,6 +7,7 @@
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import {
 		fetchProject,
 		saveProject,
@@ -33,7 +34,12 @@
 		stopRunner,
 		restartRunner
 	} from '$lib/api/runners';
-	import { fetchPrefixes, savePrefixes, migratePrefixes } from '$lib/api/repository';
+	import {
+		fetchPrefixes,
+		savePrefixes,
+		migratePrefixes,
+		importTestCases
+	} from '$lib/api/repository';
 	import { updateProfile, changePassword } from '$lib/api/auth';
 	import {
 		fetchUsers,
@@ -43,15 +49,9 @@
 	import { builtInEnabled } from '$lib/stores/runner';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
-	import {
-		API_BASE,
-		BROWSERS,
-		TOAST_TIMEOUT_MS,
-		MAX_TEST_RETRIES,
-		COPY_TIMEOUT_MS
-	} from '$lib/constants';
+	import { API_BASE, BROWSERS, MAX_TEST_RETRIES, COPY_TIMEOUT_MS } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
-	import Toast from '$lib/components/ui/Toast.svelte';
+	import { notify } from '$lib/stores/notifications';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import { CANCEL_LABEL, EDIT_LABEL, SAVE_LABEL, EMAIL_LABEL } from '$lib/copy/common';
@@ -64,6 +64,15 @@
 		RUNNERS_LABEL,
 		REPOSITORY_NAV_LABEL,
 		REPOSITORY_HEADING,
+		TEST_CASES_NAV_LABEL,
+		TEST_CASES_HEADING,
+		TEST_CASES_DESC,
+		TC_IMPORT_CARD_TITLE,
+		TC_IMPORT_DESC,
+		TC_IMPORT_HINT,
+		TC_IMPORT_FAILED_FALLBACK,
+		tcImportLabel,
+		tcImportSummary,
 		INTEGRATIONS_LABEL,
 		MCP_NAV_LABEL,
 		MCP_HEADING,
@@ -283,8 +292,21 @@
 		backupSizeLabel
 	} from '$lib/copy/settings';
 
-	/** @type {'project' | 'runners' | 'repository' | 'integrations' | 'mcp' | 'account' | 'users' | 'backup'} */
+	const VALID_SECTIONS = new Set([
+		'project',
+		'runners',
+		'repository',
+		'testcases',
+		'integrations',
+		'mcp',
+		'account',
+		'users',
+		'backup'
+	]);
+
+	const querySection = $page.url.searchParams.get('section');
 	let section =
+		(VALID_SECTIONS.has(querySection) && querySection) ||
 		(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('plum:settings:section')) ||
 		'project';
 
@@ -297,7 +319,6 @@
 
 	let project = { name: '', logoUrl: '', timezone: 'UTC', maxRetries: 0 };
 	let projectSaving = false;
-	let toast = null;
 
 	const TIMEZONES = (() => {
 		try {
@@ -331,6 +352,11 @@
 	let importing = false;
 	let exporting = false;
 	let fileInput;
+
+	let tcImportFile = null;
+	let tcImporting = false;
+	let tcFileInput;
+	let tcImportResult = null;
 
 	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
 	let integrationsSaving = false;
@@ -383,11 +409,6 @@
 	let editForm = { name: '', url: '', token: '', browser: 'chromium' };
 	let editFormError = '';
 	let editFormSaving = false;
-
-	function showToast(type, message) {
-		toast = { type, message };
-		setTimeout(() => (toast = null), TOAST_TIMEOUT_MS);
-	}
 
 	let runnersLoaded = false;
 
@@ -500,7 +521,7 @@
 			};
 			runnerForm = { name: '', url: '', token: '', browser: 'chromium' };
 			runnerFormOpen = false;
-			showToast('success', runnerAddedToast(runner.name));
+			notify('success', runnerAddedToast(runner.name));
 		} catch {
 			runnerFormError = ADD_RUNNER_FAILED;
 		} finally {
@@ -512,9 +533,9 @@
 		try {
 			await deleteRunner(id);
 			runners = runners.filter((r) => r.id !== id);
-			showToast('success', runnerRemovedToast(name));
+			notify('success', runnerRemovedToast(name));
 		} catch {
-			showToast('error', REMOVE_RUNNER_FAILED);
+			notify('error', REMOVE_RUNNER_FAILED);
 		}
 	}
 
@@ -533,12 +554,12 @@
 		try {
 			const result = await stopRunner(id);
 			if (result.ok) {
-				showToast('success', runnerStoppedToast(name));
+				notify('success', runnerStoppedToast(name));
 			} else {
-				showToast('error', runnerStopFailedToast(name, result.error));
+				notify('error', runnerStopFailedToast(name, result.error));
 			}
 		} catch {
-			showToast('error', runnerStopFailedGenericToast(name));
+			notify('error', runnerStopFailedGenericToast(name));
 		} finally {
 			stoppingId = null;
 			refreshPing(id);
@@ -550,12 +571,12 @@
 		try {
 			const result = await restartRunner(id);
 			if (result.ok) {
-				showToast('success', runnerRestartingToast(name));
+				notify('success', runnerRestartingToast(name));
 			} else {
-				showToast('error', runnerRestartFailedToast(name, result.error));
+				notify('error', runnerRestartFailedToast(name, result.error));
 			}
 		} catch {
-			showToast('error', runnerRestartFailedGenericToast(name));
+			notify('error', runnerRestartFailedGenericToast(name));
 		} finally {
 			restartingId = null;
 			// Give the replacement process a moment to bind before checking on it.
@@ -596,7 +617,7 @@
 			const { runner } = await updateRunner(id, editForm);
 			runners = runners.map((r) => (r.id === id ? runner : r));
 			editingId = null;
-			showToast('success', runnerUpdatedToast(runner.name));
+			notify('success', runnerUpdatedToast(runner.name));
 		} catch {
 			editFormError = UPDATE_RUNNER_FAILED;
 		} finally {
@@ -608,9 +629,9 @@
 		projectSaving = true;
 		try {
 			await saveProject(project);
-			showToast('success', PROJECT_SAVED_TOAST);
+			notify('success', PROJECT_SAVED_TOAST);
 		} catch {
-			showToast('error', PROJECT_SAVE_FAILED);
+			notify('error', PROJECT_SAVE_FAILED);
 		} finally {
 			projectSaving = false;
 		}
@@ -627,9 +648,9 @@
 			a.download = backupFilename(new Date().toISOString().slice(0, 10));
 			a.click();
 			URL.revokeObjectURL(url);
-			showToast('success', BACKUP_DOWNLOADED_TOAST);
+			notify('success', BACKUP_DOWNLOADED_TOAST);
 		} catch {
-			showToast('error', EXPORT_FAILED_TOAST);
+			notify('error', EXPORT_FAILED_TOAST);
 		} finally {
 			exporting = false;
 		}
@@ -643,12 +664,12 @@
 			const data = JSON.parse(text);
 			const result = await importBackup(data);
 			if (result.error) throw new Error(result.error);
-			showToast('success', IMPORT_SUCCESS_TOAST);
+			notify('success', IMPORT_SUCCESS_TOAST);
 			project = await fetchProject();
 			importFile = null;
 			if (fileInput) fileInput.value = '';
 		} catch (e) {
-			showToast('error', e.message || IMPORT_FAILED_FALLBACK);
+			notify('error', e.message || IMPORT_FAILED_FALLBACK);
 		} finally {
 			importing = false;
 		}
@@ -658,13 +679,35 @@
 		importFile = e.target.files[0] ?? null;
 	}
 
+	function handleTcFileChange(e) {
+		tcImportFile = e.target.files[0] ?? null;
+		tcImportResult = null;
+	}
+
+	async function handleTcImport() {
+		if (!tcImportFile) return;
+		tcImporting = true;
+		tcImportResult = null;
+		try {
+			const data = JSON.parse(await tcImportFile.text());
+			tcImportResult = await importTestCases(data);
+			notify('success', tcImportSummary(tcImportResult));
+			tcImportFile = null;
+			if (tcFileInput) tcFileInput.value = '';
+		} catch (e) {
+			notify('error', e.message || TC_IMPORT_FAILED_FALLBACK);
+		} finally {
+			tcImporting = false;
+		}
+	}
+
 	async function handleSavePrefixes() {
 		prefixesSaving = true;
 		try {
 			prefixes = await savePrefixes(prefixes);
-			showToast('success', PREFIXES_SAVED_TOAST);
+			notify('success', PREFIXES_SAVED_TOAST);
 		} catch {
-			showToast('error', PREFIXES_SAVE_FAILED);
+			notify('error', PREFIXES_SAVE_FAILED);
 		} finally {
 			prefixesSaving = false;
 		}
@@ -675,9 +718,9 @@
 		try {
 			await migratePrefixes(migrateForm);
 			prefixes = { ...prefixes, ...migrateForm };
-			showToast('success', MIGRATION_COMPLETE_TOAST);
+			notify('success', MIGRATION_COMPLETE_TOAST);
 		} catch {
-			showToast('error', MIGRATION_FAILED_TOAST);
+			notify('error', MIGRATION_FAILED_TOAST);
 		} finally {
 			migrating = false;
 		}
@@ -693,7 +736,7 @@
 				email: profileForm.email
 			});
 			auth.login($auth.token, { ...$auth.user, ...user });
-			showToast('success', PROFILE_UPDATED_TOAST);
+			notify('success', PROFILE_UPDATED_TOAST);
 		} catch (e) {
 			profileError = e.message;
 		} finally {
@@ -712,7 +755,7 @@
 			const user = await createUserApi(userForm);
 			allUsers = [...allUsers, user];
 			userForm = { name: '', email: '', password: '', role: 'user' };
-			showToast('success', userAddedToast(user.name));
+			notify('success', userAddedToast(user.name));
 		} catch (e) {
 			userFormError = e.message;
 		} finally {
@@ -724,9 +767,9 @@
 		try {
 			await deleteUserApi(id);
 			allUsers = allUsers.filter((u) => u.id !== id);
-			showToast('success', userRemovedToast(name));
+			notify('success', userRemovedToast(name));
 		} catch (e) {
-			showToast('error', e.message);
+			notify('error', e.message);
 		}
 		confirmDeleteUser = null;
 		confirmDeleteUserOpen = false;
@@ -750,7 +793,7 @@
 				newPassword: pwForm.newPassword
 			});
 			pwForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
-			showToast('success', PASSWORD_CHANGED_TOAST);
+			notify('success', PASSWORD_CHANGED_TOAST);
 		} catch (e) {
 			pwError = e.message;
 		} finally {
@@ -770,9 +813,9 @@
 			mcpKey = result.mcpKey;
 			mcpKeySet = true;
 			mcpShowKey = true;
-			showToast('success', MCP_KEY_GENERATED_TOAST);
+			notify('success', MCP_KEY_GENERATED_TOAST);
 		} catch {
-			showToast('error', MCP_KEY_GENERATE_FAILED);
+			notify('error', MCP_KEY_GENERATE_FAILED);
 		} finally {
 			mcpGenerating = false;
 		}
@@ -803,9 +846,9 @@
 		integrationsSaving = true;
 		try {
 			integrations = await saveIntegrations(integrations);
-			showToast('success', INTEGRATIONS_SAVED_TOAST);
+			notify('success', INTEGRATIONS_SAVED_TOAST);
 		} catch {
-			showToast('error', INTEGRATIONS_SAVE_FAILED);
+			notify('error', INTEGRATIONS_SAVE_FAILED);
 		} finally {
 			integrationsSaving = false;
 		}
@@ -820,9 +863,9 @@
 			if (result.error) throw new Error(result.error);
 			if (backupConfig.backupS3SecretKey) backupS3SecretKeySet = true;
 			backupConfig = { ...backupConfig, backupS3SecretKey: '' };
-			showToast('success', BACKUP_CONFIG_SAVED_TOAST);
+			notify('success', BACKUP_CONFIG_SAVED_TOAST);
 		} catch (e) {
-			showToast('error', e.message || BACKUP_CONFIG_SAVE_FAILED);
+			notify('error', e.message || BACKUP_CONFIG_SAVE_FAILED);
 		} finally {
 			backupConfigSaving = false;
 		}
@@ -837,9 +880,9 @@
 			if (result.error) throw new Error(result.error);
 			if (backupConfig.backupS3SecretKey) backupS3SecretKeySet = true;
 			backupConfig = { ...backupConfig, backupS3SecretKey: '' };
-			showToast('success', BACKUP_CONFIG_SAVED_TOAST);
+			notify('success', BACKUP_CONFIG_SAVED_TOAST);
 		} catch (e) {
-			showToast('error', e.message || BACKUP_CONFIG_SAVE_FAILED);
+			notify('error', e.message || BACKUP_CONFIG_SAVE_FAILED);
 		} finally {
 			includeReportsSaving = false;
 		}
@@ -869,9 +912,9 @@
 			if (result.error) throw new Error(result.error);
 			backupLastRunAt = result.lastRunAt;
 			backupLastStatus = result.lastStatus ?? '';
-			showToast('success', BACKUP_UPLOAD_SUCCESS_TOAST);
+			notify('success', BACKUP_UPLOAD_SUCCESS_TOAST);
 		} catch (e) {
-			showToast('error', e.message || BACKUP_UPLOAD_FAILED_FALLBACK);
+			notify('error', e.message || BACKUP_UPLOAD_FAILED_FALLBACK);
 			const bc = await fetchBackupConfig().catch(() => null);
 			if (bc) {
 				backupLastRunAt = bc.backupLastRunAt;
@@ -902,7 +945,7 @@
 			if (result.error) throw new Error(result.error);
 			s3Backups = result.backups ?? [];
 		} catch (e) {
-			showToast('error', e.message || LIST_S3_BACKUPS_FAILED);
+			notify('error', e.message || LIST_S3_BACKUPS_FAILED);
 		} finally {
 			loadingS3Backups = false;
 		}
@@ -919,12 +962,12 @@
 		try {
 			const result = await restoreFromS3(restoreTarget.key);
 			if (result.error) throw new Error(result.error);
-			showToast('success', RESTORE_SUCCESS_TOAST);
+			notify('success', RESTORE_SUCCESS_TOAST);
 			project = await fetchProject();
 			restoreConfirmOpen = false;
 			restoreTarget = null;
 		} catch (e) {
-			showToast('error', e.message || RESTORE_FAILED_FALLBACK);
+			notify('error', e.message || RESTORE_FAILED_FALLBACK);
 		} finally {
 			restoringKey = null;
 		}
@@ -959,6 +1002,7 @@
 		'project',
 		'runners',
 		'repository',
+		'testcases',
 		'integrations',
 		'mcp',
 		'users',
@@ -975,6 +1019,7 @@
 					{ id: 'project', label: PROJECT_LABEL },
 					{ id: 'runners', label: RUNNERS_LABEL },
 					{ id: 'repository', label: REPOSITORY_NAV_LABEL },
+					{ id: 'testcases', label: TEST_CASES_NAV_LABEL },
 					{ id: 'integrations', label: INTEGRATIONS_LABEL },
 					{ id: 'mcp', label: MCP_NAV_LABEL },
 					{ id: 'account', label: ACCOUNT_LABEL },
@@ -985,8 +1030,6 @@
 </script>
 
 <svelte:head><title>{PAGE_TITLE}</title></svelte:head>
-
-<Toast {toast} />
 
 <div class="page-header">
 	<h1>{HEADING}</h1>
@@ -1441,6 +1484,41 @@
 						<Button variant="ghost" on:click={handleMigratePrefixes} disabled={migrating}>
 							{runMigrationLabel(migrating)}
 						</Button>
+					</div>
+				</div>
+			</div>
+
+			<!-- TEST CASES -->
+		{:else if section === 'testcases'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<div class="content-header">
+					<h2>{TEST_CASES_HEADING}</h2>
+					<p class="content-desc">{TEST_CASES_DESC}</p>
+				</div>
+
+				<div class="card settings-card">
+					<p class="card-title">{TC_IMPORT_CARD_TITLE}</p>
+					<div class="backup-block">
+						<p class="backup-block-desc">{TC_IMPORT_DESC}</p>
+						<div class="import-row">
+							<label class="file-label">
+								<input
+									bind:this={tcFileInput}
+									type="file"
+									accept=".json,application/json"
+									class="file-input-hidden"
+									on:change={handleTcFileChange}
+								/>
+								<span class="file-btn">{tcImportFile ? tcImportFile.name : CHOOSE_FILE_LABEL}</span>
+							</label>
+							<Button on:click={handleTcImport} disabled={!tcImportFile || tcImporting}>
+								{tcImportLabel(tcImporting)}
+							</Button>
+						</div>
+						{#if tcImportResult}
+							<p class="tc-import-result">{tcImportSummary(tcImportResult)}</p>
+						{/if}
+						<p class="backup-block-desc">{TC_IMPORT_HINT}</p>
 					</div>
 				</div>
 			</div>
@@ -2716,6 +2794,12 @@
 	.field-input-mono {
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.8125rem;
+	}
+
+	.tc-import-result {
+		margin-top: 0.75rem;
+		font-size: 0.85rem;
+		color: var(--text);
 	}
 
 	.import-row {

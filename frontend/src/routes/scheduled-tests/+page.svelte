@@ -15,7 +15,7 @@
 	import { fetchRunners } from '$lib/api/runners';
 	import { fetchIntegrations } from '$lib/api/settings';
 	import { backgroundRuns, findActiveCronRun } from '$lib/stores/runner';
-	import { BROWSERS, BUILTIN_RUNNER_ID, TOAST_TIMEOUT_MS } from '$lib/constants';
+	import { BROWSERS, BUILTIN_RUNNER_ID } from '$lib/constants';
 	import {
 		BUILTIN_RUNNER_LABEL,
 		EDIT_LABEL,
@@ -80,7 +80,7 @@
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
-	import Toast from '$lib/components/ui/Toast.svelte';
+	import { notify } from '$lib/stores/notifications';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 
 	const CRON_REGEX =
@@ -98,7 +98,6 @@
 	let cronJobs = [];
 	let availableRunners = [];
 	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
-	let toast = null;
 
 	let modalOpen = false;
 	let deleteModalOpen = false;
@@ -119,11 +118,6 @@
 	let selectedSchedule = '';
 	let useCustomCron = false;
 	let formError = '';
-
-	function showToast(type, message) {
-		toast = { type, message };
-		setTimeout(() => (toast = null), TOAST_TIMEOUT_MS);
-	}
 
 	function handleScheduleChange(e) {
 		if (e.target.value === CUSTOM_SENTINEL) {
@@ -202,7 +196,7 @@
 		try {
 			const data = await saveCronJob({ ...form, isEditing, editTaskName });
 			if (data.message) {
-				showToast('success', savedToast(isEditing, form.taskName));
+				notify('success', savedToast(isEditing, form.taskName));
 				modalOpen = false;
 				cronJobs = await fetchCronJobs();
 			} else {
@@ -220,16 +214,16 @@
 			await toggleCronJob(job.taskName, next);
 		} catch {
 			cronJobs = cronJobs.map((j) => (j.taskName === job.taskName ? { ...j, enabled: !next } : j));
-			showToast('error', COULD_NOT_UPDATE_SCHEDULE);
+			notify('error', COULD_NOT_UPDATE_SCHEDULE);
 		}
 	}
 
 	async function handleRunNow(taskName) {
 		try {
 			await runCronJobNow(taskName);
-			showToast('success', startedToast(taskName));
+			notify('success', startedToast(taskName));
 		} catch {
-			showToast('error', COULD_NOT_TRIGGER_RUN);
+			notify('error', COULD_NOT_TRIGGER_RUN);
 		}
 	}
 
@@ -237,13 +231,13 @@
 		try {
 			const data = await deleteCronJob(taskToDelete);
 			if (data.message) {
-				showToast('success', deletedToast(taskToDelete));
+				notify('success', deletedToast(taskToDelete));
 				cronJobs = await fetchCronJobs();
 			} else {
-				showToast('error', COULD_NOT_DELETE_JOB);
+				notify('error', COULD_NOT_DELETE_JOB);
 			}
 		} catch {
-			showToast('error', NETWORK_ERROR);
+			notify('error', NETWORK_ERROR);
 		}
 		deleteModalOpen = false;
 		taskToDelete = '';
@@ -432,8 +426,6 @@
 <ConfirmModal bind:open={deleteModalOpen} title={DELETE_CRON_JOB_TITLE} on:confirm={handleDelete}>
 	{DELETE_CONFIRM_PREFIX} <strong>{taskToDelete}</strong>{CANNOT_BE_UNDONE_SUFFIX}
 </ConfirmModal>
-
-<Toast {toast} />
 
 <div class="page-header">
 	<div class="header-row">

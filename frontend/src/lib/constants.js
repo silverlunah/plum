@@ -25,7 +25,7 @@ export const REPO_PAGE_SIZE = 20;
 export const SUITE_CASES_PER_PAGE = 20;
 
 export const COPY_TIMEOUT_MS = 1400;
-export const TOAST_TIMEOUT_MS = 4000;
+export const TOAST_TIMEOUT_MS = 8000;
 
 export const REDIRECT_DELAY_MS = 3000;
 

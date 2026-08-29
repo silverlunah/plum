@@ -6,7 +6,19 @@
 const express = require('express');
 const router = express.Router();
 const { jwtAuth } = require('../middleware/jwtAuth');
+const { requireAdmin } = require('../middleware/requireAdmin');
 const testCaseService = require('../services/testCaseService');
+const testImportService = require('../services/testImportService');
+
+router.post('/import', jwtAuth, requireAdmin, async (req, res, next) => {
+	try {
+		const result = await testImportService.importTestCases(req.body, req.user.userId);
+		res.json(result);
+	} catch (e) {
+		if (e.status === 400) return res.status(400).json({ error: e.message });
+		next(e);
+	}
+});
 
 router.get('/:id', jwtAuth, async (req, res, next) => {
 	try {

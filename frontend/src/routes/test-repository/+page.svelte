@@ -8,15 +8,22 @@
 	import { fly } from 'svelte/transition';
 	import { fetchSuites, createSuite, deleteSuite, searchRepository } from '$lib/api/repository';
 	import { fetchRuns, createRun, duplicateRun, deleteRun } from '$lib/api/repository';
+	import { downloadTestCaseExport } from '$lib/api/repository';
+	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
+	import { exportFailedToast, exportedToast } from '$lib/copy/common';
+	import {
+		IMPORT_TEST_CASES_LINK,
+		IMPORT_TEST_CASES_HREF,
+		EXPORT_TEST_CASES_WHAT
+	} from '$lib/copy/repository';
 	import { runsVersion } from '$lib/stores/runner';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import { REPO_PAGE_SIZE } from '$lib/constants';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
-	import Toast from '$lib/components/ui/Toast.svelte';
+	import { notify } from '$lib/stores/notifications';
 	import Button from '$lib/components/ui/Button.svelte';
-	import { TOAST_TIMEOUT_MS } from '$lib/constants';
 	import {
 		CLEAR_SEARCH_LABEL,
 		CANCEL_LABEL,
@@ -121,7 +128,6 @@
 	}
 
 	let loading = true;
-	let toast = null;
 
 	// Search results (server-side when query is active)
 	let searchResults = null;
@@ -174,9 +180,17 @@
 
 	const PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
 
-	function showToast(type, message) {
-		toast = { type, message };
-		setTimeout(() => (toast = null), TOAST_TIMEOUT_MS);
+	let exporting = false;
+	async function handleExport(format) {
+		exporting = true;
+		try {
+			await downloadTestCaseExport('all', null, format);
+			notify('success', exportedToast(EXPORT_TEST_CASES_WHAT));
+		} catch {
+			notify('error', exportFailedToast(EXPORT_TEST_CASES_WHAT.toLowerCase()));
+		} finally {
+			exporting = false;
+		}
 	}
 
 	async function loadSuites(page = 1) {
@@ -222,7 +236,7 @@
 		try {
 			await Promise.all([loadSuites(1), loadRuns(1)]);
 		} catch (e) {
-			showToast('error', FAILED_TO_LOAD_DATA);
+			notify('error', FAILED_TO_LOAD_DATA);
 		} finally {
 			loading = false;
 		}
@@ -241,7 +255,7 @@
 			suitesTotal += 1;
 			suiteModalOpen = false;
 			suiteForm = { name: '', description: '', priority: 'Medium' };
-			showToast('success', suiteCreatedToast(suite.name));
+			notify('success', suiteCreatedToast(suite.name));
 		} catch (e) {
 			suiteFormError = e.message;
 		} finally {
@@ -254,9 +268,9 @@
 			await deleteSuite(id);
 			suites = suites.filter((s) => s.id !== id);
 			suitesTotal -= 1;
-			showToast('success', suiteDeletedToast(name));
+			notify('success', suiteDeletedToast(name));
 		} catch {
-			showToast('error', FAILED_TO_DELETE_SUITE);
+			notify('error', FAILED_TO_DELETE_SUITE);
 		}
 		confirmDelete = null;
 		confirmDeleteOpen = false;
@@ -297,9 +311,9 @@
 			runs = [copy, ...runs];
 			runsTotal += 1;
 			runsVersion.update((v) => v + 1);
-			showToast('success', duplicatedAsToast(copy.title));
+			notify('success', duplicatedAsToast(copy.title));
 		} catch {
-			showToast('error', FAILED_TO_DUPLICATE_RUN);
+			notify('error', FAILED_TO_DUPLICATE_RUN);
 		}
 	}
 
@@ -309,9 +323,9 @@
 			runs = runs.filter((r) => r.id !== id);
 			runsTotal -= 1;
 			runsVersion.update((v) => v + 1);
-			showToast('success', runDeletedToast(title));
+			notify('success', runDeletedToast(title));
 		} catch {
-			showToast('error', FAILED_TO_DELETE_RUN);
+			notify('error', FAILED_TO_DELETE_RUN);
 		}
 		confirmDelete = null;
 		confirmDeleteOpen = false;
@@ -327,8 +341,6 @@
 </script>
 
 <svelte:head><title>{PAGE_TITLE}</title></svelte:head>
-
-<Toast {toast} />
 
 <ConfirmModal
 	bind:open={confirmDeleteOpen}
@@ -433,6 +445,8 @@
 	</div>
 	<div class="header-actions">
 		{#if tab === 'suites'}
+			<a class="import-link" href={IMPORT_TEST_CASES_HREF}>{IMPORT_TEST_CASES_LINK}</a>
+			<ExportMenu busy={exporting} on:select={(e) => handleExport(e.detail)} />
 			<Button on:click={() => (suiteModalOpen = true)}>{NEW_SUITE_LABEL}</Button>
 		{:else}
 			<Button on:click={() => (runModalOpen = true)}>{NEW_RUN_LABEL}</Button>
@@ -876,6 +890,20 @@
 	.header-actions {
 		flex-shrink: 0;
 		padding-top: 0.25rem;
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.import-link {
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		text-decoration: none;
+		white-space: nowrap;
+	}
+	.import-link:hover {
+		color: var(--accent);
+		text-decoration: underline;
 	}
 
 	/* ── Tabs ── */

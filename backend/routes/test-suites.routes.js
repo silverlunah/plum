@@ -7,6 +7,40 @@ const express = require('express');
 const router = express.Router();
 const { jwtAuth } = require('../middleware/jwtAuth');
 const testSuiteService = require('../services/testSuiteService');
+const exportService = require('../services/exportService');
+const { sendExport, exportFormat } = require('../lib/exportResponse');
+
+const testCaseRenderers = (data) => ({
+	json: () => data,
+	csv: () => exportService.testCaseCsv(data)
+});
+
+router.get('/export', jwtAuth, async (req, res, next) => {
+	try {
+		const data = await exportService.buildTestCaseExport('all');
+		await sendExport(res, {
+			format: exportFormat(req),
+			filenameBase: 'test-cases',
+			...testCaseRenderers(data)
+		});
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/:id/export', jwtAuth, async (req, res, next) => {
+	try {
+		const data = await exportService.buildTestCaseExport('suite', { suiteId: req.params.id });
+		if (!data) return res.status(404).json({ error: 'Suite not found' });
+		await sendExport(res, {
+			format: exportFormat(req),
+			filenameBase: `suite-${data.suites[0]?.displayId ?? req.params.id}`,
+			...testCaseRenderers(data)
+		});
+	} catch (e) {
+		next(e);
+	}
+});
 
 router.get('/', jwtAuth, async (req, res, next) => {
 	try {
