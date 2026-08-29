@@ -150,14 +150,16 @@ const VALID_BROWSERS = ['chromium', 'firefox'];
 async function promptPublicUrl(message, initial) {
 	for (;;) {
 		const v = await clack.text({
-			message: `${message} — include the http:// or https:// prefix`,
+			message:
+				`${message} — include the scheme (http:// or https://). ` +
+				'Add the :port from above unless a reverse proxy terminates it on 80/443.',
 			placeholder: initial,
 			defaultValue: initial
 		});
 		if (clack.isCancel(v)) cancelAndExit();
 		const val = (v || initial).trim();
 		if (/^https?:\/\//i.test(val)) return val.replace(/\/+$/, '');
-		clack.log.warn('That needs a full URL starting with http:// or https://');
+		clack.log.warn('Needs a scheme — start with http:// or https://');
 	}
 }
 
@@ -278,11 +280,11 @@ async function configureServer({ force }) {
 
 		if (mode === 'production') {
 			cfg.apiUrl = await promptPublicUrl(
-				'Public URL of the Plum backend / API',
+				'Public URL or IP of the Plum backend / API',
 				cfg.apiUrl || `http://localhost:${cfg.backendPort}`
 			);
 			cfg.uiUrl = await promptPublicUrl(
-				'Public URL of the Plum UI (frontend)',
+				'Public URL or IP of the Plum UI (frontend)',
 				cfg.uiUrl || `http://localhost:${cfg.frontendPort}`
 			);
 		} else {
