@@ -10,10 +10,6 @@
 	import { fetchRecordingEvents } from '$lib/api/reports';
 	import { computeRecordingSegments } from '$lib/utils/format';
 	import { describeElement } from '$lib/utils/inspectElement';
-	import { captureReplayFrame } from '$lib/utils/replayCapture';
-	import { downloadBlob } from '$lib/utils/download';
-	import { notify } from '$lib/stores/notifications';
-	import { startReplayVideo, replayVideoJob, cancelReplayVideo } from '$lib/stores/replayVideo';
 	import StepsRail from './StepsRail.svelte';
 	import MultiTabTimeline from './MultiTabTimeline.svelte';
 	import ElementInspector from './ElementInspector.svelte';
@@ -21,21 +17,12 @@
 		PLAYER_LOAD_ERROR,
 		INSPECT_TOGGLE_LABEL,
 		RESTART_LABEL,
-		recordingTabLabel,
-		REPLAY_DOWNLOAD_LABEL,
-		SCREENSHOT_LABEL,
-		SCREENSHOT_HINT,
-		RECORD_VIDEO_LABEL,
-		RECORD_VIDEO_HINT,
-		SCREENSHOT_SAVED_TOAST,
-		SCREENSHOT_FAILED_TOAST,
-		VIDEO_MULTITAB_UNSUPPORTED
+		recordingTabLabel
 	} from '$lib/copy/reports';
 
 	export let reportId;
 	export let recordings = [];
 	export let steps = [];
-	export let scenarioName = '';
 	export let inspecting = false;
 
 	const MIN_PLAYER_WIDTH = 480;
@@ -79,12 +66,28 @@
 	let livePosition = 0;
 	let livePositionRaf = null;
 	function tickLivePosition() {
+		armClickGuard();
 		// Skip while finished: the finish handler snaps livePosition to overallTo
 		// (endedAt can sit past the last real event) — polling here would
 		// immediately overwrite that.
 		const replayer = currentReplayer();
 		if (replayer && !finished) livePosition = mountedFirst + replayer.getCurrentTime();
 		livePositionRaf = requestAnimationFrame(tickLivePosition);
+	}
+
+	// Replays are read-only — block a click on a link/button from navigating the
+	// iframe off the recording (inspect mode's own click handler still runs).
+	// rrweb swaps the iframe document on each FullSnapshot, so re-arm on change.
+	let guardedDoc = null;
+	function blockNavigation(e) {
+		e.preventDefault();
+	}
+	function armClickGuard() {
+		const doc = currentReplayer()?.iframe?.contentDocument;
+		if (!doc || doc === guardedDoc) return;
+		guardedDoc = doc;
+		doc.addEventListener('click', blockNavigation, true);
+		doc.addEventListener('submit', blockNavigation, true);
 	}
 	$: overallFrom = segments[0]?.from ?? 0;
 	$: overallTo = segments[segments.length - 1]?.to ?? 0;
@@ -298,59 +301,8 @@
 		}
 	}
 
-	let shotBusy = false;
-	let downloadMenuOpen = false;
-	$: videoRendering = $replayVideoJob?.status === 'rendering';
-
-	function fileSlug() {
-		return `report-${reportId}${scenarioName ? '-' + scenarioName : ''}`
-			.replace(/[^a-z0-9]+/gi, '-')
-			.replace(/^-+|-+$/g, '')
-			.toLowerCase();
-	}
-
-	async function handleScreenshot() {
-		downloadMenuOpen = false;
-		if (shotBusy) return;
-		shotBusy = true;
-		try {
-			const blob = await captureReplayFrame(currentReplayer());
-			const step = currentStepIndex >= 0 ? `-step-${currentStepIndex + 1}` : '';
-			downloadBlob(blob, `${fileSlug()}${step}.png`);
-			notify('success', SCREENSHOT_SAVED_TOAST);
-		} catch {
-			notify('error', SCREENSHOT_FAILED_TOAST);
-		} finally {
-			shotBusy = false;
-		}
-	}
-
-	async function handleRecordVideo() {
-		downloadMenuOpen = false;
-		if ($replayVideoJob?.status === 'rendering') return;
-		if (segments.length > 1) {
-			notify('error', VIDEO_MULTITAB_UNSUPPORTED);
-			return;
-		}
-		const replayer = currentReplayer();
-		if (!replayer) return;
-		const evs = eventsByRecordingId.get(segments[0]?.recordingId) ?? [];
-		const durationMs = evs.length > 1 ? evs[evs.length - 1].timestamp - evs[0].timestamp : 0;
-		const resume = currentPlaybackState();
-		await startReplayVideo({
-			replayer,
-			durationMs,
-			filename: `${fileSlug()}-replay.webm`
-		});
-		buildPlayer(resume);
-	}
-
 	// Escape exits inspect mode first — the parent's handler checks `inspecting` (bound) before closing.
 	function handleWindowKeydown(e) {
-		if (e.key === 'Escape' && downloadMenuOpen) {
-			downloadMenuOpen = false;
-			return;
-		}
 		if (e.key === 'Escape' && inspecting) {
 			toggleInspect();
 			return;
@@ -359,10 +311,6 @@
 			e.preventDefault();
 			togglePlayPause();
 		}
-	}
-
-	function handleWindowClick(e) {
-		if (downloadMenuOpen && !e.target.closest('.download-fab-wrap')) downloadMenuOpen = false;
 	}
 
 	let finished = false;
@@ -627,13 +575,16 @@
 
 	onDestroy(() => {
 		if (livePositionRaf !== null) cancelAnimationFrame(livePositionRaf);
-		if ($replayVideoJob?.status === 'rendering') cancelReplayVideo();
+		if (guardedDoc) {
+			guardedDoc.removeEventListener('click', blockNavigation, true);
+			guardedDoc.removeEventListener('submit', blockNavigation, true);
+		}
 		stopInspectWatch();
 		destroyPlayer();
 	});
 </script>
 
-<svelte:window on:keydown={handleWindowKeydown} on:click={handleWindowClick} />
+<svelte:window on:keydown={handleWindowKeydown} />
 
 <div class="recording-player">
 	{#if steps.length > 0}
@@ -701,8 +652,6 @@
 			class:inspect-fab-active={inspecting}
 			on:click={toggleInspect}
 			disabled={loading || loadError}
-			title={INSPECT_TOGGLE_LABEL}
-			aria-label={INSPECT_TOGGLE_LABEL}
 		>
 			<svg
 				width="14"
@@ -716,57 +665,8 @@
 			>
 				<path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
 			</svg>
+			<span class="inspect-fab-label">{INSPECT_TOGGLE_LABEL}</span>
 		</button>
-
-		<div class="download-fab-wrap">
-			<button
-				class="inspect-fab"
-				class:inspect-fab-active={downloadMenuOpen}
-				on:click={() => (downloadMenuOpen = !downloadMenuOpen)}
-				disabled={loading || loadError}
-				title={REPLAY_DOWNLOAD_LABEL}
-				aria-label={REPLAY_DOWNLOAD_LABEL}
-				aria-haspopup="menu"
-				aria-expanded={downloadMenuOpen}
-			>
-				<svg
-					width="14"
-					height="14"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-					<polyline points="7 10 12 15 17 10" />
-					<line x1="12" y1="15" x2="12" y2="3" />
-				</svg>
-			</button>
-			{#if downloadMenuOpen}
-				<div class="download-menu" role="menu">
-					<button
-						class="download-item"
-						role="menuitem"
-						on:click={handleScreenshot}
-						disabled={shotBusy}
-					>
-						<span class="di-label">{SCREENSHOT_LABEL}</span>
-						<span class="di-hint">{SCREENSHOT_HINT}</span>
-					</button>
-					<button
-						class="download-item"
-						role="menuitem"
-						on:click={handleRecordVideo}
-						disabled={videoRendering}
-					>
-						<span class="di-label">{RECORD_VIDEO_LABEL}</span>
-						<span class="di-hint">{RECORD_VIDEO_HINT}</span>
-					</button>
-				</div>
-			{/if}
-		</div>
 	</div>
 
 	{#if inspecting}
@@ -913,13 +813,12 @@
 		right: 0.75rem;
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		width: 30px;
-		height: 30px;
+		gap: 0.4rem;
+		padding: 0.4rem 0.7rem;
 		background: rgb(0 0 0 / 0.55);
 		backdrop-filter: blur(6px);
 		border: none;
-		border-radius: 50%;
+		border-radius: var(--radius-pill);
 		color: #fff;
 		cursor: pointer;
 		opacity: 0.7;
@@ -938,55 +837,9 @@
 		background: var(--accent);
 		opacity: 1;
 	}
-
-	.download-fab-wrap {
-		position: absolute;
-		top: 3.4rem;
-		right: 0.75rem;
-	}
-	.download-fab-wrap .inspect-fab {
-		position: static;
-	}
-
-	.download-menu {
-		position: absolute;
-		top: 0;
-		right: calc(100% + 8px);
-		min-width: 11rem;
-		padding: 0.3rem;
-		background: var(--bg-elevated);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-md);
-		box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-	}
-	.download-item {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 0.1rem;
-		padding: 0.45rem 0.6rem;
-		background: transparent;
-		border: none;
-		border-radius: var(--radius-sm);
-		cursor: pointer;
-		text-align: left;
-	}
-	.download-item:hover:not(:disabled) {
-		background: var(--bg-subtle);
-	}
-	.download-item:disabled {
-		opacity: 0.5;
-		cursor: default;
-	}
-	.di-label {
-		font-size: 0.82rem;
-		color: var(--text);
-	}
-	.di-hint {
-		font-size: 0.7rem;
-		color: var(--text-muted);
+	.inspect-fab-label {
+		font-size: 0.72rem;
+		line-height: 1;
+		white-space: nowrap;
 	}
 </style>
