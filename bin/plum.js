@@ -146,6 +146,51 @@ function cancelAndExit() {
 
 const VALID_BROWSERS = ['chromium', 'firefox'];
 
+// Re-prompts until the answer carries an http:// or https:// scheme. Used for
+// the production-mode public API/UI URLs, where a bare host:port silently
+// breaks link generation and CORS.
+async function promptPublicUrl(message, initial) {
+	for (;;) {
+		const v = await clack.text({
+			message: `${message} — include the http:// or https:// prefix`,
+			placeholder: initial,
+			defaultValue: initial
+		});
+		if (clack.isCancel(v)) cancelAndExit();
+		const val = (v || initial).trim();
+		if (/^https?:\/\//i.test(val)) return val.replace(/\/+$/, '');
+		clack.log.warn('That needs a full URL starting with http:// or https://');
+	}
+}
+
+// Asks for a port. If something is already listening there, offers to free it
+// on start; `onFree()` is called when the user agrees so the caller can add the
+// port to its kill list.
+async function promptPort(message, initial, onFree) {
+	const { findPidOnPort } = runnerProcessLib();
+	for (;;) {
+		const v = await clack.text({
+			message,
+			placeholder: String(initial),
+			defaultValue: String(initial)
+		});
+		if (clack.isCancel(v)) cancelAndExit();
+		const port = (v || String(initial)).trim();
+		const pid = findPidOnPort(Number(port));
+		if (!pid) return port;
+		const free = await clack.confirm({
+			message: `Port ${port} is in use (pid ${pid}) — free it when Plum starts?`,
+			initialValue: true
+		});
+		if (clack.isCancel(free)) cancelAndExit();
+		if (free) {
+			onFree();
+			return port;
+		}
+		clack.log.warn('Pick a different port, or stop that process yourself.');
+	}
+}
+
 /* -----------------------------------------------------
  *                 Server flow
  * ------------------------------------------------------ */
@@ -176,12 +221,14 @@ async function configureServer({ force }) {
 
 	const overrides = {
 		headless: getFlag(args, '--headless'),
+		mode: getFlag(args, '--mode'),
 		backendPort: getFlag(args, '--backend-port'),
 		frontendPort: getFlag(args, '--frontend-port'),
 		apiUrl: getFlag(args, '--api-url'),
 		uiUrl: getFlag(args, '--ui-url')
 	};
 	if (overrides.headless !== undefined) cfg.headless = overrides.headless === 'true';
+	if (overrides.mode !== undefined) cfg.mode = overrides.mode;
 	if (overrides.backendPort !== undefined) cfg.backendPort = overrides.backendPort;
 	if (overrides.frontendPort !== undefined) cfg.frontendPort = overrides.frontendPort;
 	if (overrides.apiUrl !== undefined) cfg.apiUrl = overrides.apiUrl;
@@ -189,6 +236,7 @@ async function configureServer({ force }) {
 
 	const hasFlags = anyFlags(args, [
 		'--headless',
+		'--mode',
 		'--backend-port',
 		'--frontend-port',
 		'--api-url',
@@ -197,47 +245,63 @@ async function configureServer({ force }) {
 	const interactive = force || (interactiveAllowed() && !hasFlags);
 
 	if (interactive) {
+		const mode = await clack.select({
+			message: 'Where are you setting up Plum?',
+			options: [
+				{ value: 'production', label: 'Production / Network server' },
+				{ value: 'local', label: 'Local machine' }
+			],
+			initialValue: cfg.mode === 'production' ? 'production' : 'local'
+		});
+		if (clack.isCancel(mode)) cancelAndExit();
+		cfg.mode = mode;
+
+		const useDefaults = await clack.confirm({
+			message:
+				'Use the default ports (backend 3001, frontend 3002)? ' +
+				'Any process already using those ports will be stopped.'
+		});
+		if (clack.isCancel(useDefaults)) cancelAndExit();
+
+		if (useDefaults) {
+			cfg.backendPort = '3001';
+			cfg.frontendPort = '3002';
+			cfg.clearPorts = true;
+			clack.log.warn(
+				'Ports 3001 and 3002 will be freed before Plum starts. ' +
+					'The database runs inside Docker and is not affected.'
+			);
+		} else {
+			cfg.backendPort = await promptPort('Backend port', cfg.backendPort, () => {
+				cfg.clearPorts = true;
+			});
+			cfg.frontendPort = await promptPort('Frontend (UI) port', cfg.frontendPort, () => {
+				cfg.clearPorts = true;
+			});
+		}
+
+		if (mode === 'production') {
+			cfg.apiUrl = await promptPublicUrl(
+				'Public URL of the Plum backend / API',
+				cfg.apiUrl || `http://localhost:${cfg.backendPort}`
+			);
+			cfg.uiUrl = await promptPublicUrl(
+				'Public URL of the Plum UI (frontend)',
+				cfg.uiUrl || `http://localhost:${cfg.frontendPort}`
+			);
+		} else {
+			cfg.apiUrl = `http://localhost:${cfg.backendPort}`;
+			cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
+		}
+
 		const headless = await clack.confirm({
 			message: 'Run browsers headless?',
 			initialValue: cfg.headless
 		});
 		if (clack.isCancel(headless)) cancelAndExit();
 		cfg.headless = headless;
-
-		const backendPort = await clack.text({
-			message: 'Backend port',
-			placeholder: String(cfg.backendPort),
-			defaultValue: String(cfg.backendPort)
-		});
-		if (clack.isCancel(backendPort)) cancelAndExit();
-		cfg.backendPort = backendPort || cfg.backendPort;
-
-		const frontendPort = await clack.text({
-			message: 'Frontend (UI) port',
-			placeholder: String(cfg.frontendPort),
-			defaultValue: String(cfg.frontendPort)
-		});
-		if (clack.isCancel(frontendPort)) cancelAndExit();
-		cfg.frontendPort = frontendPort || cfg.frontendPort;
-
-		const defaultApiUrl = `http://localhost:${cfg.backendPort}`;
-		const apiUrl = await clack.text({
-			message: 'Public URL for the API (only if reverse-proxying behind a domain)',
-			placeholder: cfg.apiUrl || defaultApiUrl,
-			defaultValue: cfg.apiUrl || defaultApiUrl
-		});
-		if (clack.isCancel(apiUrl)) cancelAndExit();
-		cfg.apiUrl = apiUrl || defaultApiUrl;
-
-		const defaultUiUrl = `http://localhost:${cfg.frontendPort}`;
-		const uiUrl = await clack.text({
-			message: 'Public URL for the UI (only if reverse-proxying behind a domain)',
-			placeholder: cfg.uiUrl || defaultUiUrl,
-			defaultValue: cfg.uiUrl || defaultUiUrl
-		});
-		if (clack.isCancel(uiUrl)) cancelAndExit();
-		cfg.uiUrl = uiUrl || defaultUiUrl;
 	} else {
+		if (!cfg.mode) cfg.mode = 'local';
 		if (!cfg.apiUrl) cfg.apiUrl = `http://localhost:${cfg.backendPort}`;
 		if (!cfg.uiUrl) cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
 	}
@@ -371,6 +435,20 @@ async function runFirstUserSetup(apiBase, uiUrl) {
 	}
 }
 
+// Frees the backend/frontend host ports before `docker compose up`, so a stale
+// process on one of them can't fail the whole stack with a bind error. Only
+// runs when the user opted into it during setup (cfg.clearPorts).
+async function clearServerPorts(cfg) {
+	const { findPidOnPort, killPort } = runnerProcessLib();
+	for (const port of [cfg.backendPort, cfg.frontendPort]) {
+		const p = Number(port);
+		if (findPidOnPort(p)) {
+			clack.log.step(`Freeing port ${port}…`);
+			await killPort(p);
+		}
+	}
+}
+
 // docker compose failures (port conflicts, daemon not running, etc.) must not
 // crash the process with a raw stack trace — that would abort serverStart()
 // before it ever reaches the first-user prompt, with no indication why.
@@ -401,6 +479,8 @@ async function serverStart() {
 	const cfg = await configureServer({ force: false });
 	applyServerConfig(cfg);
 	clack.log.info(`UI: ${pc.cyan(cfg.uiUrl)}`);
+
+	if (cfg.clearPorts) await clearServerPorts(cfg);
 
 	if (!runDockerComposeUp(cfg)) {
 		clack.outro(pc.red('Plum did not start.'));
@@ -623,9 +703,10 @@ async function configureNode({ force, name: nameArg }) {
 			!name &&
 			!anyFlags(args, ['--primary', '--url', '--port', '--token', '--browser']));
 
+	// Name first, so the saved config for that name can seed the other defaults.
 	if (!name && interactive) {
 		const v = await clack.text({
-			message: 'Runner name',
+			message: 'Node name or alias — call it whatever you like',
 			placeholder: 'node-1',
 			defaultValue: 'node-1'
 		});
@@ -636,6 +717,7 @@ async function configureNode({ force, name: nameArg }) {
 
 	const saved = loadNodeByName(name);
 
+	let mode = getFlag(args, '--mode') ?? saved.mode ?? 'local';
 	let primary = getFlag(args, '--primary') ?? process.env.PRIMARY_URL ?? saved.primary ?? '';
 	// Not 3001 — that's the primary's default; a co-located node must not collide.
 	let port = getFlag(args, '--port') ?? saved.port ?? '3002';
@@ -644,32 +726,59 @@ async function configureNode({ force, name: nameArg }) {
 	let url = getFlag(args, '--url') ?? saved.url ?? '';
 
 	if (interactive) {
-		const primaryVal = await clack.text({
-			message: 'Your Plum server backend URL',
-			placeholder: primary || 'http://localhost:3001',
-			defaultValue: primary
+		const modeVal = await clack.select({
+			message: 'Is this node for a production / network setup, or this local machine?',
+			options: [
+				{ value: 'production', label: 'Production / Network' },
+				{ value: 'local', label: 'Local machine' }
+			],
+			initialValue: mode === 'production' ? 'production' : 'local'
 		});
-		if (clack.isCancel(primaryVal)) cancelAndExit();
-		primary = primaryVal || primary;
+		if (clack.isCancel(modeVal)) cancelAndExit();
+		mode = modeVal;
+
+		if (mode === 'production') {
+			primary = await promptPublicUrl(
+				'Plum server backend URL or IP address (include the port)',
+				primary || 'https://plum.example.com'
+			);
+		} else {
+			const bp = await clack.text({
+				message:
+					'Port your Plum backend runs on (default 3001 — if you changed it or are unsure, ' +
+					'run `docker compose ps` or check Docker Desktop on the server machine)',
+				placeholder: '3001',
+				defaultValue: '3001'
+			});
+			if (clack.isCancel(bp)) cancelAndExit();
+			primary = `http://localhost:${(bp || '3001').trim()}`;
+		}
 
 		const portVal = await clack.text({
-			message: 'Local port this Plum node listens on',
+			message:
+				'Port this node will listen on — it runs there, and any process already using ' +
+				'that port is stopped when the node starts',
 			placeholder: port,
 			defaultValue: port
 		});
 		if (clack.isCancel(portVal)) cancelAndExit();
-		port = portVal || port;
+		port = (portVal || port).trim();
 
-		const defaultUrl = url || `http://${detectLanIp()}:${port}`;
-		const urlVal = await clack.text({
-			message: 'The URL your Plum server calls to reach this node',
-			placeholder: defaultUrl,
-			defaultValue: defaultUrl
-		});
-		if (clack.isCancel(urlVal)) cancelAndExit();
-		url = urlVal || defaultUrl;
+		if (mode === 'production') {
+			url = await promptPublicUrl(
+				'URL your Plum server uses to reach this node (e.g. https://node-1.example.com)',
+				url && !url.includes('host.docker.internal') ? url : 'https://node-1.example.com'
+			);
+		} else {
+			// The local primary runs in Docker; it reaches a host-side node via
+			// host.docker.internal, not localhost.
+			url = `http://host.docker.internal:${port}`;
+			clack.log.info(`This node will register with the server as ${pc.cyan(url)}`);
+		}
 	}
 
+	// Flag-driven path with no --url: keep the LAN-IP guess (interactive mode
+	// has already set `url` explicitly above).
 	if (!url) url = `http://${detectLanIp()}:${port}`;
 
 	if (!VALID_BROWSERS.includes(browser)) {
@@ -680,6 +789,7 @@ async function configureNode({ force, name: nameArg }) {
 	saveNodeByName(name, {
 		id: saved.id ?? null,
 		name,
+		mode,
 		url,
 		token,
 		primary,
@@ -688,7 +798,7 @@ async function configureNode({ force, name: nameArg }) {
 		pid: saved.pid ?? null
 	});
 	globalRegistryLib().registerInstall('node', nodeHome(name));
-	return { primary, port, browser, token, name, url };
+	return { primary, port, browser, token, name, url, mode };
 }
 
 async function registerNode({ primary, name, url, token, browser, port }) {
@@ -725,7 +835,7 @@ async function registerNode({ primary, name, url, token, browser, port }) {
 }
 
 // Register a node with the primary and start its process here — this is the one
-// path both `plum node start` and manage-runners' "Add new runner" run.
+// path both `plum node start` and manage-nodes' "Add new node" run.
 async function bringNodeUp(cfg) {
 	const { prepareEnv, startNode, findPidOnPort, killPort, nodeReachable } = runnerProcessLib();
 
@@ -773,7 +883,7 @@ async function bringNodeUp(cfg) {
 }
 
 async function nodeStart({ reconfig, name }) {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Runner  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node  ')));
 	migrateLegacyNodes();
 	const cfg = await configureNode({ force: reconfig, name });
 	await bringNodeUp(cfg);
@@ -917,8 +1027,8 @@ function readRunnerTokenFromPrimary() {
 	return null;
 }
 
-async function openManageRunnersMenu(primaryUrl) {
-	const manageScript = path.join(plumRoot, 'backend', 'scripts', 'manage-runners.mjs');
+async function openManageNodesMenu(primaryUrl) {
+	const manageScript = path.join(plumRoot, 'backend', 'scripts', 'manage-nodes.mjs');
 	const apiUrl = primaryUrl || 'http://localhost:3001';
 	const env = { ...process.env, PLUM_API_URL: apiUrl };
 	if (!env.PLUM_RUNNER_TOKEN) {
@@ -1059,7 +1169,7 @@ switch (command) {
 					'   ```bash',
 					'   plum start',
 					'   ```',
-					'   On first run, Plum asks you to create an admin account. Then open **http://localhost:5173** and sign in.',
+					'   On first run, Plum asks you to create an admin account. Then open **http://localhost:3002** and sign in.',
 					'',
 					'---',
 					'',
@@ -1075,7 +1185,7 @@ switch (command) {
 					'| `plum server reconfig` | Change server URL/ports without starting |',
 					'| `plum stop` | Stop the server |',
 					'| `plum create-step` | Interactively generate a new step definition |',
-					'| `plum node start <name>` | Register a runner node and start it here |',
+					'| `plum node start <name>` | Register a node and start it here |',
 					'| `plum node list` | List this machine’s nodes |',
 					'',
 					'---',
@@ -1201,14 +1311,14 @@ switch (command) {
 
 	case 'start':
 		console.log(
-			`\nSpecify what to start:\n  ${pc.cyan('plum server start')}   — start the web UI stack (Docker)\n  ${pc.cyan('plum node start')}     — start a runner node\n`
+			`\nSpecify what to start:\n  ${pc.cyan('plum server start')}   — start the web UI stack (Docker)\n  ${pc.cyan('plum node start')}     — start a node\n`
 		);
 		process.exit(1);
 		break;
 
 	case 'restart':
 		console.log(
-			`\nSpecify what to restart:\n  ${pc.cyan('plum server restart')}  — rebuild and restart the server\n  ${pc.cyan('plum node restart')}    — restart the runner node\n`
+			`\nSpecify what to restart:\n  ${pc.cyan('plum server restart')}  — rebuild and restart the server\n  ${pc.cyan('plum node restart')}    — restart the node\n`
 		);
 		process.exit(1);
 		break;
@@ -1309,7 +1419,7 @@ switch (command) {
 
 	case 'stop':
 		console.log(
-			`\nSpecify what to stop:\n  ${pc.cyan('plum server stop')}    — stop the web UI stack\n  ${pc.cyan('plum node stop')}      — stop the runner node\n`
+			`\nSpecify what to stop:\n  ${pc.cyan('plum server stop')}    — stop the web UI stack\n  ${pc.cyan('plum node stop')}      — stop the node\n`
 		);
 		process.exit(1);
 		break;
@@ -1329,7 +1439,7 @@ switch (command) {
 					'  delete <name>    stop it, delete its config, unregister it from the primary',
 					'  reconfig [name]  re-enter settings and re-register, without starting',
 					'',
-					'  Options for start: --primary <url> --url <url> --port <n> --token <s> --browser <chromium|firefox>',
+					'  Options for start: --mode <local|production> --primary <url> --url <url> --port <n> --token <s> --browser <chromium|firefox>',
 					''
 				].join('\n')
 			);
@@ -1368,7 +1478,7 @@ switch (command) {
 		break;
 	}
 
-	case 'manage-runners': {
+	case 'manage-nodes': {
 		const { listNodeNames, loadNodeByName } = nodeRegisterLib();
 		const firstNode = listNodeNames()
 			.map(loadNodeByName)
@@ -1378,7 +1488,7 @@ switch (command) {
 			process.env.PLUM_API_URL ??
 			firstNode?.primary ??
 			'http://localhost:3001';
-		await openManageRunnersMenu(primaryUrl);
+		await openManageNodesMenu(primaryUrl);
 		break;
 	}
 
@@ -1415,8 +1525,9 @@ switch (command) {
 		console.log('  init                 Set up a new Plum project');
 		console.log('  server start         Start the full UI stack (interactive)');
 		console.log('    --headless <bool>  Run browsers headless (true/false)');
+		console.log('    --mode <m>         local | production (default: local)');
 		console.log('    --backend-port <n> Host port for the backend/API (default: 3001)');
-		console.log('    --frontend-port <n> Host port for the UI (default: 5173)');
+		console.log('    --frontend-port <n> Host port for the UI (default: 3002)');
 		console.log(
 			'    --api-url <url>    Public URL for the API (only if reverse-proxying; default: http://localhost:<backend-port>)'
 		);
@@ -1430,10 +1541,11 @@ switch (command) {
 			'  update               Update Plum and restart whichever is running (server/node)'
 		);
 		console.log('  node start [name]    Register a node with the primary and start it here');
+		console.log('    --mode <m>         local | production (default: local)');
 		console.log('    --primary <url>    Primary Plum server to register with');
-		console.log('    --url <url>        Address the primary calls back (default: <lan-ip>:<port>;');
+		console.log('    --url <url>        Address the primary calls back (default, local mode:');
 		console.log(
-			'                       pass a domain like https://node1.example behind a TLS proxy)'
+			'                       http://host.docker.internal:<port>; production: pass a domain)'
 		);
 		console.log('    --port <n>         Local HTTP port the node listens on (default: 3002)');
 		console.log('    --token <secret>   Auth token (auto-generated + saved if omitted)');
@@ -1447,7 +1559,7 @@ switch (command) {
 		console.log(
 			'  node reconfig [name] Re-enter a node’s settings and re-register, without starting'
 		);
-		console.log('  manage-runners       Open the runner management menu');
+		console.log('  manage-nodes         Open the node management menu');
 		console.log(
 			'    --primary <url>    Primary server URL (default: saved config or localhost:3001)'
 		);

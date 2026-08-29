@@ -16,7 +16,7 @@
 ## Requirements
 
 - [Node.js](https://nodejs.org) v18 or higher
-- [Docker](https://www.docker.com) — required for `plum server start` (the web UI stack). Runner nodes (`plum node start`) run as a plain Node process and **do not need Docker**.
+- [Docker](https://www.docker.com) — required for `plum server start` (the web UI stack). Nodes (`plum node start`) run as a plain Node process and **do not need Docker**.
 
 ---
 
@@ -42,7 +42,7 @@ plum run-test
 plum server start
 ```
 
-Open **http://localhost:5173** and sign in with the account you create on first start.
+On first start, Plum asks whether you're setting up on a **local machine** or a **production / network server**, and whether to use the default ports (backend `3001`, frontend `3002`). Then open **http://localhost:3002** and sign in with the account you create.
 
 ### For contributors
 
@@ -53,7 +53,7 @@ npm run init        # installs all monorepo dependencies
 npm run docker:up   # builds and starts the full stack
 ```
 
-The UI is available at **http://localhost:5173**. The frontend dev server runs outside Docker for fast HMR — see the **Development** section below.
+The UI is available at **http://localhost:3002**. For fast HMR while developing the frontend, run the Vite dev server outside Docker (`http://localhost:5173`) — see the **Development** section below.
 
 ---
 
@@ -71,7 +71,7 @@ Full documentation is available at:
 | [Running Tests Locally](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/running-tests-locally-GGhFcqaAQ8)       | `plum run-test` flags, parallel runs, debugging tips          |
 | [Retrying Flaky Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/retrying-flaky-tests-NXwRF5SXru)         | Auto-retry failed scenarios, global setting, report badges    |
 | [Setting Up the Server](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-the-server-vj0Ab1kJVs)       | Production server setup, reverse proxy (Nginx/Caddy), Docker  |
-| [Setting Up Nodes](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-nodes-dtmekJGJia)                 | Runner nodes, systemd service, managing nodes                 |
+| [Setting Up Nodes](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-nodes-dtmekJGJia)                 | Nodes, systemd service, managing nodes                        |
 | [Integrations](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/integrations-qfiqfmdP0j)                         | Discord & Slack webhook notifications, CI/external triggers   |
 | [Backup](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/backup-RNNObJfct9)                                     | Backup strategy                                               |
 
@@ -87,7 +87,7 @@ Full documentation is available at:
 | `plum server stop`            | Stop the server (data preserved)                                                              |
 | `plum server reconfig`        | Re-enter server settings without starting                                                     |
 | `plum update`                 | Update Plum, then restart every registered server and node on this machine (asks before each) |
-| `plum node start [name]`      | Register a runner node with the server and start it on this machine                           |
+| `plum node start [name]`      | Register a node with the server and start it on this machine                                  |
 | `plum node list`              | List this machine's nodes and their status                                                    |
 | `plum node restart [name]`    | Stop, refresh dependencies, and restart a node                                                |
 | `plum node stop [name]`       | Stop a node                                                                                   |
@@ -100,7 +100,7 @@ Full documentation is available at:
 | `plum run-test --help`        | Show usage for `run-test`                                                                     |
 | `plum create-step`            | Interactively scaffold a new step definition                                                  |
 | `plum create-test`            | Interactively scaffold a full feature (`.feature` + Page + Steps)                             |
-| `plum manage-runners`         | Open the interactive runner management menu                                                   |
+| `plum manage-nodes`           | Open the interactive node management menu                                                     |
 
 ---
 
@@ -133,7 +133,7 @@ npm test -- @TC-001          # run a specific scenario
 npm test -- --parallel 4     # run in parallel
 npm run create-step          # scaffold a step definition
 npm run create-test          # scaffold a full test from template
-npm run manage-runners       # open the runner management menu
+npm run manage-nodes         # open the node management menu
 ```
 
 ### Test file locations

@@ -19,8 +19,11 @@ const CONFIG_FILENAME = '.plum-server.json';
 function defaults() {
 	return {
 		headless: false,
+		// 'local' (localhost URLs, derived automatically) or 'production'
+		// (operator supplies the public API/UI URLs).
+		mode: 'local',
 		backendPort: '3001',
-		frontendPort: '5173',
+		frontendPort: '3002',
 		// Public URLs the browser actually uses. Left blank until the user sets
 		// them (e.g. behind a reverse proxy) — resolved to a localhost default
 		// at the call site otherwise.
@@ -56,10 +59,10 @@ function loadServerConfig(dir) {
 }
 
 function saveServerConfig(dir, cfg) {
-	const { headless, backendPort, frontendPort, apiUrl, uiUrl } = cfg;
+	const { headless, mode, backendPort, frontendPort, apiUrl, uiUrl } = cfg;
 	fs.writeFileSync(
 		configPath(dir),
-		JSON.stringify({ headless, backendPort, frontendPort, apiUrl, uiUrl }, null, 2) + '\n',
+		JSON.stringify({ headless, mode, backendPort, frontendPort, apiUrl, uiUrl }, null, 2) + '\n',
 		'utf8'
 	);
 }
