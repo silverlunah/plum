@@ -7,6 +7,24 @@ const express = require('express');
 const router = express.Router();
 const { jwtAuth } = require('../middleware/jwtAuth');
 const testRunService = require('../services/testRunService');
+const exportService = require('../services/exportService');
+const { sendExport, exportFormat } = require('../lib/exportResponse');
+
+router.get('/:id/export', jwtAuth, async (req, res, next) => {
+	try {
+		const data = await exportService.buildTestCaseExport('run', { runId: req.params.id });
+		if (!data) return res.status(404).json({ error: 'Test run not found' });
+		await sendExport(res, {
+			format: exportFormat(req),
+			filenameBase: `run-${data.run?.title ?? req.params.id}`,
+			json: () => data,
+			csv: () => exportService.testCaseCsv(data),
+			xlsx: () => exportService.testCaseXlsx(data)
+		});
+	} catch (e) {
+		next(e);
+	}
+});
 
 router.get('/', jwtAuth, async (req, res, next) => {
 	try {

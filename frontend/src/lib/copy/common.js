@@ -26,6 +26,16 @@ export const SLACK_LABEL = 'Slack';
 export const EMAIL_LABEL = 'Email';
 export const PASSWORD_LABEL = 'Password';
 
+export const EXPORT_LABEL = 'Export';
+export const EXPORTING_LABEL = 'Exporting…';
+export const EXPORT_MENU_ITEMS = [
+	{ id: 'xlsx', label: 'Excel', hint: 'One sheet per suite' },
+	{ id: 'csv', label: 'CSV', hint: 'One flat table' },
+	{ id: 'json', label: 'JSON', hint: 'Structured — re-importable' }
+];
+export const exportFailedToast = (what) => `Could not export ${what}.`;
+export const exportedToast = (what) => `${what} exported.`;
+
 export const CLEAR_SEARCH_LABEL = 'Clear search';
 export const SORT_BY_LABEL = 'Sort by';
 export const LOADING_LABEL = 'Loading…';

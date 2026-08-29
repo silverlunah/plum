@@ -5,6 +5,7 @@
 
 import { API_BASE, REPO_PAGE_SIZE } from '$lib/constants';
 import { auth } from '$lib/stores/auth';
+import { downloadFromEndpoint } from '$lib/utils/download';
 
 function getToken() {
 	return auth.getToken();
@@ -241,4 +242,31 @@ export async function migratePrefixes({ testCasePrefix, testSuitePrefix }) {
 		body: JSON.stringify({ testCasePrefix, testSuitePrefix })
 	});
 	return res.json();
+}
+
+// ── Export / import ──────────────────────────────────────────────────────────
+
+function testCaseExportUrl(scope, id, format) {
+	const q = `?format=${format}`;
+	if (scope === 'suite') return `${API_BASE}/test-suites/${id}/export${q}`;
+	if (scope === 'run') return `${API_BASE}/test-runs/${id}/export${q}`;
+	return `${API_BASE}/test-suites/export${q}`;
+}
+
+export async function downloadTestCaseExport(scope, id, format) {
+	await downloadFromEndpoint(testCaseExportUrl(scope, id, format), {
+		headers: { Authorization: `Bearer ${getToken()}` },
+		fallbackName: `test-cases.${format}`
+	});
+}
+
+export async function importTestCases(payload) {
+	const res = await fetch(`${API_BASE}/test-cases/import`, {
+		method: 'POST',
+		headers: authHeaders(),
+		body: JSON.stringify(payload)
+	});
+	const data = await res.json();
+	if (!res.ok) throw new Error(data.error ?? 'Import failed');
+	return data;
 }

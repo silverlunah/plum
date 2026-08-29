@@ -6,6 +6,25 @@
 const express = require('express');
 const router = express.Router();
 const reportService = require('../services/reportService');
+const exportService = require('../services/exportService');
+const { sendExport, exportFormat } = require('../lib/exportResponse');
+
+router.get('/:id/export', async (req, res, next) => {
+	const id = parseInt(req.params.id, 10);
+	if (isNaN(id)) return res.status(400).json({ error: 'Invalid report id' });
+	try {
+		const data = await exportService.buildReportExport(id);
+		if (!data) return res.status(404).json({ error: 'Report not found' });
+		await sendExport(res, {
+			format: exportFormat(req),
+			filenameBase: `report-${id}`,
+			json: () => data,
+			csv: () => exportService.reportCsv(data)
+		});
+	} catch (e) {
+		next(e);
+	}
+});
 
 router.get('/', async (req, res) => {
 	try {
