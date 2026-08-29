@@ -146,9 +146,7 @@ function cancelAndExit() {
 
 const VALID_BROWSERS = ['chromium', 'firefox'];
 
-// Re-prompts until the answer carries an http:// or https:// scheme. Used for
-// the production-mode public API/UI URLs, where a bare host:port silently
-// breaks link generation and CORS.
+// A bare host:port silently breaks link generation and CORS, so require a scheme.
 async function promptPublicUrl(message, initial) {
 	for (;;) {
 		const v = await clack.text({
@@ -163,9 +161,7 @@ async function promptPublicUrl(message, initial) {
 	}
 }
 
-// Asks for a port. If something is already listening there, offers to free it
-// on start; `onFree()` is called when the user agrees so the caller can add the
-// port to its kill list.
+// onFree() fires when the user agrees to free an in-use port — lets the caller flag it for clearing.
 async function promptPort(message, initial, onFree) {
 	const { findPidOnPort } = runnerProcessLib();
 	for (;;) {
@@ -435,9 +431,8 @@ async function runFirstUserSetup(apiBase, uiUrl) {
 	}
 }
 
-// Frees the backend/frontend host ports before `docker compose up`, so a stale
-// process on one of them can't fail the whole stack with a bind error. Only
-// runs when the user opted into it during setup (cfg.clearPorts).
+// A stale process on the backend/frontend port fails the whole stack with a
+// bind error — clear it before `docker compose up`.
 async function clearServerPorts(cfg) {
 	const { findPidOnPort, killPort } = runnerProcessLib();
 	for (const port of [cfg.backendPort, cfg.frontendPort]) {
@@ -703,7 +698,7 @@ async function configureNode({ force, name: nameArg }) {
 			!name &&
 			!anyFlags(args, ['--primary', '--url', '--port', '--token', '--browser']));
 
-	// Name first, so the saved config for that name can seed the other defaults.
+	// Name first — the saved config for that name seeds the other defaults.
 	if (!name && interactive) {
 		const v = await clack.text({
 			message: 'Node name or alias — call it whatever you like',
@@ -770,15 +765,14 @@ async function configureNode({ force, name: nameArg }) {
 				url && !url.includes('host.docker.internal') ? url : 'https://node-1.example.com'
 			);
 		} else {
-			// The local primary runs in Docker; it reaches a host-side node via
+			// Local primary runs in Docker — it reaches a host node via
 			// host.docker.internal, not localhost.
 			url = `http://host.docker.internal:${port}`;
 			clack.log.info(`This node will register with the server as ${pc.cyan(url)}`);
 		}
 	}
 
-	// Flag-driven path with no --url: keep the LAN-IP guess (interactive mode
-	// has already set `url` explicitly above).
+	// Flag path with no --url: fall back to the LAN-IP guess (interactive already set it).
 	if (!url) url = `http://${detectLanIp()}:${port}`;
 
 	if (!VALID_BROWSERS.includes(browser)) {

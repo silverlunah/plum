@@ -299,7 +299,7 @@ async function addNode() {
 		if (cancelled(url)) return;
 		url = String(url).trim().replace(/\/+$/, '');
 	} else {
-		// The primary runs in Docker; it reaches a host-side node via
+		// Local primary runs in Docker — it reaches a host node via
 		// host.docker.internal, not localhost.
 		url = `http://host.docker.internal:${port}`;
 	}
