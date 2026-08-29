@@ -15,7 +15,7 @@
 
 ## Requirements
 
-- [Node.js](https://nodejs.org) v18 or higher
+- [Node.js](https://nodejs.org) v20.12 or higher (Node 22 LTS recommended)
 - [Docker](https://www.docker.com) — required for `plum server start` (the web UI stack). Nodes (`plum node start`) run as a plain Node process and **do not need Docker**.
 
 ---
