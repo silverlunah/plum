@@ -10,7 +10,7 @@ const { AUTH_SCHEME } = require('../lib/authHeader');
 
 /**
  * Accepts either a logged-in admin (web Settings UI) or any currently-registered
- * runner's own token (manage-runners.mjs and node self-registration have no
+ * runner's own token (manage-nodes.mjs and node self-registration have no
  * browser session/JWT to present, but every runner already has a token
  * generated at registration — reuse it instead of a second credential).
  */

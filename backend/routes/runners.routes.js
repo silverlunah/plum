@@ -10,7 +10,7 @@ const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireAdmin } = require('../middleware/requireAdmin');
 const { runnerOrAdmin } = require('../middleware/runnerOrAdmin');
 
-// List/create are hit by headless CLI tools (manage-runners.mjs, node
+// List/create are hit by headless CLI tools (manage-nodes.mjs, node
 // self-registration) with no session to present — same as before the
 // runner-management routes were locked down. The response never includes
 // runner tokens (toPublicRunner strips them), so listing isn't a secret leak.

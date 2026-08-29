@@ -40,7 +40,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - '${FRONTEND_PORT:-5173}:5173'
+      - '${FRONTEND_PORT:-3002}:5173'
     depends_on:
       - backend
     networks:
