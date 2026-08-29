@@ -12,8 +12,7 @@ const { sendExport, exportFormat } = require('../lib/exportResponse');
 
 const testCaseRenderers = (data) => ({
 	json: () => data,
-	csv: () => exportService.testCaseCsv(data),
-	xlsx: () => exportService.testCaseXlsx(data)
+	csv: () => exportService.testCaseCsv(data)
 });
 
 router.get('/export', jwtAuth, async (req, res, next) => {

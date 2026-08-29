@@ -11,14 +11,10 @@ const slug = (s) =>
 
 const CONTENT_TYPE = {
 	json: 'application/json; charset=utf-8',
-	csv: 'text/csv; charset=utf-8',
-	xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+	csv: 'text/csv; charset=utf-8'
 };
 
-const exportFormat = (req) => {
-	const f = String(req.query.format).toLowerCase();
-	return f === 'csv' || f === 'xlsx' ? f : 'json';
-};
+const exportFormat = (req) => (String(req.query.format).toLowerCase() === 'csv' ? 'csv' : 'json');
 
 /**
  * Renders and sends one of `renderers` (keyed by format) as a downloadable
