@@ -9,6 +9,7 @@
 	import { fetchSuites, createSuite, deleteSuite, searchRepository } from '$lib/api/repository';
 	import { fetchRuns, createRun, duplicateRun, deleteRun } from '$lib/api/repository';
 	import { downloadTestCaseExport } from '$lib/api/repository';
+	import { auth } from '$lib/stores/auth';
 	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
 	import { exportFailedToast, exportedToast } from '$lib/copy/common';
 	import {
@@ -445,7 +446,9 @@
 	</div>
 	<div class="header-actions">
 		{#if tab === 'suites'}
-			<a class="import-link" href={IMPORT_TEST_CASES_HREF}>{IMPORT_TEST_CASES_LINK}</a>
+			{#if $auth.user?.role === 'admin'}
+				<a class="import-link" href={IMPORT_TEST_CASES_HREF}>{IMPORT_TEST_CASES_LINK}</a>
+			{/if}
 			<ExportMenu busy={exporting} on:select={(e) => handleExport(e.detail)} />
 			<Button on:click={() => (suiteModalOpen = true)}>{NEW_SUITE_LABEL}</Button>
 		{:else}
@@ -900,10 +903,10 @@
 		color: var(--text-muted);
 		text-decoration: none;
 		white-space: nowrap;
+		transition: color var(--duration-fast) var(--ease-out);
 	}
 	.import-link:hover {
-		color: var(--accent);
-		text-decoration: underline;
+		color: var(--text);
 	}
 
 	/* ── Tabs ── */
