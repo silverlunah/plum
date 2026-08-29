@@ -69,6 +69,17 @@ export const builtInEnabled = writable(true);
 export const reportsVersion = writable(0);
 export const runsVersion = writable(0);
 
+// crypto.randomUUID exists only in a secure context — a production install
+// served over plain http:// on a bare IP doesn't get it. getRandomValues does.
+function newRunId() {
+	if (crypto.randomUUID) return crypto.randomUUID();
+	const b = crypto.getRandomValues(new Uint8Array(16));
+	b[6] = (b[6] & 0x0f) | 0x40;
+	b[8] = (b[8] & 0x3f) | 0x80;
+	const hex = [...b].map((n) => n.toString(16).padStart(2, '0')).join('');
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 // Enqueues a run and returns its id so the caller can navigate to /live/<id>.
 // The run stays `queued` until every runner it targets is free.
 export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
@@ -77,7 +88,7 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 
 	const { workers, testID, browser, selectedRunners } = get(runnerConfig);
 	const tag = (id !== undefined ? id : testID).trim().replace(/\sOR\s/gi, (m) => m.toLowerCase());
-	const runId = crypto.randomUUID();
+	const runId = newRunId();
 	const startedBy = get(auth).user?.name ?? null;
 
 	backgroundRuns.update((r) => ({
