@@ -13,19 +13,22 @@
 		fetchAllSuitesWithCases,
 		recordEntryResult,
 		assignEntry,
-		fetchMembers
+		fetchMembers,
+		downloadTestCaseExport
 	} from '$lib/api/repository';
 	import { runsVersion } from '$lib/stores/runner';
 	import { auth } from '$lib/stores/auth';
 	import Button from '$lib/components/ui/Button.svelte';
+	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
+	import { exportFailedToast, exportedToast } from '$lib/copy/common';
+	import { EXPORT_RUN_WHAT } from '$lib/copy/repository';
 	import Modal from '$lib/components/ui/Modal.svelte';
-	import Toast from '$lib/components/ui/Toast.svelte';
+	import { notify } from '$lib/stores/notifications';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import AutomatedBadge from '$lib/components/ui/AutomatedBadge.svelte';
 	import PriorityBadge from '$lib/components/ui/PriorityBadge.svelte';
 	import CaseIdChip from '$lib/components/ui/CaseIdChip.svelte';
 	import ResultChip from '$lib/components/ui/ResultChip.svelte';
-	import { TOAST_TIMEOUT_MS } from '$lib/constants';
 	import { CANCEL_LABEL, SAVE_LABEL, SAVING_LABEL, LOADING_LABEL } from '$lib/copy/common';
 	import {
 		TEST_REPOSITORY_BREADCRUMB,
@@ -82,7 +85,6 @@
 	let suites = [];
 	let members = [];
 	let loading = true;
-	let toast = null;
 	let saving = false;
 	let executing = false;
 	let assigning = null;
@@ -151,9 +153,17 @@
 		expandedExecEntries = new Set(expandedExecEntries);
 	}
 
-	function showToast(type, message) {
-		toast = { type, message };
-		setTimeout(() => (toast = null), TOAST_TIMEOUT_MS);
+	let exporting = false;
+	async function handleExport(format) {
+		exporting = true;
+		try {
+			await downloadTestCaseExport('run', run.id, format);
+			notify('success', exportedToast(EXPORT_RUN_WHAT));
+		} catch {
+			notify('error', exportFailedToast('this run'));
+		} finally {
+			exporting = false;
+		}
 	}
 
 	onMount(async () => {
@@ -166,7 +176,7 @@
 			expandedSuites = new Set(suites.map((s) => s.id));
 			if (run.status === 'in-progress') mode = 'execute';
 		} catch (e) {
-			showToast('error', FAILED_TO_LOAD_DATA);
+			notify('error', FAILED_TO_LOAD_DATA);
 		} finally {
 			loading = false;
 		}
@@ -185,7 +195,7 @@
 				)
 			};
 		} catch (e) {
-			showToast('error', e.message);
+			notify('error', e.message);
 		} finally {
 			assigning = null;
 		}
@@ -234,7 +244,7 @@
 			run = await fetchRun(runId);
 		} catch (e) {
 			run = previous;
-			showToast('error', FAILED_TO_ADD_CASE);
+			notify('error', FAILED_TO_ADD_CASE);
 		}
 	}
 
@@ -248,9 +258,9 @@
 			const updated = await updateRun(runId, editRunForm);
 			run = { ...run, ...updated };
 			editRunOpen = false;
-			showToast('success', RUN_UPDATED_TOAST);
+			notify('success', RUN_UPDATED_TOAST);
 		} catch (e) {
-			showToast('error', e.message);
+			notify('error', e.message);
 		} finally {
 			editRunSaving = false;
 		}
@@ -262,9 +272,9 @@
 			const caseIds = run.entries.map((e) => e.case.id);
 			const updated = await updateRun(runId, { caseIds });
 			run = await fetchRun(runId);
-			showToast('success', RUN_SAVED_TOAST);
+			notify('success', RUN_SAVED_TOAST);
 		} catch (e) {
-			showToast('error', e.message);
+			notify('error', e.message);
 		} finally {
 			saving = false;
 		}
@@ -287,7 +297,7 @@
 			};
 			entryNote = '';
 		} catch (e) {
-			showToast('error', e.message);
+			notify('error', e.message);
 		} finally {
 			executingEntryId = null;
 		}
@@ -300,7 +310,7 @@
 			mode = 'build';
 			runsVersion.update((v) => v + 1);
 		} catch (e) {
-			showToast('error', e.message);
+			notify('error', e.message);
 		}
 	}
 
@@ -309,9 +319,9 @@
 			await updateRun(runId, { status: 'complete' });
 			run = { ...run, status: 'complete' };
 			runsVersion.update((v) => v + 1);
-			showToast('success', RUN_MARKED_COMPLETE_TOAST);
+			notify('success', RUN_MARKED_COMPLETE_TOAST);
 		} catch (e) {
-			showToast('error', e.message);
+			notify('error', e.message);
 		}
 	}
 
@@ -321,9 +331,9 @@
 			run = { ...run, status: 'backlog' };
 			mode = 'build';
 			runsVersion.update((v) => v + 1);
-			showToast('success', RUN_REOPENED_TOAST);
+			notify('success', RUN_REOPENED_TOAST);
 		} catch (e) {
-			showToast('error', e.message);
+			notify('error', e.message);
 		}
 	}
 
@@ -359,8 +369,6 @@
 </script>
 
 <svelte:head><title>{runDetailTitle(run)}</title></svelte:head>
-
-<Toast {toast} />
 
 <Modal bind:open={editRunOpen} title={EDIT_RUN_MODAL_TITLE}>
 	<div class="form-fields">
@@ -414,6 +422,7 @@
 			</button>
 		</div>
 		<div class="run-header-actions">
+			<ExportMenu busy={exporting} on:select={(e) => handleExport(e.detail)} />
 			{#if isLocked}
 				<Button variant="ghost" on:click={handleReopenRun}>{REOPEN_LABEL}</Button>
 			{:else if mode === 'build'}

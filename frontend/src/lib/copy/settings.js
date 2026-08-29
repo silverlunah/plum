@@ -19,6 +19,21 @@ export const PROJECT_LABEL = 'Project';
 export const RUNNERS_LABEL = 'Runners';
 export const REPOSITORY_NAV_LABEL = 'Repository';
 export const REPOSITORY_HEADING = 'Test Repository';
+export const TEST_CASES_NAV_LABEL = 'Test Cases';
+export const TEST_CASES_HEADING = 'Test Cases';
+export const TEST_CASES_DESC = 'Bring test cases in from a Plum export file.';
+export const TC_IMPORT_CARD_TITLE = 'Import';
+export const TC_IMPORT_DESC =
+	'Upload a JSON file exported from Test Repository. Suites and cases are added as new records.';
+export const TC_IMPORT_HINT =
+	'A case is skipped when its ID already exists here. Cases with a different prefix or no ID are imported with a fresh ID.';
+export const TC_IMPORT_FAILED_FALLBACK = 'Could not read that file.';
+export const tcImportLabel = (importing) => (importing ? 'Importing…' : 'Import');
+export const tcImportSummary = ({ importedCases, importedSuites, skippedCases, skippedSuites }) => {
+	const imported = `Imported ${importedCases} ${importedCases === 1 ? 'case' : 'cases'} in ${importedSuites} ${importedSuites === 1 ? 'suite' : 'suites'}`;
+	const skipped = skippedCases + skippedSuites;
+	return skipped > 0 ? `${imported} · skipped ${skippedCases} already here` : imported + '.';
+};
 export const INTEGRATIONS_LABEL = 'Integrations';
 export const MCP_NAV_LABEL = 'MCP';
 export const MCP_HEADING = 'MCP Integration';

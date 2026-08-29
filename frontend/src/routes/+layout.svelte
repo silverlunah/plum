@@ -11,6 +11,7 @@
 	import Nav from '$lib/components/layout/Nav.svelte';
 	import PageShell from '$lib/components/layout/PageShell.svelte';
 	import RunnerPanel from '$lib/components/layout/RunnerPanel.svelte';
+	import NotificationStack from '$lib/components/ui/NotificationStack.svelte';
 	import { auth } from '$lib/stores/auth';
 	import { checkNeedsSetup } from '$lib/api/auth';
 
@@ -51,6 +52,7 @@
 			<slot />
 		</PageShell>
 		<RunnerPanel />
+		<NotificationStack />
 	{/if}
 {:else}
 	<div class="boot-loading">Loading…</div>
