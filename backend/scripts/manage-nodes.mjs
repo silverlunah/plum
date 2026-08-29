@@ -277,8 +277,8 @@ async function addNode() {
 	const port = await clack.text({
 		message:
 			'Port this node will listen on — any process already using it will be stopped on start',
-		placeholder: '3002',
-		defaultValue: '3002'
+		placeholder: '9001',
+		defaultValue: '9001'
 	});
 	if (cancelled(port)) return;
 

@@ -733,8 +733,8 @@ async function configureNode({ force, name: nameArg }) {
 
 	let mode = getFlag(args, '--mode') ?? saved.mode ?? 'local';
 	let primary = getFlag(args, '--primary') ?? process.env.PRIMARY_URL ?? saved.primary ?? '';
-	// Not 3001 — that's the primary's default; a co-located node must not collide.
-	let port = getFlag(args, '--port') ?? saved.port ?? '3002';
+	// Away from 3001 (primary) and 3002 (frontend) so a co-located node doesn't collide.
+	let port = getFlag(args, '--port') ?? saved.port ?? '9001';
 	let browser = getFlag(args, '--browser') ?? saved.browser ?? 'chromium';
 	let token = getFlag(args, '--token') ?? process.env.NODE_TOKEN ?? saved.token ?? generateToken();
 	let url = getFlag(args, '--url') ?? saved.url ?? '';
@@ -1561,7 +1561,7 @@ switch (command) {
 		console.log(
 			'                       http://host.docker.internal:<port>; production: pass a domain)'
 		);
-		console.log('    --port <n>         Local HTTP port the node listens on (default: 3002)');
+		console.log('    --port <n>         Local HTTP port the node listens on (default: 9001)');
 		console.log('    --token <secret>   Auth token (auto-generated + saved if omitted)');
 		console.log('    --browser <name>   chromium | firefox (default: chromium)');
 		console.log('  node list            List this machine’s nodes and their status');
