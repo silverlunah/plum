@@ -638,7 +638,6 @@
 						{reportId}
 						recordings={scenarioRecordings}
 						steps={replayScenario.steps}
-						scenarioName={replayScenario.name}
 						bind:inspecting={replayInspecting}
 					/>
 				{/if}
