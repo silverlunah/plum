@@ -196,18 +196,18 @@ const TEST_CASE_CSV_HEADER = [
 	'Notes'
 ];
 
+const BLANK = '';
+
+// A value only prints on the first row of the group it labels — the suite id on
+// the first row of the suite, the case columns on the case's first step — so a
+// spreadsheet reads as nested blocks instead of every column repeating down.
 function testCaseCsvRows(data) {
 	const rows = [TEST_CASE_CSV_HEADER];
 	for (const suite of data.suites) {
+		if (rows.length > 1) rows.push([]);
+		let suiteShown = false;
 		for (const c of suite.cases) {
-			const base = [
-				suite.displayId,
-				suite.name,
-				c.displayId,
-				c.title,
-				c.priority,
-				yesNo(c.isAutomated)
-			];
+			const caseHead = [c.displayId, c.title, c.priority, yesNo(c.isAutomated)];
 			const tail = [
 				c.result ?? '',
 				c.lastResult ?? '',
@@ -215,21 +215,20 @@ function testCaseCsvRows(data) {
 				c.lastTestedBy ?? '',
 				c.notes ?? ''
 			];
-			if (c.steps.length === 0) {
-				rows.push([...base, '', '', '', '', ...tail]);
-				continue;
-			}
-			c.steps.forEach((step, i) => {
+			const steps = c.steps.length ? c.steps : [null];
+			steps.forEach((step, i) => {
+				const first = i === 0;
 				rows.push([
-					...base,
-					i + 1,
-					step.action,
-					step.testData,
-					step.expectedOutput,
-					// The result/notes belong to the case, not a step — show them once
-					// on the first step row so the block reads cleanly in a spreadsheet.
-					...(i === 0 ? tail : ['', '', '', '', ''])
+					suiteShown ? BLANK : suite.displayId,
+					suiteShown ? BLANK : suite.name,
+					...(first ? caseHead : [BLANK, BLANK, BLANK, BLANK]),
+					step ? i + 1 : BLANK,
+					step?.action ?? BLANK,
+					step?.testData ?? BLANK,
+					step?.expectedOutput ?? BLANK,
+					...(first ? tail : [BLANK, BLANK, BLANK, BLANK, BLANK])
 				]);
+				suiteShown = true;
 			});
 		}
 	}
@@ -311,22 +310,23 @@ const REPORT_CSV_HEADER = [
 function reportCsvRows(data) {
 	const rows = [REPORT_CSV_HEADER];
 	for (const feature of data.features) {
+		if (rows.length > 1) rows.push([]);
+		let featureShown = false;
 		for (const sc of feature.scenarios) {
-			const base = [feature.name, sc.name, sc.tags.join(' '), sc.result];
-			if (sc.steps.length === 0) {
-				rows.push([...base, '', '', '', '', '', '']);
-				continue;
-			}
-			sc.steps.forEach((st, i) => {
+			const steps = sc.steps.length ? sc.steps : [null];
+			steps.forEach((st, i) => {
+				const first = i === 0;
 				rows.push([
-					...(i === 0 ? base : ['', '', '', '']),
-					i + 1,
-					st.keyword,
-					st.text,
-					st.status,
-					st.durationMs,
-					st.error
+					featureShown ? BLANK : feature.name,
+					...(first ? [sc.name, sc.tags.join(' '), sc.result] : [BLANK, BLANK, BLANK]),
+					st ? i + 1 : BLANK,
+					st?.keyword ?? BLANK,
+					st?.text ?? BLANK,
+					st?.status ?? BLANK,
+					st?.durationMs ?? BLANK,
+					st?.error ?? BLANK
 				]);
+				featureShown = true;
 			});
 		}
 	}
