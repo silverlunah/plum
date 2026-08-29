@@ -259,7 +259,8 @@ async function addNode() {
 	if (mode === 'production') {
 		primary = await clack.text({
 			message:
-				'Plum server backend URL or IP address, including the port (with http:// or https://)',
+				'Public URL or IP of the Plum backend / API — include the scheme (http:// or https://). ' +
+				'Add the :port unless a reverse proxy terminates it on 80/443.',
 			placeholder: 'https://plum.example.com'
 		});
 		if (cancelled(primary)) return;
