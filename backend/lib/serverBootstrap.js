@@ -68,7 +68,7 @@ async function bootstrapMcpKey(isNodeMode) {
 }
 
 function logServerReady(port, isNodeMode) {
-	console.log(`Backend running on port ${port}${isNodeMode ? ' (node/runner mode)' : ''}`);
+	console.log(`Backend running on port ${port}${isNodeMode ? ' (node mode)' : ''}`);
 }
 
 // Dispatches to the node-runner startup path or the full-server startup path
@@ -83,7 +83,7 @@ async function onServerListening({ port, io, testsDir, isNodeMode }) {
 }
 
 function handleNodeModeStartup(port) {
-	// Self-register PID so manage-runners can track and stop this process.
+	// Self-register PID so manage-nodes can track and stop this process.
 	const runnerId = process.env.RUNNER_ID;
 	if (!runnerId) return;
 
