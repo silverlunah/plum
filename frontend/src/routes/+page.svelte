@@ -10,6 +10,7 @@
 	import { runnerConfig, triggerRun } from '$lib/stores/runner';
 	import { COPY_TIMEOUT_MS } from '$lib/constants';
 	import { stagger } from '$lib/utils/format';
+	import { copyText } from '$lib/utils/clipboard';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import { CLEAR_SEARCH_LABEL, SORT_BY_LABEL } from '$lib/copy/common';
 	import {
@@ -111,7 +112,7 @@
 	}
 
 	async function copyId(id) {
-		await navigator.clipboard.writeText(id);
+		await copyText(id);
 		copiedIds.add(id);
 		copiedIds = copiedIds;
 		if (copyTimers.has(id)) clearTimeout(copyTimers.get(id));
