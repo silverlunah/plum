@@ -36,4 +36,8 @@ export const RUN_PICKER_LIMIT = 200;
 export const RUN_TAG_DISPLAY_LIMIT = 5;
 export const CASE_HISTORY_BARS_MAX = 20;
 
+// Replay inspector panel: its default size and the floor it can be resized to.
+// The player reserves exactly this much width; anything wider overlays the replay.
+export const INSPECTOR_MIN_WIDTH = 280;
+
 export const BUILTIN_RUNNER_ID = 'built-in';
