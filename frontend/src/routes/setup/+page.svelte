@@ -33,6 +33,13 @@
 		setupStepLabel,
 		createAccountLabel
 	} from '$lib/copy/auth';
+	import {
+		TERMS_HEADING,
+		TERMS_INTRO,
+		TERMS_SECTIONS,
+		TERMS_AGREE_LABEL,
+		TERMS_REQUIRED_ERROR
+	} from '$lib/copy/legal';
 
 	let step = 1;
 	let organizationName = '';
@@ -40,12 +47,13 @@
 	let name = '';
 	let email = '';
 	let password = '';
+	let termsAccepted = false;
 	let error = '';
 	let loading = false;
 	let checking = true;
 
 	$: step1Ready = organizationName.trim() && projectName.trim();
-	$: step2Ready = name.trim() && email.trim() && password;
+	$: step2Ready = name.trim() && email.trim() && password && termsAccepted;
 
 	onMount(async () => {
 		try {
@@ -64,7 +72,7 @@
 	}
 
 	async function handleSubmit() {
-		if (!step2Ready) {
+		if (!name.trim() || !email.trim() || !password) {
 			error = ALL_FIELDS_REQUIRED;
 			return;
 		}
@@ -72,10 +80,21 @@
 			error = PASSWORD_MIN_LENGTH_ERROR;
 			return;
 		}
+		if (!termsAccepted) {
+			error = TERMS_REQUIRED_ERROR;
+			return;
+		}
 		error = '';
 		loading = true;
 		try {
-			const { token, user } = await setup({ organizationName, projectName, name, email, password });
+			const { token, user } = await setup({
+				organizationName,
+				projectName,
+				name,
+				email,
+				password,
+				termsAccepted
+			});
 			auth.login(token, user);
 			window.location.href = '/';
 		} catch (e) {
@@ -164,6 +183,20 @@
 							autocomplete="new-password"
 						/>
 					</div>
+				</div>
+
+				<div class="terms">
+					<p class="terms-title">{TERMS_HEADING}</p>
+					<div class="terms-box">
+						<p>{TERMS_INTRO}</p>
+						{#each TERMS_SECTIONS as section}
+							<p><strong>{section.h}.</strong> {section.p}</p>
+						{/each}
+					</div>
+					<label class="terms-check">
+						<input type="checkbox" bind:checked={termsAccepted} />
+						<span>{TERMS_AGREE_LABEL}</span>
+					</label>
 				</div>
 
 				{#if error}<p class="error">{error}</p>{/if}
@@ -283,6 +316,51 @@
 		font-size: 0.8125rem;
 		color: var(--fail);
 		margin: -0.25rem 0 0;
+	}
+
+	.terms {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.terms-title {
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--text);
+		margin: 0;
+	}
+	.terms-box {
+		max-height: 160px;
+		overflow-y: auto;
+		padding: 0.75rem 0.875rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--bg);
+		font-size: 0.75rem;
+		line-height: 1.5;
+		color: var(--text-muted);
+	}
+	.terms-box p {
+		margin: 0 0 0.6rem;
+	}
+	.terms-box p:last-child {
+		margin-bottom: 0;
+	}
+	.terms-box strong {
+		color: var(--text);
+		font-weight: 600;
+	}
+	.terms-check {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+		font-size: 0.8125rem;
+		color: var(--text);
+		cursor: pointer;
+	}
+	.terms-check input {
+		margin-top: 0.15rem;
+		accent-color: var(--accent);
 	}
 
 	.actions {
