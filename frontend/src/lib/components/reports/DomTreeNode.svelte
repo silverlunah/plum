@@ -81,26 +81,24 @@
 </div>
 
 <style>
-	/* Font family / size / line-height match $lib/components/ui/CodeViewer so the
-	   DOM tab reads as the same code surface as the Element tab. */
 	.dom-row {
 		display: flex;
 		align-items: center;
 		gap: 0.15rem;
-		padding-top: 0.14rem;
-		padding-bottom: 0.14rem;
+		padding-top: 0.12rem;
+		padding-bottom: 0.12rem;
 		padding-right: 0.5rem;
 		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.78rem;
-		line-height: 1.5;
+		font-size: 0.72rem;
+		line-height: 1.4;
 		white-space: nowrap;
 		cursor: pointer;
 	}
 	.dom-row:hover {
-		background: rgb(255 255 255 / 0.06);
+		background: var(--bg-subtle);
 	}
 	.dom-row.selected {
-		background: color-mix(in srgb, var(--accent) 28%, transparent);
+		background: var(--accent-soft);
 	}
 
 	.twisty {
@@ -113,8 +111,7 @@
 		padding: 0;
 		border: none;
 		background: transparent;
-		color: var(--terminal-text);
-		opacity: 0.5;
+		color: var(--text-muted);
 		cursor: pointer;
 		transition: transform var(--duration-fast) var(--ease-out);
 	}
@@ -128,23 +125,27 @@
 
 	.lt,
 	.gt {
-		color: var(--code-comment);
+		color: var(--text-muted);
 	}
 	.tag {
-		color: var(--code-tag);
+		color: var(--text);
+	}
+	.dom-row.selected .tag {
+		color: var(--accent);
+		font-weight: 600;
 	}
 	.id {
-		color: var(--code-attr);
+		color: var(--accent);
 	}
 	.cls {
-		color: var(--code-string);
+		color: var(--text-muted);
 	}
 	.hint {
-		color: var(--code-comment);
+		color: var(--text-muted);
 	}
 	.text {
 		margin-left: 0.3rem;
-		color: var(--code-comment);
+		color: var(--text-muted);
 		font-style: italic;
 		overflow: hidden;
 		text-overflow: ellipsis;
