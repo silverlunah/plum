@@ -6,23 +6,23 @@
 const crypto = require('crypto');
 const prisma = require('./prisma');
 
-// Raw accessor — includes secret fields (backupS3SecretKey, mcpKey). Only for
-// internal use by this file's own functions and other trusted internal
-// callers (e.g. backup.routes.js needs the real S3 secret for a connection
-// test). Never expose this return value directly over HTTP.
+// Raw accessor — includes the mcpKey secret. Only for internal use by this
+// file's own functions and other trusted internal callers. Never expose this
+// return value directly over HTTP.
 const getProjectRaw = async (projectId) => {
 	return prisma.project.findUnique({ where: { id: projectId } });
 };
 
-// Instance-wide config (DB backup) lives on the first project.
-const instanceProjectId = async () => {
-	const p = await prisma.project.findFirst({ orderBy: { id: 'asc' }, select: { id: true } });
-	return p?.id ?? null;
+// The single organisation. Raw accessor includes backupS3SecretKey — only for
+// internal callers (e.g. backup.routes.js needs the real secret for a
+// connection test). Never expose it directly over HTTP.
+const getOrgRaw = async () => {
+	return prisma.organization.findFirst({ orderBy: { id: 'asc' } });
 };
 
 // Public accessor — strips secret fields. This is what routes should use.
 const getProject = async (projectId) => {
-	const { backupS3SecretKey, mcpKey, ...safe } = await getProjectRaw(projectId);
+	const { mcpKey, ...safe } = await getProjectRaw(projectId);
 	return safe;
 };
 
@@ -40,12 +40,11 @@ const updateProject = async (projectId, { name, logoUrl, timezone, baseUrl, maxR
 
 	if (timezone !== undefined) {
 		// Cron jobs read the timezone at schedule time, so a change here must
-		// re-schedule everything for the new offset to take effect immediately.
+		// re-schedule this project's jobs for the new offset to take effect.
 		await require('./cronService').reload();
-		await require('./backupCronService').reload();
 	}
 
-	const { backupS3SecretKey, mcpKey, ...safe } = project;
+	const { mcpKey, ...safe } = project;
 	return safe;
 };
 
@@ -87,40 +86,41 @@ const updateWebhooks = async (
 	});
 };
 
-const getBackupConfig = async (projectId) => {
-	const project = await getProjectRaw(projectId);
+const getBackupConfig = async () => {
+	const org = await getOrgRaw();
 	return {
-		backupEnabled: project.backupEnabled,
-		backupCron: project.backupCron,
-		backupS3Endpoint: project.backupS3Endpoint,
-		backupS3Region: project.backupS3Region,
-		backupS3Bucket: project.backupS3Bucket,
-		backupS3AccessKey: project.backupS3AccessKey,
-		backupS3SecretKeySet: project.backupS3SecretKey.length > 0,
-		backupS3Prefix: project.backupS3Prefix,
-		backupLastRunAt: project.backupLastRunAt,
-		backupLastStatus: project.backupLastStatus,
-		backupIncludeReports: project.backupIncludeReports
+		timezone: org.timezone,
+		backupEnabled: org.backupEnabled,
+		backupCron: org.backupCron,
+		backupS3Endpoint: org.backupS3Endpoint,
+		backupS3Region: org.backupS3Region,
+		backupS3Bucket: org.backupS3Bucket,
+		backupS3AccessKey: org.backupS3AccessKey,
+		backupS3SecretKeySet: org.backupS3SecretKey.length > 0,
+		backupS3Prefix: org.backupS3Prefix,
+		backupLastRunAt: org.backupLastRunAt,
+		backupLastStatus: org.backupLastStatus,
+		backupIncludeReports: org.backupIncludeReports
 	};
 };
 
-const updateBackupConfig = async (
-	projectId,
-	{
-		backupEnabled,
-		backupCron,
-		backupS3Endpoint,
-		backupS3Region,
-		backupS3Bucket,
-		backupS3AccessKey,
-		backupS3SecretKey,
-		backupS3Prefix,
-		backupIncludeReports
-	}
-) => {
-	return prisma.project.update({
-		where: { id: projectId },
+const updateBackupConfig = async ({
+	timezone,
+	backupEnabled,
+	backupCron,
+	backupS3Endpoint,
+	backupS3Region,
+	backupS3Bucket,
+	backupS3AccessKey,
+	backupS3SecretKey,
+	backupS3Prefix,
+	backupIncludeReports
+}) => {
+	const org = await getOrgRaw();
+	return prisma.organization.update({
+		where: { id: org.id },
 		data: {
+			...(timezone !== undefined && { timezone }),
 			...(backupEnabled !== undefined && { backupEnabled }),
 			...(backupCron !== undefined && { backupCron }),
 			...(backupS3Endpoint !== undefined && { backupS3Endpoint }),
@@ -148,7 +148,7 @@ const generateMcpKey = async (projectId) => {
 module.exports = {
 	getProject,
 	getProjectRaw,
-	instanceProjectId,
+	getOrgRaw,
 	updateProject,
 	getTestPrefixes,
 	updateTestPrefixes,

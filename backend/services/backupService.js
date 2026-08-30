@@ -159,13 +159,24 @@ const importAll = async (
 				});
 			}
 
-			// 4. Project settings
+			// 4. Project settings — only the fields exportAll writes; older backups
+			// also carried the S3/backup columns, which now live on Organization.
 			if (project) {
-				await tx.project.upsert({
-					where: { id: 1 },
-					create: { id: 1, ...project },
-					update: project
-				});
+				const fields = [
+					'name',
+					'logoUrl',
+					'timezone',
+					'testCasePrefix',
+					'testSuitePrefix',
+					'discordWebhookUrl',
+					'slackWebhookUrl',
+					'notifyPublicUrl'
+				];
+				const data = Object.fromEntries(
+					fields.filter((f) => project[f] !== undefined).map((f) => [f, project[f]])
+				);
+				const existing = await tx.project.findFirst({ orderBy: { id: 'asc' } });
+				if (existing) await tx.project.update({ where: { id: existing.id }, data });
 			}
 
 			// 5. Test suites + cases + steps

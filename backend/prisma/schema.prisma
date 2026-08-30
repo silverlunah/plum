@@ -104,11 +104,25 @@ model Recording {
 }
 
 model Organization {
-  id        Int       @id @default(autoincrement())
-  name      String    @default("")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  projects  Project[]
+  id                   Int       @id @default(autoincrement())
+  name                 String    @default("")
+  // DB backup is instance-level (one database), so its schedule, timezone and
+  // S3 target live here, not on any single Project.
+  timezone             String    @default("UTC")
+  backupEnabled        Boolean   @default(false)
+  backupCron           String    @default("0 2 * * *")
+  backupS3Endpoint     String    @default("")
+  backupS3Region       String    @default("")
+  backupS3Bucket       String    @default("")
+  backupS3AccessKey    String    @default("")
+  backupS3SecretKey    String    @default("")
+  backupS3Prefix       String    @default("")
+  backupLastRunAt      DateTime?
+  backupLastStatus     String    @default("")
+  backupIncludeReports Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  projects             Project[]
 }
 
 model Project {
@@ -127,17 +141,6 @@ model Project {
   discordWebhookUrl    String       @default("")
   slackWebhookUrl      String       @default("")
   notifyPublicUrl      String       @default("")
-  backupEnabled        Boolean      @default(false)
-  backupCron           String       @default("0 2 * * *")
-  backupS3Endpoint     String       @default("")
-  backupS3Region       String       @default("")
-  backupS3Bucket       String       @default("")
-  backupS3AccessKey    String       @default("")
-  backupS3SecretKey    String       @default("")
-  backupS3Prefix       String       @default("")
-  backupLastRunAt      DateTime?
-  backupLastStatus     String       @default("")
-  backupIncludeReports Boolean      @default(false)
   mcpKey               String       @default("")
   maxRetries           Int          @default(0)
 

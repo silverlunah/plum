@@ -287,6 +287,8 @@
 		CONFIGURE_S3_FIRST_MESSAGE,
 		ENABLE_SCHEDULED_BACKUP_LABEL,
 		CRON_EXPRESSION_LABEL,
+		BACKUP_TIMEZONE_LABEL,
+		BACKUP_TIMEZONE_HINT,
 		CRON_HINT_PREFIX,
 		CRON_HINT_SUFFIX,
 		CRONTAB_LINK_LABEL,
@@ -402,6 +404,7 @@
 	let backupConfig = {
 		backupEnabled: false,
 		backupCron: '0 2 * * *',
+		timezone: 'UTC',
 		backupS3Endpoint: '',
 		backupS3Region: '',
 		backupS3Bucket: '',
@@ -477,6 +480,7 @@
 			backupConfig = {
 				backupEnabled: bc.backupEnabled,
 				backupCron: bc.backupCron,
+				timezone: bc.timezone ?? 'UTC',
 				backupS3Endpoint: bc.backupS3Endpoint,
 				backupS3Region: bc.backupS3Region,
 				backupS3Bucket: bc.backupS3Bucket,
@@ -2323,6 +2327,18 @@
 								bind:value={backupConfig.backupCron}
 								placeholder={CRON_PLACEHOLDER}
 							/>
+						</div>
+
+						<div class="field">
+							<label class="field-label" for="backup-timezone">
+								<span>{BACKUP_TIMEZONE_LABEL}</span>
+								<span class="field-hint">{BACKUP_TIMEZONE_HINT}</span>
+							</label>
+							<select id="backup-timezone" class="field-input" bind:value={backupConfig.timezone}>
+								{#each TIMEZONES as tz}
+									<option value={tz}>{tz}</option>
+								{/each}
+							</select>
 						</div>
 
 						{#if backupLastRunAt}
