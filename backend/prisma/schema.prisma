@@ -122,9 +122,37 @@ model Organization {
   backupLastRunAt      DateTime?
   backupLastStatus     String    @default("")
   backupIncludeReports Boolean   @default(false)
+  // Activity log entries older than this are pruned nightly. 0 keeps them forever.
+  activityRetentionDays Int      @default(90)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   projects             Project[]
+}
+
+// Append-only audit trail. `scope` splits project-level events (visible to that
+// project's admins) from org-level ones (owner only). The actor's name is
+// denormalised into `actorLabel` — with a "(MCP)" suffix when the action came
+// through an MCP key — so a row still reads correctly after the user is renamed
+// or deleted.
+model ActivityLog {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  scope       String   @default("project")
+  projectId   Int?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actorId     String?
+  actor       User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorLabel  String
+  action      String
+  targetType  String   @default("")
+  targetId    String   @default("")
+  targetLabel String   @default("")
+  metadata    Json?
+  source      String   @default("ui")
+
+  @@index([scope, createdAt])
+  @@index([projectId, createdAt])
+  @@index([actorId])
 }
 
 model Project {
@@ -153,6 +181,7 @@ model Project {
   cronJobs CronJob[]
   runQueue RunQueue[]
   mcpKeys  McpKey[]
+  activity ActivityLog[]
 }
 
 // One per (project, member). Each person mints their own key for a project they
@@ -201,6 +230,7 @@ model User {
   caseHistories      TestCaseHistory[]
   projectMemberships ProjectMember[]
   mcpKeys            McpKey[]
+  activity           ActivityLog[]
 }
 
 model TestSuite {

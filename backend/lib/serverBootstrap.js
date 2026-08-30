@@ -40,23 +40,31 @@ function attachListenRetry(server, port) {
 }
 
 function wireRealtimeServices(io, isNodeMode) {
-	if (isNodeMode) return { cronService: null, backupCronService: null, runQueueService: null };
+	if (isNodeMode)
+		return {
+			cronService: null,
+			backupCronService: null,
+			activityRetentionService: null,
+			runQueueService: null
+		};
 
 	const socketHandler = require('../websockets/socketHandler.js');
 	const cronService = require('../services/cronService');
 	const backupCronService = require('../services/backupCronService');
+	const activityRetentionService = require('../services/activityRetentionService');
 	const runQueueService = require('../services/runQueueService');
 
 	socketHandler(io);
 	runQueueService.setSocketIO(io);
 	require('../services/testRunService').setSocketIO(io);
 
-	return { cronService, backupCronService, runQueueService };
+	return { cronService, backupCronService, activityRetentionService, runQueueService };
 }
 
-async function initCronServices(cronService, backupCronService) {
+async function initCronServices(cronService, backupCronService, activityRetentionService) {
 	if (cronService) await cronService.init();
 	if (backupCronService) await backupCronService.init();
+	if (activityRetentionService) await activityRetentionService.init();
 }
 
 // MCP keys are per-project now and resolved live from the DB in jwtAuth — the

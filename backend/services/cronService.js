@@ -6,6 +6,8 @@
 const cron = require('node-cron');
 const prisma = require('./prisma');
 const runQueueService = require('./runQueueService');
+const activityService = require('./activityService');
+const { ACTIVITY_ACTION } = require('../constants/activity');
 const { BUILT_IN_RUNNER_ID, TRIGGER_TYPE } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 
@@ -97,6 +99,10 @@ const addCronJob = async (
 		}
 	});
 	await scheduleJob(job);
+	await activityService.record(ACTIVITY_ACTION.SCHEDULE_CREATE, {
+		projectId,
+		target: { type: 'schedule', id: job.id, label: taskName }
+	});
 	return { status: 201, message: `Cron job "${taskName}" added` };
 };
 
@@ -109,6 +115,10 @@ const removeCronJob = async (projectId, taskName) => {
 		delete scheduledJobs[job.id];
 	}
 	await prisma.cronJob.delete({ where: { id: job.id } });
+	await activityService.record(ACTIVITY_ACTION.SCHEDULE_DELETE, {
+		projectId,
+		target: { type: 'schedule', id: job.id, label: taskName }
+	});
 	return { status: 200, message: `Cron job "${taskName}" deleted` };
 };
 
@@ -154,6 +164,10 @@ const updateCronJob = async (
 	});
 
 	await scheduleJob(updated);
+	await activityService.record(ACTIVITY_ACTION.SCHEDULE_UPDATE, {
+		projectId,
+		target: { type: 'schedule', id: updated.id, label: effectiveName }
+	});
 	return { status: 200, message: 'Cron job updated' };
 };
 
@@ -170,6 +184,11 @@ const toggleCronJob = async (projectId, taskName, enabled) => {
 
 	const updated = await prisma.cronJob.update({ where: { id: job.id }, data: { enabled } });
 	await scheduleJob(updated);
+	await activityService.record(ACTIVITY_ACTION.SCHEDULE_TOGGLE, {
+		projectId,
+		target: { type: 'schedule', id: updated.id, label: taskName },
+		metadata: { enabled: updated.enabled }
+	});
 	return { status: 200, enabled: updated.enabled };
 };
 

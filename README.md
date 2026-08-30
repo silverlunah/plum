@@ -77,6 +77,7 @@ Full documentation is available at:
 | [Retrying Flaky Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/retrying-flaky-tests-NXwRF5SXru)       | Auto-retry failed scenarios, global setting, report badges                          |
 | [Integrations](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/integrations-qfiqfmdP0j)                       | Per-project Discord & Slack webhook notifications, CI/external triggers             |
 | [MCP Integration](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/mcp-integration-yGjbsFrI76)                 | Per-member MCP keys, connecting an AI client, tools, `(MCP)` attribution            |
+| [Activity Logs](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/activity-logs-5BJzE7o8oU)                     | Audit feed of project and org changes, MCP attribution, retention                   |
 | [Backup](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/backup-RNNObJfct9)                                   | Instance-level database backup, schedule, S3 target                                 |
 
 ---
