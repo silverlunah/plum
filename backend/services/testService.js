@@ -6,9 +6,10 @@
 const fs = require('fs');
 const path = require('path');
 
+// TODO: resolve the features dir per project.
 const FEATURES_DIR = path.join(__dirname, '../tests/features');
 
-const getTestSuites = () => {
+const getTestSuites = (_projectId) => {
 	const suites = [];
 	const files = fs.readdirSync(FEATURES_DIR).filter((f) => f.endsWith('.feature'));
 

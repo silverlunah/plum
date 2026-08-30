@@ -25,7 +25,7 @@ model CronJob {
   id             Int      @id @default(autoincrement())
   projectId      Int
   project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  taskName       String   @unique
+  taskName       String
   cronExpression String
   tags           String
   workers        Int      @default(1)
@@ -40,6 +40,7 @@ model CronJob {
   updatedAt      DateTime @updatedAt
   reports        Report[]
 
+  @@unique([projectId, taskName])
   @@index([projectId])
 }
 
@@ -184,7 +185,7 @@ model TestSuite {
   id          String     @id @default(cuid())
   projectId   Int
   project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  displayId   String     @unique
+  displayId   String
   name        String
   description String     @default("")
   priority    String     @default("Medium")
@@ -194,6 +195,7 @@ model TestSuite {
   updatedAt   DateTime   @updatedAt
   cases       TestCase[]
 
+  @@unique([projectId, displayId])
   @@index([createdAt])
   @@index([projectId])
 }
@@ -202,7 +204,7 @@ model TestCase {
   id          String            @id @default(cuid())
   projectId   Int
   project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  displayId   String            @unique
+  displayId   String
   title       String
   description String            @default("")
   priority    String            @default("Medium")
@@ -217,6 +219,7 @@ model TestCase {
   runEntries  TestRunEntry[]
   history     TestCaseHistory[]
 
+  @@unique([projectId, displayId])
   @@index([suiteId])
   @@index([projectId])
 }

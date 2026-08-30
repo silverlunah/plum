@@ -6,12 +6,15 @@
 const express = require('express');
 const router = express.Router();
 const { jwtAuth } = require('../middleware/jwtAuth');
+const { requireProjectAccess } = require('../middleware/requireProjectAccess');
 const { TRIGGER_TYPE } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { JOB_STATUS } = require('../constants/jobStatus');
 const triggerService = require('../services/triggerService');
 
-router.post('/', jwtAuth, async (req, res, next) => {
+router.use(jwtAuth, requireProjectAccess);
+
+router.post('/', async (req, res, next) => {
 	try {
 		const {
 			tag = '',
@@ -24,6 +27,7 @@ router.post('/', jwtAuth, async (req, res, next) => {
 		const trigger = source === 'mcp' ? TRIGGER_TYPE.MCP : TRIGGER_TYPE.EXTERNAL;
 
 		const jobId = await triggerService.startRun({
+			projectId: req.projectId,
 			tag,
 			browser,
 			workers,
@@ -37,9 +41,9 @@ router.post('/', jwtAuth, async (req, res, next) => {
 	}
 });
 
-router.get('/:jobId', jwtAuth, async (req, res, next) => {
+router.get('/:jobId', async (req, res, next) => {
 	try {
-		const job = await triggerService.getJob(req.params.jobId);
+		const job = await triggerService.getJob(req.params.jobId, req.projectId);
 		if (!job) return res.status(404).json({ error: 'Job not found' });
 		res.json(job);
 	} catch (e) {

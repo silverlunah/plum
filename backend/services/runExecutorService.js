@@ -161,7 +161,7 @@ function spawnBuiltInAttempt({
 
 async function runBuiltIn(run, io, emit) {
 	const startedAt = Date.now();
-	const { maxRetries } = await settingsService.getProject();
+	const { maxRetries } = await settingsService.getProject(run.projectId);
 	const laneId = BUILT_IN_RUNNER_ID;
 
 	let logBuffer = '';
@@ -202,6 +202,7 @@ async function runBuiltIn(run, io, emit) {
 	if (cancelled) return { code: CANCEL_CODE, reportId: null };
 
 	const report = await reportService.saveReport({
+		projectId: run.projectId,
 		rawCucumberJson: rawJson,
 		tags: run.tag,
 		triggerType: run.triggerType,
@@ -224,7 +225,7 @@ async function runBuiltIn(run, io, emit) {
 
 async function runDistributed(run, io, emit, laneInfos, chunks) {
 	const startedAt = Date.now();
-	const { maxRetries } = await settingsService.getProject();
+	const { maxRetries } = await settingsService.getProject(run.projectId);
 
 	emit(SOCKET_EVENTS.BG_RUN_LANES_INIT, {
 		lanes: laneInfos.map((l, i) => ({ id: l.id, name: l.name, testCount: chunks[i].length }))
@@ -254,6 +255,7 @@ async function runDistributed(run, io, emit, laneInfos, chunks) {
 	if (isCancelled(run.id)) return { code: CANCEL_CODE, reportId: null };
 
 	const saved = await reportService.saveCombinedReport({
+		projectId: run.projectId,
 		reports: collectedReports,
 		runners: laneInfos,
 		workers: run.workers,
@@ -352,6 +354,7 @@ async function maybeNotify(run, report) {
 	if (!report || (!run.notifyDiscord && !run.notifySlack)) return;
 	try {
 		await notificationService.send({
+			projectId: run.projectId,
 			jobName: run.label,
 			status: report.status,
 			content: report.content,

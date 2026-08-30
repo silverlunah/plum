@@ -11,10 +11,6 @@ const { DEFAULT_BROWSER } = require('../constants/defaults');
 
 const scheduledJobs = {};
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
 /** Parses the stored comma-separated runnerIds string into an array. */
 function parseRunnerIds(str) {
 	if (!str || !str.trim()) return [BUILT_IN_RUNNER_ID];
@@ -24,14 +20,11 @@ function parseRunnerIds(str) {
 		.filter(Boolean);
 }
 
-// ---------------------------------------------------------------------------
-// Run paths
-// ---------------------------------------------------------------------------
-
 async function runCronJob(job) {
 	const runnerIds = parseRunnerIds(job.runnerIds);
 	console.log(`Queuing scheduled task: "${job.taskName}" → runners: ${runnerIds.join(', ')}`);
 	await runQueueService.enqueue({
+		projectId: job.projectId,
 		kind: TRIGGER_TYPE.CRON,
 		triggerType: job.taskName,
 		label: job.taskName,
@@ -44,18 +37,14 @@ async function runCronJob(job) {
 	});
 }
 
-// ---------------------------------------------------------------------------
-// Public: scheduling
-// ---------------------------------------------------------------------------
-
 async function scheduleJob(job) {
 	const { taskName, cronExpression } = job;
 	if (scheduledJobs[taskName]) {
 		scheduledJobs[taskName].stop();
 		delete scheduledJobs[taskName];
 	}
-	if (job.enabled === false) return; // disabled jobs are not scheduled
-	const project = await prisma.project.findUnique({ where: { id: 1 } });
+	if (job.enabled === false) return;
+	const project = await prisma.project.findUnique({ where: { id: job.projectId } });
 	scheduledJobs[taskName] = cron.schedule(cronExpression, () => runCronJob(job), {
 		timezone: project?.timezone || 'UTC'
 	});
@@ -75,22 +64,17 @@ const reload = async () => {
 	await init();
 };
 
-// ---------------------------------------------------------------------------
-// Public: CRUD
-// ---------------------------------------------------------------------------
+const getAllCronJobs = (projectId) =>
+	prisma.cronJob.findMany({ where: { projectId }, orderBy: { createdAt: 'asc' } });
 
-const getAllCronJobs = () => prisma.cronJob.findMany({ orderBy: { createdAt: 'asc' } });
+async function ownedJob(projectId, taskName) {
+	return prisma.cronJob.findFirst({ where: { taskName, projectId } });
+}
 
-const addCronJob = async ({
-	taskName,
-	cronExpression,
-	tags,
-	workers,
-	browser,
-	runnerIds,
-	notifyDiscord,
-	notifySlack
-}) => {
+const addCronJob = async (
+	projectId,
+	{ taskName, cronExpression, tags, workers, browser, runnerIds, notifyDiscord, notifySlack }
+) => {
 	if (!cronExpression || !taskName) {
 		return { status: 400, message: 'Missing required parameters' };
 	}
@@ -99,6 +83,7 @@ const addCronJob = async ({
 
 	const job = await prisma.cronJob.create({
 		data: {
+			projectId,
 			taskName,
 			cronExpression,
 			tags: tags ?? '',
@@ -114,19 +99,20 @@ const addCronJob = async ({
 	return { status: 201, message: `Cron job "${taskName}" added` };
 };
 
-const removeCronJob = async (taskName) => {
-	const job = await prisma.cronJob.findUnique({ where: { taskName } });
+const removeCronJob = async (projectId, taskName) => {
+	const job = await ownedJob(projectId, taskName);
 	if (!job) return { status: 404, message: `Cron job "${taskName}" not found` };
 
 	if (scheduledJobs[taskName]) {
 		scheduledJobs[taskName].stop();
 		delete scheduledJobs[taskName];
 	}
-	await prisma.cronJob.delete({ where: { taskName } });
+	await prisma.cronJob.delete({ where: { id: job.id } });
 	return { status: 200, message: `Cron job "${taskName}" deleted` };
 };
 
 const updateCronJob = async (
+	projectId,
 	oldTaskName,
 	{
 		taskName: newTaskName,
@@ -139,7 +125,7 @@ const updateCronJob = async (
 		notifySlack
 	}
 ) => {
-	const job = await prisma.cronJob.findUnique({ where: { taskName: oldTaskName } });
+	const job = await ownedJob(projectId, oldTaskName);
 	if (!job) return { status: 404, message: `Cron job "${oldTaskName}" not found` };
 
 	if (scheduledJobs[oldTaskName]) {
@@ -152,7 +138,7 @@ const updateCronJob = async (
 		Array.isArray(runnerIds) && runnerIds.length > 0 ? runnerIds.join(',') : BUILT_IN_RUNNER_ID;
 
 	const updated = await prisma.cronJob.update({
-		where: { taskName: oldTaskName },
+		where: { id: job.id },
 		data: {
 			taskName: effectiveName,
 			cronExpression,
@@ -170,23 +156,19 @@ const updateCronJob = async (
 	return { status: 200, message: 'Cron job updated' };
 };
 
-const runJobNow = async (taskName) => {
-	const job = await prisma.cronJob.findUnique({ where: { taskName } });
+const runJobNow = async (projectId, taskName) => {
+	const job = await ownedJob(projectId, taskName);
 	if (!job) return { status: 404, message: `Cron job "${taskName}" not found` };
 	runCronJob(job);
 	return { status: 200 };
 };
 
-const toggleCronJob = async (taskName, enabled) => {
-	const job = await prisma.cronJob.findUnique({ where: { taskName } });
+const toggleCronJob = async (projectId, taskName, enabled) => {
+	const job = await ownedJob(projectId, taskName);
 	if (!job) return { status: 404, message: `Cron job "${taskName}" not found` };
 
-	const updated = await prisma.cronJob.update({
-		where: { taskName },
-		data: { enabled }
-	});
-
-	await scheduleJob(updated); // re-schedules if enabled, stops and removes if disabled
+	const updated = await prisma.cronJob.update({ where: { id: job.id }, data: { enabled } });
+	await scheduleJob(updated);
 	return { status: 200, enabled: updated.enabled };
 };
 

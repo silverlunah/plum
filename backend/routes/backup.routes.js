@@ -12,9 +12,16 @@ const backupCronService = require('../services/backupCronService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireAdmin } = require('../middleware/requireAdmin');
 
-router.get('/export', jwtAuth, requireAdmin, async (req, res) => {
+// DB backup is instance-wide; its config lives on the first project.
+async function pid() {
+	return settingsService.instanceProjectId();
+}
+
+router.use(jwtAuth, requireAdmin);
+
+router.get('/export', async (req, res) => {
 	try {
-		const { backupIncludeReports } = await settingsService.getBackupConfig();
+		const { backupIncludeReports } = await settingsService.getBackupConfig(await pid());
 		const data = await backupService.exportAll(backupIncludeReports);
 		const fileName = `plum-backup-${new Date().toISOString().slice(0, 10)}.json`;
 		res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -26,7 +33,7 @@ router.get('/export', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/import', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/import', async (req, res) => {
 	try {
 		const { cronJobs, project, users, runners, testSuites, testRuns } = req.body;
 		const hasData = [cronJobs, project, users, runners, testSuites, testRuns].some(
@@ -44,9 +51,9 @@ router.post('/import', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.get('/config', jwtAuth, requireAdmin, async (req, res) => {
+router.get('/config', async (req, res) => {
 	try {
-		const config = await settingsService.getBackupConfig();
+		const config = await settingsService.getBackupConfig(await pid());
 		res.json(config);
 	} catch (error) {
 		console.error('Failed to get backup config:', error);
@@ -54,11 +61,11 @@ router.get('/config', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/config', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/config', async (req, res) => {
 	try {
-		await settingsService.updateBackupConfig(req.body);
+		await settingsService.updateBackupConfig(await pid(), req.body);
 		await backupCronService.reload();
-		const config = await settingsService.getBackupConfig();
+		const config = await settingsService.getBackupConfig(await pid());
 		res.json(config);
 	} catch (error) {
 		console.error('Failed to save backup config:', error);
@@ -66,12 +73,12 @@ router.post('/config', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/test-s3', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/test-s3', async (req, res) => {
 	try {
 		// If no secret key provided in the request, fall back to the stored one
 		let config = { ...req.body };
 		if (!config.backupS3SecretKey) {
-			const stored = await settingsService.getProjectRaw();
+			const stored = await settingsService.getProjectRaw(await pid());
 			config.backupS3SecretKey = stored?.backupS3SecretKey ?? '';
 		}
 
@@ -88,9 +95,9 @@ router.post('/test-s3', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.get('/s3-backups', jwtAuth, requireAdmin, async (req, res) => {
+router.get('/s3-backups', async (req, res) => {
 	try {
-		const config = await settingsService.getProjectRaw();
+		const config = await settingsService.getProjectRaw(await pid());
 		const required = ['backupS3Bucket', 'backupS3AccessKey', 'backupS3SecretKey'];
 		const missing = required.filter((k) => !config[k]);
 		if (missing.length > 0) {
@@ -106,12 +113,12 @@ router.get('/s3-backups', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/s3-restore', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/s3-restore', async (req, res) => {
 	try {
 		const { key } = req.body;
 		if (!key) return res.status(400).json({ error: 'Missing backup key' });
 
-		const config = await settingsService.getProjectRaw();
+		const config = await settingsService.getProjectRaw(await pid());
 		const required = ['backupS3Bucket', 'backupS3AccessKey', 'backupS3SecretKey'];
 		const missing = required.filter((k) => !config[k]);
 		if (missing.length > 0) {
@@ -133,10 +140,10 @@ router.post('/s3-restore', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/run-now', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/run-now', async (req, res) => {
 	try {
 		await backupCronService.runBackup();
-		const config = await settingsService.getBackupConfig();
+		const config = await settingsService.getBackupConfig(await pid());
 		if (config.backupLastStatus?.startsWith('error:')) {
 			return res.status(500).json({ error: config.backupLastStatus.replace('error:', '') });
 		}

@@ -58,14 +58,10 @@ async function initCronServices(cronService, backupCronService) {
 	if (backupCronService) await backupCronService.init();
 }
 
-async function bootstrapMcpKey(isNodeMode) {
-	if (isNodeMode || process.env.PLUM_MCP_KEY) return;
-	try {
-		const settingsService = require('../services/settingsService');
-		const { mcpKey } = await settingsService.getMcpConfig();
-		if (mcpKey) process.env.PLUM_MCP_KEY = mcpKey;
-	} catch {}
-}
+// MCP keys are per-project now and resolved live from the DB in jwtAuth — the
+// only global key is an optional PLUM_MCP_KEY env override (CI). Kept exported
+// so server.js's call site doesn't change.
+async function bootstrapMcpKey() {}
 
 function logServerReady(port, isNodeMode) {
 	console.log(`Backend running on port ${port}${isNodeMode ? ' (node mode)' : ''}`);
