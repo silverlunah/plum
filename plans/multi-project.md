@@ -70,7 +70,8 @@ master
       ├── 299-p3-first-boot
       ├── 299-p4-tests-root
       ├── 299-p5-frontend
-      └── 299-p6-docs
+      ├── 299-p6-testing
+      └── 299-p7-docs
 ```
 
 ---
@@ -273,7 +274,34 @@ and Org settings screens.
 
 ---
 
-## P6 — documentation rewrite
+## P6 — full test pass
+
+End-to-end verification on the `299-multi-project` integration branch before it
+goes near `master`.
+
+- **Migration** — apply on a fresh DB and on a copy of a real single-tenant DB;
+  confirm the backfill and that nothing 500s.
+- **Isolation** — two projects, two members. Each member sees only their
+  project's suites / cases / runs / reports / schedules; cross-project ids return
+  403; an admin sees everything.
+- **Run pipeline** — trigger a run in each project (built-in + a node), confirm
+  the report lands scoped to the right project and the replay works.
+- **First-boot** — fresh install → wizard creates org + project + admin → land on
+  a working dashboard. CLI no longer prompts for an account.
+- **`plum project init`** — scaffolds a folder, wires the mount, restarts the
+  container; `.env` edit + `git pull` into the folder reflected on the next run
+  with no restart.
+- **Frontend** — project switcher, Projects admin, Org vs Project settings; stale
+  active-project id falls back cleanly.
+- **Regression** — single-project installs (one project, header-less clients)
+  still work unchanged.
+
+**Acceptance:** the checklist above passes on the integration branch; then one PR
+`299-multi-project → master`.
+
+---
+
+## P7 — documentation rewrite
 
 Rewrite the Outline collection + `README.md` + the scaffolded README string in
 `bin/plum.js` from scratch. Principles:
