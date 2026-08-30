@@ -4,6 +4,8 @@
  */
 
 const prisma = require('./prisma');
+const activityService = require('./activityService');
+const { ACTIVITY_ACTION } = require('../constants/activity');
 
 const suiteSelect = {
 	id: true,
@@ -131,7 +133,7 @@ async function create(projectId, { name, description, priority, createdById, via
 	const num = String(project.suiteSeqNext).padStart(3, '0');
 	const displayId = `${project.testSuitePrefix}-${num}`;
 
-	return prisma.testSuite.create({
+	const suite = await prisma.testSuite.create({
 		data: {
 			projectId,
 			displayId,
@@ -143,6 +145,11 @@ async function create(projectId, { name, description, priority, createdById, via
 		},
 		select: suiteSelect
 	});
+	await activityService.record(ACTIVITY_ACTION.TEST_SUITE_CREATE, {
+		projectId,
+		target: { type: 'test_suite', id: suite.id, label: `${suite.displayId} ${suite.name}` }
+	});
+	return suite;
 }
 
 async function update(projectId, id, { name, description, priority }) {
@@ -155,11 +162,27 @@ async function update(projectId, id, { name, description, priority }) {
 		}
 	});
 	if (count === 0) return null;
-	return prisma.testSuite.findUnique({ where: { id }, select: suiteSelect });
+	const suite = await prisma.testSuite.findUnique({ where: { id }, select: suiteSelect });
+	await activityService.record(ACTIVITY_ACTION.TEST_SUITE_UPDATE, {
+		projectId,
+		target: { type: 'test_suite', id: suite.id, label: `${suite.displayId} ${suite.name}` }
+	});
+	return suite;
 }
 
 async function remove(projectId, id) {
-	return prisma.testSuite.deleteMany({ where: { id, projectId } });
+	const suite = await prisma.testSuite.findFirst({
+		where: { id, projectId },
+		select: { displayId: true, name: true }
+	});
+	const result = await prisma.testSuite.deleteMany({ where: { id, projectId } });
+	if (suite) {
+		await activityService.record(ACTIVITY_ACTION.TEST_SUITE_DELETE, {
+			projectId,
+			target: { type: 'test_suite', id, label: `${suite.displayId} ${suite.name}` }
+		});
+	}
+	return result;
 }
 
 async function migratePrefix(projectId, newPrefix) {

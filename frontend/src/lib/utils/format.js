@@ -42,6 +42,20 @@ export function stagger(i, stepMs = 45) {
 	return `animation-delay: ${i * stepMs}ms`;
 }
 
+// "just now" / "5m ago" / "3h ago" / "2d ago", then an absolute date once it's a
+// week old — for feeds where the exact second stops mattering.
+export function relativeTime(iso) {
+	const then = new Date(iso).getTime();
+	if (Number.isNaN(then)) return '';
+	const diff = Date.now() - then;
+	const min = 60_000;
+	if (diff < min) return 'just now';
+	if (diff < 60 * min) return `${Math.floor(diff / min)}m ago`;
+	if (diff < 24 * 60 * min) return `${Math.floor(diff / (60 * min))}h ago`;
+	if (diff < 7 * 24 * 60 * min) return `${Math.floor(diff / (24 * 60 * min))}d ago`;
+	return new Date(iso).toLocaleDateString();
+}
+
 export function fmtDuration(ms) {
 	if (ms >= 1000) return (ms / 1000).toFixed(2) + 's';
 	return ms + 'ms';
