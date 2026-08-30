@@ -6,6 +6,8 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('./prisma');
+const projectPaths = require('../lib/projectPaths');
+const { slugify } = require('../lib/slugify');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'plum-dev-secret-change-in-production';
 const SALT_ROUNDS = 10;
@@ -25,21 +27,15 @@ async function createUser({ name, email, password, role = 'user' }) {
 	});
 }
 
-const slugify = (s) =>
-	String(s)
-		.toLowerCase()
-		.trim()
-		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-+|-+$/g, '') || 'project';
-
 // First boot: the organisation, its first project, and an admin — all or
 // nothing. Admins reach every project implicitly, so no ProjectMember row.
 async function bootstrap({ organizationName, projectName, name, email, password }) {
 	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
-	return prisma.$transaction(async (tx) => {
+	const slug = slugify(projectName);
+	const result = await prisma.$transaction(async (tx) => {
 		const org = await tx.organization.create({ data: { name: organizationName } });
 		const project = await tx.project.create({
-			data: { orgId: org.id, name: projectName, slug: slugify(projectName) }
+			data: { orgId: org.id, name: projectName, slug }
 		});
 		const user = await tx.user.create({
 			data: { name, email, password: hashed, role: 'admin' },
@@ -47,6 +43,9 @@ async function bootstrap({ organizationName, projectName, name, email, password 
 		});
 		return { org, project, user };
 	});
+	await projectPaths.refresh();
+	projectPaths.scaffoldProject(slug);
+	return result;
 }
 
 async function login({ email, password }) {

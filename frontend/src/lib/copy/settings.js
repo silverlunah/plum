@@ -13,7 +13,6 @@ export const NETWORK_ERROR = 'Network error';
 
 const CHECKING_LABEL = 'Checking…';
 const COPIED_LABEL = 'Copied!';
-const COPY_LABEL = 'Copy';
 
 // ── Nav / section labels ──
 export const PROJECT_LABEL = 'Project';
@@ -343,9 +342,5 @@ export const PROJECT_MEMBERS_LABEL = 'Members';
 export const SAVE_MEMBERS_LABEL = 'Save members';
 export const PROJECT_ADMINS_ALL_HINT =
 	'Admins can see every project — only non-admin members are listed here.';
-export const PROJECT_ID_LABEL = 'Project ID';
-export const PROJECT_NOT_SCAFFOLDED_HINT =
-	'No test folder yet. On the machine running Plum, run this then restart the server:';
-export const projectInitCommand = (id) => `plum project init ${id} && plum server restart`;
-export const copyInitCmdLabel = (copied) => (copied ? COPIED_LABEL : COPY_LABEL);
+export const projectFolderHint = (slug) => `projects/${slug}/tests/`;
 export const PROJECT_MEMBERS_COUNT = (n) => `${n} member${n === 1 ? '' : 's'}`;
