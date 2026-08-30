@@ -9,15 +9,30 @@ const runQueueService = require('../services/runQueueService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { accessibleProjectIds } = require('../lib/projectContext');
 
-// Returns every active run across every project (the bottom bar shows all of
-// them for awareness) plus the ids of the projects this user can actually open.
+// Every active run across every project — the bottom bar shows them all for
+// awareness. Runs in a project the caller can't open are redacted to just what
+// the locked card renders (label, project, status, queue position); the tag,
+// runner list and who started it are dropped.
 router.get('/', jwtAuth, async (req, res, next) => {
 	try {
 		const [runs, accessible] = await Promise.all([
 			runQueueService.listActive(),
 			accessibleProjectIds(req.user)
 		]);
-		res.json({ runs, accessibleProjectIds: accessible });
+		const visible = runs.map((r) =>
+			accessible.includes(r.projectId)
+				? r
+				: {
+						runId: r.runId,
+						projectId: r.projectId,
+						projectName: r.projectName,
+						status: r.status,
+						kind: r.kind,
+						label: r.label,
+						position: r.position
+					}
+		);
+		res.json({ runs: visible, accessibleProjectIds: accessible });
 	} catch (e) {
 		next(e);
 	}

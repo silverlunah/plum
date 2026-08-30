@@ -6,6 +6,7 @@
 const prisma = require('./prisma');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { slugify } = require('../lib/slugify');
 
 // ---------------------------------------------------------------------------
 // Export
@@ -176,7 +177,17 @@ const importAll = async (
 					fields.filter((f) => project[f] !== undefined).map((f) => [f, project[f]])
 				);
 				const existing = await tx.project.findFirst({ orderBy: { id: 'asc' } });
-				if (existing) await tx.project.update({ where: { id: existing.id }, data });
+				if (existing) {
+					await tx.project.update({ where: { id: existing.id }, data });
+				} else {
+					// Restore into an empty database — a project needs an org and a slug.
+					const org =
+						(await tx.organization.findFirst({ orderBy: { id: 'asc' } })) ??
+						(await tx.organization.create({ data: { name: 'Default' } }));
+					await tx.project.create({
+						data: { orgId: org.id, slug: slugify(data.name || 'default') || 'default', ...data }
+					});
+				}
 			}
 
 			// 5. Test suites + cases + steps

@@ -27,7 +27,12 @@ const { StreamableHTTPServerTransport } = require(path.join(sdkCjs, 'server', 's
 // no need to keep a session alive between calls.
 async function handleMcp(req, res, next) {
 	try {
-		const server = createMcpServer({ userId: req.user.userId, projectId: req.projectId });
+		const server = createMcpServer({
+			userId: req.user.userId,
+			projectId: req.projectId,
+			role: req.user.role,
+			apiKey: req.user.apiKey ?? null
+		});
 		const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 		res.on('close', () => {
 			transport.close();

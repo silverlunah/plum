@@ -20,7 +20,16 @@ async function needsSetup() {
 	return count === 0;
 }
 
+// One owner per instance — the count logic in listAll and the implicit-owner
+// row in getMembers both assume it.
+async function assertRoleAssignable(role) {
+	if (role === ROLE.OWNER && (await prisma.user.count({ where: { role: ROLE.OWNER } })) > 0) {
+		throw new Error('This instance already has an owner');
+	}
+}
+
 async function createUser({ name, email, password, role = 'user' }) {
+	await assertRoleAssignable(role);
 	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 	return prisma.user.create({
 		data: { name, email, password: hashed, role },
@@ -150,6 +159,10 @@ async function updateUser(id, { name, email, role }) {
 	if (!user) return { ok: false, error: 'User not found' };
 	if (role !== undefined && !['owner', 'admin', 'user'].includes(role)) {
 		return { ok: false, error: 'role must be owner, admin or user' };
+	}
+	if (role === ROLE.OWNER && user.role !== ROLE.OWNER) {
+		const owners = await prisma.user.count({ where: { role: ROLE.OWNER } });
+		if (owners > 0) return { ok: false, error: 'This instance already has an owner' };
 	}
 	if (email) {
 		const conflict = await prisma.user.findFirst({ where: { email, NOT: { id } } });
