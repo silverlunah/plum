@@ -37,7 +37,10 @@ const SOCKET_EVENTS = Object.freeze({
 	// and get every assignment / result / structural change live.
 	TEST_RUN_JOIN: 'test-run-join',
 	TEST_RUN_LEAVE: 'test-run-leave',
-	TEST_RUN_CHANGED: 'test-run-changed'
+	TEST_RUN_CHANGED: 'test-run-changed',
+
+	// Client → its active project's room; run streams are emitted only there.
+	JOIN_PROJECT: 'join-project'
 });
 
 module.exports = { SOCKET_EVENTS };

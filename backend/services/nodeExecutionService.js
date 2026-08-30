@@ -44,6 +44,10 @@ function startJob({
 		tempTestsDir = path.join(tmpdir, `plum-job-${jobId}`);
 		for (const [rel, content] of Object.entries(tests)) {
 			const dest = path.join(tempTestsDir, rel);
+			// Keep writes inside the job dir — `rel` comes off the wire.
+			if (dest !== tempTestsDir && !dest.startsWith(tempTestsDir + path.sep)) {
+				throw new Error(`Illegal test path: ${rel}`);
+			}
 			fs.mkdirSync(path.dirname(dest), { recursive: true });
 			fs.writeFileSync(dest, Buffer.from(content, 'base64'));
 		}

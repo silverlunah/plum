@@ -124,6 +124,9 @@ model Organization {
   backupIncludeReports Boolean   @default(false)
   // Activity log entries older than this are pruned nightly. 0 keeps them forever.
   activityRetentionDays Int      @default(90)
+  // When the operator accepted the first-run notice. Null only on instances
+  // created before the notice existed.
+  termsAcceptedAt      DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   projects             Project[]

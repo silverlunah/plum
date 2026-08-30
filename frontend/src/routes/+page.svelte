@@ -4,10 +4,12 @@
  -->
 
 <script>
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
 	import { slide } from 'svelte/transition';
 	import { fetchSuites } from '$lib/api/tests';
 	import { runnerConfig, triggerRun } from '$lib/stores/runner';
+	import { activeProjectId } from '$lib/stores/project';
 	import { COPY_TIMEOUT_MS } from '$lib/constants';
 	import { stagger } from '$lib/utils/format';
 	import { copyText } from '$lib/utils/clipboard';
@@ -74,9 +76,12 @@
 		}
 	}
 
-	// Loads once on mount — this page is static and only reflects new suites/tests
-	// on a manual browser refresh, not via a live auto-refresh.
-	onMount(loadSuites);
+	// Reactive, not onMount: after login the switcher sets the active project
+	// just after this mounts, and a fetch on the stale id would 403.
+	$: if (browser) {
+		$activeProjectId;
+		loadSuites();
+	}
 
 	function suiteIds(suite) {
 		return Array.isArray(suite.suiteId) ? suite.suiteId : [suite.suiteId];

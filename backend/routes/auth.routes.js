@@ -7,7 +7,14 @@ const express = require('express');
 const router = express.Router();
 const userService = require('../services/userService');
 const { jwtAuth } = require('../middleware/jwtAuth');
+const { rateLimit } = require('../middleware/rateLimit');
 const { slugify } = require('../lib/slugify');
+
+const loginLimiter = rateLimit({
+	windowMs: 15 * 60_000,
+	max: 10,
+	key: (req) => `${req.ip || ''}|${(req.body?.email || '').toLowerCase()}`
+});
 
 router.get('/needs-setup', async (req, res, next) => {
 	try {
@@ -23,11 +30,14 @@ router.post('/setup', async (req, res, next) => {
 		if (!(await userService.needsSetup())) {
 			return res.status(403).json({ error: 'Setup already complete' });
 		}
-		const { organizationName, projectName, name, email, password } = req.body;
+		const { organizationName, projectName, name, email, password, termsAccepted } = req.body;
 		if (!organizationName || !projectName || !name || !email || !password) {
 			return res.status(400).json({
 				error: 'organizationName, projectName, name, email and password are required'
 			});
+		}
+		if (termsAccepted !== true) {
+			return res.status(400).json({ error: 'The first-run notice must be accepted' });
 		}
 		if (!slugify(projectName)) {
 			return res
@@ -41,7 +51,7 @@ router.post('/setup', async (req, res, next) => {
 	}
 });
 
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginLimiter, async (req, res, next) => {
 	try {
 		const { email, password } = req.body;
 		if (!email || !password)
