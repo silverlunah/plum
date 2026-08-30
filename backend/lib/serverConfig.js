@@ -114,14 +114,21 @@ function buildOverrideYaml({ testsAbs, reportsAbs, backendPort, apiUrl, projects
 	);
 }
 
-// Every ./projects/<id>/ dir on the host (id = the numeric project id from the UI).
+// Every ./projects/<id>/tests dir on the host (id = the numeric project id from
+// the UI). Mounts the `tests/` subdir so the container path lines up with the
+// legacy `tests -> /app/tests` shape and resolveTestsRoot(id).
 function discoverProjectMounts(cwd) {
 	const dir = path.join(cwd, 'projects');
 	try {
 		return fs
 			.readdirSync(dir, { withFileTypes: true })
-			.filter((e) => e.isDirectory() && /^\d+$/.test(e.name))
-			.map((e) => ({ id: e.name, absPath: path.join(dir, e.name) }));
+			.filter(
+				(e) =>
+					e.isDirectory() &&
+					/^\d+$/.test(e.name) &&
+					fs.existsSync(path.join(dir, e.name, 'tests', 'features'))
+			)
+			.map((e) => ({ id: e.name, absPath: path.join(dir, e.name, 'tests') }));
 	} catch {
 		return [];
 	}
