@@ -33,6 +33,9 @@ const testCaseService = require('../services/testCaseService');
 const triggerService = require('../services/triggerService');
 const reportService = require('../services/reportService');
 const exportService = require('../services/exportService');
+const userService = require('../services/userService');
+const projectService = require('../services/projectService');
+const settingsService = require('../services/settingsService');
 
 // ---------------------------------------------------------------------------
 // Polling helper for test runs
@@ -557,6 +560,79 @@ function createMcpServer({ userId, projectId }) {
 			const text = format === 'csv' ? exportService.reportCsv(data) : JSON.stringify(data, null, 2);
 			return { content: [{ type: 'text', text }] };
 		}
+	);
+
+	// -- Account administration ------------------------------------------------
+	// These act account-wide, not on the key's project. Deleting a user or a
+	// project is deliberately left out — it must be done by a human in the UI.
+
+	const asJson = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] });
+
+	server.tool('list_users', 'List every Plum account with its role.', {}, async () =>
+		asJson(await userService.getAll())
+	);
+
+	server.tool(
+		'create_user',
+		'Create a Plum account. The person can sign in immediately with the password you set.',
+		{
+			name: z.string().min(1),
+			email: z.string().email(),
+			password: z.string().min(8).describe('At least 8 characters'),
+			role: z.enum(['owner', 'admin', 'user']).optional().describe('Default: user')
+		},
+		async ({ name, email, password, role = 'user' }) =>
+			asJson(await userService.createUser({ name, email, password, role }))
+	);
+
+	server.tool(
+		'update_user',
+		'Change a Plum account’s name, email or role. Does not set passwords.',
+		{
+			userId: z.string().describe('The account id (cuid), not the email'),
+			name: z.string().min(1).optional(),
+			email: z.string().email().optional(),
+			role: z.enum(['owner', 'admin', 'user']).optional()
+		},
+		async ({ userId, name, email, role }) => {
+			const result = await userService.updateUser(userId, { name, email, role });
+			if (!result.ok) throw new Error(result.error);
+			return asJson(result.user);
+		}
+	);
+
+	server.tool(
+		'list_projects',
+		'List every project in the organisation with its slug and member count.',
+		{},
+		async () => asJson(await projectService.listAll())
+	);
+
+	server.tool(
+		'create_project',
+		'Create a project. Its slug (folder + API identity) is derived from the name and never changes.',
+		{
+			name: z.string().min(1),
+			baseUrl: z.string().optional().describe('Default base URL for this project’s runs')
+		},
+		async ({ name, baseUrl }) => asJson(await projectService.create({ name, baseUrl }))
+	);
+
+	server.tool(
+		'update_project',
+		'Change a project’s name, logo, timezone, base URL or retry count. The slug never changes.',
+		{
+			projectId: z.number().int().describe('Numeric project id'),
+			name: z.string().min(1).optional(),
+			logoUrl: z.string().optional(),
+			timezone: z.string().optional().describe('IANA name, e.g. "Asia/Manila"'),
+			baseUrl: z.string().optional(),
+			maxRetries: z.number().int().min(0).optional()
+		},
+		async ({ projectId: id, name, logoUrl, timezone, baseUrl, maxRetries }) =>
+			asJson(
+				await settingsService.updateProject(id, { name, logoUrl, timezone, baseUrl, maxRetries })
+			)
 	);
 
 	return server;

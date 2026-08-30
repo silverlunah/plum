@@ -52,6 +52,17 @@ router.post('/', jwtAuth, requireOwner, async (req, res, next) => {
 	}
 });
 
+router.put('/:id', jwtAuth, requireOwner, async (req, res, next) => {
+	try {
+		const { name, email, role } = req.body;
+		const result = await userService.updateUser(req.params.id, { name, email, role });
+		if (!result.ok) return res.status(400).json({ error: result.error });
+		res.json({ user: result.user });
+	} catch (e) {
+		next(e);
+	}
+});
+
 router.delete('/:id', jwtAuth, requireOwner, async (req, res, next) => {
 	try {
 		if (req.params.id === req.user.userId)
