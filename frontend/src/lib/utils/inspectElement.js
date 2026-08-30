@@ -23,6 +23,21 @@ function shallowMarkup(el) {
 	return `<${tag}${attrs}>${inner}</${tag}>`;
 }
 
+/** Split a DOM tree row's label into its coloured parts: tag, id, class list. */
+export function nodeSelectorParts(el) {
+	return {
+		tag: el.tagName.toLowerCase(),
+		id: el.id || '',
+		classes: (el.getAttribute('class') ?? '').trim().split(/\s+/).filter(Boolean)
+	};
+}
+
+/** Trimmed text content of a leaf element, for inline preview in the DOM tree. */
+export function nodeTextPreview(el) {
+	if (el.children.length > 0) return '';
+	return (el.textContent ?? '').trim().slice(0, 120);
+}
+
 /** Summarizes a DOM element for the replay inspector panel: markup preview, attributes, size. */
 export function describeElement(el) {
 	const rect = el.getBoundingClientRect();
