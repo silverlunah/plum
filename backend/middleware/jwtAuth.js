@@ -7,22 +7,38 @@ const { verifyToken } = require('../services/userService');
 const prisma = require('../services/prisma');
 const { AUTH_SCHEME } = require('../lib/authHeader');
 
+async function firstAdminId() {
+	const admin = await prisma.user.findFirst({ where: { role: 'admin' }, select: { id: true } });
+	return admin?.id ?? null;
+}
+
+// An API key authenticates as the first admin. A key set via PLUM_MCP_KEY (CI)
+// is instance-wide; a key generated in a project's settings is scoped to that
+// project and pins req.user.mcpProjectId so requireProjectAccess honours it.
+async function resolveApiKey(token) {
+	if (!token) return null;
+	if (process.env.PLUM_MCP_KEY && token === process.env.PLUM_MCP_KEY) {
+		return { userId: await firstAdminId(), role: 'admin' };
+	}
+	const project = await prisma.project.findFirst({
+		where: { mcpKey: token },
+		select: { id: true }
+	});
+	if (!project) return null;
+	return { userId: await firstAdminId(), role: 'admin', mcpProjectId: project.id };
+}
+
 function jwtAuth(req, res, next) {
 	const auth = req.headers.authorization;
 
-	// MCP API key — resolves to the first admin user so createdById is always valid
-	const mcpKey = process.env.PLUM_MCP_KEY;
-	if (mcpKey && auth === `${AUTH_SCHEME.API_KEY} ${mcpKey}`) {
-		prisma.user
-			.findFirst({ where: { role: 'admin' }, select: { id: true } })
-			.then((admin) => {
-				req.user = { userId: admin?.id ?? null, role: 'admin' };
+	if (auth && auth.startsWith(`${AUTH_SCHEME.API_KEY} `)) {
+		resolveApiKey(auth.slice(AUTH_SCHEME.API_KEY.length + 1))
+			.then((user) => {
+				if (!user) return res.status(401).json({ error: 'Invalid API key' });
+				req.user = user;
 				next();
 			})
-			.catch(() => {
-				req.user = { userId: null, role: 'admin' };
-				next();
-			});
+			.catch(() => res.status(401).json({ error: 'Invalid API key' }));
 		return;
 	}
 

@@ -10,17 +10,15 @@ const testSuiteService = require('./testSuiteService');
 // "TC-014" → "TC", "MY-TEAM-3" → "MY-TEAM", "loose" → "loose"
 const prefixOf = (displayId) => String(displayId ?? '').replace(/-\d+$/, '');
 
-async function importTestCases(payload, userId) {
+async function importTestCases(projectId, payload, userId) {
 	if (!payload || payload.plumExport !== 'test-cases' || !Array.isArray(payload.suites)) {
 		const err = new Error('Not a Plum test-case export file.');
 		err.status = 400;
 		throw err;
 	}
 
-	const project = await prisma.project.upsert({
-		where: { id: 1 },
-		create: { id: 1 },
-		update: {},
+	const project = await prisma.project.findUnique({
+		where: { id: projectId },
 		select: { testCasePrefix: true, testSuitePrefix: true }
 	});
 
@@ -36,13 +34,15 @@ async function importTestCases(payload, userId) {
 		const suiteCollides =
 			suite.displayId &&
 			prefixOf(suite.displayId) === project.testSuitePrefix &&
-			(await prisma.testSuite.findUnique({ where: { displayId: suite.displayId } }));
+			(await prisma.testSuite.findUnique({
+				where: { projectId_displayId: { projectId, displayId: suite.displayId } }
+			}));
 
 		if (suiteCollides) {
 			suiteId = suiteCollides.id;
 			result.skippedSuites += 1;
 		} else {
-			const created = await testSuiteService.create({
+			const created = await testSuiteService.create(projectId, {
 				name: suite.name.trim(),
 				description: suite.description ?? '',
 				priority: suite.priority ?? 'Medium',
@@ -61,21 +61,23 @@ async function importTestCases(payload, userId) {
 			const caseCollides =
 				c.displayId &&
 				prefixOf(c.displayId) === project.testCasePrefix &&
-				(await prisma.testCase.findUnique({ where: { displayId: c.displayId } }));
+				(await prisma.testCase.findUnique({
+					where: { projectId_displayId: { projectId, displayId: c.displayId } }
+				}));
 			if (caseCollides) {
 				result.skippedCases += 1;
 				continue;
 			}
 
-			const created = await testCaseService.create({
+			const created = await testCaseService.create(projectId, {
 				suiteId,
 				title: c.title.trim(),
 				description: c.description ?? '',
 				priority: c.priority ?? 'Medium',
 				createdById: userId
 			});
-			if (Array.isArray(c.steps) && c.steps.length > 0) {
-				await testCaseService.upsertSteps(created.id, c.steps);
+			if (created && Array.isArray(c.steps) && c.steps.length > 0) {
+				await testCaseService.upsertSteps(projectId, created.id, c.steps);
 			}
 			result.importedCases += 1;
 		}

@@ -24,6 +24,7 @@ const socketHandler = (io) => {
 			try {
 				await runQueueService.enqueue({
 					id: payload.runId || randomUUID(),
+					projectId: Number(payload.projectId) || undefined,
 					kind: TRIGGER_TYPE.MANUAL,
 					triggerType: TRIGGER_TYPE.MANUAL,
 					label: runTitle || tag || 'Manual run',

@@ -6,16 +6,11 @@
 const express = require('express');
 const router = express.Router();
 const testService = require('../services/testService');
+const { jwtAuth } = require('../middleware/jwtAuth');
+const { requireProjectAccess } = require('../middleware/requireProjectAccess');
 
-/* -----------------------------------------------------
- *                   Get all tests
- *  Description:
- * 		Gets all suites and its own test cases in
- * 		 features/
- * ------------------------------------------------------ */
-router.get('/', (req, res) => {
-	const suites = testService.getTestSuites();
-	res.json({ suites });
+router.get('/', jwtAuth, requireProjectAccess, (req, res) => {
+	res.json({ suites: testService.getTestSuites(req.projectId).suites });
 });
 
 module.exports = router;

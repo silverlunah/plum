@@ -8,12 +8,16 @@ const router = express.Router();
 const reportService = require('../services/reportService');
 const exportService = require('../services/exportService');
 const { sendExport, exportFormat } = require('../lib/exportResponse');
+const { jwtAuth } = require('../middleware/jwtAuth');
+const { requireProjectAccess } = require('../middleware/requireProjectAccess');
+
+router.use(jwtAuth, requireProjectAccess);
 
 router.get('/:id/export', async (req, res, next) => {
 	const id = parseInt(req.params.id, 10);
 	if (isNaN(id)) return res.status(400).json({ error: 'Invalid report id' });
 	try {
-		const data = await exportService.buildReportExport(id);
+		const data = await exportService.buildReportExport(req.projectId, id);
 		if (!data) return res.status(404).json({ error: 'Report not found' });
 		await sendExport(res, {
 			format: exportFormat(req),
@@ -30,8 +34,7 @@ router.get('/', async (req, res) => {
 	try {
 		const page = Math.max(1, parseInt(req.query.page) || 1);
 		const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 15));
-		const result = await reportService.getReports({ page, limit });
-		res.json(result);
+		res.json(await reportService.getReports(req.projectId, { page, limit }));
 	} catch {
 		res.status(500).json({ error: 'Failed to fetch reports' });
 	}
@@ -39,8 +42,7 @@ router.get('/', async (req, res) => {
 
 router.get('/latest', async (req, res) => {
 	try {
-		const latestReportId = await reportService.getLatestReportId();
-		res.json({ latestReportId });
+		res.json({ latestReportId: await reportService.getLatestReportId(req.projectId) });
 	} catch {
 		res.status(500).json({ error: 'Failed to fetch latest report' });
 	}
@@ -50,8 +52,7 @@ router.get('/:id/recordings', async (req, res) => {
 	const id = parseInt(req.params.id, 10);
 	if (isNaN(id)) return res.status(400).json({ error: 'Invalid report id' });
 	try {
-		const recordings = await reportService.getRecordings(id);
-		res.json(recordings);
+		res.json(await reportService.getRecordings(req.projectId, id));
 	} catch {
 		res.status(500).json({ error: 'Failed to fetch recordings' });
 	}
@@ -61,7 +62,7 @@ router.get('/:id/recordings/:recordingId/events', async (req, res) => {
 	const recordingId = parseInt(req.params.recordingId, 10);
 	if (isNaN(recordingId)) return res.status(400).json({ error: 'Invalid recording id' });
 	try {
-		const events = await reportService.getRecordingEvents(recordingId);
+		const events = await reportService.getRecordingEvents(req.projectId, recordingId);
 		if (!events) return res.status(404).json({ error: 'Recording not found' });
 		res.json({ events });
 	} catch {
@@ -72,7 +73,7 @@ router.get('/:id/recordings/:recordingId/events', async (req, res) => {
 router.get('/:id', async (req, res) => {
 	const id = parseInt(req.params.id, 10);
 	if (isNaN(id)) return res.status(400).json({ error: 'Invalid report id' });
-	const detail = await reportService.getReportDetail(id);
+	const detail = await reportService.getReportDetail(req.projectId, id);
 	if (!detail) return res.status(404).json({ error: 'Report not found' });
 	res.json(detail);
 });
@@ -85,7 +86,7 @@ router.delete('/bulk', async (req, res) => {
 	const numericIds = ids.map(Number).filter((n) => !isNaN(n));
 	if (numericIds.length === 0) return res.status(400).json({ error: 'No valid ids' });
 	try {
-		await reportService.deleteReports(numericIds);
+		await reportService.deleteReports(req.projectId, numericIds);
 		res.json({ deleted: numericIds.length });
 	} catch {
 		res.status(500).json({ error: 'Failed to delete reports' });
@@ -96,7 +97,7 @@ router.delete('/:id', async (req, res) => {
 	const id = parseInt(req.params.id, 10);
 	if (isNaN(id)) return res.status(400).json({ error: 'Invalid report id' });
 	try {
-		await reportService.deleteReport(id);
+		await reportService.deleteReport(req.projectId, id);
 		res.json({ deleted: id });
 	} catch {
 		res.status(500).json({ error: 'Failed to delete report' });

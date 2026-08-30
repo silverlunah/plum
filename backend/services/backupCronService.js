@@ -12,7 +12,7 @@ let scheduledJob = null;
 const runBackup = async () => {
 	let project;
 	try {
-		project = await prisma.project.findUnique({ where: { id: 1 } });
+		project = await prisma.project.findFirst({ orderBy: { id: 'asc' } });
 	} catch (err) {
 		console.error('❌ Backup: could not read project config:', err.message);
 		return;
@@ -25,7 +25,7 @@ const runBackup = async () => {
 		const key = await backupService.uploadToS3(data, project);
 
 		await prisma.project.update({
-			where: { id: 1 },
+			where: { id: project.id },
 			data: {
 				backupLastRunAt: new Date(),
 				backupLastStatus: `success:${key}`
@@ -36,7 +36,7 @@ const runBackup = async () => {
 		console.error('❌ Backup failed:', err.message);
 		try {
 			await prisma.project.update({
-				where: { id: 1 },
+				where: { id: project.id },
 				data: {
 					backupLastRunAt: new Date(),
 					backupLastStatus: `error:${err.message}`
@@ -58,7 +58,7 @@ const schedule = (cronExpr, enabled, timezone) => {
 
 const init = async () => {
 	try {
-		const project = await prisma.project.findUnique({ where: { id: 1 } });
+		const project = await prisma.project.findFirst({ orderBy: { id: 'asc' } });
 		schedule(project?.backupCron, project?.backupEnabled, project?.timezone);
 	} catch (err) {
 		console.error('Failed to initialize backup cron:', err.message);

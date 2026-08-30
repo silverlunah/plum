@@ -36,7 +36,7 @@ async function exportReports() {
 const exportAll = async (includeReports = false) => {
 	const [cronJobs, project, testSuites, testRuns, users, runners, reports] = await Promise.all([
 		prisma.cronJob.findMany({ orderBy: { createdAt: 'asc' } }),
-		prisma.project.findUnique({ where: { id: 1 } }),
+		prisma.project.findFirst({ orderBy: { id: 'asc' } }),
 		prisma.testSuite.findMany({
 			orderBy: { createdAt: 'asc' },
 			include: {

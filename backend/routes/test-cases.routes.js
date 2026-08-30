@@ -7,12 +7,19 @@ const express = require('express');
 const router = express.Router();
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireAdmin } = require('../middleware/requireAdmin');
+const { requireProjectAccess } = require('../middleware/requireProjectAccess');
 const testCaseService = require('../services/testCaseService');
 const testImportService = require('../services/testImportService');
 
-router.post('/import', jwtAuth, requireAdmin, async (req, res, next) => {
+router.use(jwtAuth, requireProjectAccess);
+
+router.post('/import', requireAdmin, async (req, res, next) => {
 	try {
-		const result = await testImportService.importTestCases(req.body, req.user.userId);
+		const result = await testImportService.importTestCases(
+			req.projectId,
+			req.body,
+			req.user.userId
+		);
 		res.json(result);
 	} catch (e) {
 		if (e.status === 400) return res.status(400).json({ error: e.message });
@@ -20,9 +27,9 @@ router.post('/import', jwtAuth, requireAdmin, async (req, res, next) => {
 	}
 });
 
-router.get('/:id', jwtAuth, async (req, res, next) => {
+router.get('/:id', async (req, res, next) => {
 	try {
-		const tc = await testCaseService.getById(req.params.id);
+		const tc = await testCaseService.getById(req.projectId, req.params.id);
 		if (!tc) return res.status(404).json({ error: 'Test case not found' });
 		res.json({ testCase: tc });
 	} catch (e) {
@@ -30,52 +37,55 @@ router.get('/:id', jwtAuth, async (req, res, next) => {
 	}
 });
 
-router.post('/', jwtAuth, async (req, res, next) => {
+router.post('/', async (req, res, next) => {
 	try {
 		const { suiteId, title, description, priority } = req.body;
-		if (!suiteId || !title)
+		if (!suiteId || !title) {
 			return res.status(400).json({ error: 'suiteId and title are required' });
-		const testCase = await testCaseService.create({
+		}
+		const testCase = await testCaseService.create(req.projectId, {
 			suiteId,
 			title,
 			description,
 			priority,
 			createdById: req.user.userId
 		});
+		if (!testCase) return res.status(404).json({ error: 'Suite not found' });
 		res.status(201).json({ testCase });
 	} catch (e) {
 		next(e);
 	}
 });
 
-router.put('/:id', jwtAuth, async (req, res, next) => {
+router.put('/:id', async (req, res, next) => {
 	try {
 		const { title, description, priority, suiteId } = req.body;
-		const testCase = await testCaseService.update(req.params.id, {
+		const testCase = await testCaseService.update(req.projectId, req.params.id, {
 			title,
 			description,
 			priority,
 			suiteId
 		});
+		if (!testCase) return res.status(404).json({ error: 'Test case not found' });
 		res.json({ testCase });
 	} catch (e) {
 		next(e);
 	}
 });
 
-router.put('/:id/steps', jwtAuth, async (req, res, next) => {
+router.put('/:id/steps', async (req, res, next) => {
 	try {
-		const { steps } = req.body;
-		const saved = await testCaseService.upsertSteps(req.params.id, steps);
+		const saved = await testCaseService.upsertSteps(req.projectId, req.params.id, req.body.steps);
+		if (saved === null) return res.status(404).json({ error: 'Test case not found' });
 		res.json({ steps: saved });
 	} catch (e) {
 		next(e);
 	}
 });
 
-router.delete('/:id', jwtAuth, async (req, res, next) => {
+router.delete('/:id', async (req, res, next) => {
 	try {
-		await testCaseService.remove(req.params.id);
+		await testCaseService.remove(req.projectId, req.params.id);
 		res.json({ ok: true });
 	} catch (e) {
 		next(e);
