@@ -128,6 +128,7 @@ function spawnBuiltInAttempt({
 		const env = {
 			...process.env,
 			...loadProjectEnv(projectId),
+			IS_HEADLESS: 'true', // server runs have no display — never headed
 			TAG: tag,
 			TRIGGER: TRIGGER_REMOTE,
 			BROWSER: browser,

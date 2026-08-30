@@ -38,6 +38,8 @@ function createEnvFile() {
 	}
 
 	const envContent = `BASE_URL=https://www.saucedemo.com/v1/
+# IS_HEADLESS only affects local \`plum run-test\`. Set it false to watch the
+# browser while debugging. Server and node runs always force headless (no display).
 IS_HEADLESS=false
 `;
 
@@ -218,14 +220,12 @@ async function configureServer({ force }) {
 	const cfg = loadServerConfig(cwd);
 
 	const overrides = {
-		headless: getFlag(args, '--headless'),
 		mode: getFlag(args, '--mode'),
 		backendPort: getFlag(args, '--backend-port'),
 		frontendPort: getFlag(args, '--frontend-port'),
 		apiUrl: getFlag(args, '--api-url'),
 		uiUrl: getFlag(args, '--ui-url')
 	};
-	if (overrides.headless !== undefined) cfg.headless = overrides.headless === 'true';
 	if (overrides.mode !== undefined) cfg.mode = overrides.mode;
 	if (overrides.backendPort !== undefined) cfg.backendPort = overrides.backendPort;
 	if (overrides.frontendPort !== undefined) cfg.frontendPort = overrides.frontendPort;
@@ -233,7 +233,6 @@ async function configureServer({ force }) {
 	if (overrides.uiUrl !== undefined) cfg.uiUrl = overrides.uiUrl;
 
 	const hasFlags = anyFlags(args, [
-		'--headless',
 		'--mode',
 		'--backend-port',
 		'--frontend-port',
@@ -291,13 +290,6 @@ async function configureServer({ force }) {
 			cfg.apiUrl = `http://localhost:${cfg.backendPort}`;
 			cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
 		}
-
-		const headless = await clack.confirm({
-			message: 'Run browsers headless?',
-			initialValue: cfg.headless
-		});
-		if (clack.isCancel(headless)) cancelAndExit();
-		cfg.headless = headless;
 	} else {
 		if (!cfg.mode) cfg.mode = 'local';
 		if (!cfg.apiUrl) cfg.apiUrl = `http://localhost:${cfg.backendPort}`;
@@ -309,10 +301,8 @@ async function configureServer({ force }) {
 	return cfg;
 }
 
-const FIRST_PROJECT_ID = 1;
-
 // Copies the scaffold (test dirs + .gitignore, .vscode, README, .env.example)
-// into a per-project folder. `overwrite: false` makes it a safe fill-in — an
+// into projects/<slug>/tests/. `overwrite: false` makes it a safe fill-in — an
 // operator's edited files and extra tests are left untouched, missing ones added.
 function scaffoldProjectDir(testsDir) {
 	fse.copySync(scaffoldTestsPath, testsDir, { overwrite: false, errorOnExist: false });
@@ -320,38 +310,25 @@ function scaffoldProjectDir(testsDir) {
 	if (!fs.existsSync(env)) fs.copyFileSync(path.join(testsDir, '.env.example'), env);
 }
 
-// The setup wizard's first project is always id 1. Scaffold its test folder up
-// front so it's mounted before the wizard runs — every project, the first one
-// included, then lives in projects/<id>/. Skipped for a legacy single-project
-// install (its tests are still in ./tests/).
-function ensureFirstProjectScaffold(cwd) {
-	if (fs.existsSync(path.join(cwd, 'tests', 'features'))) return;
-	const testsDir = path.join(cwd, 'projects', String(FIRST_PROJECT_ID), 'tests');
-	const isNew = !fs.existsSync(path.join(testsDir, 'features'));
-	scaffoldProjectDir(testsDir);
-	if (isNew) {
-		clack.log.success(`Scaffolded projects/${FIRST_PROJECT_ID}/tests/ for your first project`);
-	}
-}
-
 function applyServerConfig(cfg) {
-	const { writeEnvFile, buildOverrideYaml, discoverProjectMounts } = serverConfigLib();
+	const { writeEnvFile, buildOverrideYaml } = serverConfigLib();
 	const cwd = process.cwd();
-	ensureFirstProjectScaffold(cwd);
-	writeEnvFile(cwd, cfg);
+	// The whole ./projects tree is bind-mounted; the backend fills in each
+	// projects/<slug>/tests/ folder itself, so the dir just has to exist.
+	fs.mkdirSync(path.join(cwd, 'projects'), { recursive: true });
+	writeEnvFile(cwd);
 	copyEnvFile();
 	mergeUserPlugins();
 	const testsDir = path.join(cwd, 'tests');
 	const testsAbs = fs.existsSync(testsDir) ? testsDir.replace(/\\/g, '/') : null;
-	const reportsAbs = path.resolve(cwd, 'reports').replace(/\\/g, '/');
 	fs.writeFileSync(
 		overrideFilePath,
 		buildOverrideYaml({
 			testsAbs,
-			reportsAbs,
+			reportsAbs: path.resolve(cwd, 'reports').replace(/\\/g, '/'),
+			projectsAbs: path.join(cwd, 'projects').replace(/\\/g, '/'),
 			backendPort: cfg.backendPort,
-			apiUrl: cfg.apiUrl,
-			projects: discoverProjectMounts(cwd)
+			apiUrl: cfg.apiUrl
 		}),
 		'utf8'
 	);
@@ -1501,30 +1478,31 @@ switch (command) {
 	}
 
 	case 'project': {
-		const sub = process.argv[3];
-		if (sub !== 'init') {
-			console.log('Usage: plum project init <project-id>');
-			console.log('  <project-id> is the numeric id from Settings → Projects in the UI.');
+		const { slugify } = require(path.join(plumRoot, 'backend', 'lib', 'slugify'));
+		const name = process.argv.slice(4).join(' ').trim();
+		if (process.argv[3] !== 'init' || !name) {
+			console.log('Usage: plum project init "<project name>"');
+			console.log('  Use the exact name from Settings → Projects. The server normally');
+			console.log('  creates this folder for you — run this only to re-create it.');
 			break;
 		}
-		const id = process.argv[4];
-		if (!id || !/^\d+$/.test(id)) {
-			console.error('✗ Pass the numeric project id: plum project init 2');
+		const slug = slugify(name);
+		if (!slug) {
+			console.error('✗ Project name needs at least one letter or number (a–z, 0–9).');
 			process.exit(1);
 		}
-		const testsDir = path.join(process.cwd(), 'projects', id, 'tests');
+		const testsDir = path.join(process.cwd(), 'projects', slug, 'tests');
 		const exists = fs.existsSync(path.join(testsDir, 'features'));
 		scaffoldProjectDir(testsDir);
 		console.log(
 			exists
-				? `projects/${id}/tests/ already exists — filled in any missing files.`
-				: `✓ Scaffolded projects/${id}/tests/`
+				? `projects/${slug}/tests/ already exists — filled in any missing files.`
+				: `✓ Scaffolded projects/${slug}/tests/`
 		);
 		console.log('');
 		console.log('Next:');
-		console.log(`  1. Set the app URL:  nano projects/${id}/tests/.env   # BASE_URL=...`);
-		console.log(`  2. plum server restart              # picks up the new mount`);
-		console.log(`  3. On merge to main, git pull into projects/${id}/tests/`);
+		console.log(`  1. Set the app URL:  nano projects/${slug}/tests/.env   # BASE_URL=...`);
+		console.log(`  2. Merge new tests straight into projects/${slug}/tests/ — no restart.`);
 		break;
 	}
 
@@ -1560,7 +1538,6 @@ switch (command) {
 		console.log('  --version, -v        Print the installed Plum version');
 		console.log('  init                 Set up a new Plum project');
 		console.log('  server start         Start the full UI stack (interactive)');
-		console.log('    --headless <bool>  Run browsers headless (true/false)');
 		console.log('    --mode <m>         local | production (default: local)');
 		console.log('    --backend-port <n> Host port for the backend/API (default: 3001)');
 		console.log('    --frontend-port <n> Host port for the UI (default: 3002)');

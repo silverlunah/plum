@@ -5,14 +5,15 @@
 
 const prisma = require('./prisma');
 const { accessibleProjectIds } = require('../lib/projectContext');
-const { isPerProjectScaffolded } = require('../lib/testsRoot');
+const projectPaths = require('../lib/projectPaths');
+const { slugify } = require('../lib/slugify');
 
-const slugify = (s) =>
-	String(s)
-		.toLowerCase()
-		.trim()
-		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-+|-+$/g, '') || 'project';
+// "janns-blog", then "janns-blog-2", "janns-blog-3", … if taken.
+async function uniqueSlug(base) {
+	let slug = base;
+	for (let n = 2; await prisma.project.findUnique({ where: { slug } }); n++) slug = `${base}-${n}`;
+	return slug;
+}
 
 // Projects the user can act in, with their own name/slug/baseUrl.
 async function listForUser(user) {
@@ -42,19 +43,22 @@ async function listAll() {
 	]);
 	return rows.map(({ _count, ...p }) => ({
 		...p,
-		memberCount: _count.members + adminCount,
-		scaffolded: isPerProjectScaffolded(p.id)
+		memberCount: _count.members + adminCount
 	}));
 }
 
+// `slug` is derived from the name once, here, and never changes afterwards —
+// it's the project's folder and API identity. Renames don't touch it.
 async function create({ name, baseUrl }) {
 	const org = await prisma.organization.findFirst({ orderBy: { id: 'asc' } });
-	let slug = slugify(name);
-	if (await prisma.project.findUnique({ where: { slug } })) slug = `${slug}-${Date.now()}`;
-	return prisma.project.create({
+	const slug = await uniqueSlug(slugify(name));
+	const project = await prisma.project.create({
 		data: { orgId: org.id, name, slug, baseUrl: baseUrl ?? '' },
 		select: { id: true, name: true, slug: true, baseUrl: true }
 	});
+	await projectPaths.refresh();
+	projectPaths.scaffoldProject(slug);
+	return project;
 }
 
 async function getMembers(projectId) {

@@ -5,27 +5,22 @@
 
 const fs = require('fs');
 const path = require('path');
+const { slugFor, PROJECTS_DIR } = require('./projectPaths');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
-const PROJECTS_DIR = process.env.PROJECTS_DIR || path.join(BACKEND_DIR, 'projects');
 
-// A project's test files live in <PROJECTS_DIR>/<id>/. Falls back to the legacy
-// single `tests/` dir when no per-project folder is mounted — so single-project
-// installs keep working while multi-project rolls out.
+// A known project always resolves to its own projects/<slug>/tests/ — even if
+// the folder isn't there yet, so a project with no tests reads as empty rather
+// than falling through to another project's or the shared demo `tests/`. The
+// legacy `tests/` dir is only for a single-project install with no slug.
 function resolveTestsRoot(projectId) {
-	const perProject = path.join(PROJECTS_DIR, String(projectId));
-	if (projectId != null && fs.existsSync(path.join(perProject, 'features'))) return perProject;
+	const slug = projectId != null ? slugFor(projectId) : null;
+	if (slug) return path.join(PROJECTS_DIR, slug, 'tests');
 	return path.join(BACKEND_DIR, 'tests');
 }
 
 function featuresDir(projectId) {
 	return path.join(resolveTestsRoot(projectId), 'features');
-}
-
-// True when the project has its own mounted test folder (projects/<id>/), as
-// opposed to falling back to the legacy shared `tests/` dir.
-function isPerProjectScaffolded(projectId) {
-	return fs.existsSync(path.join(PROJECTS_DIR, String(projectId), 'features'));
 }
 
 // Minimal KEY=VALUE parse of a project's own .env — merged into a run's spawn
@@ -46,4 +41,4 @@ function loadProjectEnv(projectId) {
 	return out;
 }
 
-module.exports = { resolveTestsRoot, featuresDir, isPerProjectScaffolded, loadProjectEnv };
+module.exports = { resolveTestsRoot, featuresDir, loadProjectEnv };

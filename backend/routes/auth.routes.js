@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const userService = require('../services/userService');
 const { jwtAuth } = require('../middleware/jwtAuth');
+const { slugify } = require('../lib/slugify');
 
 router.get('/needs-setup', async (req, res, next) => {
 	try {
@@ -27,6 +28,11 @@ router.post('/setup', async (req, res, next) => {
 			return res.status(400).json({
 				error: 'organizationName, projectName, name, email and password are required'
 			});
+		}
+		if (!slugify(projectName)) {
+			return res
+				.status(400)
+				.json({ error: 'Project name needs at least one letter or number (a–z, 0–9)' });
 		}
 		await userService.bootstrap({ organizationName, projectName, name, email, password });
 		res.status(201).json(await userService.login({ email, password }));
