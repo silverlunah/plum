@@ -1,0 +1,12 @@
+/*
+ * This file is part of Plum.
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
+ */
+
+export const TIMEZONES = (() => {
+	try {
+		return Intl.supportedValuesOf('timeZone');
+	} catch {
+		return ['UTC'];
+	}
+})();
