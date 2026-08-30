@@ -10,14 +10,14 @@ const settingsService = require('../services/settingsService');
 const cronService = require('../services/cronService');
 const backupCronService = require('../services/backupCronService');
 const { jwtAuth } = require('../middleware/jwtAuth');
-const { requireAdmin } = require('../middleware/requireAdmin');
+const { requireOwner } = require('../middleware/requireOwner');
 
 // DB backup is instance-wide; its config lives on the first project.
 async function pid() {
 	return settingsService.instanceProjectId();
 }
 
-router.use(jwtAuth, requireAdmin);
+router.use(jwtAuth, requireOwner);
 
 router.get('/export', async (req, res) => {
 	try {

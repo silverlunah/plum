@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const runnerService = require('../services/runnerService');
 const { jwtAuth } = require('../middleware/jwtAuth');
-const { requireAdmin } = require('../middleware/requireAdmin');
+const { requireOwner } = require('../middleware/requireOwner');
 const { runnerOrAdmin } = require('../middleware/runnerOrAdmin');
 
 // List/create are hit by headless CLI tools (manage-nodes.mjs, node
@@ -23,7 +23,7 @@ router.get('/', async (req, res) => {
 	}
 });
 
-router.post('/probe', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/probe', jwtAuth, requireOwner, async (req, res) => {
 	try {
 		const { url, token } = req.body;
 		if (!url || !token)
@@ -47,7 +47,7 @@ router.post('/', async (req, res) => {
 	}
 });
 
-router.put('/:id', jwtAuth, requireAdmin, async (req, res) => {
+router.put('/:id', jwtAuth, requireOwner, async (req, res) => {
 	try {
 		const { name, url, token, browser } = req.body;
 		const runner = await runnerService.update(req.params.id, { name, url, token, browser });
