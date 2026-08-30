@@ -8,6 +8,7 @@
 	import Player from 'rrweb-player';
 	import 'rrweb-player/dist/style.css';
 	import { fetchRecordingEvents } from '$lib/api/reports';
+	import { INSPECTOR_MIN_WIDTH } from '$lib/constants';
 	import { computeRecordingSegments } from '$lib/utils/format';
 	import { describeElement } from '$lib/utils/inspectElement';
 	import StepsRail from './StepsRail.svelte';
@@ -41,6 +42,7 @@
 	let loading = true;
 	let loadError = false;
 	let selectedElement = null;
+	let selectedNode = null;
 	let hoverBox = null;
 	let cleanupInspect = null;
 	let inspectAttachedDoc = null;
@@ -94,6 +96,41 @@
 
 	function currentReplayer() {
 		return player?.getReplayer?.();
+	}
+
+	// `clip` = the iframe's rect (.player-stage coords) to clip the overlay to;
+	// `box` = the element's rect relative to that clip. Keeps a highlight from
+	// spilling onto the controller, the inspector panel, or past the viewport.
+	function boxFromNode(target) {
+		const iframe = currentReplayer()?.iframe;
+		const doc = iframe?.contentDocument;
+		if (!target || !iframe || !doc || target === doc.documentElement) return null;
+		const rect = target.getBoundingClientRect();
+		const iframeRect = iframe.getBoundingClientRect();
+		const stageRect = stage.getBoundingClientRect();
+		// rrweb-player scales the iframe to fit — clientWidth/Height are pre-scale,
+		// getBoundingClientRect post-scale; ratio = scale.
+		const scaleX = iframeRect.width / (iframe.clientWidth || 1);
+		const scaleY = iframeRect.height / (iframe.clientHeight || 1);
+		return {
+			clip: {
+				top: iframeRect.top - stageRect.top,
+				left: iframeRect.left - stageRect.left,
+				width: iframeRect.width,
+				height: iframeRect.height
+			},
+			box: {
+				top: rect.top * scaleY,
+				left: rect.left * scaleX,
+				width: rect.width * scaleX,
+				height: rect.height * scaleY
+			}
+		};
+	}
+
+	function selectElement(node) {
+		selectedNode = node;
+		selectedElement = describeElement(node);
 	}
 
 	// goto() offsets are relative to a recording's first event — bounded to this
@@ -181,30 +218,12 @@
 		inspectAttachedDoc = doc;
 
 		const onMove = (e) => {
-			const target = e.target;
-			if (!target || target === doc.documentElement) {
-				hoverBox = null;
-				return;
-			}
-			const rect = target.getBoundingClientRect();
-			const iframeRect = iframe.getBoundingClientRect();
-			const stageRect = stage.getBoundingClientRect();
-			// rrweb-player scales the iframe to fit — clientWidth/Height are
-			// pre-scale, getBoundingClientRect post-scale; ratio = scale.
-			const scaleX = iframeRect.width / (iframe.clientWidth || 1);
-			const scaleY = iframeRect.height / (iframe.clientHeight || 1);
-			// Relative to .player-stage so its overflow:hidden clips the highlight.
-			hoverBox = {
-				top: iframeRect.top + rect.top * scaleY - stageRect.top,
-				left: iframeRect.left + rect.left * scaleX - stageRect.left,
-				width: rect.width * scaleX,
-				height: rect.height * scaleY
-			};
+			hoverBox = boxFromNode(e.target);
 		};
 		const onClick = (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			selectedElement = describeElement(e.target);
+			selectElement(e.target);
 		};
 		const onLeave = () => {
 			hoverBox = null;
@@ -277,6 +296,13 @@
 	// Rebuild since rrweb-player's canvas won't reflow to the resized stage on its own.
 	async function toggleInspect() {
 		inspecting = !inspecting;
+		// Entering inspect rebuilds the player — any node held from a prior session
+		// points into a torn-down iframe document.
+		if (inspecting) {
+			selectedElement = null;
+			selectedNode = null;
+			hoverBox = null;
+		}
 		const resumeState = currentPlaybackState();
 		if (resumeState && inspecting) resumeState.paused = true;
 		// jumpToStep pauses exactly at the NEXT marker to show step i's result —
@@ -591,7 +617,11 @@
 		<StepsRail {steps} {stepTimestamps} {currentStepIndex} on:jump={(e) => jumpToStep(e.detail)} />
 	{/if}
 
-	<div class="player-stage" bind:this={stage}>
+	<div
+		class="player-stage"
+		style:margin-right={inspecting ? `${INSPECTOR_MIN_WIDTH}px` : null}
+		bind:this={stage}
+	>
 		<div class="player-column">
 			<div
 				class="player-mount"
@@ -620,9 +650,16 @@
 		{/if}
 		{#if hoverBox}
 			<div
-				class="inspect-highlight"
-				style="top: {hoverBox.top}px; left: {hoverBox.left}px; width: {hoverBox.width}px; height: {hoverBox.height}px;"
-			></div>
+				class="highlight-clip"
+				style="top: {hoverBox.clip.top}px; left: {hoverBox.clip.left}px; width: {hoverBox.clip
+					.width}px; height: {hoverBox.clip.height}px;"
+			>
+				<div
+					class="inspect-highlight"
+					style="top: {hoverBox.box.top}px; left: {hoverBox.box.left}px; width: {hoverBox.box
+						.width}px; height: {hoverBox.box.height}px;"
+				></div>
+			</div>
 		{/if}
 		{#if finished}
 			<button
@@ -647,35 +684,39 @@
 			</button>
 		{/if}
 
-		<button
-			class="inspect-fab"
-			class:inspect-fab-active={inspecting}
-			on:click={toggleInspect}
-			disabled={loading || loadError}
-		>
-			<svg
-				width="14"
-				height="14"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
-			</svg>
-			<span class="inspect-fab-label">{INSPECT_TOGGLE_LABEL}</span>
-		</button>
+		{#if !inspecting}
+			<button class="inspect-fab" on:click={toggleInspect} disabled={loading || loadError}>
+				<svg
+					width="14"
+					height="14"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+				</svg>
+				<span class="inspect-fab-label">{INSPECT_TOGGLE_LABEL}</span>
+			</button>
+		{/if}
 	</div>
 
 	{#if inspecting}
-		<ElementInspector {selectedElement} />
+		<ElementInspector
+			{selectedElement}
+			{selectedNode}
+			on:close={toggleInspect}
+			on:select={(e) => selectElement(e.detail)}
+			on:hover={(e) => (hoverBox = e.detail ? boxFromNode(e.detail) : null)}
+		/>
 	{/if}
 </div>
 
 <style>
 	.recording-player {
+		position: relative;
 		flex: 1;
 		min-height: 0;
 		display: flex;
@@ -691,11 +732,19 @@
 		min-width: 0;
 		min-height: 0;
 		display: flex;
-		align-items: center;
+		/* Pin the player to the bottom so its control bar sits flush with the
+		   screen edge — the STAGE_BREATHING_ROOM slack falls above it. */
+		align-items: flex-end;
 		justify-content: center;
-		/* Matches the constructed player's own white chrome so
-		   STAGE_BREATHING_ROOM's margin doesn't look like an unstyled gap. */
-		background: var(--bg-elevated);
+		background-color: var(--bg-subtle);
+		/* Minimalist dot grid so the margin around the player reads as intentional
+		   canvas, not an unstyled gap. */
+		background-image: radial-gradient(
+			circle,
+			color-mix(in srgb, var(--text-muted) 22%, transparent) 1px,
+			transparent 1px
+		);
+		background-size: 18px 18px;
 	}
 
 	/* Shrink-wraps to .player-mount's own box so MultiTabTimeline can be
@@ -709,19 +758,26 @@
 		display: flex;
 	}
 
-	/* rrweb's .rr-player/.rr-controller ship a rounded corner + drop shadow,
-	   invisible only while the player filled its container edge-to-edge.
-	   STAGE_BREATHING_ROOM now leaves a margin that reveals both as a smudge. */
+	/* rrweb's .rr-player ships a white fill + drop shadow that would box in the
+	   replay and hide the dot-grid canvas — clear both; the iframe's own border
+	   is the only frame. */
 	.player-mount :global(.rr-player) {
 		border-radius: 0 !important;
 		box-shadow: none !important;
+		background: transparent !important;
 	}
 	.player-mount :global(.rr-controller) {
 		border-radius: 0 !important;
 	}
 
-	/* rrweb sets pointer-events:none inline, blocking scroll — safe to override, iframe is sandboxed. */
+	/* Soft border on the replay iframe itself so it outlines exactly the website
+	   viewport. border-box keeps the 1280×720 attribute size intact for rrweb's
+	   scale math. rrweb sets pointer-events:none inline, blocking scroll — safe to
+	   override, the iframe is sandboxed. */
 	.player-mount :global(iframe) {
+		box-sizing: border-box;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
 		pointer-events: auto !important;
 	}
 
@@ -782,13 +838,20 @@
 		font-size: 0.7rem;
 	}
 
+	/* Clipped to the iframe's rect and kept below the UI chrome (inspector panel,
+	   FAB, controller) so the highlight never draws outside the replay viewport. */
+	.highlight-clip {
+		position: absolute;
+		overflow: hidden;
+		pointer-events: none;
+		z-index: 1;
+	}
 	.inspect-highlight {
 		position: absolute;
 		pointer-events: none;
 		background: color-mix(in srgb, var(--accent) 18%, transparent);
 		border: 1.5px solid var(--accent);
 		border-radius: 2px;
-		z-index: 10000;
 	}
 
 	.restart-overlay-btn {
@@ -811,6 +874,7 @@
 		position: absolute;
 		top: 0.75rem;
 		right: 0.75rem;
+		z-index: 21;
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
@@ -832,10 +896,6 @@
 	.inspect-fab:disabled {
 		opacity: 0.3;
 		cursor: default;
-	}
-	.inspect-fab-active {
-		background: var(--accent);
-		opacity: 1;
 	}
 	.inspect-fab-label {
 		font-size: 0.72rem;

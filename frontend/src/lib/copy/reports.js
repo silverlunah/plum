@@ -65,9 +65,13 @@ export const DISMISS_LABEL = 'Dismiss';
 export const RESTART_LABEL = 'Restart replay';
 export const STEPS_RAIL_HEADING = 'Steps';
 export const INSPECTOR_HEADING = 'Inspector';
+export const CLOSE_INSPECTOR_LABEL = 'Close';
 export const NO_ELEMENT_SELECTED = 'Click an element in the replay to inspect it.';
 export const ELEMENT_ATTRIBUTES_LABEL = 'Attributes';
 export const ELEMENT_SIZE_LABEL = 'Size';
+export const INSPECTOR_TAB_ELEMENT = 'Element';
+export const INSPECTOR_TAB_DOM = 'DOM';
+export const DOM_TREE_EMPTY = 'Click an element in the replay to locate it in the DOM.';
 export const recordingTabLabel = (tabIndex) =>
 	tabIndex === 0 ? 'Main tab' : `Tab/Window ${tabIndex + 1}`;
 

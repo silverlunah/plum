@@ -16,7 +16,8 @@
 		featureFile,
 		groupScenariosByRunnerAndWorker,
 		parseRunnerLogs,
-		featureSuiteTag
+		featureSuiteTag,
+		visibleTags
 	} from '$lib/utils/format';
 	import { BROWSERS } from '$lib/constants';
 	import { pluralize } from '$lib/copy/common';
@@ -616,7 +617,12 @@
 		<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
 		<div class="replay-modal" on:click|stopPropagation>
 			<div class="replay-modal-header">
-				<span class="replay-modal-title">{replayScenario.name}</span>
+				<div class="replay-modal-heading">
+					<span class="replay-modal-title">{replayScenario.name}</span>
+					{#each visibleTags(replayScenario) as tag}
+						<TagChip {tag} />
+					{/each}
+				</div>
 				<button class="replay-close" on:click={closeReplay}>
 					<svg
 						width="16"
@@ -1280,13 +1286,20 @@
 	}
 
 	.replay-modal-header {
+		position: relative;
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		padding: 0.875rem 1.25rem;
+		justify-content: center;
+		padding: 0.875rem 3rem;
 		border-bottom: 1px solid var(--border);
-		gap: 1rem;
 		flex-shrink: 0;
+	}
+
+	.replay-modal-heading {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
 	}
 
 	.replay-modal-title {
@@ -1299,6 +1312,10 @@
 	}
 
 	.replay-close {
+		position: absolute;
+		right: 1rem;
+		top: 50%;
+		transform: translateY(-50%);
 		background: transparent;
 		border: none;
 		color: var(--text-muted);
