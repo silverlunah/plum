@@ -21,7 +21,10 @@ export const REPOSITORY_NAV_LABEL = 'Repository';
 export const REPOSITORY_HEADING = 'Test Repository';
 export const TEST_CASES_NAV_LABEL = 'Test Cases';
 export const TEST_CASES_HEADING = 'Test Cases';
-export const TEST_CASES_DESC = 'Bring test cases in from a Plum export file.';
+export const TEST_CASES_DESC = 'Import, export and configure this project’s test repository.';
+export const TC_EXPORT_CARD_TITLE = 'Export';
+export const TC_EXPORT_DESC =
+	'Download every suite and case in this project as a JSON or CSV file.';
 export const TC_IMPORT_CARD_TITLE = 'Import';
 export const TC_IMPORT_DESC =
 	'Upload a JSON file exported from Test Repository. Suites and cases are added as new records.';
@@ -331,13 +334,35 @@ export const restoreLabel = (restoring) => (restoring ? 'Restoring…' : 'Restor
 export const refreshingLabel = (loading) => (loading ? 'Loading…' : REFRESH_LABEL);
 export const backupSizeLabel = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
 
+// ── Update banner (owner) ──
+export const updateBannerText = (latest) =>
+	`Plum ${latest} is available. Run "plum update" on the server to upgrade.`;
+export const UPDATE_NPM_LINK_LABEL = 'Release notes';
+
 // ── Projects & access (Project tab) ──
 export const MANAGE_PROJECTS_LINK_LABEL = 'Manage projects & access →';
 export const CURRENT_PROJECT_LABEL = 'Current project';
 export const NEW_PROJECT_LABEL = 'New project';
 export const NEW_PROJECT_BASE_URL_LABEL = 'Base URL (optional)';
 export const CREATE_PROJECT_LABEL = 'Create';
+
+export const OTHER_PROJECTS_LABEL = 'Other projects';
+export const OTHER_PROJECTS_HINT =
+	'Every project in this organisation. Deleting one wipes it for good.';
+export const DELETE_PROJECT_LABEL = 'Delete';
+export const projectRowMeta = (id, slug, n) =>
+	`#${id} · ${slug} · ${n} member${n === 1 ? '' : 's'}`;
+export const DELETE_PROJECT_MODAL_TITLE = 'Delete project';
+export const deleteProjectWarning = (name) =>
+	`Deleting “${name}” permanently removes every test case, run, report, schedule and its test folder. Users keep their accounts and their names stay on past runs, but the project itself cannot be recovered.`;
+export const DELETE_CONTINUE_LABEL = 'I understand — continue';
+export const deleteProjectConfirmPrompt = (id) =>
+	`Type the project ID (${id}) to permanently delete:`;
+export const CONFIRM_DELETE_PROJECT_LABEL = 'Delete this project';
+
 export const PROJECT_MEMBERS_LABEL = 'Members of this project';
-export const SAVE_MEMBERS_LABEL = 'Save members';
 export const PROJECT_MEMBERS_HINT =
-	'The owner is on every project. Assign admins and users to this project — an admin gets full settings for it, a user just sees its tests and reports.';
+	'The owner is on every project. Add admins (full settings for this project) and users (see its tests and reports). Removing someone only revokes access — their test cases and their name on past runs stay.';
+export const MEMBER_SEARCH_PLACEHOLDER = 'Search people to add…';
+export const NO_MEMBERS_YET = 'No one is assigned yet — search above to add someone.';
+export const REMOVE_MEMBER_TITLE = 'Remove from this project';

@@ -17,6 +17,13 @@ export async function fetchUsers() {
 	return data.users;
 }
 
+// The full pool an owner/admin can add to a project.
+export async function fetchAssignablePool() {
+	const res = await fetch(`${API_BASE}/users/assignable`, { headers: authHeaders() });
+	if (!res.ok) throw new Error('Failed to fetch users');
+	return (await res.json()).users;
+}
+
 export async function createUser({ name, email, password, role = 'user' }) {
 	const res = await fetch(`${API_BASE}/users`, {
 		method: 'POST',

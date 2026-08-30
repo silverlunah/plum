@@ -18,6 +18,12 @@ export async function fetchProjects() {
 	return (await res.json()).projects;
 }
 
+export async function fetchAllProjects() {
+	const res = await fetch(`${API_BASE}/projects/all`, { headers: authHeaders() });
+	if (!res.ok) throw new Error('Failed to load projects');
+	return (await res.json()).projects;
+}
+
 export async function createProject({ name, baseUrl }) {
 	const res = await fetch(`${API_BASE}/projects`, {
 		method: 'POST',
@@ -27,6 +33,15 @@ export async function createProject({ name, baseUrl }) {
 	const data = await res.json();
 	if (!res.ok) throw new Error(data.error ?? 'Failed to create project');
 	return data.project;
+}
+
+export async function deleteProject(id) {
+	const res = await fetch(`${API_BASE}/projects/${id}`, {
+		method: 'DELETE',
+		headers: authHeaders()
+	});
+	const data = await res.json();
+	if (!res.ok) throw new Error(data.error ?? 'Failed to delete project');
 }
 
 export async function fetchProjectMembers(id) {

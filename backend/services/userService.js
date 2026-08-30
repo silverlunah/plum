@@ -69,14 +69,33 @@ async function getAll() {
 	return prisma.user.findMany({ select: userSelect, orderBy: { createdAt: 'asc' } });
 }
 
-// Users that can be assigned to a project — everyone but the owner, who is
-// already on every project.
-async function getMembers() {
+// The whole pool an owner/admin can add to a project — everyone but the owner,
+// who is already on every project.
+async function getAssignablePool() {
 	return prisma.user.findMany({
 		where: { role: { not: ROLE.OWNER } },
 		select: { id: true, name: true, email: true, role: true },
 		orderBy: { name: 'asc' }
 	});
+}
+
+// Who can be assigned work within one project: its explicit members plus the
+// owner. Used by the test-run assignee picker.
+async function getProjectMembers(projectId) {
+	const [owner, memberships] = await Promise.all([
+		prisma.user.findFirst({
+			where: { role: ROLE.OWNER },
+			orderBy: { createdAt: 'asc' },
+			select: { id: true, name: true, email: true, role: true }
+		}),
+		prisma.projectMember.findMany({
+			where: { projectId },
+			select: { user: { select: { id: true, name: true, email: true, role: true } } }
+		})
+	]);
+	const users = memberships.map((m) => m.user);
+	if (owner) users.unshift(owner);
+	return users.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 async function getById(id) {
@@ -120,7 +139,8 @@ module.exports = {
 	login,
 	verifyToken,
 	getAll,
-	getMembers,
+	getAssignablePool,
+	getProjectMembers,
 	getById,
 	updateProfile,
 	updatePassword,

@@ -53,6 +53,16 @@ router.post('/', jwtAuth, requireOwner, async (req, res, next) => {
 	}
 });
 
+router.delete('/:id', jwtAuth, requireOwner, async (req, res, next) => {
+	try {
+		const result = await projectService.remove(Number(req.params.id));
+		if (!result.ok) return res.status(400).json({ error: result.error });
+		res.json({ ok: true });
+	} catch (e) {
+		next(e);
+	}
+});
+
 router.get('/:id/members', jwtAuth, requireProjectAdmin, async (req, res, next) => {
 	try {
 		res.json({ members: await projectService.getMembers(Number(req.params.id)) });
