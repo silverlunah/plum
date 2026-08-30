@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const prisma = require('./prisma');
 const { loadTestEnv } = require('../lib/testEnv');
+const { resolveTestsRoot, loadProjectEnv } = require('../lib/testsRoot');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { bearerHeader } = require('../lib/authHeader');
@@ -147,8 +148,7 @@ const restart = (id) => callControlEndpoint(id, 'restart', 5000);
 // Remote execution
 // ---------------------------------------------------------------------------
 
-function collectTestFiles() {
-	const testsDir = path.resolve(process.cwd(), 'tests');
+function collectTestFiles(testsDir) {
 	const files = {};
 
 	function walk(dir, rel) {
@@ -201,7 +201,7 @@ async function fetchReportContent(runner, jobId, onLog) {
  */
 async function dispatchAndPoll(
 	runnerId,
-	{ tags, browser, workers, baseUrl },
+	{ projectId, tags, browser, workers, baseUrl },
 	onLog,
 	onDone,
 	onRRwebBatch = null,
@@ -236,8 +236,12 @@ async function dispatchAndPoll(
 				tags,
 				browser,
 				workers,
-				tests: collectTestFiles(),
-				env: { ...loadTestEnv(process.cwd()), ...(baseUrl ? { BASE_URL: baseUrl } : {}) }
+				tests: collectTestFiles(resolveTestsRoot(projectId)),
+				env: {
+					...loadTestEnv(process.cwd()),
+					...loadProjectEnv(projectId),
+					...(baseUrl ? { BASE_URL: baseUrl } : {})
+				}
 			}),
 			signal: AbortSignal.timeout(10000)
 		});

@@ -6,17 +6,16 @@
 const fs = require('fs');
 const path = require('path');
 const prisma = require('./prisma');
+const { featuresDir } = require('../lib/testsRoot');
 
-// TODO: resolve the features dir per project.
-const FEATURES_DIR = path.join(__dirname, '../tests/features');
-
-function isTaggedInFeatures(_projectId, displayId) {
+function isTaggedInFeatures(projectId, displayId) {
 	try {
+		const dir = featuresDir(projectId);
 		const tag = `@${displayId}`;
 		return fs
-			.readdirSync(FEATURES_DIR)
+			.readdirSync(dir)
 			.filter((f) => f.endsWith('.feature'))
-			.some((f) => fs.readFileSync(path.join(FEATURES_DIR, f), 'utf8').includes(tag));
+			.some((f) => fs.readFileSync(path.join(dir, f), 'utf8').includes(tag));
 	} catch {
 		return false;
 	}

@@ -260,9 +260,18 @@ Next:
   plum run-test              # try it locally first
 ```
 
-**Acceptance:** two scaffolded projects with different `BASE_URL`s run independently;
-editing one project's `.env` changes only that project's next run, no restart;
-`git pull` into a project folder is reflected on the next run and in the UI list.
+**Status: server side done.** `backend/lib/testsRoot.js` (`resolveTestsRoot` /
+`featuresDir` / `loadProjectEnv`) — resolves `<PROJECTS_DIR>/<id>`, falls back to
+the legacy `tests/` dir so single-project installs are unchanged (verified: run
+pipeline still green with `TESTS_ROOT` now set). Wired into `testService`,
+`testCaseService`, `reportService`, the built-in spawn (`TESTS_ROOT` +
+`PLUM_PROJECT_ID` + per-project `.env` merged in) and node dispatch
+(`collectTestFiles(resolveTestsRoot(projectId))` + `loadProjectEnv`). `chokidar`
+watches `projects/*/features` and re-syncs just the changed project.
+
+**Moved to P5** (needs the `plum server` e2e flow + the Projects admin UI):
+`plum project init <name>`, `buildOverrideYaml` multi-mount, `docker compose`
+restart. Container path is `/app/projects/<id>` (numeric id from the UI).
 
 ---
 
