@@ -120,6 +120,9 @@ function handleNodeModeStartup(port) {
 }
 
 async function handleFullModeStartup(io, testsDir) {
+	await require('./projectPaths')
+		.reconcile()
+		.catch((e) => console.warn('⚠️  project folder reconcile failed:', e.message));
 	syncAutomatedFlags();
 	cleanupLegacyScreenshots();
 
@@ -163,19 +166,22 @@ async function loadChokidar() {
 }
 
 function watchTestFiles(chokidar, testsDir) {
-	// Legacy single-project dir + every per-project folder. A change under
-	// projects/<id>/features re-syncs just that project's automated flags.
+	// Legacy single-project dir + every per-project folder
+	// (projects/<slug>/tests/features). Any change re-syncs all projects — there
+	// are only a handful, and mapping the changed path back to a project id isn't
+	// worth the slug lookup.
 	const projectsDir = process.env.PROJECTS_DIR || path.join(path.dirname(testsDir), 'projects');
-	const targets = [path.join(testsDir, 'features'), path.join(projectsDir, '*', 'features')];
+	const targets = [
+		path.join(testsDir, 'features'),
+		path.join(projectsDir, '*', 'tests', 'features')
+	];
 
 	let debounce = null;
 	chokidar.watch(targets, WATCH_OPTS).on('all', (event, filePath) => {
-		const m = filePath.replace(/\\/g, '/').match(/\/projects\/(\d+)\/features\//);
-		const projectId = m ? Number(m[1]) : null;
 		clearTimeout(debounce);
 		debounce = setTimeout(() => {
 			console.log(`📝 Tests changed (${event}: ${path.basename(filePath)})`);
-			syncAutomatedFlags(projectId);
+			syncAutomatedFlags();
 		}, 300);
 	});
 	console.log('👀 Watching for test file changes...');
