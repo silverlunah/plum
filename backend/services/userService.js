@@ -51,7 +51,9 @@ async function bootstrap({ organizationName, projectName, name, email, password 
 	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 	const slug = slugify(projectName);
 	const result = await prisma.$transaction(async (tx) => {
-		const org = await tx.organization.create({ data: { name: organizationName } });
+		const org = await tx.organization.create({
+			data: { name: organizationName, termsAcceptedAt: new Date() }
+		});
 		const project = await tx.project.create({
 			data: { orgId: org.id, name: projectName, slug }
 		});

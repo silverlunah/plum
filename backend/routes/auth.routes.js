@@ -23,11 +23,14 @@ router.post('/setup', async (req, res, next) => {
 		if (!(await userService.needsSetup())) {
 			return res.status(403).json({ error: 'Setup already complete' });
 		}
-		const { organizationName, projectName, name, email, password } = req.body;
+		const { organizationName, projectName, name, email, password, termsAccepted } = req.body;
 		if (!organizationName || !projectName || !name || !email || !password) {
 			return res.status(400).json({
 				error: 'organizationName, projectName, name, email and password are required'
 			});
+		}
+		if (termsAccepted !== true) {
+			return res.status(400).json({ error: 'The first-run notice must be accepted' });
 		}
 		if (!slugify(projectName)) {
 			return res
