@@ -54,9 +54,11 @@ read "Upgrading" before deploying.
 ### Live runs
 
 - The bottom run bar shows **every project's** queued and running jobs for
-  awareness, each tagged with a project chip. Jobs outside your projects are
-  visible but not clickable and cannot be cancelled; `/live/<id>` blocks the
-  stream for a run whose project you can't reach.
+  awareness, each tagged with a project chip. You can only open or cancel a run
+  in the project you are **currently in** — a run from another project shows its
+  label and project but isn't clickable; switch to that project to watch it.
+  Runs in projects you don't belong to are also stripped of their tag, runner
+  list and who-started-them.
 - The run queue serialises by **runner node**, across all projects — two
   projects targeting the same node (or both using the built-in runner) queue
   FIFO; projects on disjoint nodes run in parallel.
@@ -66,8 +68,10 @@ read "Upgrading" before deploying.
 - Each project has its own **MCP API key**, scoped to that project's data. Only
   a project admin (or the owner) can view or rotate it.
 - New MCP tools: `list_users` / `create_user` / `update_user` and
-  `list_projects` / `create_project` / `update_project`. Deleting a user or a
-  project is deliberately **not** exposed over MCP — a human does that in the UI.
+  `list_projects` / `create_project` / `update_project`. These are organisation-
+  wide, so they require an **owner login or the instance `PLUM_MCP_KEY`** — a
+  project-scoped key cannot use them. Deleting a user or a project is
+  deliberately **not** exposed over MCP — a human does that in the UI.
 
 ### Backup
 
