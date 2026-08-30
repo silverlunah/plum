@@ -38,8 +38,10 @@
 		fetchPrefixes,
 		savePrefixes,
 		migratePrefixes,
-		importTestCases
+		importTestCases,
+		downloadTestCaseExport
 	} from '$lib/api/repository';
+	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
 	import { updateProfile, changePassword } from '$lib/api/auth';
 	import {
 		fetchUsers,
@@ -53,10 +55,18 @@
 	import { copyText } from '$lib/utils/clipboard';
 	import Button from '$lib/components/ui/Button.svelte';
 	import ProjectAccess from '$lib/components/settings/ProjectAccess.svelte';
+	import UpdateBanner from '$lib/components/settings/UpdateBanner.svelte';
+	import Paginator from '$lib/components/ui/Paginator.svelte';
 	import { notify } from '$lib/stores/notifications';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
-	import { CANCEL_LABEL, EDIT_LABEL, SAVE_LABEL, EMAIL_LABEL } from '$lib/copy/common';
+	import {
+		CANCEL_LABEL,
+		EDIT_LABEL,
+		SAVE_LABEL,
+		EMAIL_LABEL,
+		SEARCH_PLACEHOLDER
+	} from '$lib/copy/common';
 	import {
 		PAGE_TITLE,
 		HEADING,
@@ -72,6 +82,8 @@
 		TEST_CASES_HEADING,
 		TEST_CASES_DESC,
 		TC_IMPORT_CARD_TITLE,
+		TC_EXPORT_CARD_TITLE,
+		TC_EXPORT_DESC,
 		TC_IMPORT_DESC,
 		TC_IMPORT_HINT,
 		TC_IMPORT_FAILED_FALLBACK,
@@ -300,7 +312,6 @@
 	const VALID_SECTIONS = new Set([
 		'project',
 		'runners',
-		'repository',
 		'testcases',
 		'integrations',
 		'mcp',
@@ -343,6 +354,15 @@
 	let profileError = '';
 
 	let allUsers = [];
+	let userQuery = '';
+	let userPage = 0;
+	const USERS_PER_PAGE = 20;
+	$: filteredUsers = allUsers.filter(
+		(u) =>
+			!userQuery.trim() ||
+			`${u.name} ${u.email}`.toLowerCase().includes(userQuery.trim().toLowerCase())
+	);
+	$: pagedUsers = filteredUsers.slice(userPage * USERS_PER_PAGE, (userPage + 1) * USERS_PER_PAGE);
 	let userForm = { name: '', email: '', password: '', role: 'user' };
 	let userFormSaving = false;
 	let userFormError = '';
@@ -706,6 +726,18 @@
 		}
 	}
 
+	let tcExporting = false;
+	async function handleTcExport(format) {
+		tcExporting = true;
+		try {
+			await downloadTestCaseExport('all', null, format);
+		} catch (e) {
+			notify('error', e.message || TC_IMPORT_FAILED_FALLBACK);
+		} finally {
+			tcExporting = false;
+		}
+	}
+
 	async function handleSavePrefixes() {
 		prefixesSaving = true;
 		try {
@@ -1004,7 +1036,7 @@
 	].join('\n');
 
 	// Per-project settings — the owner and an admin of the active project.
-	const ELEVATED_SECTIONS = new Set(['project', 'repository', 'testcases', 'integrations', 'mcp']);
+	const ELEVATED_SECTIONS = new Set(['project', 'testcases', 'integrations', 'mcp']);
 	// Account-wide settings — the owner only.
 	const OWNER_SECTIONS = new Set(['runners', 'users', 'backup']);
 
@@ -1020,7 +1052,6 @@
 		...(isElevated
 			? [
 					{ id: 'project', label: PROJECT_LABEL },
-					{ id: 'repository', label: REPOSITORY_NAV_LABEL },
 					{ id: 'testcases', label: TEST_CASES_NAV_LABEL },
 					{ id: 'integrations', label: INTEGRATIONS_LABEL },
 					{ id: 'mcp', label: MCP_NAV_LABEL }
@@ -1042,6 +1073,10 @@
 <div class="page-header">
 	<h1>{HEADING}</h1>
 </div>
+
+{#if isOwner}
+	<UpdateBanner />
+{/if}
 
 <div class="settings-layout">
 	<!-- Left sidebar -->
@@ -1405,10 +1440,49 @@
 				</div>
 			</div>
 
-			<!-- REPOSITORY -->
-		{:else if section === 'repository'}
+			<!-- TEST CASES (repository config + import) -->
+		{:else if section === 'testcases'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<div class="content-header">
+					<h2>{TEST_CASES_HEADING}</h2>
+					<p class="content-desc">{TEST_CASES_DESC}</p>
+				</div>
+
+				<div class="card settings-card">
+					<p class="card-title">{TC_EXPORT_CARD_TITLE}</p>
+					<div class="backup-block">
+						<p class="backup-block-desc">{TC_EXPORT_DESC}</p>
+						<ExportMenu busy={tcExporting} on:select={(e) => handleTcExport(e.detail)} />
+					</div>
+				</div>
+
+				<div class="card settings-card">
+					<p class="card-title">{TC_IMPORT_CARD_TITLE}</p>
+					<div class="backup-block">
+						<p class="backup-block-desc">{TC_IMPORT_DESC}</p>
+						<div class="import-row">
+							<label class="file-label">
+								<input
+									bind:this={tcFileInput}
+									type="file"
+									accept=".json,application/json"
+									class="file-input-hidden"
+									on:change={handleTcFileChange}
+								/>
+								<span class="file-btn">{tcImportFile ? tcImportFile.name : CHOOSE_FILE_LABEL}</span>
+							</label>
+							<Button on:click={handleTcImport} disabled={!tcImportFile || tcImporting}>
+								{tcImportLabel(tcImporting)}
+							</Button>
+						</div>
+						{#if tcImportResult}
+							<p class="tc-import-result">{tcImportSummary(tcImportResult)}</p>
+						{/if}
+						<p class="backup-block-desc">{TC_IMPORT_HINT}</p>
+					</div>
+				</div>
+
+				<div class="content-header" style="margin-top: 1rem">
 					<h2>{REPOSITORY_HEADING}</h2>
 					<p class="content-desc">{REPOSITORY_DESC}</p>
 				</div>
@@ -1490,41 +1564,6 @@
 						<Button variant="ghost" on:click={handleMigratePrefixes} disabled={migrating}>
 							{runMigrationLabel(migrating)}
 						</Button>
-					</div>
-				</div>
-			</div>
-
-			<!-- TEST CASES -->
-		{:else if section === 'testcases'}
-			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
-				<div class="content-header">
-					<h2>{TEST_CASES_HEADING}</h2>
-					<p class="content-desc">{TEST_CASES_DESC}</p>
-				</div>
-
-				<div class="card settings-card">
-					<p class="card-title">{TC_IMPORT_CARD_TITLE}</p>
-					<div class="backup-block">
-						<p class="backup-block-desc">{TC_IMPORT_DESC}</p>
-						<div class="import-row">
-							<label class="file-label">
-								<input
-									bind:this={tcFileInput}
-									type="file"
-									accept=".json,application/json"
-									class="file-input-hidden"
-									on:change={handleTcFileChange}
-								/>
-								<span class="file-btn">{tcImportFile ? tcImportFile.name : CHOOSE_FILE_LABEL}</span>
-							</label>
-							<Button on:click={handleTcImport} disabled={!tcImportFile || tcImporting}>
-								{tcImportLabel(tcImporting)}
-							</Button>
-						</div>
-						{#if tcImportResult}
-							<p class="tc-import-result">{tcImportSummary(tcImportResult)}</p>
-						{/if}
-						<p class="backup-block-desc">{TC_IMPORT_HINT}</p>
 					</div>
 				</div>
 			</div>
@@ -1904,9 +1943,17 @@
 					</div>
 				</div>
 
+				{#if allUsers.length >= USERS_PER_PAGE}
+					<input
+						class="field-input user-search"
+						bind:value={userQuery}
+						placeholder={SEARCH_PLACEHOLDER}
+						on:input={() => (userPage = 0)}
+					/>
+				{/if}
 				{#if allUsers.length > 0}
 					<div class="users-table">
-						{#each allUsers as u (u.id)}
+						{#each pagedUsers as u (u.id)}
 							<div class="user-row">
 								<div class="user-info">
 									<span class="user-name">{u.name}</span>
@@ -1943,6 +1990,7 @@
 							</div>
 						{/each}
 					</div>
+					<Paginator bind:page={userPage} total={filteredUsers.length} perPage={USERS_PER_PAGE} />
 				{/if}
 			</div>
 
@@ -2995,6 +3043,9 @@
 	}
 
 	/* ── Users table ── */
+	.user-search {
+		margin-top: 1rem;
+	}
 	.users-table {
 		display: flex;
 		flex-direction: column;

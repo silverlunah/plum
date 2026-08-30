@@ -19,7 +19,7 @@ export const HEADING = 'Test Repository';
 export const HEADER_DESC = 'Manage test suites, cases, and track manual test runs.';
 export const NEW_SUITE_LABEL = '+ New Suite';
 export const NEW_RUN_LABEL = '+ New Run';
-export const IMPORT_TEST_CASES_LINK = 'Import from file';
+export const MANAGE_TEST_CASES_LINK = 'Import / export →';
 export const IMPORT_TEST_CASES_HREF = '/settings?section=testcases';
 export const EXPORT_TEST_CASES_WHAT = 'Test cases';
 export const EXPORT_SUITE_WHAT = 'Suite';

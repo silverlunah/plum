@@ -328,7 +328,8 @@ function applyServerConfig(cfg) {
 			reportsAbs: path.resolve(cwd, 'reports').replace(/\\/g, '/'),
 			projectsAbs: path.join(cwd, 'projects').replace(/\\/g, '/'),
 			backendPort: cfg.backendPort,
-			apiUrl: cfg.apiUrl
+			apiUrl: cfg.apiUrl,
+			plumVersion: readPlumVersion()
 		}),
 		'utf8'
 	);

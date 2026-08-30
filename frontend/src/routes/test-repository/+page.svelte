@@ -8,15 +8,8 @@
 	import { fly } from 'svelte/transition';
 	import { fetchSuites, createSuite, deleteSuite, searchRepository } from '$lib/api/repository';
 	import { fetchRuns, createRun, duplicateRun, deleteRun } from '$lib/api/repository';
-	import { downloadTestCaseExport } from '$lib/api/repository';
 	import { auth } from '$lib/stores/auth';
-	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
-	import { exportFailedToast, exportedToast } from '$lib/copy/common';
-	import {
-		IMPORT_TEST_CASES_LINK,
-		IMPORT_TEST_CASES_HREF,
-		EXPORT_TEST_CASES_WHAT
-	} from '$lib/copy/repository';
+	import { MANAGE_TEST_CASES_LINK, IMPORT_TEST_CASES_HREF } from '$lib/copy/repository';
 	import { runsVersion } from '$lib/stores/runner';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import { REPO_PAGE_SIZE } from '$lib/constants';
@@ -180,19 +173,6 @@
 	$: filteredRuns = searchResults?.runs ?? [];
 
 	const PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
-
-	let exporting = false;
-	async function handleExport(format) {
-		exporting = true;
-		try {
-			await downloadTestCaseExport('all', null, format);
-			notify('success', exportedToast(EXPORT_TEST_CASES_WHAT));
-		} catch {
-			notify('error', exportFailedToast(EXPORT_TEST_CASES_WHAT.toLowerCase()));
-		} finally {
-			exporting = false;
-		}
-	}
 
 	async function loadSuites(page = 1) {
 		const isPrioritySort = suitesSort.by === 'priority';
@@ -447,9 +427,8 @@
 	<div class="header-actions">
 		{#if tab === 'suites'}
 			{#if $auth.user?.role === 'owner' || $auth.user?.role === 'admin'}
-				<a class="import-link" href={IMPORT_TEST_CASES_HREF}>{IMPORT_TEST_CASES_LINK}</a>
+				<a class="import-link" href={IMPORT_TEST_CASES_HREF}>{MANAGE_TEST_CASES_LINK}</a>
 			{/if}
-			<ExportMenu busy={exporting} on:select={(e) => handleExport(e.detail)} />
 			<Button on:click={() => (suiteModalOpen = true)}>{NEW_SUITE_LABEL}</Button>
 		{:else}
 			<Button on:click={() => (runModalOpen = true)}>{NEW_RUN_LABEL}</Button>
