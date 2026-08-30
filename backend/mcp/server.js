@@ -100,10 +100,9 @@ function createMcpServer({ userId, projectId, role, apiKey }) {
 		version: '1.0.0'
 	});
 
-	// Account-admin tools act organisation-wide. Allow a genuine owner login or
-	// the instance-wide PLUM_MCP_KEY; refuse a project-scoped MCP key (it
-	// authenticates as the owner only for its own project's data) and any
-	// non-owner. Called at the top of each such tool's handler.
+	// A project-scoped MCP key resolves to role 'owner' too, but only for its own
+	// project's data — it must not reach the organisation-wide account tools.
+	// Those need a real owner login or the instance-wide PLUM_MCP_KEY.
 	const assertAccountAdmin = () => {
 		if (apiKey === 'scoped' || role !== 'owner') {
 			throw new Error(
@@ -575,9 +574,8 @@ function createMcpServer({ userId, projectId, role, apiKey }) {
 	);
 
 	// -- Account administration ------------------------------------------------
-	// Organisation-wide, and gated by assertAccountAdmin (owner login or the
-	// instance key only). Deleting a user or a project is deliberately left out —
-	// a human does that in the UI.
+	// Deleting a user or a project is deliberately not here — a human does that
+	// in the UI.
 
 	const asJson = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] });
 
