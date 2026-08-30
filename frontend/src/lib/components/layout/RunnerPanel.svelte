@@ -21,7 +21,7 @@
 		makeRunEntry,
 		mergeRRwebBatch
 	} from '$lib/stores/runner';
-	import { activeProjectId, projects } from '$lib/stores/project';
+	import { activeProjectId } from '$lib/stores/project';
 	import { reportUrl } from '$lib/api/reports';
 	import { fetchRunners } from '$lib/api/runners';
 	import { fetchRuns, fetchRun } from '$lib/api/repository';
@@ -179,19 +179,27 @@
 
 		s.on(SOCKET_EVENTS.REPORT_READY, () => reportsVersion.update((v) => v + 1));
 
-		function updateBgRun(runId, updater) {
+		function updateBgRun(runId, updater, { streamOnly = false } = {}) {
 			backgroundRuns.update((r) => {
-				if (!r[runId]) return r;
-				return { ...r, [runId]: updater(r[runId]) };
+				const run = r[runId];
+				if (!run) return r;
+				// Don't retain logs or screen frames for a run in a project the viewer
+				// can't open — the awareness entry (status only) is enough. Full
+				// socket-level isolation is a separate server-side change.
+				if (streamOnly && !canOpenRun(run)) return r;
+				return { ...r, [runId]: updater(run) };
 			});
 		}
 
 		function upsertBgRun(runId, { projectId, projectName, kind, label, meta }, status) {
+			// Keep only label + project for a run the viewer can't open — drop the
+			// tag / who-started-it that the socket broadcast still carries.
+			const safeMeta = canOpenRun({ projectId }) ? meta : undefined;
 			backgroundRuns.update((r) => ({
 				...r,
 				[runId]: r[runId]
 					? { ...r[runId], status }
-					: makeRunEntry({ projectId, projectName, kind, label, meta, status })
+					: makeRunEntry({ projectId, projectName, kind, label, meta: safeMeta, status })
 			}));
 			panelExpanded.set(true);
 		}
@@ -205,14 +213,18 @@
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_LOG, ({ runId, log }) => {
-			updateBgRun(runId, (run) => ({ ...run, output: run.output + log }));
+			updateBgRun(runId, (run) => ({ ...run, output: run.output + log }), { streamOnly: true });
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_LANES_INIT, ({ runId, lanes }) => {
-			updateBgRun(runId, (run) => ({
-				...run,
-				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '' }))
-			}));
+			updateBgRun(
+				runId,
+				(run) => ({
+					...run,
+					lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '' }))
+				}),
+				{ streamOnly: true }
+			);
 		});
 
 		// Upsert the lane — a tab that connected mid-run (or after a refresh)
@@ -236,18 +248,24 @@
 		}
 
 		s.on(SOCKET_EVENTS.BG_RUN_LANE_LOG, ({ runId, laneId, log }) => {
-			updateBgRun(runId, (run) => patchLane(run, laneId, (l) => ({ logs: (l.logs || '') + log })));
+			updateBgRun(runId, (run) => patchLane(run, laneId, (l) => ({ logs: (l.logs || '') + log })), {
+				streamOnly: true
+			});
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_LANE_STATUS, ({ runId, laneId, status }) => {
-			updateBgRun(runId, (run) => patchLane(run, laneId, () => ({ status })));
+			updateBgRun(runId, (run) => patchLane(run, laneId, () => ({ status })), { streamOnly: true });
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, ({ runId, ...batch }) => {
-			updateBgRun(runId, (run) => ({
-				...run,
-				rrwebByLane: mergeRRwebBatch(run.rrwebByLane, batch)
-			}));
+			updateBgRun(
+				runId,
+				(run) => ({
+					...run,
+					rrwebByLane: mergeRRwebBatch(run.rrwebByLane, batch)
+				}),
+				{ streamOnly: true }
+			);
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_DONE, ({ runId, code, reportId }) => {
@@ -286,13 +304,10 @@
 	$: activeRunEntries = Object.entries($backgroundRuns).filter(
 		([, r]) => r.status === 'queued' || r.status === 'running'
 	);
-	// A run is openable only if the viewer belongs to its project — others still
-	// see it in the bar (queued/running awareness) but can't reach its live view.
-	$: viewableProjectIds = new Set($projects.map((p) => p.id));
-	const canOpenRun = (run) =>
-		run.projectId == null ||
-		run.projectId === $activeProjectId ||
-		viewableProjectIds.has(run.projectId);
+	// A run is openable only when it belongs to the project the viewer is currently
+	// in. Runs from other projects still show in the bar for awareness, but you
+	// have to switch to that project to open one — even if you're a member.
+	$: canOpenRun = (run) => run.projectId == null || run.projectId === $activeProjectId;
 	$: runningCount = activeRunEntries.filter(([, r]) => r.status === 'running').length;
 	$: queuedCount = activeRunEntries.filter(([, r]) => r.status === 'queued').length;
 	$: anyRunning = activeRunEntries.length > 0;

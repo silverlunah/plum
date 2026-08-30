@@ -87,7 +87,7 @@ export const LOGO_URL_PLACEHOLDER = 'https://example.com/logo.png';
 export const PREVIEW_LABEL = 'Preview';
 export const LOGO_PREVIEW_ALT = 'Project logo preview';
 export const TIMEZONE_LABEL = 'Timezone';
-export const TIMEZONE_HINT = 'Used to schedule cron jobs and backups';
+export const TIMEZONE_HINT = 'Used to schedule this project’s cron test runs';
 export const RETRY_FAILED_TESTS_LABEL = 'Retry failed tests';
 export const RETRY_FAILED_TESTS_HINT =
 	'Automatically re-run failed scenarios up to this many times before finalizing the report. 0 disables retries.';
@@ -310,6 +310,9 @@ export const CRON_HINT_PREFIX = '5-field cron — e.g.';
 export const CRON_HINT_SUFFIX = '= daily at 2 AM.';
 export const CRONTAB_LINK_LABEL = 'Test at crontab.guru ↗';
 export const CRON_PLACEHOLDER = '0 2 * * *';
+export const BACKUP_TIMEZONE_LABEL = 'Schedule Timezone';
+export const BACKUP_TIMEZONE_HINT =
+	'The cron above fires on this timezone. Backup is instance-wide.';
 export const BACKUP_LAST_RUN_PREFIX = 'Last backup:';
 export const BACKUP_DOWNLOADED_TOAST = 'Backup downloaded.';
 export const EXPORT_FAILED_TOAST = 'Export failed.';

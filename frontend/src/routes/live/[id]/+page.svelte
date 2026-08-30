@@ -9,6 +9,7 @@
 	import { page } from '$app/stores';
 	import { fly } from 'svelte/transition';
 	import { backgroundRuns, cancelRun } from '$lib/stores/runner';
+	import { activeProjectId } from '$lib/stores/project';
 	import { fetchActiveRuns } from '$lib/api/activeRuns';
 	import { reportUrl } from '$lib/api/reports';
 	import { REDIRECT_DELAY_MS } from '$lib/constants';
@@ -57,7 +58,6 @@
 	let hydrated = false;
 	let queuePosition = 0;
 	let posInterval = null;
-	let accessibleProjectIds = null; // null until the first fetch resolves
 	let listedProjectId = null; // the run's project as seen in the active-runs list
 
 	$: runId = $page.params.id;
@@ -65,19 +65,17 @@
 	$: status = run?.status ?? null;
 	$: lanes = run?.lanes ?? [];
 	$: isMulti = lanes.length > 1;
-	// Block the stream once we know the run's project and that it isn't one the
-	// viewer belongs to — the bottom bar wouldn't link here, but a pasted URL can.
+	// A run is viewable only from within its own project — the bottom bar won't
+	// link here otherwise, but a pasted URL can. (Socket events still reach the
+	// client; server-side room isolation is a separate change.)
 	$: runProjectId = run?.projectId ?? listedProjectId;
 	$: forbidden =
-		accessibleProjectIds != null &&
-		runProjectId != null &&
-		!accessibleProjectIds.includes(runProjectId);
+		runProjectId != null && $activeProjectId != null && runProjectId !== $activeProjectId;
 
 	async function refreshQueuePosition() {
 		try {
-			const { runs, accessibleProjectIds: ids } = await fetchActiveRuns();
+			const { runs } = await fetchActiveRuns();
 			hydrated = true;
-			accessibleProjectIds = ids;
 			const mine = runs.find((r) => r.runId === runId);
 			queuePosition = mine?.position ?? 0;
 			if (mine?.projectId != null) listedProjectId = mine.projectId;

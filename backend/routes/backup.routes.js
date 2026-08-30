@@ -12,16 +12,12 @@ const backupCronService = require('../services/backupCronService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireOwner } = require('../middleware/requireOwner');
 
-// DB backup is instance-wide; its config lives on the first project.
-async function pid() {
-	return settingsService.instanceProjectId();
-}
-
+// DB backup is instance-level (one database); its config lives on the org.
 router.use(jwtAuth, requireOwner);
 
 router.get('/export', async (req, res) => {
 	try {
-		const { backupIncludeReports } = await settingsService.getBackupConfig(await pid());
+		const { backupIncludeReports } = await settingsService.getBackupConfig();
 		const data = await backupService.exportAll(backupIncludeReports);
 		const fileName = `plum-backup-${new Date().toISOString().slice(0, 10)}.json`;
 		res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -53,7 +49,7 @@ router.post('/import', async (req, res) => {
 
 router.get('/config', async (req, res) => {
 	try {
-		const config = await settingsService.getBackupConfig(await pid());
+		const config = await settingsService.getBackupConfig();
 		res.json(config);
 	} catch (error) {
 		console.error('Failed to get backup config:', error);
@@ -63,9 +59,9 @@ router.get('/config', async (req, res) => {
 
 router.post('/config', async (req, res) => {
 	try {
-		await settingsService.updateBackupConfig(await pid(), req.body);
+		await settingsService.updateBackupConfig(req.body);
 		await backupCronService.reload();
-		const config = await settingsService.getBackupConfig(await pid());
+		const config = await settingsService.getBackupConfig();
 		res.json(config);
 	} catch (error) {
 		console.error('Failed to save backup config:', error);
@@ -78,7 +74,7 @@ router.post('/test-s3', async (req, res) => {
 		// If no secret key provided in the request, fall back to the stored one
 		let config = { ...req.body };
 		if (!config.backupS3SecretKey) {
-			const stored = await settingsService.getProjectRaw(await pid());
+			const stored = await settingsService.getOrgRaw();
 			config.backupS3SecretKey = stored?.backupS3SecretKey ?? '';
 		}
 
@@ -97,7 +93,7 @@ router.post('/test-s3', async (req, res) => {
 
 router.get('/s3-backups', async (req, res) => {
 	try {
-		const config = await settingsService.getProjectRaw(await pid());
+		const config = await settingsService.getOrgRaw();
 		const required = ['backupS3Bucket', 'backupS3AccessKey', 'backupS3SecretKey'];
 		const missing = required.filter((k) => !config[k]);
 		if (missing.length > 0) {
@@ -118,7 +114,7 @@ router.post('/s3-restore', async (req, res) => {
 		const { key } = req.body;
 		if (!key) return res.status(400).json({ error: 'Missing backup key' });
 
-		const config = await settingsService.getProjectRaw(await pid());
+		const config = await settingsService.getOrgRaw();
 		const required = ['backupS3Bucket', 'backupS3AccessKey', 'backupS3SecretKey'];
 		const missing = required.filter((k) => !config[k]);
 		if (missing.length > 0) {
@@ -143,7 +139,7 @@ router.post('/s3-restore', async (req, res) => {
 router.post('/run-now', async (req, res) => {
 	try {
 		await backupCronService.runBackup();
-		const config = await settingsService.getBackupConfig(await pid());
+		const config = await settingsService.getBackupConfig();
 		if (config.backupLastStatus?.startsWith('error:')) {
 			return res.status(500).json({ error: config.backupLastStatus.replace('error:', '') });
 		}
