@@ -1081,9 +1081,9 @@
 					{ id: 'integrations', label: INTEGRATIONS_LABEL }
 				]
 			: []),
-		{ id: 'mcp', label: MCP_NAV_LABEL },
 		...(isOwner ? [{ id: 'runners', label: RUNNERS_LABEL }] : []),
 		{ id: 'account', label: ACCOUNT_LABEL },
+		{ id: 'mcp', label: MCP_NAV_LABEL },
 		...(isOwner
 			? [
 					{ id: 'users', label: USERS_LABEL },
