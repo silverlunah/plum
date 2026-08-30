@@ -339,6 +339,25 @@ goes near `master`.
 - **Regression** — single-project installs (one project, header-less clients)
   still work unchanged.
 
+**In progress.** On a fresh DB + fresh build:
+
+- ✅ all migrations apply, backend boots
+- ✅ **first-boot** — _found + fixed a lockout:_ migration `20260830060000`
+  unconditionally seeded a Default org/project, so on a genuine fresh install
+  `needsSetup()` was already false and the wizard was skipped. Fix: migration
+  `20260830090000` deletes the seed when there are no users. Now
+  `/auth/needs-setup` → true → `/auth/setup` creates Acme/Checkout/Alice(admin) +
+  membership and returns a token; a second call 403s.
+- ✅ **isolation** — two projects each mint `TS-001`; Bob (member of Payments
+  only) → 200 on Payments, 403 on Checkout, `/projects` lists only Payments
+- ✅ **run pipeline** — built-in `@TC-001` run in project 2 → report scoped to
+  project 2; project 3 sees 0 reports
+- ✅ **regression** — header-less requests fall back to the user's first project;
+  every route 200s; frontend builds
+- ⏳ not yet retried cold: `plum project init` + override multi-mount (needs the
+  `plum server` CLI flow), a node-dispatched run, replay in the browser per
+  project
+
 **Acceptance:** the checklist above passes on the integration branch; then one PR
 `299-multi-project → master`.
 
