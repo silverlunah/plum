@@ -385,7 +385,13 @@ async function maybeNotify(run, report) {
 // can re-dispatch a persisted row after a server restart.
 async function execute(run, io) {
 	handles(run.id); // register before any await so an early cancel is seen
-	const emit = (event, extra) => io && io.emit(event, { runId: run.id, ...extra });
+
+	// Log / rrweb streams (app output, DOM recordings) go only to this run's
+	// project room, never the global broadcast.
+	const roomIo = io
+		? { emit: (event, payload) => io.to(`project:${run.projectId}`).emit(event, payload) }
+		: null;
+	const emit = (event, extra) => roomIo && roomIo.emit(event, { runId: run.id, ...extra });
 
 	// Drop runner ids that no longer exist — a stale selection or a runner
 	// deleted while this job sat in the queue must not wedge it.
@@ -397,22 +403,27 @@ async function execute(run, io) {
 		return { code: 0, reportId: null, note: 'Target runner no longer exists — run skipped.' };
 	}
 
-	emit(SOCKET_EVENTS.BG_RUN_START, {
-		projectId: run.projectId,
-		projectName: run.projectName ?? '',
-		kind: run.kind,
-		label: run.label,
-		meta: {
-			tag: run.tag,
-			workers: run.workers,
-			browser: run.browser,
-			startedBy: run.startedBy ?? null
-		}
-	});
+	// Coarse start signal stays global for the cross-project run bar; the client
+	// redacts it for projects the viewer can't open.
+	if (io) {
+		io.emit(SOCKET_EVENTS.BG_RUN_START, {
+			runId: run.id,
+			projectId: run.projectId,
+			projectName: run.projectName ?? '',
+			kind: run.kind,
+			label: run.label,
+			meta: {
+				tag: run.tag,
+				workers: run.workers,
+				browser: run.browser,
+				startedBy: run.startedBy ?? null
+			}
+		});
+	}
 
 	try {
 		const isSingleBuiltIn = validated.length === 1 && validated[0] === BUILT_IN_RUNNER_ID;
-		if (isSingleBuiltIn) return await runBuiltIn(run, io, emit);
+		if (isSingleBuiltIn) return await runBuiltIn(run, roomIo, emit);
 
 		const allIds = getTestIdsForTag(run.tag);
 		const chunks = chunkTests(allIds, validated.length);
@@ -430,7 +441,7 @@ async function execute(run, io) {
 				return { id, name: r?.name ?? id, dbId: r?.id ?? null };
 			})
 		);
-		return await runDistributed(run, io, emit, laneInfos, chunks);
+		return await runDistributed(run, roomIo, emit, laneInfos, chunks);
 	} finally {
 		inflight.delete(run.id);
 	}

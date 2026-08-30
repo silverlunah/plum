@@ -223,15 +223,21 @@
 		border-bottom: 1px solid var(--border);
 	}
 	.scope-tabs button {
-		padding: 0.8rem 1.25rem;
+		flex: 1;
+		padding: 0.85rem 1rem;
 		font: inherit;
 		font-size: 0.8125rem;
+		font-weight: 500;
 		color: var(--text-muted);
 		background: none;
 		border: none;
+		border-right: 1px solid var(--border);
 		border-bottom: 2px solid transparent;
 		margin-bottom: -1px;
 		cursor: pointer;
+	}
+	.scope-tabs button:last-child {
+		border-right: none;
 	}
 	.scope-tabs button.active {
 		color: var(--text);

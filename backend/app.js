@@ -8,15 +8,30 @@ const cors = require('cors');
 const { isNodeMode } = require('./constants/env');
 const app = express();
 
-app.use(cors({ origin: '*', exposedHeaders: ['Content-Disposition'] }));
+// `*` is safe here (auth is a header token, not a cookie); PLUM_ALLOWED_ORIGINS
+// pins it anyway for internet-facing deploys.
+const allowedOrigins = (process.env.PLUM_ALLOWED_ORIGINS || '')
+	.split(',')
+	.map((o) => o.trim())
+	.filter(Boolean);
+app.use(
+	cors({
+		origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
+		exposedHeaders: ['Content-Disposition']
+	})
+);
 // Dispatching a run to a node ships the whole tests/ tree (base64-encoded,
 // fixtures included) as one JSON body — Express's 100kb default 413s well
 // before a real test suite does.
 app.use(express.json({ limit: '500mb' }));
 
 // Routes
-const nodeRoutes = require('./routes/node.routes');
-app.use('/api', nodeRoutes);
+
+// Node-only — these run caller-supplied test code; on the primary that's an
+// unauthenticated RCE. The primary never serves its own /api/*.
+if (isNodeMode()) {
+	app.use('/api', require('./routes/node.routes'));
+}
 
 // Primary-mode routes — skipped when running as a runner node (no DB available)
 if (!isNodeMode()) {

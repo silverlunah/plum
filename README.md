@@ -15,34 +15,40 @@
 
 ## Requirements
 
-- [Node.js](https://nodejs.org) v20.12 or higher (Node 22 LTS recommended)
-- [Docker](https://www.docker.com) — required for `plum server start` (the web UI stack). Nodes (`plum node start`) run as a plain Node process and **do not need Docker**.
+- [Node.js](https://nodejs.org) **20.12 or newer** (Node 22 LTS recommended) — enforced by the package's `engines` field.
+- [Docker](https://www.docker.com) — needed **only** for the server (web UI) stack. Writing and running tests locally needs neither Docker nor the server. Runner nodes (`plum node start`) run as a plain Node process and also don't need Docker.
 
 ---
 
 ## Quick Start
 
-### For users
+### Writing tests (no server)
+
+`plum init` scaffolds the current folder — `tests/`, `.env`, `tsconfig.json`, VS Code settings — and installs the Playwright/Cucumber toolchain. Nothing else is required to write and run tests on your machine.
 
 ```bash
-# 1. Install Plum globally
 npm install -g plum-e2e
 
-# 2. Create a project folder and initialize it
 mkdir my-tests && cd my-tests
-plum init
+plum init                       # takes no arguments — sets up this folder
 
-# 3. Set your app URL
-# Edit .env → BASE_URL=https://your-app.com
+# edit .env → BASE_URL=https://your-app.com
 
-# 4. Run the example tests locally (no server needed)
-plum run-test
+plum run-test                   # runs ./tests locally — no Docker, no database
+plum create-test                # scaffold a new .feature + Page + Steps
+```
 
-# 5. Start the web UI (requires Docker)
+### Running the server (web UI: Test Repository, reports, schedules, MCP)
+
+Run this on one machine for your team. It brings up the Docker stack, runs migrations, and — on first start — asks whether you're on a **local machine** or a **production / network server** and which ports to use (backend `3001`, frontend `3002`).
+
+```bash
+npm install -g plum-e2e
+mkdir plum && cd plum
 plum server start
 ```
 
-On first start, Plum asks whether you're setting up on a **local machine** or a **production / network server**, and whether to use the default ports (backend `3001`, frontend `3002`). Then open **http://localhost:3002** and sign in with the account you create.
+`plum server start` creates the `projects/` folder (the bind-mount target) and the Docker config in the current directory. Open **http://localhost:3002**, complete first-run setup, and create your organisation, first project, and owner account. The server scaffolds each project's `projects/<slug>/tests/` folder itself when you add the project in **Settings → Projects** — you don't run `plum init` or `plum project init` for that (`plum project init "<name>"` only re-creates a folder the server lost).
 
 ### For contributors
 

@@ -94,17 +94,17 @@ function summariseReport(report) {
  * authenticated user for this request (see routes/mcp.routes.js — a new
  * server/transport pair is created per request in stateless mode).
  */
-function createMcpServer({ userId, userName, projectId, role, viaMcp }) {
+function createMcpServer({ userId, userName, projectId, role, viaMcp, apiKeyKind }) {
 	const server = new McpServer({
 		name: 'plum',
 		version: '1.0.0'
 	});
 
-	// The account tools are organisation-wide — an admin or user key (or their
-	// login) can't reach them.
+	// Org-wide tools need the instance key — a per-project key stays scoped even
+	// when the owner holds it.
 	const assertAccountAdmin = () => {
-		if (role !== 'owner') {
-			throw new Error('This tool needs an owner account or the instance API key (PLUM_MCP_KEY).');
+		if (apiKeyKind !== 'instance') {
+			throw new Error('This tool needs the instance API key (PLUM_MCP_KEY).');
 		}
 	};
 
@@ -651,7 +651,13 @@ function createMcpServer({ userId, userName, projectId, role, viaMcp }) {
 			maxRetries: z.number().int().min(0).optional()
 		},
 		async ({ projectId: id, name, logoUrl, timezone, baseUrl, maxRetries }) => {
-			assertAccountAdmin();
+			if (role !== 'owner' && role !== 'admin') {
+				throw new Error('Updating project settings needs an admin or owner key.');
+			}
+			// A scoped key stays on its own project; only the instance key roams.
+			if (apiKeyKind !== 'instance' && id !== projectId) {
+				throw new Error(`This key is scoped to project ${projectId}.`);
+			}
 			return asJson(
 				await settingsService.updateProject(id, { name, logoUrl, timezone, baseUrl, maxRetries })
 			);
