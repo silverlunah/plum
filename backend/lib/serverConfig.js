@@ -92,7 +92,13 @@ function writeEnvFile(dir, { headless }) {
  * to already be taken. This override only adds volumes and tells the
  * frontend where to reach the backend via VITE_API_URL.
  */
-function buildOverrideYaml({ testsAbs, reportsAbs, backendPort, apiUrl }) {
+// `projects` is an array of { id, absPath } — each is mounted at /app/projects/<id>
+// so the backend's resolveTestsRoot(id) finds it. The legacy single `tests/`
+// mount is kept for single-project installs.
+function buildOverrideYaml({ testsAbs, reportsAbs, backendPort, apiUrl, projects = [] }) {
+	const projectMounts = projects.map(
+		(p) => `      - "${p.absPath.replace(/\\/g, '/')}:/app/projects/${p.id}"`
+	);
 	return (
 		[
 			'services:',
@@ -100,11 +106,25 @@ function buildOverrideYaml({ testsAbs, reportsAbs, backendPort, apiUrl }) {
 			'    volumes:',
 			`      - "${reportsAbs}:/app/reports"`,
 			`      - "${testsAbs}:/app/tests"`,
+			...projectMounts,
 			'  frontend:',
 			'    environment:',
 			`      VITE_API_URL: "${apiUrl || `http://localhost:${backendPort}`}"`
 		].join('\n') + '\n'
 	);
+}
+
+// Every ./projects/<id>/ dir on the host (id = the numeric project id from the UI).
+function discoverProjectMounts(cwd) {
+	const dir = path.join(cwd, 'projects');
+	try {
+		return fs
+			.readdirSync(dir, { withFileTypes: true })
+			.filter((e) => e.isDirectory() && /^\d+$/.test(e.name))
+			.map((e) => ({ id: e.name, absPath: path.join(dir, e.name) }));
+	} catch {
+		return [];
+	}
 }
 
 module.exports = {
@@ -113,5 +133,6 @@ module.exports = {
 	loadServerConfig,
 	saveServerConfig,
 	writeEnvFile,
-	buildOverrideYaml
+	buildOverrideYaml,
+	discoverProjectMounts
 };

@@ -3,10 +3,11 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
+import { apiHeaders } from '$lib/api/headers';
 import { API_BASE } from '$lib/constants';
 
 export async function fetchSuites() {
-	const res = await fetch(`${API_BASE}/tests`);
+	const res = await fetch(`${API_BASE}/tests`, { headers: apiHeaders() });
 	const { suites } = await res.json();
 	return suites.suites ?? [];
 }
