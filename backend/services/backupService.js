@@ -6,6 +6,7 @@
 const prisma = require('./prisma');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { slugify } = require('../lib/slugify');
 
 // ---------------------------------------------------------------------------
 // Export
@@ -159,13 +160,34 @@ const importAll = async (
 				});
 			}
 
-			// 4. Project settings
+			// 4. Project settings — only the fields exportAll writes; older backups
+			// also carried the S3/backup columns, which now live on Organization.
 			if (project) {
-				await tx.project.upsert({
-					where: { id: 1 },
-					create: { id: 1, ...project },
-					update: project
-				});
+				const fields = [
+					'name',
+					'logoUrl',
+					'timezone',
+					'testCasePrefix',
+					'testSuitePrefix',
+					'discordWebhookUrl',
+					'slackWebhookUrl',
+					'notifyPublicUrl'
+				];
+				const data = Object.fromEntries(
+					fields.filter((f) => project[f] !== undefined).map((f) => [f, project[f]])
+				);
+				const existing = await tx.project.findFirst({ orderBy: { id: 'asc' } });
+				if (existing) {
+					await tx.project.update({ where: { id: existing.id }, data });
+				} else {
+					// Restore into an empty database — a project needs an org and a slug.
+					const org =
+						(await tx.organization.findFirst({ orderBy: { id: 'asc' } })) ??
+						(await tx.organization.create({ data: { name: 'Default' } }));
+					await tx.project.create({
+						data: { orgId: org.id, slug: slugify(data.name || 'default') || 'default', ...data }
+					});
+				}
 			}
 
 			// 5. Test suites + cases + steps

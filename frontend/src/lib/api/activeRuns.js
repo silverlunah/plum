@@ -12,7 +12,7 @@ function authHeaders() {
 
 export async function fetchActiveRuns() {
 	const res = await fetch(`${API_BASE}/active-runs`, { headers: authHeaders() });
-	if (!res.ok) return { runs: [], accessibleProjectIds: [] };
+	if (!res.ok) return { runs: [] };
 	const data = await res.json();
-	return { runs: data.runs ?? [], accessibleProjectIds: data.accessibleProjectIds ?? [] };
+	return { runs: data.runs ?? [] };
 }

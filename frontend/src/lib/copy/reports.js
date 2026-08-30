@@ -108,7 +108,7 @@ export const RUN_NOT_FOUND_HEADING = 'Run not found';
 export const RUN_NOT_FOUND_BODY =
 	'This run has finished or was never started. Check the reports list for its results.';
 export const RUN_SKIPPED_HEADING = 'Run skipped';
-export const RUN_FORBIDDEN_HEADING = 'Not your project';
+export const RUN_FORBIDDEN_HEADING = 'Another project’s run';
 export const RUN_FORBIDDEN_BODY =
-	'This run belongs to a project you don’t have access to. Ask an admin to add you if you need to see it.';
+	'This run belongs to a different project. Switch to that project to watch it — or ask an admin for access if you’re not a member.';
 export const queuePositionLine = (n) => (n > 0 ? `Position ${n} in the queue` : 'Next up');

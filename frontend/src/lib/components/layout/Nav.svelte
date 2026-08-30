@@ -14,8 +14,7 @@
 	let menuOpen = false;
 	let projectMenuOpen = false;
 
-	// Reads from the shared store so the switcher updates the moment a project is
-	// created or deleted in Settings, without a reload.
+	// Shared store, so a project created or deleted in Settings shows here without a reload.
 	$: projectList = $projects;
 
 	onMount(async () => {
