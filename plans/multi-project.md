@@ -58,18 +58,19 @@ nano ~/plum/projects/checkout/.env
 
 ## Phase branching
 
-Each phase branches from the previous phase's branch (not `master`) until phases
-start merging. PR per phase, reviewed, then merged forward.
+`299-multi-project` is a long-lived integration branch off `master`. Every phase
+branches from it and PRs back into it. `master` is not touched until the whole
+feature is tested on the integration branch and lands as one PR.
 
 ```
 master
- └── 299-multi-project-plan            (this doc)
-      └── 299-p1-schema
-           └── 299-p2-backend-scoping
-                └── 299-p3-first-boot
-                     └── 299-p4-tests-root
-                          └── 299-p5-frontend
-                               └── 299-p6-docs
+ └── 299-multi-project              integration / test branch
+      ├── 299-p1-schema     ✅ merged
+      ├── 299-p2-backend-scoping
+      ├── 299-p3-first-boot
+      ├── 299-p4-tests-root
+      ├── 299-p5-frontend
+      └── 299-p6-docs
 ```
 
 ---
