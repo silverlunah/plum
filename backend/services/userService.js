@@ -65,8 +65,24 @@ function verifyToken(token) {
 	return jwt.verify(token, JWT_SECRET);
 }
 
+// Each user with the projects they can reach — the owner reaches every project
+// implicitly, everyone else only their explicit memberships.
 async function getAll() {
-	return prisma.user.findMany({ select: userSelect, orderBy: { createdAt: 'asc' } });
+	const projectSelect = { id: true, name: true, slug: true };
+	const [users, allProjects] = await Promise.all([
+		prisma.user.findMany({
+			select: {
+				...userSelect,
+				projectMemberships: { select: { project: { select: projectSelect } } }
+			},
+			orderBy: { createdAt: 'asc' }
+		}),
+		prisma.project.findMany({ select: projectSelect, orderBy: { id: 'asc' } })
+	]);
+	return users.map(({ projectMemberships, ...u }) => ({
+		...u,
+		projects: u.role === ROLE.OWNER ? allProjects : projectMemberships.map((m) => m.project)
+	}));
 }
 
 // The whole pool an owner/admin can add to a project — everyone but the owner,

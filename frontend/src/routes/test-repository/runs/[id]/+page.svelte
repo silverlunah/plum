@@ -42,6 +42,8 @@
 		LOCKED_BADGE,
 		NO_CASES_IN_RUN_MESSAGE,
 		UNASSIGNED_OPTION,
+		ASSIGNEE_SEARCH_PLACEHOLDER,
+		NO_MATCHING_PEOPLE,
 		SUITE_BROWSER_LABEL,
 		SEARCH_CASES_PLACEHOLDER,
 		NO_MATCHING_CASES,
@@ -349,9 +351,30 @@
 	$: totalCount = run?.entries.length ?? 0;
 	$: passCount = run?.entries.filter((e) => e.status === 'pass').length ?? 0;
 	$: failCount = run?.entries.filter((e) => e.status === 'fail').length ?? 0;
+
+	let assigneeMenuFor = null;
+	let assigneeQuery = '';
+
+	function toggleAssigneeMenu(entryId) {
+		assigneeMenuFor = assigneeMenuFor === entryId ? null : entryId;
+		assigneeQuery = '';
+	}
+
+	const matchName = (m, q) =>
+		!q.trim() || `${m.name} ${m.email}`.toLowerCase().includes(q.trim().toLowerCase());
+
+	async function pickAssignee(entryId, userId) {
+		assigneeMenuFor = null;
+		await handleAssignEntry(entryId, userId);
+	}
 </script>
 
 <svelte:head><title>{runDetailTitle(run)}</title></svelte:head>
+
+<svelte:window
+	on:click={() => (assigneeMenuFor = null)}
+	on:keydown={(e) => e.key === 'Escape' && (assigneeMenuFor = null)}
+/>
 
 <Modal bind:open={editRunOpen} title={EDIT_RUN_MODAL_TITLE}>
 	<div class="form-fields">
@@ -513,17 +536,54 @@
 								{#if entry.case.isAutomated}
 									<AutomatedBadge />
 								{:else}
-									<select
-										class="assignee-select"
-										value={entry.assignedToId ?? ''}
-										disabled={assigning === entry.id}
-										on:change={(e) => handleAssignEntry(entry.id, e.target.value)}
-									>
-										<option value="">{UNASSIGNED_OPTION}</option>
-										{#each members as m}
-											<option value={m.id}>{m.name}</option>
-										{/each}
-									</select>
+									<div class="assignee-picker">
+										<button
+											type="button"
+											class="assignee-trigger"
+											class:open={assigneeMenuFor === entry.id}
+											class:unassigned={!entry.assignedTo}
+											disabled={assigning === entry.id}
+											on:click|stopPropagation={() => toggleAssigneeMenu(entry.id)}
+										>
+											{entry.assignedTo?.name ?? UNASSIGNED_OPTION}
+										</button>
+										{#if assigneeMenuFor === entry.id}
+											<div class="assignee-menu" role="presentation" on:click|stopPropagation>
+												<!-- svelte-ignore a11y_autofocus -->
+												<input
+													class="assignee-search"
+													placeholder={ASSIGNEE_SEARCH_PLACEHOLDER}
+													bind:value={assigneeQuery}
+													autofocus
+												/>
+												<ul>
+													<li>
+														<button
+															type="button"
+															class:selected={!entry.assignedToId}
+															on:click={() => pickAssignee(entry.id, '')}
+														>
+															{UNASSIGNED_OPTION}
+														</button>
+													</li>
+													{#each members.filter((m) => matchName(m, assigneeQuery)) as m (m.id)}
+														<li>
+															<button
+																type="button"
+																class:selected={m.id === entry.assignedToId}
+																on:click={() => pickAssignee(entry.id, m.id)}
+															>
+																<span>{m.name}</span>
+																<span class="assignee-email">{m.email}</span>
+															</button>
+														</li>
+													{:else}
+														<li class="assignee-empty">{NO_MATCHING_PEOPLE}</li>
+													{/each}
+												</ul>
+											</div>
+										{/if}
+									</div>
 								{/if}
 								{#if !isLocked}
 									<button class="icon-btn danger" on:click={() => removeEntry(entry.id)}>
@@ -1070,21 +1130,100 @@
 		margin-bottom: 1rem;
 	}
 
-	.assignee-select {
+	.assignee-picker {
+		position: relative;
+		flex-shrink: 0;
+	}
+	.assignee-trigger {
 		font-size: 0.75rem;
 		font-family: var(--font-body);
 		color: var(--text);
 		background: var(--bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
-		padding: 0.2rem 0.4rem;
+		padding: 0.2rem 0.5rem;
 		cursor: pointer;
-		flex-shrink: 0;
+		max-width: 10rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
-
-	.assignee-select:focus {
+	.assignee-trigger:hover:not(:disabled),
+	.assignee-trigger.open {
+		border-color: var(--accent);
+	}
+	.assignee-trigger:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.assignee-trigger.unassigned {
+		color: var(--text-muted);
+	}
+	.assignee-menu {
+		position: absolute;
+		top: calc(100% + 4px);
+		right: 0;
+		z-index: 20;
+		width: 15rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+		padding: 0.3rem;
+	}
+	.assignee-search {
+		width: 100%;
+		box-sizing: border-box;
+		font: inherit;
+		font-size: 0.78rem;
+		padding: 0.35rem 0.45rem;
+		margin-bottom: 0.3rem;
+		color: var(--text);
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+	}
+	.assignee-search:focus {
 		outline: none;
 		border-color: var(--accent);
+	}
+	.assignee-menu ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		max-height: 12rem;
+		overflow-y: auto;
+	}
+	.assignee-menu li button {
+		display: flex;
+		align-items: baseline;
+		gap: 0.4rem;
+		width: 100%;
+		padding: 0.35rem 0.45rem;
+		font: inherit;
+		font-size: 0.8rem;
+		color: var(--text);
+		text-align: left;
+		background: none;
+		border: none;
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+	}
+	.assignee-menu li button:hover {
+		background: var(--bg-subtle);
+	}
+	.assignee-menu li button.selected {
+		color: var(--accent);
+		font-weight: 600;
+	}
+	.assignee-email {
+		font-size: 0.7rem;
+		color: var(--text-muted);
+	}
+	.assignee-empty {
+		padding: 0.5rem 0.45rem;
+		font-size: 0.78rem;
+		color: var(--text-muted);
 	}
 
 	/* ── Suite browser ── */

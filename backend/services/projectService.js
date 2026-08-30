@@ -88,12 +88,19 @@ async function remove(projectId) {
 	return { ok: true };
 }
 
+// Owner first (implicit member of every project), then the stored members —
+// each carrying its account role so the UI can badge and gate removal.
 async function getMembers(projectId) {
-	const rows = await prisma.projectMember.findMany({
-		where: { projectId },
-		select: { userId: true, role: true }
-	});
-	return rows;
+	const userFields = { id: true, name: true, email: true, role: true };
+	const [owner, rows] = await Promise.all([
+		prisma.user.findFirst({ where: { role: ROLE.OWNER }, select: userFields }),
+		prisma.projectMember.findMany({
+			where: { projectId },
+			select: { user: { select: userFields } }
+		})
+	]);
+	const members = rows.map((r) => r.user);
+	return owner ? [owner, ...members] : members;
 }
 
 // Replace the project's membership with `userIds` (all as 'member').
