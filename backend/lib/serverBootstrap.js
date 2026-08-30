@@ -141,11 +141,15 @@ function cleanupLegacyScreenshots() {
 	});
 }
 
-function syncAutomatedFlags() {
-	// Sync automated flags from feature files on every startup
-	require('../services/reportService')
-		.syncAutomatedFromFeatures()
-		.catch(() => {});
+async function syncAutomatedFlags(projectId) {
+	const reportService = require('../services/reportService');
+	if (projectId != null) return reportService.syncAutomatedFromFeatures(projectId).catch(() => {});
+	// startup: every project
+	try {
+		const prisma = require('../services/prisma');
+		const projects = await prisma.project.findMany({ select: { id: true } });
+		for (const p of projects) await reportService.syncAutomatedFromFeatures(p.id).catch(() => {});
+	} catch {}
 }
 
 async function loadChokidar() {
@@ -159,15 +163,19 @@ async function loadChokidar() {
 }
 
 function watchTestFiles(chokidar, testsDir) {
-	const featuresDir = path.join(testsDir, 'features');
-	if (!fs.existsSync(featuresDir)) return;
+	// Legacy single-project dir + every per-project folder. A change under
+	// projects/<id>/features re-syncs just that project's automated flags.
+	const projectsDir = process.env.PROJECTS_DIR || path.join(path.dirname(testsDir), 'projects');
+	const targets = [path.join(testsDir, 'features'), path.join(projectsDir, '*', 'features')];
 
 	let debounce = null;
-	chokidar.watch(featuresDir, WATCH_OPTS).on('all', (event, filePath) => {
+	chokidar.watch(targets, WATCH_OPTS).on('all', (event, filePath) => {
+		const m = filePath.replace(/\\/g, '/').match(/\/projects\/(\d+)\/features\//);
+		const projectId = m ? Number(m[1]) : null;
 		clearTimeout(debounce);
 		debounce = setTimeout(() => {
 			console.log(`📝 Tests changed (${event}: ${path.basename(filePath)})`);
-			syncAutomatedFlags();
+			syncAutomatedFlags(projectId);
 		}, 300);
 	});
 	console.log('👀 Watching for test file changes...');
