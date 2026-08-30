@@ -385,51 +385,13 @@ async function runFirstUserSetup(apiBase, uiUrl) {
 	let needsSetup = false;
 	try {
 		const res = await fetchWithTimeout(`${apiBase}/auth/needs-setup`);
-		const data = await res.json();
-		needsSetup = data.needsSetup;
+		needsSetup = (await res.json()).needsSetup;
 	} catch {}
 
-	if (!needsSetup) return;
-
-	if (!interactiveAllowed()) {
+	if (needsSetup) {
 		clack.log.info(
-			`No users found. Open ${pc.cyan(`${uiUrl}/setup`)} to create your first account.`
+			`Open ${pc.cyan(`${uiUrl}/setup`)} to create your organization, first project, and admin account.`
 		);
-		return;
-	}
-
-	clack.log.info('No users found — create your first account to get started.');
-
-	const name = await clack.text({ message: 'Your name', placeholder: 'Jane Smith' });
-	if (clack.isCancel(name)) {
-		clack.log.warn('Skipped. Create a user at /setup in the UI.');
-		return;
-	}
-	const email = await clack.text({ message: 'Email address', placeholder: 'jane@example.com' });
-	if (clack.isCancel(email)) {
-		clack.log.warn('Skipped. Create a user at /setup in the UI.');
-		return;
-	}
-	const password = await clack.password({ message: 'Password (min 8 characters)' });
-	if (clack.isCancel(password)) {
-		clack.log.warn('Skipped. Create a user at /setup in the UI.');
-		return;
-	}
-
-	try {
-		const res = await fetchWithTimeout(`${apiBase}/auth/setup`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ name, email, password })
-		});
-		if (res.ok) {
-			clack.log.success(`Account created for ${email}. You can now log in.`);
-		} else {
-			const err = await res.json();
-			clack.log.error(`Failed to create account: ${err.error ?? 'unknown error'}`);
-		}
-	} catch (e) {
-		clack.log.error(`Failed to create account: ${e.message}`);
 	}
 }
 

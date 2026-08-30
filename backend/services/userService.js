@@ -13,7 +13,7 @@ const SALT_ROUNDS = 10;
 const userSelect = { id: true, name: true, email: true, role: true, createdAt: true };
 
 async function needsSetup() {
-	const count = await prisma.user.count();
+	const count = await prisma.organization.count();
 	return count === 0;
 }
 
@@ -22,6 +22,33 @@ async function createUser({ name, email, password, role = 'user' }) {
 	return prisma.user.create({
 		data: { name, email, password: hashed, role },
 		select: userSelect
+	});
+}
+
+const slugify = (s) =>
+	String(s)
+		.toLowerCase()
+		.trim()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '') || 'project';
+
+// First boot: the organisation, its first project, and an admin who owns it —
+// all or nothing.
+async function bootstrap({ organizationName, projectName, name, email, password }) {
+	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
+	return prisma.$transaction(async (tx) => {
+		const org = await tx.organization.create({ data: { name: organizationName } });
+		const project = await tx.project.create({
+			data: { orgId: org.id, name: projectName, slug: slugify(projectName) }
+		});
+		const user = await tx.user.create({
+			data: { name, email, password: hashed, role: 'admin' },
+			select: userSelect
+		});
+		await tx.projectMember.create({
+			data: { projectId: project.id, userId: user.id, role: 'admin' }
+		});
+		return { org, project, user };
 	});
 }
 
@@ -89,6 +116,7 @@ async function deleteUser(id) {
 module.exports = {
 	needsSetup,
 	createUser,
+	bootstrap,
 	login,
 	verifyToken,
 	getAll,
