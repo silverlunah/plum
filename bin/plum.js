@@ -310,7 +310,7 @@ async function configureServer({ force }) {
 }
 
 function applyServerConfig(cfg) {
-	const { writeEnvFile, buildOverrideYaml } = serverConfigLib();
+	const { writeEnvFile, buildOverrideYaml, discoverProjectMounts } = serverConfigLib();
 	const cwd = process.cwd();
 	writeEnvFile(cwd, cfg);
 	copyEnvFile();
@@ -323,7 +323,8 @@ function applyServerConfig(cfg) {
 			testsAbs,
 			reportsAbs,
 			backendPort: cfg.backendPort,
-			apiUrl: cfg.apiUrl
+			apiUrl: cfg.apiUrl,
+			projects: discoverProjectMounts(cwd)
 		}),
 		'utf8'
 	);
@@ -1469,6 +1470,33 @@ switch (command) {
 			firstNode?.primary ??
 			'http://localhost:3001';
 		await openManageNodesMenu(primaryUrl);
+		break;
+	}
+
+	case 'project': {
+		const sub = process.argv[3];
+		if (sub !== 'init') {
+			console.log('Usage: plum project init <project-id>');
+			console.log('  <project-id> is the numeric id from Settings → Projects in the UI.');
+			break;
+		}
+		const id = process.argv[4];
+		if (!id || !/^\d+$/.test(id)) {
+			console.error('✗ Pass the numeric project id: plum project init 2');
+			process.exit(1);
+		}
+		const dest = path.join(process.cwd(), 'projects', id);
+		if (fs.existsSync(dest)) {
+			console.log(`projects/${id}/ already exists — leaving it as is.`);
+		} else {
+			fse.copySync(scaffoldTestsPath, path.join(dest, 'tests'));
+			console.log(`✓ Scaffolded projects/${id}/tests/`);
+		}
+		console.log('');
+		console.log('Next:');
+		console.log(`  1. Set the app URL:  nano projects/${id}/tests/.env   # BASE_URL=...`);
+		console.log(`  2. plum server restart              # picks up the new mount`);
+		console.log(`  3. On merge to main, git pull into projects/${id}/tests/`);
 		break;
 	}
 
