@@ -6,9 +6,11 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('./prisma');
+const activityService = require('./activityService');
 const projectPaths = require('../lib/projectPaths');
 const { slugify } = require('../lib/slugify');
 const { ROLE } = require('../constants/roles');
+const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'plum-dev-secret-change-in-production';
 const SALT_ROUNDS = 10;
@@ -31,10 +33,16 @@ async function assertRoleAssignable(role) {
 async function createUser({ name, email, password, role = 'user' }) {
 	await assertRoleAssignable(role);
 	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
-	return prisma.user.create({
+	const user = await prisma.user.create({
 		data: { name, email, password: hashed, role },
 		select: userSelect
 	});
+	await activityService.record(ACTIVITY_ACTION.USER_CREATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'user', id: user.id, label: user.name },
+		metadata: { role: user.role }
+	});
+	return user;
 }
 
 // First boot: the organisation, its first project, and the owner — all or
@@ -181,11 +189,33 @@ async function updateUser(id, { name, email, role }) {
 		},
 		select: userSelect
 	});
+
+	if (role !== undefined && role !== user.role) {
+		await activityService.record(ACTIVITY_ACTION.USER_ROLE_CHANGE, {
+			scope: ACTIVITY_SCOPE.ORG,
+			target: { type: 'user', id, label: updated.name },
+			metadata: { from: user.role, to: role }
+		});
+	}
+	if (name !== undefined || email !== undefined) {
+		await activityService.record(ACTIVITY_ACTION.USER_UPDATE, {
+			scope: ACTIVITY_SCOPE.ORG,
+			target: { type: 'user', id, label: updated.name }
+		});
+	}
 	return { ok: true, user: updated };
 }
 
 async function deleteUser(id) {
-	return prisma.user.delete({ where: { id } });
+	const user = await prisma.user.findUnique({ where: { id }, select: { name: true } });
+	const result = await prisma.user.delete({ where: { id } });
+	if (user) {
+		await activityService.record(ACTIVITY_ACTION.USER_DELETE, {
+			scope: ACTIVITY_SCOPE.ORG,
+			target: { type: 'user', id, label: user.name }
+		});
+	}
+	return result;
 }
 
 module.exports = {

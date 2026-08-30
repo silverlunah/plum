@@ -4,10 +4,12 @@
  */
 
 const prisma = require('./prisma');
+const activityService = require('./activityService');
 const { accessibleProjectIds } = require('../lib/projectContext');
 const projectPaths = require('../lib/projectPaths');
 const { slugify } = require('../lib/slugify');
 const { ROLE, ELEVATED_ROLES } = require('../constants/roles');
+const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 
 // May this user manage a project's settings and membership? Owners: any project.
 // Admins: only the projects they're assigned to. Everyone else: no.
@@ -67,6 +69,10 @@ async function create({ name, baseUrl }) {
 	});
 	await projectPaths.refresh();
 	projectPaths.scaffoldProject(slug);
+	await activityService.record(ACTIVITY_ACTION.PROJECT_CREATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'project', id: project.id, label: project.name }
+	});
 	return project;
 }
 
@@ -76,7 +82,7 @@ async function create({ name, baseUrl }) {
 async function remove(projectId) {
 	const project = await prisma.project.findUnique({
 		where: { id: projectId },
-		select: { slug: true }
+		select: { slug: true, name: true }
 	});
 	if (!project) return { ok: false, error: 'Project not found' };
 	if ((await prisma.project.count()) <= 1) {
@@ -85,6 +91,10 @@ async function remove(projectId) {
 	await prisma.project.delete({ where: { id: projectId } });
 	projectPaths.removeProjectDir(project.slug);
 	await projectPaths.refresh();
+	await activityService.record(ACTIVITY_ACTION.PROJECT_DELETE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'project', id: projectId, label: project.name || project.slug }
+	});
 	return { ok: true };
 }
 
@@ -111,6 +121,11 @@ async function getMembers(projectId) {
 // dropped here also loses their MCP key for the project.
 async function setMembers(projectId, userIds) {
 	const ids = [...new Set(userIds)];
+	const before = new Set(
+		(await prisma.projectMember.findMany({ where: { projectId }, select: { userId: true } })).map(
+			(m) => m.userId
+		)
+	);
 	await prisma.$transaction([
 		prisma.projectMember.deleteMany({ where: { projectId, userId: { notIn: ids } } }),
 		prisma.mcpKey.deleteMany({
@@ -124,6 +139,37 @@ async function setMembers(projectId, userIds) {
 			})
 		)
 	]);
+
+	const added = ids.filter((id) => !before.has(id));
+	const removed = [...before].filter((id) => !ids.includes(id));
+	if (added.length > 0 || removed.length > 0) {
+		const names = Object.fromEntries(
+			(
+				await prisma.user.findMany({
+					where: { id: { in: [...added, ...removed] } },
+					select: { id: true, name: true }
+				})
+			).map((u) => [u.id, u.name])
+		);
+		const project = await prisma.project.findUnique({
+			where: { id: projectId },
+			select: { name: true }
+		});
+		for (const id of added) {
+			await activityService.record(ACTIVITY_ACTION.MEMBER_ADD, {
+				projectId,
+				target: { type: 'user', id, label: names[id] ?? id },
+				metadata: { project: project?.name }
+			});
+		}
+		for (const id of removed) {
+			await activityService.record(ACTIVITY_ACTION.MEMBER_REMOVE, {
+				projectId,
+				target: { type: 'user', id, label: names[id] ?? id },
+				metadata: { project: project?.name }
+			});
+		}
+	}
 	return getMembers(projectId);
 }
 

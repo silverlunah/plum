@@ -6,10 +6,12 @@
 const fs = require('fs');
 const path = require('path');
 const prisma = require('./prisma');
+const activityService = require('./activityService');
 const { loadTestEnv } = require('../lib/testEnv');
 const { resolveTestsRoot, loadProjectEnv } = require('../lib/testsRoot');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 const { bearerHeader } = require('../lib/authHeader');
 const { JOB_STATUS } = require('../constants/jobStatus');
 
@@ -43,6 +45,13 @@ const create = async ({ name, url, token, browser = DEFAULT_BROWSER }) => {
 	const runner = existing
 		? await prisma.runner.update({ where: { id: existing.id }, data: { token, browser } })
 		: await prisma.runner.create({ data: { name, url: normalisedUrl, token, browser } });
+	await activityService.record(
+		existing ? ACTIVITY_ACTION.NODE_UPDATE : ACTIVITY_ACTION.NODE_CREATE,
+		{
+			scope: ACTIVITY_SCOPE.ORG,
+			target: { type: 'node', id: runner.id, label: runner.name }
+		}
+	);
 	return toPublicRunner(runner);
 };
 
@@ -60,7 +69,13 @@ async function remove(id) {
 			data: { runnerIds: ids.length > 0 ? ids.join(',') : BUILT_IN_RUNNER_ID }
 		});
 	}
-	return prisma.runner.delete({ where: { id } });
+	const runner = await prisma.runner.findUnique({ where: { id }, select: { name: true } });
+	const result = await prisma.runner.delete({ where: { id } });
+	await activityService.record(ACTIVITY_ACTION.NODE_DELETE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'node', id, label: runner?.name ?? id }
+	});
+	return result;
 }
 
 // Leaving `token` blank keeps the existing one (same pattern as the S3 backup
@@ -74,6 +89,10 @@ const update = async (id, { name, url, token, browser }) => {
 			...(token && { token }),
 			...(browser !== undefined && { browser })
 		}
+	});
+	await activityService.record(ACTIVITY_ACTION.NODE_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'node', id, label: runner.name }
 	});
 	return toPublicRunner(runner);
 };

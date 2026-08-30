@@ -4,6 +4,8 @@
  */
 
 const prisma = require('./prisma');
+const activityService = require('./activityService');
+const { ACTIVITY_ACTION } = require('../constants/activity');
 const { SOCKET_EVENTS } = require('../constants/socketEvents');
 
 let _io = null;
@@ -106,7 +108,7 @@ async function projectCaseIds(projectId, caseIds) {
 
 async function create(projectId, { title, caseIds, createdById }) {
 	const ids = await projectCaseIds(projectId, caseIds);
-	return prisma.testRun.create({
+	const run = await prisma.testRun.create({
 		data: {
 			projectId,
 			title,
@@ -116,10 +118,20 @@ async function create(projectId, { title, caseIds, createdById }) {
 		},
 		select: runListSelect
 	});
+	await activityService.record(ACTIVITY_ACTION.TEST_RUN_CREATE, {
+		projectId,
+		target: { type: 'test_run', id: run.id, label: run.title },
+		metadata: { cases: ids.length }
+	});
+	return run;
 }
 
 async function update(projectId, id, { title, status, caseIds }) {
-	if (!(await ownsRun(projectId, id))) return null;
+	const before = await prisma.testRun.findFirst({
+		where: { id, projectId },
+		select: { status: true }
+	});
+	if (!before) return null;
 
 	const data = {};
 	if (title !== undefined) data.title = title;
@@ -154,6 +166,21 @@ async function update(projectId, id, { title, status, caseIds }) {
 
 	const updated = await prisma.testRun.update({ where: { id }, data, select: runListSelect });
 	emitRunChanged(id, { reload: true });
+
+	const changed = [];
+	if (title !== undefined) changed.push('title');
+	if (caseIds !== undefined) changed.push('cases');
+	if (status !== undefined && status !== before.status) changed.push('status');
+	if (changed.length > 0) {
+		await activityService.record(ACTIVITY_ACTION.TEST_RUN_UPDATE, {
+			projectId,
+			target: { type: 'test_run', id, label: updated.title },
+			metadata: {
+				changed,
+				...(changed.includes('status') ? { from: before.status, to: status } : {})
+			}
+		});
+	}
 	return updated;
 }
 
@@ -166,7 +193,7 @@ async function duplicate(projectId, id, { createdById }) {
 		}
 	});
 	if (!original) return null;
-	return prisma.testRun.create({
+	const copy = await prisma.testRun.create({
 		data: {
 			projectId,
 			title: `Copy of ${original.title}`,
@@ -175,21 +202,49 @@ async function duplicate(projectId, id, { createdById }) {
 		},
 		select: runListSelect
 	});
+	await activityService.record(ACTIVITY_ACTION.TEST_RUN_CREATE, {
+		projectId,
+		target: { type: 'test_run', id: copy.id, label: copy.title },
+		metadata: { duplicatedFrom: id }
+	});
+	return copy;
 }
 
 async function remove(projectId, id) {
-	return prisma.testRun.deleteMany({ where: { id, projectId } });
+	const run = await prisma.testRun.findFirst({
+		where: { id, projectId },
+		select: { title: true }
+	});
+	const result = await prisma.testRun.deleteMany({ where: { id, projectId } });
+	if (run) {
+		await activityService.record(ACTIVITY_ACTION.TEST_RUN_DELETE, {
+			projectId,
+			target: { type: 'test_run', id, label: run.title }
+		});
+	}
+	return result;
 }
 
 async function loadEntry(projectId, entryId) {
 	return prisma.testRunEntry.findFirst({
 		where: { id: entryId, run: { projectId } },
-		select: { id: true, runId: true, caseId: true }
+		select: {
+			id: true,
+			runId: true,
+			caseId: true,
+			run: { select: { title: true } },
+			case: { select: { displayId: true, title: true } }
+		}
 	});
 }
 
+// "TC-004 Valid login — Nightly regression"
+const entryLabel = (loaded) =>
+	`${loaded.case.displayId} ${loaded.case.title} — ${loaded.run.title}`;
+
 async function updateEntry(projectId, entryId, { status, notes, executedById }) {
-	if (!(await loadEntry(projectId, entryId))) return null;
+	const loaded = await loadEntry(projectId, entryId);
+	if (!loaded) return null;
 	const entry = await prisma.testRunEntry.update({
 		where: { id: entryId },
 		data: {
@@ -223,6 +278,11 @@ async function updateEntry(projectId, entryId, { status, notes, executedById }) 
 	}
 
 	emitRunChanged(entry.runId, { entry });
+	await activityService.record(ACTIVITY_ACTION.TEST_RUN_ENTRY_RESULT, {
+		projectId,
+		target: { type: 'test_run', id: entry.runId, label: entryLabel(loaded) },
+		metadata: { result: status }
+	});
 	return entry;
 }
 
@@ -235,6 +295,11 @@ async function assignEntry(projectId, entryId, { userId }) {
 		select: { id: true, assignedToId: true, assignedTo: { select: { id: true, name: true } } }
 	});
 	emitRunChanged(loaded.runId, { entry });
+	await activityService.record(ACTIVITY_ACTION.TEST_RUN_ENTRY_ASSIGN, {
+		projectId,
+		target: { type: 'test_run', id: loaded.runId, label: entryLabel(loaded) },
+		metadata: { assignedTo: entry.assignedTo?.name ?? null }
+	});
 	return entry;
 }
 
