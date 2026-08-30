@@ -8,8 +8,8 @@ const cors = require('cors');
 const { isNodeMode } = require('./constants/env');
 const app = express();
 
-// `*` is safe here (auth is a header token, not a cookie); PLUM_ALLOWED_ORIGINS
-// pins it anyway for internet-facing deploys.
+// `*` is safe here — auth is a header token, not a cookie. Operators who still
+// want the browser origin pinned can set PLUM_ALLOWED_ORIGINS (comma-separated).
 const allowedOrigins = (process.env.PLUM_ALLOWED_ORIGINS || '')
 	.split(',')
 	.map((o) => o.trim())
