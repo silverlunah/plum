@@ -37,6 +37,7 @@ function normaliseRunnerIds(arr) {
 function rowToJob(row) {
 	return {
 		id: row.id,
+		projectId: row.projectId,
 		kind: row.kind,
 		triggerType: row.triggerType,
 		label: row.label,
@@ -153,13 +154,20 @@ async function prune() {
 
 // Adds a run request to the queue and returns its id. It starts as soon as
 // every runner it targets is free; disjoint runner sets run in parallel.
+async function defaultProjectId() {
+	const p = await prisma.project.findFirst({ orderBy: { id: 'asc' }, select: { id: true } });
+	return p?.id ?? null;
+}
+
 async function enqueue(job) {
 	const id = job.id || randomUUID();
 	const runnerIds = normaliseRunnerIds(job.runnerIds);
+	const projectId = job.projectId ?? (await defaultProjectId());
 
 	await prisma.runQueue.create({
 		data: {
 			id,
+			projectId,
 			kind: job.kind,
 			triggerType: job.triggerType,
 			label: job.label ?? '',
@@ -193,9 +201,10 @@ async function enqueue(job) {
 
 // Stops a run in any state: a queued row is dropped, a running one has its local
 // processes and remote node jobs killed. Emits bg-run-done either way.
-async function cancel(id) {
+async function cancel(id, projectId) {
 	const row = await prisma.runQueue.findUnique({ where: { id } });
 	if (!row || row.status === DONE) return false;
+	if (projectId !== undefined && row.projectId !== projectId) return false;
 
 	if (row.status === QUEUED) {
 		await prisma.runQueue.update({
@@ -219,9 +228,10 @@ async function cancel(id) {
 }
 
 // Back-compat shape for the HTTP trigger poll (GET /trigger/:jobId).
-async function getJob(id) {
+async function getJob(id, projectId) {
 	const row = await prisma.runQueue.findUnique({ where: { id } });
 	if (!row) return null;
+	if (projectId !== undefined && row.projectId !== projectId) return null;
 	let status = JOB_STATUS.RUNNING;
 	if (row.status === DONE) {
 		status =
@@ -239,9 +249,12 @@ async function getJob(id) {
 	};
 }
 
-async function listActive() {
+async function listActive(projectId) {
 	const rows = await prisma.runQueue.findMany({
-		where: { status: { in: [QUEUED, RUNNING] } },
+		where: {
+			status: { in: [QUEUED, RUNNING] },
+			...(projectId !== undefined ? { projectId } : {})
+		},
 		orderBy: { queuedAt: 'asc' }
 	});
 	let queuePos = 0;

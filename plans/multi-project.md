@@ -161,11 +161,28 @@ Split into project-scoped (`getProject(projectId)`) and org-scoped
 **MCP key** — `bootstrapMcpKey` becomes per-project; `jwtAuth`'s MCP branch resolves
 the key → its project → `req.projectId`.
 
-**Users routes** — add `GET/PUT /projects/:id/members` (admin only).
+**Users / Projects routes** — add project CRUD + `GET/PUT /projects/:id/members`
+(admin only). _Deferred to P5 with the frontend._
 
-**Acceptance:** a `member` token for project A gets `403` on any project B route;
-an `admin` token works everywhere; existing single-project API calls still work
-when `X-Plum-Project` points at the Default project.
+**Extra schema (migration `20260830070000`)** — `displayId` and cron `taskName`
+are unique per project now (`@@unique([projectId, ...])`), not globally, so two
+projects can each have `TC-001` / a `nightly` schedule.
+
+**Status: done.** Verified on the running stack:
+
+- header missing → falls back to the user's first project; `x-plum-project: <bad>`
+  → 403; no auth → 401 (`/reports`, `/tests`, `/cron-jobs` are authenticated now)
+- two projects each generate `TS-001`; each lists only its own suites
+- a `member` of project B: 200 on B, **403 on project A**, header-less → auto-B
+- run pipeline: `trigger` → `RunQueue` row carries `projectId` → report saved
+  scoped to it (built-in runner, verified end to end)
+- MCP server + key resolution, cron scheduler, backup config all take a project /
+  instance id
+
+Left for later phases: `testService` / `runExecutorService` / `testChunker` still
+read the single `tests/features` dir (P4 gives them `resolveTestsRoot`); backup
+_restore_ needs a multi-project pass; socket run-trigger trusts `payload.projectId`
+(no socket auth yet).
 
 ---
 

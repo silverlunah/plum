@@ -64,10 +64,10 @@ function shapeCase(c, { result = null, notes = null, testedBy = null, testedAt =
 	};
 }
 
-async function buildTestCaseExport(scope, { suiteId, runId } = {}) {
+async function buildTestCaseExport(projectId, scope, { suiteId, runId } = {}) {
 	if (scope === 'run') {
-		const run = await prisma.testRun.findUnique({
-			where: { id: runId },
+		const run = await prisma.testRun.findFirst({
+			where: { id: runId, projectId },
 			select: {
 				id: true,
 				title: true,
@@ -138,7 +138,7 @@ async function buildTestCaseExport(scope, { suiteId, runId } = {}) {
 		};
 	}
 
-	const where = scope === 'suite' ? { id: suiteId } : {};
+	const where = scope === 'suite' ? { id: suiteId, projectId } : { projectId };
 	const suites = await prisma.testSuite.findMany({
 		where,
 		orderBy: { createdAt: 'asc' },
@@ -236,9 +236,9 @@ function testCaseCsvRows(data) {
 
 // ── Reports ─────────────────────────────────────────────────────────────────
 
-async function buildReportExport(id) {
+async function buildReportExport(projectId, id) {
 	const reportService = require('./reportService');
-	const detail = await reportService.getReportDetail(id);
+	const detail = await reportService.getReportDetail(projectId, id);
 	if (!detail) return null;
 
 	let passed = 0;

@@ -7,13 +7,11 @@ const express = require('express');
 const router = express.Router();
 const runQueueService = require('../services/runQueueService');
 const { jwtAuth } = require('../middleware/jwtAuth');
+const { requireProjectAccess } = require('../middleware/requireProjectAccess');
 
-// Queued + running rows carry a real user's display name (`startedBy`) — gate
-// this the same way as other identity-bearing routes, not left open like the
-// purely operational GET routes.
-router.get('/', jwtAuth, async (req, res, next) => {
+router.get('/', jwtAuth, requireProjectAccess, async (req, res, next) => {
 	try {
-		res.json({ runs: await runQueueService.listActive() });
+		res.json({ runs: await runQueueService.listActive(req.projectId) });
 	} catch (e) {
 		next(e);
 	}
