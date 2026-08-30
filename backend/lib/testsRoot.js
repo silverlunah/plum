@@ -31,8 +31,10 @@ function loadProjectEnv(projectId) {
 	const file = path.join(resolveTestsRoot(projectId), '.env');
 	const out = {};
 	try {
-		for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
-			const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+		// Split on \r?\n and trim the value so a CRLF .env (easy to save on
+		// Windows) or a trailing space doesn't leak into BASE_URL et al.
+		for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+			const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
 			if (m && m[1] !== 'IS_HEADLESS') out[m[1]] = m[2].replace(/^["']|["']$/g, '');
 		}
 	} catch {

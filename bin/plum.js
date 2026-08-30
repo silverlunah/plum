@@ -4,7 +4,7 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-import { execSync, spawn } from 'child_process';
+import { execSync, execFileSync, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -1509,7 +1509,7 @@ switch (command) {
 
 	case 'create-step': {
 		const createStepScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-step.mjs');
-		execSync(`node "${createStepScript}"`, {
+		execFileSync(process.execPath, [createStepScript], {
 			cwd: process.cwd(),
 			stdio: 'inherit',
 			env: {
@@ -1522,7 +1522,7 @@ switch (command) {
 
 	case 'create-test': {
 		const createTestScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-test.mjs');
-		execSync(`node "${createTestScript}"`, {
+		execFileSync(process.execPath, [createTestScript], {
 			cwd: process.cwd(),
 			stdio: 'inherit',
 			env: {
