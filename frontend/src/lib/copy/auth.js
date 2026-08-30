@@ -17,8 +17,7 @@ export const signInLabel = (loading) => (loading ? 'Signing in…' : 'Sign in');
 
 // ── Setup ──
 export const SETUP_PAGE_TITLE = 'Setup — Plum';
-export const WELCOME_TITLE = 'Welcome to Plum';
-export const WELCOME_SUBTITLE = 'Create your first account to get started.';
+
 export const YOUR_NAME_LABEL = 'Your name';
 export const NAME_PLACEHOLDER = 'Jane Smith';
 export const PASSWORD_MIN_PLACEHOLDER = 'Min. 8 characters';
@@ -26,4 +25,17 @@ export const ALL_FIELDS_REQUIRED = 'All fields are required.';
 export const PASSWORD_MIN_LENGTH_ERROR = 'Password must be at least 8 characters.';
 export const SETUP_FAILED_FALLBACK = 'Setup failed';
 
-export const createAccountLabel = (loading) => (loading ? 'Creating account…' : 'Create account');
+export const SETUP_STEP_ORG_TITLE = 'Name your organization';
+export const SETUP_STEP_ORG_SUBTITLE =
+	'Plus a first project — a project keeps its tests and reports separate.';
+export const SETUP_STEP_ADMIN_TITLE = 'Create your admin account';
+export const SETUP_STEP_ADMIN_SUBTITLE = 'You can add more people and projects once you are in.';
+export const ORG_NAME_LABEL = 'Organization name';
+export const ORG_NAME_PLACEHOLDER = 'Acme Inc.';
+export const PROJECT_NAME_LABEL = 'First project name';
+export const PROJECT_NAME_PLACEHOLDER = 'Checkout';
+export const SETUP_CONTINUE_LABEL = 'Continue';
+export const SETUP_BACK_LABEL = 'Back';
+export const setupStepLabel = (n, total) => `Step ${n} of ${total}`;
+
+export const createAccountLabel = (loading) => (loading ? 'Creating account…' : 'Finish setup');
