@@ -257,8 +257,8 @@ async function getJob(id, projectId) {
 	};
 }
 
-// Every active run across every project — the bottom bar shows them all for
-// awareness; the client marks the ones the viewer can't reach as non-clickable.
+// Not filtered by project — the bottom bar shows every project's active runs for
+// awareness. The /active-runs route redacts the ones the caller can't reach.
 async function listActive() {
 	const rows = await prisma.runQueue.findMany({
 		where: { status: { in: [QUEUED, RUNNING] } },
