@@ -19,6 +19,7 @@ const { SOCKET_EVENTS } = require('../constants/socketEvents');
 const { JOB_STATUS, REPORT_STATUS } = require('../constants/jobStatus');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { getTestSuites } = require('./testService');
+const { resolveTestsRoot, loadProjectEnv } = require('../lib/testsRoot');
 const { readCucumberReportFile } = require('../lib/reportFilename');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
@@ -110,6 +111,7 @@ function makeSyntheticFailReport(laneName, testIds, reason) {
 // reports/cucumber_report.json is never contended.
 function spawnBuiltInAttempt({
 	runId,
+	projectId,
 	laneId,
 	tag,
 	workers,
@@ -125,12 +127,15 @@ function spawnBuiltInAttempt({
 
 		const env = {
 			...process.env,
+			...loadProjectEnv(projectId),
 			TAG: tag,
 			TRIGGER: TRIGGER_REMOTE,
 			BROWSER: browser,
 			REPORT_RUNNERS: String(workers),
 			PLUM_MODE: PLUM_MODE_NODE,
-			PLUM_SS_DIR: ssDir
+			PLUM_SS_DIR: ssDir,
+			TESTS_ROOT: resolveTestsRoot(projectId),
+			PLUM_PROJECT_ID: String(projectId)
 		};
 		if (Number(workers) > 1) env.PARALLEL = String(workers);
 		if (testRunId) env.TEST_RUN_ID = testRunId;
@@ -179,6 +184,7 @@ async function runBuiltIn(run, io, emit) {
 		spawnAttempt: async (tagOverride) => {
 			const { code, raw } = await spawnBuiltInAttempt({
 				runId: run.id,
+				projectId: run.projectId,
 				laneId,
 				tag: tagOverride ?? run.tag,
 				workers: run.workers,
@@ -287,6 +293,7 @@ function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
 			? (currentTag) =>
 					spawnBuiltInAttempt({
 						runId: run.id,
+						projectId: run.projectId,
 						laneId,
 						tag: currentTag,
 						workers: run.workers,
@@ -306,6 +313,7 @@ function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
 						runnerService.dispatchAndPoll(
 							laneId,
 							{
+								projectId: run.projectId,
 								tags: currentTag,
 								browser: run.browser,
 								workers: run.workers,

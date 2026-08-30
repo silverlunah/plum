@@ -616,15 +616,15 @@ const deleteReports = async (projectId, ids) => {
 	await prisma.report.deleteMany({ where: { id: { in: ids }, projectId } });
 };
 
-// TODO: resolve the features dir per project.
-const FEATURES_DIR = path.join(__dirname, '../tests/features');
+const { featuresDir } = require('../lib/testsRoot');
 
 async function syncAutomatedFromFeatures(projectId) {
 	try {
-		if (!fs.existsSync(FEATURES_DIR)) return;
+		const dir = featuresDir(projectId);
+		if (!fs.existsSync(dir)) return;
 		const tagSet = new Set();
-		for (const file of fs.readdirSync(FEATURES_DIR).filter((f) => f.endsWith('.feature'))) {
-			const content = fs.readFileSync(path.join(FEATURES_DIR, file), 'utf8');
+		for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.feature'))) {
+			const content = fs.readFileSync(path.join(dir, file), 'utf8');
 			for (const m of content.matchAll(/@(\S+)/g)) tagSet.add(m[1]);
 		}
 		if (tagSet.size === 0) return;
