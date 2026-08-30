@@ -32,7 +32,7 @@ router.get('/', jwtAuth, async (req, res, next) => {
 						position: r.position
 					}
 		);
-		res.json({ runs: visible, accessibleProjectIds: accessible });
+		res.json({ runs: visible });
 	} catch (e) {
 		next(e);
 	}
