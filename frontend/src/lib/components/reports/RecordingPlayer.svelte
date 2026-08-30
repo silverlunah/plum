@@ -772,12 +772,15 @@
 
 	/* Soft border on the replay iframe itself so it outlines exactly the website
 	   viewport. border-box keeps the 1280×720 attribute size intact for rrweb's
-	   scale math. rrweb sets pointer-events:none inline, blocking scroll — safe to
+	   scale math. Opaque fill so a content-less step (e.g. an API call with no
+	   page render) shows a blank screen, not the dot-grid canvas bleeding
+	   through. rrweb sets pointer-events:none inline, blocking scroll — safe to
 	   override, the iframe is sandboxed. */
 	.player-mount :global(iframe) {
 		box-sizing: border-box;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
+		background: var(--bg-elevated);
 		pointer-events: auto !important;
 	}
 
