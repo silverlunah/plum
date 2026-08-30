@@ -5,6 +5,7 @@
 
 const prisma = require('./prisma');
 const { accessibleProjectIds } = require('../lib/projectContext');
+const { isPerProjectScaffolded } = require('../lib/testsRoot');
 
 const slugify = (s) =>
 	String(s)
@@ -18,22 +19,32 @@ async function listForUser(user) {
 	const ids = await accessibleProjectIds(user);
 	return prisma.project.findMany({
 		where: { id: { in: ids } },
-		select: { id: true, name: true, slug: true, baseUrl: true },
+		select: { id: true, name: true, slug: true, baseUrl: true, logoUrl: true },
 		orderBy: { id: 'asc' }
 	});
 }
 
+// Admins are implicit members of every project, so they're added to each count
+// on top of the stored (non-admin) ProjectMember rows.
 async function listAll() {
-	return prisma.project.findMany({
-		select: {
-			id: true,
-			name: true,
-			slug: true,
-			baseUrl: true,
-			_count: { select: { members: true } }
-		},
-		orderBy: { id: 'asc' }
-	});
+	const [rows, adminCount] = await Promise.all([
+		prisma.project.findMany({
+			select: {
+				id: true,
+				name: true,
+				slug: true,
+				baseUrl: true,
+				_count: { select: { members: true } }
+			},
+			orderBy: { id: 'asc' }
+		}),
+		prisma.user.count({ where: { role: 'admin' } })
+	]);
+	return rows.map(({ _count, ...p }) => ({
+		...p,
+		memberCount: _count.members + adminCount,
+		scaffolded: isPerProjectScaffolded(p.id)
+	}));
 }
 
 async function create({ name, baseUrl }) {
