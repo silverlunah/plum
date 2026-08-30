@@ -65,13 +65,18 @@ read "Upgrading" before deploying.
 
 ### MCP
 
-- Each project has its own **MCP API key**, scoped to that project's data. Only
-  a project admin (or the owner) can view or rotate it.
+- **Every member has their own MCP key per project** (Settings → MCP, visible to
+  all members). A client using it acts as that person, with their role, scoped
+  to the project — and anything it creates or runs is tagged **"(MCP)"** on the
+  suite, case, run and report. The key dies the moment the person loses access
+  to the project.
+- `PLUM_MCP_KEY` (CI) still authenticates as the owner, instance-wide.
 - New MCP tools: `list_users` / `create_user` / `update_user` and
-  `list_projects` / `create_project` / `update_project`. These are organisation-
-  wide, so they require an **owner login or the instance `PLUM_MCP_KEY`** — a
-  project-scoped key cannot use them. Deleting a user or a project is
-  deliberately **not** exposed over MCP — a human does that in the UI.
+  `list_projects` / `create_project` / `update_project` — **owner only** (an
+  owner login, an owner's key, or `PLUM_MCP_KEY`). Deleting a user or a project
+  is deliberately **not** exposed over MCP — a human does that in the UI.
+- Upgrading wipes the old single per-project key; each integration mints a
+  personal one.
 
 ### Backup
 
@@ -119,6 +124,8 @@ After upgrading:
 - API routes for tests, reports, schedules, suites, cases, runs and MCP now
   require project context (the `X-Plum-Project` header, falling back to the
   caller's first project). Unauthenticated access to these routes is closed.
-- A project-scoped MCP key only sees its own project's data.
+- MCP keys are per member per project and act with that member's role — the old
+  single per-project key (which authenticated as the owner) is **wiped** on
+  upgrade. Regenerate a personal key in Settings → MCP.
 - Backup config set on a non-default project before the upgrade is not carried
   over — only the default project's (now the organisation's) config is kept.
