@@ -446,7 +446,7 @@
 	</div>
 	<div class="header-actions">
 		{#if tab === 'suites'}
-			{#if $auth.user?.role === 'admin'}
+			{#if $auth.user?.role === 'owner' || $auth.user?.role === 'admin'}
 				<a class="import-link" href={IMPORT_TEST_CASES_HREF}>{IMPORT_TEST_CASES_LINK}</a>
 			{/if}
 			<ExportMenu busy={exporting} on:select={(e) => handleExport(e.detail)} />
