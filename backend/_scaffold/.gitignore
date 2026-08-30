@@ -1,0 +1,4 @@
+# Plum
+.env
+reports/
+node_modules/
