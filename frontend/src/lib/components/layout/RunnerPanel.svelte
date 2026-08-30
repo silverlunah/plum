@@ -21,7 +21,7 @@
 		makeRunEntry,
 		mergeRRwebBatch
 	} from '$lib/stores/runner';
-	import { activeProjectId, projects } from '$lib/stores/project';
+	import { activeProjectId } from '$lib/stores/project';
 	import { reportUrl } from '$lib/api/reports';
 	import { fetchRunners } from '$lib/api/runners';
 	import { fetchRuns, fetchRun } from '$lib/api/repository';
@@ -304,14 +304,10 @@
 	$: activeRunEntries = Object.entries($backgroundRuns).filter(
 		([, r]) => r.status === 'queued' || r.status === 'running'
 	);
-	// A run is openable only if the viewer belongs to its project — others still
-	// see it in the bar (queued/running awareness) but can't reach its live view.
-	// Reactive so a queued card unlocks the moment the projects store hydrates.
-	$: viewableProjectIds = new Set($projects.map((p) => p.id));
-	$: canOpenRun = (run) =>
-		run.projectId == null ||
-		run.projectId === $activeProjectId ||
-		viewableProjectIds.has(run.projectId);
+	// A run is openable only when it belongs to the project the viewer is currently
+	// in. Runs from other projects still show in the bar for awareness, but you
+	// have to switch to that project to open one — even if you're a member.
+	$: canOpenRun = (run) => run.projectId == null || run.projectId === $activeProjectId;
 	$: runningCount = activeRunEntries.filter(([, r]) => r.status === 'running').length;
 	$: queuedCount = activeRunEntries.filter(([, r]) => r.status === 'queued').length;
 	$: anyRunning = activeRunEntries.length > 0;
