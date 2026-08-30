@@ -85,7 +85,6 @@ function buildOverrideYaml({
 	projectsAbs,
 	backendPort,
 	apiUrl,
-	allowedOrigins,
 	plumVersion
 }) {
 	return (
@@ -94,7 +93,6 @@ function buildOverrideYaml({
 			'  backend:',
 			'    environment:',
 			`      PLUM_VERSION: "${plumVersion || ''}"`,
-			...(allowedOrigins ? [`      PLUM_ALLOWED_ORIGINS: "${allowedOrigins}"`] : []),
 			'    volumes:',
 			`      - "${reportsAbs}:/app/reports"`,
 			`      - "${projectsAbs}:/app/projects"`,
