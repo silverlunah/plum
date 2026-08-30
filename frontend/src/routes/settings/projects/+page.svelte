@@ -25,14 +25,9 @@
 		PROJECT_MEMBERS_LABEL,
 		SAVE_MEMBERS_LABEL,
 		PROJECT_ADMINS_ALL_HINT,
-		PROJECT_ID_LABEL,
 		PROJECT_MEMBERS_COUNT,
-		PROJECT_NOT_SCAFFOLDED_HINT,
-		projectInitCommand,
-		copyInitCmdLabel
+		projectFolderHint
 	} from '$lib/copy/settings';
-	import { COPY_TIMEOUT_MS } from '$lib/constants';
-	import { copyText } from '$lib/utils/clipboard';
 
 	let projects = [];
 	let users = [];
@@ -44,14 +39,6 @@
 	let expanded = null;
 	let memberIds = new Set();
 	let savingMembers = false;
-	let copiedId = null;
-
-	function copyInitCmd(id) {
-		copyText(projectInitCommand(id)).then(() => {
-			copiedId = id;
-			setTimeout(() => (copiedId = null), COPY_TIMEOUT_MS);
-		});
-	}
 
 	onMount(async () => {
 		if ($auth.user?.role !== 'admin') {
@@ -129,22 +116,9 @@
 				<button class="project-head" on:click={() => toggleMembers(p)}>
 					<span class="project-name">{p.name}</span>
 					<span class="project-meta">
-						{PROJECT_ID_LABEL}
-						{p.id} · {p.slug} · {PROJECT_MEMBERS_COUNT(p.memberCount ?? 0)}
+						<code>{projectFolderHint(p.slug)}</code> · {PROJECT_MEMBERS_COUNT(p.memberCount ?? 0)}
 					</span>
 				</button>
-
-				{#if !p.scaffolded}
-					<div class="scaffold-hint">
-						<p class="hint">{PROJECT_NOT_SCAFFOLDED_HINT}</p>
-						<div class="cmd-row">
-							<code>{projectInitCommand(p.id)}</code>
-							<button class="btn ghost" on:click={() => copyInitCmd(p.id)}>
-								{copyInitCmdLabel(copiedId === p.id)}
-							</button>
-						</div>
-					</div>
-				{/if}
 
 				{#if expanded === p.id}
 					<div class="members">
@@ -266,34 +240,8 @@
 		color: var(--text-muted);
 		font-family: 'JetBrains Mono', monospace;
 	}
-	.scaffold-hint {
-		border-top: 1px solid var(--border);
-		padding: 0.75rem 1rem;
-		background: var(--bg-subtle);
-	}
-	.cmd-row {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-	}
-	.cmd-row code {
-		flex: 1;
-		min-width: 200px;
-		padding: 0.4rem 0.6rem;
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.78rem;
+	.project-meta code {
 		color: var(--text);
-		background: var(--bg);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		overflow-x: auto;
-		white-space: nowrap;
-	}
-	.btn.ghost {
-		background: transparent;
-		color: var(--text);
-		border: 1px solid var(--border);
 	}
 	.members {
 		border-top: 1px solid var(--border);

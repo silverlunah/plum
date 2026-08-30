@@ -240,6 +240,7 @@ async function dispatchAndPoll(
 				env: {
 					...loadTestEnv(process.cwd()),
 					...loadProjectEnv(projectId),
+					IS_HEADLESS: 'true', // node runs on a server have no display — never headed
 					...(baseUrl ? { BASE_URL: baseUrl } : {})
 				}
 			}),

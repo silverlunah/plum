@@ -8,6 +8,7 @@ const router = express.Router();
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireAdmin } = require('../middleware/requireAdmin');
 const projectService = require('../services/projectService');
+const { slugify } = require('../lib/slugify');
 
 // The switcher: projects the caller can reach.
 router.get('/', jwtAuth, async (req, res, next) => {
@@ -28,9 +29,15 @@ router.get('/all', jwtAuth, requireAdmin, async (req, res, next) => {
 
 router.post('/', jwtAuth, requireAdmin, async (req, res, next) => {
 	try {
-		const { name, baseUrl } = req.body;
-		if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
-		res.status(201).json({ project: await projectService.create({ name: name.trim(), baseUrl }) });
+		const name = (req.body.name || '').trim();
+		if (!name) return res.status(400).json({ error: 'name is required' });
+		if (!slugify(name))
+			return res
+				.status(400)
+				.json({ error: 'Project name needs at least one letter or number (a–z, 0–9)' });
+		res
+			.status(201)
+			.json({ project: await projectService.create({ name, baseUrl: req.body.baseUrl }) });
 	} catch (e) {
 		next(e);
 	}
