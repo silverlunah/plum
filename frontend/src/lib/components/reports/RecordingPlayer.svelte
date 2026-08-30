@@ -17,6 +17,7 @@
 	import {
 		PLAYER_LOAD_ERROR,
 		INSPECT_TOGGLE_LABEL,
+		REPLAY_EMPTY_FRAME_HINT,
 		RESTART_LABEL,
 		recordingTabLabel
 	} from '$lib/copy/reports';
@@ -626,6 +627,7 @@
 			<div
 				class="player-mount"
 				class:player-mount-multi={segments.length > 1}
+				style="--replay-empty-hint: {JSON.stringify(REPLAY_EMPTY_FRAME_HINT)}"
 				bind:this={container}
 			></div>
 			{#if segments.length > 1}
@@ -772,16 +774,36 @@
 
 	/* Soft border on the replay iframe itself so it outlines exactly the website
 	   viewport. border-box keeps the 1280×720 attribute size intact for rrweb's
-	   scale math. Opaque fill so a content-less step (e.g. an API call with no
-	   page render) shows a blank screen, not the dot-grid canvas bleeding
-	   through. rrweb sets pointer-events:none inline, blocking scroll — safe to
+	   scale math. rrweb sets pointer-events:none inline, blocking scroll — safe to
 	   override, the iframe is sandboxed. */
 	.player-mount :global(iframe) {
 		box-sizing: border-box;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
-		background: var(--bg-elevated);
 		pointer-events: auto !important;
+	}
+
+	/* An opaque screen exactly coincident with the iframe (.replayer-wrapper wraps
+	   it at native size): a step that renders no page leaves the iframe
+	   transparent, and without this the dot-grid canvas shows through. The
+	   ::before message shows only then — a real page's own background covers it. */
+	.player-mount :global(.replayer-wrapper) {
+		background: var(--bg-elevated);
+	}
+	.player-mount :global(.replayer-wrapper)::before {
+		content: var(--replay-empty-hint);
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 2rem;
+		text-align: center;
+		color: var(--text-muted);
+		font-size: 0.85rem;
+		line-height: 1.5;
+		pointer-events: none;
 	}
 
 	/* "Skip inactive" is a dead control here — hide it. */
