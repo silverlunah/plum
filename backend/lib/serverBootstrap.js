@@ -49,6 +49,7 @@ function wireRealtimeServices(io, isNodeMode) {
 
 	socketHandler(io);
 	runQueueService.setSocketIO(io);
+	require('../services/testRunService').setSocketIO(io);
 
 	return { cronService, backupCronService, runQueueService };
 }
