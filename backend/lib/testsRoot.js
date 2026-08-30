@@ -29,14 +29,16 @@ function isPerProjectScaffolded(projectId) {
 }
 
 // Minimal KEY=VALUE parse of a project's own .env — merged into a run's spawn
-// env so BASE_URL and per-project secrets are read live, no restart.
+// env so BASE_URL and per-project secrets are read live, no restart. IS_HEADLESS
+// is skipped: headless mode is set by where the run executes (the server
+// container is always headless), never by a project.
 function loadProjectEnv(projectId) {
 	const file = path.join(resolveTestsRoot(projectId), '.env');
 	const out = {};
 	try {
 		for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
 			const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
-			if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, '');
+			if (m && m[1] !== 'IS_HEADLESS') out[m[1]] = m[2].replace(/^["']|["']$/g, '');
 		}
 	} catch {
 		// no per-project .env — the primary's own env still applies
