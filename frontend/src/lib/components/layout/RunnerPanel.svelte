@@ -65,6 +65,7 @@
 		startedByLabel,
 		collapseOrExpandLabel,
 		queuePositionLabel,
+		lockedRunTitle,
 		statusLabel as computeStatusLabel,
 		runnerSummary as computeRunnerSummary
 	} from '$lib/copy/runners';
@@ -786,6 +787,7 @@
 						role={openable ? undefined : 'presentation'}
 						class="run-card-main"
 						class:locked={!openable}
+						title={openable ? undefined : lockedRunTitle(run.projectName)}
 						on:click={openable ? () => panelExpanded.set(false) : undefined}
 					>
 						<div class="run-card-info">
@@ -858,8 +860,8 @@
 						class="empty-icon"
 					>
 						<circle cx="12" cy="12" r="10" />
-						<line x1="10" y1="15" x2="10" y2="12" />
-						<line x1="10" y1="9" x2="10.01" y2="9" />
+						<line x1="12" y1="16" x2="12" y2="12" />
+						<line x1="12" y1="8" x2="12.01" y2="8" />
 					</svg>
 					{NO_TESTS_RUNNING}
 				</div>
