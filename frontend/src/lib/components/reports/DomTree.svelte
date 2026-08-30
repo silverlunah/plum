@@ -41,5 +41,7 @@
 		min-height: 0;
 		overflow: auto;
 		padding: 0.5rem 0;
+		background: var(--terminal-bg);
+		color: var(--terminal-text);
 	}
 </style>
