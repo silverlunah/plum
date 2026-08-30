@@ -298,9 +298,22 @@ a member checklist, reusing `EmptyState` / existing table styles.
 only the active project's data (the API already scopes; the UI just sends the
 header and shows the switcher).
 
-**Acceptance:** a `member` in two projects switches between them and sees only that
-project's reports/tests/schedules; an `admin` sees all projects plus the Projects
-and Org settings screens.
+**Status: core done.** `stores/project.js` (`activeProjectId`, persisted like
+`theme`), shared `api/headers.js` (`apiHeaders` = Authorization + `X-Plum-Project`)
+wired into `reports` / `tests` / `schedules` / `repository` / `settings` /
+`activeRuns` and the socket run payload. Project switcher in the nav (reloads on
+change so every page refetches — verified: switching to an empty project shows
+"0 runs"). New `backend/routes/projects.routes.js` + `projectService`
+(`GET /projects`, `POST /projects`, `GET/PUT /projects/:id/members`), verified:
+admin sees all, a member sees only theirs, create works. `/settings/projects`
+admin screen (create + assign members), linked from the Users section.
+`plum project init <id>` scaffolds `projects/<id>/tests/`; `buildOverrideYaml`
+auto-mounts every `projects/<numeric>/` → `/app/projects/<id>`. Migration
+`20260830080000` names the default project.
+
+**Not done:** the Settings Org-vs-Project split (backup still admin-scoped to the
+first project as in P2); route-loader stale-id guard beyond the switcher's own
+`setProjects` fallback. Both fine for the P6 test pass.
 
 ---
 

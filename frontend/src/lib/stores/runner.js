@@ -8,6 +8,7 @@ import { BROWSERS, TRIGGER_TYPES } from '$lib/constants';
 import { SOCKET_EVENTS } from '$lib/socketEvents';
 import { MANUAL_RUN_LABEL } from '$lib/copy/runners';
 import { auth } from './auth';
+import { getActiveProjectId } from './project';
 
 export const socket = writable(null);
 
@@ -104,6 +105,7 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 
 	s.emit(SOCKET_EVENTS.RUN_TEST, {
 		runId,
+		projectId: getActiveProjectId(),
 		tag,
 		workers,
 		browser,

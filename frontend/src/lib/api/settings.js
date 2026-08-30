@@ -3,11 +3,11 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
+import { apiHeaders } from '$lib/api/headers';
 import { API_BASE } from '$lib/constants';
-import { auth } from '$lib/stores/auth';
 
 function authHeaders() {
-	return { Authorization: `Bearer ${auth.getToken()}` };
+	return apiHeaders();
 }
 
 export async function fetchProject() {

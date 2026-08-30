@@ -3,10 +3,11 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
+import { apiHeaders } from '$lib/api/headers';
 import { API_BASE } from '$lib/constants';
 
 export async function fetchCronJobs() {
-	const res = await fetch(`${API_BASE}/cron-jobs`);
+	const res = await fetch(`${API_BASE}/cron-jobs`, { headers: apiHeaders() });
 	const { cronJobs } = await res.json();
 	return cronJobs ?? [];
 }
@@ -30,7 +31,7 @@ export async function saveCronJob({
 	const method = isEditing ? 'PUT' : 'POST';
 	const res = await fetch(url, {
 		method,
-		headers: { 'Content-Type': 'application/json' },
+		headers: apiHeaders({ json: true }),
 		body: JSON.stringify({
 			cronExpression,
 			taskName,
@@ -48,7 +49,7 @@ export async function saveCronJob({
 export async function toggleCronJob(taskName, enabled) {
 	const res = await fetch(`${API_BASE}/cron-jobs/${encodeURIComponent(taskName)}/toggle`, {
 		method: 'PATCH',
-		headers: { 'Content-Type': 'application/json' },
+		headers: apiHeaders({ json: true }),
 		body: JSON.stringify({ enabled })
 	});
 	return res.json();
@@ -56,14 +57,16 @@ export async function toggleCronJob(taskName, enabled) {
 
 export async function runCronJobNow(taskName) {
 	const res = await fetch(`${API_BASE}/cron-jobs/${encodeURIComponent(taskName)}/run`, {
-		method: 'POST'
+		method: 'POST',
+		headers: apiHeaders()
 	});
 	return res.json();
 }
 
 export async function deleteCronJob(taskName) {
 	const res = await fetch(`${API_BASE}/cron-jobs/${encodeURIComponent(taskName)}`, {
-		method: 'DELETE'
+		method: 'DELETE',
+		headers: apiHeaders()
 	});
 	return res.json();
 }
