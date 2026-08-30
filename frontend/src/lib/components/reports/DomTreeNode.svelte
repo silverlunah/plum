@@ -5,7 +5,7 @@
 
 <script>
 	import { createEventDispatcher } from 'svelte';
-	import { nodeSelectorParts, nodeTextPreview } from '$lib/utils/inspectElement';
+	import { nodeTag, nodeTextPreview } from '$lib/utils/inspectElement';
 
 	export let node;
 	export let selectedNode = null;
@@ -17,7 +17,7 @@
 	$: hasChildren = childElements.length > 0;
 	$: isSelected = node === selectedNode;
 	$: onSelectedPath = selectedNode && node !== selectedNode && node.contains(selectedNode);
-	$: parts = nodeSelectorParts(node);
+	$: ({ tag, attributes } = nodeTag(node));
 	$: textPreview = nodeTextPreview(node);
 
 	let expanded = depth < 2;
@@ -61,10 +61,10 @@
 		{:else}
 			<span class="twisty-spacer"></span>
 		{/if}
-		<span class="lt">&lt;</span><span class="tag">{parts.tag}</span>{#if parts.id}<span class="id"
-				>#{parts.id}</span
-			>{/if}{#each parts.classes as cls}<span class="cls">.{cls}</span>{/each}<span class="gt"
-			>&gt;</span
+		<span class="lt">&lt;</span><span class="tag">{tag}</span>{#each attributes as attr}<span
+				class="attr-name">{' '}{attr.name}</span
+			><span class="attr-eq">=</span><span class="attr-val">"{attr.value}"</span>{/each}<span
+			class="gt">&gt;</span
 		>
 		{#if hasChildren && !expanded}
 			<span class="hint">…</span>
@@ -133,10 +133,13 @@
 	.tag {
 		color: var(--code-tag);
 	}
-	.id {
+	.attr-name {
 		color: var(--code-attr);
 	}
-	.cls {
+	.attr-eq {
+		color: var(--code-comment);
+	}
+	.attr-val {
 		color: var(--code-string);
 	}
 	.hint {
