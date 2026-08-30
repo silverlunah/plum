@@ -9,10 +9,9 @@ const runQueueService = require('../services/runQueueService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { accessibleProjectIds } = require('../lib/projectContext');
 
-// Every active run across every project — the bottom bar shows them all for
-// awareness. Runs in a project the caller can't open are redacted to just what
-// the locked card renders (label, project, status, queue position); the tag,
-// runner list and who started it are dropped.
+// Runs the caller can't reach are redacted to what the locked bottom-bar card
+// renders (label, project, status, position) — the tag, runner list and who
+// started it are dropped.
 router.get('/', jwtAuth, async (req, res, next) => {
 	try {
 		const [runs, accessible] = await Promise.all([
