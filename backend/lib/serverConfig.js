@@ -79,11 +79,20 @@ function writeEnvFile(dir) {
 // nothing per-project to wire here. The legacy single `tests/` mount is added
 // only when that folder exists (a single-project install predating
 // multi-project) — a fresh install has none.
-function buildOverrideYaml({ testsAbs, reportsAbs, projectsAbs, backendPort, apiUrl }) {
+function buildOverrideYaml({
+	testsAbs,
+	reportsAbs,
+	projectsAbs,
+	backendPort,
+	apiUrl,
+	plumVersion
+}) {
 	return (
 		[
 			'services:',
 			'  backend:',
+			'    environment:',
+			`      PLUM_VERSION: "${plumVersion || ''}"`,
 			'    volumes:',
 			`      - "${reportsAbs}:/app/reports"`,
 			`      - "${projectsAbs}:/app/projects"`,

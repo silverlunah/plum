@@ -42,6 +42,8 @@ export const SAVING_LABEL = 'Saving…';
 export const CREATING_LABEL = 'Creating…';
 export const SEARCHING_LABEL = 'Searching…';
 export const CANNOT_BE_UNDONE_SUFFIX = '? This cannot be undone.';
+export const SEARCH_PLACEHOLDER = 'Search…';
+export const PAGINATOR_RANGE = (from, to, total) => `${from}–${to} of ${total}`;
 
 export function pluralize(count, singular, plural = `${singular}s`) {
 	return count === 1 ? singular : plural;

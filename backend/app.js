@@ -29,6 +29,7 @@ if (!isNodeMode()) {
 	app.use('/auth', require('./routes/auth.routes'));
 	app.use('/users', require('./routes/users.routes'));
 	app.use('/projects', require('./routes/projects.routes'));
+	app.use('/server', require('./routes/server.routes'));
 	app.use('/test-suites', require('./routes/test-suites.routes'));
 	app.use('/test-cases', require('./routes/test-cases.routes'));
 	app.use('/test-runs', require('./routes/test-runs.routes'));
