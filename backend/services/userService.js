@@ -144,6 +144,34 @@ async function updatePassword(id, { currentPassword, newPassword }) {
 	return { ok: true };
 }
 
+// Admin edit of another account: name, email, role. Refuses to leave the
+// instance without an owner.
+async function updateUser(id, { name, email, role }) {
+	const user = await prisma.user.findUnique({ where: { id } });
+	if (!user) return { ok: false, error: 'User not found' };
+	if (role !== undefined && !['owner', 'admin', 'user'].includes(role)) {
+		return { ok: false, error: 'role must be owner, admin or user' };
+	}
+	if (email) {
+		const conflict = await prisma.user.findFirst({ where: { email, NOT: { id } } });
+		if (conflict) return { ok: false, error: 'Email already in use' };
+	}
+	if (user.role === ROLE.OWNER && role !== undefined && role !== ROLE.OWNER) {
+		const owners = await prisma.user.count({ where: { role: ROLE.OWNER } });
+		if (owners <= 1) return { ok: false, error: 'The instance must keep an owner' };
+	}
+	const updated = await prisma.user.update({
+		where: { id },
+		data: {
+			...(name !== undefined && { name }),
+			...(email !== undefined && { email }),
+			...(role !== undefined && { role })
+		},
+		select: userSelect
+	});
+	return { ok: true, user: updated };
+}
+
 async function deleteUser(id) {
 	return prisma.user.delete({ where: { id } });
 }
@@ -160,5 +188,6 @@ module.exports = {
 	getById,
 	updateProfile,
 	updatePassword,
+	updateUser,
 	deleteUser
 };
