@@ -1830,6 +1830,7 @@
 				<div class="content-header">
 					<h2>{USERS_LABEL}</h2>
 					<p class="content-desc">{USERS_DESC}</p>
+					<a class="content-link" href="/settings/projects">Manage projects &amp; access →</a>
 				</div>
 
 				<ConfirmModal
@@ -2355,6 +2356,18 @@
 		font-size: 0.875rem;
 		color: var(--text-muted);
 		line-height: 1.5;
+	}
+
+	.content-link {
+		display: inline-block;
+		margin-top: 0.5rem;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--accent);
+		text-decoration: none;
+	}
+	.content-link:hover {
+		text-decoration: underline;
 	}
 
 	/* ── Card ── */

@@ -8,16 +8,24 @@
 	import { slide } from 'svelte/transition';
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
-	import { fetchProject } from '$lib/api/settings';
+	import { fetchProjects } from '$lib/api/projects';
+	import { activeProjectId, setProjects } from '$lib/stores/project';
 
 	let menuOpen = false;
-	let project = { name: '', logoUrl: '' };
+	let projectList = [];
 
 	onMount(async () => {
 		try {
-			project = await fetchProject();
+			projectList = await fetchProjects();
+			setProjects(projectList);
 		} catch {}
 	});
+
+	function switchProject(e) {
+		activeProjectId.set(Number(e.target.value));
+		// Every page's data is scoped by the header — reload so it all refetches.
+		window.location.reload();
+	}
 
 	const links = [
 		{ href: '/', label: 'Automated Tests' },
@@ -56,13 +64,12 @@
 		</div>
 
 		<div class="actions">
-			{#if project.name}
-				<div class="project-card">
-					{#if project.logoUrl}
-						<img src={project.logoUrl} alt="" class="project-logo" />
-					{/if}
-					<span class="project-name">{project.name}</span>
-				</div>
+			{#if projectList.length > 0}
+				<select class="project-switcher" value={$activeProjectId} on:change={switchProject}>
+					{#each projectList as p}
+						<option value={p.id}>{p.name}</option>
+					{/each}
+				</select>
 			{/if}
 			{#if $auth.user}
 				<span class="nav-user">{$auth.user.name}</span>
@@ -175,34 +182,20 @@
 		color: var(--text);
 	}
 
-	/* Project card */
-	.project-card {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.25rem 0.6rem 0.25rem 0.5rem;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		background: var(--bg-elevated);
-		flex-shrink: 0;
-	}
-
-	.project-logo {
-		width: 16px;
-		height: 16px;
-		object-fit: contain;
-		border-radius: 2px;
-		flex-shrink: 0;
-	}
-
-	.project-name {
+	.project-switcher {
+		font-family: var(--font-body);
 		font-size: 0.78rem;
 		font-weight: 500;
 		color: var(--text);
-		max-width: 140px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.3rem 0.5rem;
+		max-width: 180px;
+		cursor: pointer;
+	}
+	.project-switcher:hover {
+		border-color: var(--text-muted);
 	}
 
 	/* Desktop links */

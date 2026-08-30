@@ -329,3 +329,15 @@ export const saveScheduleLabel = (saving) => (saving ? SAVING_LABEL : SAVE_SCHED
 export const restoreLabel = (restoring) => (restoring ? 'Restoring…' : 'Restore');
 export const refreshingLabel = (loading) => (loading ? 'Loading…' : REFRESH_LABEL);
 export const backupSizeLabel = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
+
+// ── Projects (admin) ──
+export const PROJECTS_TITLE = 'Projects';
+export const PROJECTS_SUBTITLE =
+	'Each project has its own test cases, reports and automated tests. Members only see the projects you assign them to.';
+export const NEW_PROJECT_LABEL = 'New project';
+export const NEW_PROJECT_BASE_URL_LABEL = 'Base URL (optional)';
+export const CREATE_PROJECT_LABEL = 'Create';
+export const PROJECT_MEMBERS_LABEL = 'Members';
+export const SAVE_MEMBERS_LABEL = 'Save members';
+export const PROJECT_ADMINS_ALL_HINT =
+	'Admins can see every project — only non-admin members are listed here.';
