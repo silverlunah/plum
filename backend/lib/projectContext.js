@@ -26,6 +26,8 @@ async function accessibleProjectIds(user) {
 // project installs and header-less clients keep working. null when the user has
 // no project at all.
 async function resolveProjectId(req) {
+	// A project-scoped API key pins its own project.
+	if (req.user?.mcpProjectId) return req.user.mcpProjectId;
 	const ids = await accessibleProjectIds(req.user);
 	const asked = Number(req.headers[PROJECT_HEADER]);
 	if (Number.isInteger(asked)) return ids.includes(asked) ? asked : null;

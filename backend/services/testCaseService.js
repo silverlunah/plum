@@ -7,9 +7,10 @@ const fs = require('fs');
 const path = require('path');
 const prisma = require('./prisma');
 
+// TODO: resolve the features dir per project.
 const FEATURES_DIR = path.join(__dirname, '../tests/features');
 
-function isTaggedInFeatures(displayId) {
+function isTaggedInFeatures(_projectId, displayId) {
 	try {
 		const tag = `@${displayId}`;
 		return fs
@@ -36,14 +37,12 @@ const caseSelect = {
 	_count: { select: { steps: true } }
 };
 
-async function getById(id) {
-	return prisma.testCase.findUnique({
-		where: { id },
+async function getById(projectId, id) {
+	return prisma.testCase.findFirst({
+		where: { id, projectId },
 		select: {
 			...caseSelect,
-			steps: {
-				orderBy: { order: 'asc' }
-			},
+			steps: { orderBy: { order: 'asc' } },
 			history: {
 				select: {
 					id: true,
@@ -62,11 +61,16 @@ async function getById(id) {
 	});
 }
 
-async function create({ suiteId, title, description, priority, createdById }) {
-	const project = await prisma.project.upsert({
-		where: { id: 1 },
-		create: { id: 1, caseSeqNext: 1 },
-		update: { caseSeqNext: { increment: 1 } },
+async function create(projectId, { suiteId, title, description, priority, createdById }) {
+	const suite = await prisma.testSuite.findFirst({
+		where: { id: suiteId, projectId },
+		select: { id: true }
+	});
+	if (!suite) return null;
+
+	const project = await prisma.project.update({
+		where: { id: projectId },
+		data: { caseSeqNext: { increment: 1 } },
 		select: { caseSeqNext: true, testCasePrefix: true }
 	});
 	const num = String(project.caseSeqNext).padStart(3, '0');
@@ -74,36 +78,43 @@ async function create({ suiteId, title, description, priority, createdById }) {
 
 	return prisma.testCase.create({
 		data: {
+			projectId,
 			displayId,
 			suiteId,
 			title,
 			description: description ?? '',
 			priority: priority ?? 'Medium',
 			createdById,
-			isAutomated: isTaggedInFeatures(displayId)
+			isAutomated: isTaggedInFeatures(projectId, displayId)
 		},
 		select: caseSelect
 	});
 }
 
-async function update(id, { title, description, priority, suiteId }) {
-	return prisma.testCase.update({
-		where: { id },
+async function update(projectId, id, { title, description, priority, suiteId }) {
+	const { count } = await prisma.testCase.updateMany({
+		where: { id, projectId },
 		data: {
 			...(title !== undefined && { title }),
 			...(description !== undefined && { description }),
 			...(priority !== undefined && { priority }),
 			...(suiteId !== undefined && { suiteId })
-		},
-		select: caseSelect
+		}
 	});
+	if (count === 0) return null;
+	return prisma.testCase.findUnique({ where: { id }, select: caseSelect });
 }
 
-async function remove(id) {
-	return prisma.testCase.delete({ where: { id } });
+async function remove(projectId, id) {
+	return prisma.testCase.deleteMany({ where: { id, projectId } });
 }
 
-async function upsertSteps(caseId, steps) {
+async function upsertSteps(projectId, caseId, steps) {
+	const tc = await prisma.testCase.findFirst({
+		where: { id: caseId, projectId },
+		select: { id: true }
+	});
+	if (!tc) return null;
 	await prisma.testStep.deleteMany({ where: { caseId } });
 	if (!steps || steps.length === 0) return [];
 	return prisma.$transaction(
@@ -121,15 +132,15 @@ async function upsertSteps(caseId, steps) {
 	);
 }
 
-async function migratePrefix(newPrefix) {
+async function migratePrefix(projectId, newPrefix) {
 	const cases = await prisma.testCase.findMany({
-		select: { id: true, displayId: true },
+		where: { projectId },
+		select: { id: true },
 		orderBy: { createdAt: 'asc' }
 	});
-	const project = await prisma.project.upsert({
-		where: { id: 1 },
-		create: { id: 1 },
-		update: { testCasePrefix: newPrefix },
+	const project = await prisma.project.update({
+		where: { id: projectId },
+		data: { testCasePrefix: newPrefix },
 		select: { testCasePrefix: true }
 	});
 	for (let i = 0; i < cases.length; i++) {

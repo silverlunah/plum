@@ -104,6 +104,7 @@ async function postJson(url, body) {
  *           notifyDiscord: boolean, notifySlack: boolean }} opts
  */
 async function send({
+	projectId,
 	jobName,
 	status,
 	content,
@@ -117,7 +118,8 @@ async function send({
 
 	let discordWebhookUrl, slackWebhookUrl, notifyPublicUrl;
 	try {
-		({ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl } = await settingsService.getWebhooks());
+		({ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl } =
+			await settingsService.getWebhooks(projectId));
 	} catch (e) {
 		console.error(`[notify] Could not load webhook settings: ${e.message}`);
 		return;
