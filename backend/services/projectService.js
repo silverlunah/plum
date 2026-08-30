@@ -70,6 +70,24 @@ async function create({ name, baseUrl }) {
 	return project;
 }
 
+// Wipes a project and everything under it — suites, cases, runs, reports, cron,
+// members, the projects/<slug>/ folder. Users are account-level and untouched.
+// Refuses to remove the last project; an org needs at least one.
+async function remove(projectId) {
+	const project = await prisma.project.findUnique({
+		where: { id: projectId },
+		select: { slug: true }
+	});
+	if (!project) return { ok: false, error: 'Project not found' };
+	if ((await prisma.project.count()) <= 1) {
+		return { ok: false, error: 'Cannot delete the only project' };
+	}
+	await prisma.project.delete({ where: { id: projectId } });
+	projectPaths.removeProjectDir(project.slug);
+	await projectPaths.refresh();
+	return { ok: true };
+}
+
 async function getMembers(projectId) {
 	const rows = await prisma.projectMember.findMany({
 		where: { projectId },
@@ -94,4 +112,4 @@ async function setMembers(projectId, userIds) {
 	return getMembers(projectId);
 }
 
-module.exports = { listForUser, listAll, create, getMembers, setMembers, canAdminister };
+module.exports = { listForUser, listAll, create, remove, getMembers, setMembers, canAdminister };

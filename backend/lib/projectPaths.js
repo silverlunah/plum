@@ -39,6 +39,11 @@ function scaffoldProject(slug) {
 	}
 }
 
+// Deletes projects/<slug>/ entirely — the project and its tests are gone.
+function removeProjectDir(slug) {
+	if (slug) fs.rmSync(path.join(PROJECTS_DIR, slug), { recursive: true, force: true });
+}
+
 // Startup: every project has a projects/<slug>/tests/ folder, and a leftover
 // numeric folder from the pre-slug layout is renamed to its slug.
 async function reconcile() {
@@ -53,4 +58,4 @@ async function reconcile() {
 	}
 }
 
-module.exports = { refresh, slugFor, scaffoldProject, reconcile, PROJECTS_DIR };
+module.exports = { refresh, slugFor, scaffoldProject, removeProjectDir, reconcile, PROJECTS_DIR };

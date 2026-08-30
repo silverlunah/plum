@@ -7,12 +7,23 @@ const express = require('express');
 const router = express.Router();
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireOwner } = require('../middleware/requireOwner');
+const { requireAdmin } = require('../middleware/requireAdmin');
+const { requireProjectAccess } = require('../middleware/requireProjectAccess');
 const userService = require('../services/userService');
 
-// The pool of users assignable to a project or a test run (everyone but the owner).
-router.get('/members', jwtAuth, async (req, res, next) => {
+// Who can be assigned work in the active project — its members plus the owner.
+router.get('/members', jwtAuth, requireProjectAccess, async (req, res, next) => {
 	try {
-		res.json({ users: await userService.getMembers() });
+		res.json({ users: await userService.getProjectMembers(req.projectId) });
+	} catch (e) {
+		next(e);
+	}
+});
+
+// The whole pool an owner/admin can add to a project.
+router.get('/assignable', jwtAuth, requireAdmin, async (req, res, next) => {
+	try {
+		res.json({ users: await userService.getAssignablePool() });
 	} catch (e) {
 		next(e);
 	}
