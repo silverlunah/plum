@@ -19,13 +19,17 @@ router.get('/needs-setup', async (req, res, next) => {
 
 router.post('/setup', async (req, res, next) => {
 	try {
-		const setup = await userService.needsSetup();
-		if (!setup) return res.status(403).json({ error: 'Setup already complete' });
-		const { name, email, password } = req.body;
-		if (!name || !email || !password)
-			return res.status(400).json({ error: 'name, email and password are required' });
-		const user = await userService.createUser({ name, email, password, role: 'admin' });
-		res.status(201).json({ user });
+		if (!(await userService.needsSetup())) {
+			return res.status(403).json({ error: 'Setup already complete' });
+		}
+		const { organizationName, projectName, name, email, password } = req.body;
+		if (!organizationName || !projectName || !name || !email || !password) {
+			return res.status(400).json({
+				error: 'organizationName, projectName, name, email and password are required'
+			});
+		}
+		await userService.bootstrap({ organizationName, projectName, name, email, password });
+		res.status(201).json(await userService.login({ email, password }));
 	} catch (e) {
 		next(e);
 	}

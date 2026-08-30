@@ -205,8 +205,12 @@ one field group at a time — Organization name → Project name → admin accou
 Reuse existing inputs; copy strings go in `copy/auth.js`. On success, log in and
 route to `/`.
 
-**Acceptance:** fresh DB → `plum server start` → the UI wizard is the only way in;
-finishing it lands on a working dashboard scoped to the new project.
+**Status: done.** `needsSetup` = `organization.count() === 0`; `/auth/setup` runs
+the Org → Project → admin → member transaction (verified: creates atomically,
+rolls back cleanly) and returns a login token. CLI account prompt removed — now
+prints one line pointing at `<uiUrl>/setup`. `/setup` is a 2-step wizard
+(Organization + first project → admin account). Full fresh-boot walk-through is
+part of P6.
 
 ---
 
