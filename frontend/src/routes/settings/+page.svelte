@@ -52,6 +52,7 @@
 	import { API_BASE, BROWSERS, MAX_TEST_RETRIES, COPY_TIMEOUT_MS } from '$lib/constants';
 	import { copyText } from '$lib/utils/clipboard';
 	import Button from '$lib/components/ui/Button.svelte';
+	import ProjectAccess from '$lib/components/settings/ProjectAccess.svelte';
 	import { notify } from '$lib/stores/notifications';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
@@ -62,6 +63,7 @@
 		NAME_LABEL,
 		NETWORK_ERROR,
 		MANAGE_PROJECTS_LINK_LABEL,
+		CURRENT_PROJECT_LABEL,
 		PROJECT_LABEL,
 		RUNNERS_LABEL,
 		REPOSITORY_NAV_LABEL,
@@ -214,6 +216,7 @@
 		ROLE_LABEL,
 		USER_ROLE_OPTION,
 		ADMIN_ROLE_OPTION,
+		OWNER_ROLE_OPTION,
 		REMOVE_USER_ICON_TITLE,
 		YOU_CHIP_LABEL,
 		USER_FORM_REQUIRED_ERROR,
@@ -461,7 +464,7 @@
 		if ($auth.user) {
 			profileForm = { name: $auth.user.name, email: $auth.user.email };
 		}
-		if ($auth.user?.role === 'admin') {
+		if ($auth.user?.role === 'owner') {
 			try {
 				allUsers = await fetchUsers();
 			} catch {}
@@ -1000,35 +1003,38 @@
 		'      -d \'{"tag": "@smoke", "baseUrl": "https://your-pr-preview-url"}\''
 	].join('\n');
 
-	const ADMIN_SECTIONS = new Set([
-		'project',
-		'runners',
-		'repository',
-		'testcases',
-		'integrations',
-		'mcp',
-		'users',
-		'backup'
-	]);
+	// Per-project settings — the owner and an admin of the active project.
+	const ELEVATED_SECTIONS = new Set(['project', 'repository', 'testcases', 'integrations', 'mcp']);
+	// Account-wide settings — the owner only.
+	const OWNER_SECTIONS = new Set(['runners', 'users', 'backup']);
 
-	$: if ($auth.user && $auth.user.role !== 'admin' && ADMIN_SECTIONS.has(section)) {
-		section = 'account';
+	$: isOwner = $auth.user?.role === 'owner';
+	$: isElevated = $auth.user?.role === 'owner' || $auth.user?.role === 'admin';
+
+	$: {
+		if (OWNER_SECTIONS.has(section) && !isOwner) section = 'account';
+		else if (ELEVATED_SECTIONS.has(section) && !isElevated) section = 'account';
 	}
 
-	$: navItems =
-		$auth.user?.role === 'admin'
+	$: navItems = [
+		...(isElevated
 			? [
 					{ id: 'project', label: PROJECT_LABEL },
-					{ id: 'runners', label: RUNNERS_LABEL },
 					{ id: 'repository', label: REPOSITORY_NAV_LABEL },
 					{ id: 'testcases', label: TEST_CASES_NAV_LABEL },
 					{ id: 'integrations', label: INTEGRATIONS_LABEL },
-					{ id: 'mcp', label: MCP_NAV_LABEL },
-					{ id: 'account', label: ACCOUNT_LABEL },
+					{ id: 'mcp', label: MCP_NAV_LABEL }
+				]
+			: []),
+		...(isOwner ? [{ id: 'runners', label: RUNNERS_LABEL }] : []),
+		{ id: 'account', label: ACCOUNT_LABEL },
+		...(isOwner
+			? [
 					{ id: 'users', label: USERS_LABEL },
 					{ id: 'backup', label: BACKUP_LABEL }
 				]
-			: [{ id: 'account', label: ACCOUNT_LABEL }];
+			: [])
+	];
 </script>
 
 <svelte:head><title>{PAGE_TITLE}</title></svelte:head>
@@ -1051,6 +1057,18 @@
 				</button>
 			{/each}
 		</nav>
+		<hr class="sidebar-divider" />
+		<button
+			class="sidebar-item dark-toggle"
+			role="switch"
+			aria-checked={$theme === 'dark'}
+			on:click={toggleTheme}
+		>
+			<span>{DARK_MODE_LABEL}</span>
+			<span class="mini-switch" class:on={$theme === 'dark'}>
+				<span class="mini-thumb"></span>
+			</span>
+		</button>
 	</aside>
 
 	<!-- Right content -->
@@ -1061,10 +1079,10 @@
 				<div class="content-header">
 					<h2>{PROJECT_LABEL}</h2>
 					<p class="content-desc">{PROJECT_DESC}</p>
-					<a class="content-link" href="/settings/projects">{MANAGE_PROJECTS_LINK_LABEL}</a>
 				</div>
 
 				<div class="card settings-card">
+					<p class="card-title">{CURRENT_PROJECT_LABEL}</p>
 					<div class="field">
 						<label class="field-label" for="project-name">{PROJECT_NAME_LABEL}</label>
 						<input
@@ -1131,29 +1149,14 @@
 						/>
 					</div>
 
-					<!-- Dark mode toggle -->
-					<div class="toggle-row">
-						<div class="toggle-info">
-							<span class="toggle-label">{DARK_MODE_LABEL}</span>
-							<span class="toggle-desc">{DARK_MODE_DESC}</span>
-						</div>
-						<button
-							class="toggle-switch"
-							class:on={$theme === 'dark'}
-							role="switch"
-							aria-checked={$theme === 'dark'}
-							on:click={toggleTheme}
-						>
-							<span class="toggle-thumb"></span>
-						</button>
-					</div>
-
 					<div class="card-footer">
 						<Button on:click={handleSaveProject} disabled={projectSaving}>
 							{saveProjectLabel(projectSaving)}
 						</Button>
 					</div>
 				</div>
+
+				<ProjectAccess />
 			</div>
 
 			<!-- RUNNERS -->
@@ -1826,13 +1829,15 @@
 				</div>
 			</div>
 
-			<!-- USERS (admin only) -->
+			<!-- USERS (owner only) -->
 		{:else if section === 'users'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<div class="content-header">
 					<h2>{USERS_LABEL}</h2>
 					<p class="content-desc">{USERS_DESC}</p>
-					<a class="content-link" href="/settings/projects">{MANAGE_PROJECTS_LINK_LABEL}</a>
+					<button class="content-link" on:click={() => setSection('project')}>
+						{MANAGE_PROJECTS_LINK_LABEL}
+					</button>
 				</div>
 
 				<ConfirmModal
@@ -1887,6 +1892,7 @@
 							<select id="u-role" class="field-input" bind:value={userForm.role}>
 								<option value="user">{USER_ROLE_OPTION}</option>
 								<option value="admin">{ADMIN_ROLE_OPTION}</option>
+								<option value="owner">{OWNER_ROLE_OPTION}</option>
 							</select>
 						</div>
 					</div>
@@ -2331,6 +2337,44 @@
 		font-weight: 500;
 	}
 
+	.sidebar-divider {
+		border: none;
+		border-top: 1px solid var(--border);
+		margin: 0.5rem 0.25rem;
+	}
+
+	.dark-toggle {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	.mini-switch {
+		position: relative;
+		flex-shrink: 0;
+		width: 32px;
+		height: 18px;
+		border-radius: var(--radius-pill);
+		background: var(--border);
+		transition: background var(--duration-fast);
+	}
+	.mini-switch.on {
+		background: var(--accent);
+	}
+	.mini-thumb {
+		position: absolute;
+		top: 2px;
+		left: 2px;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: var(--white);
+		transition: transform var(--duration-fast);
+	}
+	.mini-switch.on .mini-thumb {
+		transform: translateX(14px);
+	}
+
 	/* ── Content area ── */
 	.settings-content {
 		min-width: 0;
@@ -2363,10 +2407,15 @@
 	.content-link {
 		display: inline-block;
 		margin-top: 0.5rem;
+		padding: 0;
+		font-family: inherit;
 		font-size: 0.8125rem;
 		font-weight: 500;
 		color: var(--accent);
+		background: none;
+		border: none;
 		text-decoration: none;
+		cursor: pointer;
 	}
 	.content-link:hover {
 		text-decoration: underline;
@@ -2990,9 +3039,13 @@
 		flex-shrink: 0;
 	}
 
+	.role-chip.owner,
 	.role-chip.admin {
 		background: var(--accent-soft);
 		color: var(--accent);
+	}
+	.role-chip.owner {
+		font-weight: 700;
 	}
 
 	.role-chip.user {

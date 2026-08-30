@@ -8,6 +8,7 @@ const jwt = require('jsonwebtoken');
 const prisma = require('./prisma');
 const projectPaths = require('../lib/projectPaths');
 const { slugify } = require('../lib/slugify');
+const { ROLE } = require('../constants/roles');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'plum-dev-secret-change-in-production';
 const SALT_ROUNDS = 10;
@@ -27,8 +28,8 @@ async function createUser({ name, email, password, role = 'user' }) {
 	});
 }
 
-// First boot: the organisation, its first project, and an admin — all or
-// nothing. Admins reach every project implicitly, so no ProjectMember row.
+// First boot: the organisation, its first project, and the owner — all or
+// nothing. The owner reaches every project implicitly, so no ProjectMember row.
 async function bootstrap({ organizationName, projectName, name, email, password }) {
 	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 	const slug = slugify(projectName);
@@ -38,7 +39,7 @@ async function bootstrap({ organizationName, projectName, name, email, password 
 			data: { orgId: org.id, name: projectName, slug }
 		});
 		const user = await tx.user.create({
-			data: { name, email, password: hashed, role: 'admin' },
+			data: { name, email, password: hashed, role: ROLE.OWNER },
 			select: userSelect
 		});
 		return { org, project, user };
@@ -68,9 +69,12 @@ async function getAll() {
 	return prisma.user.findMany({ select: userSelect, orderBy: { createdAt: 'asc' } });
 }
 
+// Users that can be assigned to a project — everyone but the owner, who is
+// already on every project.
 async function getMembers() {
 	return prisma.user.findMany({
-		select: { id: true, name: true },
+		where: { role: { not: ROLE.OWNER } },
+		select: { id: true, name: true, email: true, role: true },
 		orderBy: { name: 'asc' }
 	});
 }

@@ -18,12 +18,6 @@ export async function fetchProjects() {
 	return (await res.json()).projects;
 }
 
-export async function fetchAllProjects() {
-	const res = await fetch(`${API_BASE}/projects/all`, { headers: authHeaders() });
-	if (!res.ok) throw new Error('Failed to load projects');
-	return (await res.json()).projects;
-}
-
 export async function createProject({ name, baseUrl }) {
 	const res = await fetch(`${API_BASE}/projects`, {
 		method: 'POST',

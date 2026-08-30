@@ -5,11 +5,12 @@
 
 const prisma = require('../services/prisma');
 const { PROJECT_HEADER } = require('../constants/project');
+const { ROLE } = require('../constants/roles');
 
-// Project ids a user may act in. Global admins get every project; everyone else
-// gets their explicit memberships.
+// Project ids a user may act in. Owners get every project; everyone else
+// (admins included) gets their explicit memberships.
 async function accessibleProjectIds(user) {
-	if (user?.role === 'admin') {
+	if (user?.role === ROLE.OWNER) {
 		const rows = await prisma.project.findMany({ select: { id: true }, orderBy: { id: 'asc' } });
 		return rows.map((p) => p.id);
 	}

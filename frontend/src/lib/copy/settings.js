@@ -78,7 +78,7 @@ export const runnerUpdatedToast = (name) => `Runner "${name}" updated.`;
 // ── Project ──
 export const PROJECT_NAME_LABEL = 'Project Name';
 export const PROJECT_NAME_PLACEHOLDER = 'My Test Suite';
-export const LOGO_URL_LABEL = 'Logo URL';
+export const LOGO_URL_LABEL = 'Logo URL (optional)';
 export const LOGO_URL_HINT = 'Direct link to an image (PNG, SVG, JPG)';
 export const LOGO_URL_PLACEHOLDER = 'https://example.com/logo.png';
 export const PREVIEW_LABEL = 'Preview';
@@ -222,6 +222,7 @@ export const PASSWORD_LABEL = 'Password';
 export const ROLE_LABEL = 'Role';
 export const USER_ROLE_OPTION = 'User';
 export const ADMIN_ROLE_OPTION = 'Admin';
+export const OWNER_ROLE_OPTION = 'Owner';
 export const REMOVE_USER_ICON_TITLE = 'Remove user';
 export const YOU_CHIP_LABEL = 'you';
 export const USER_FORM_REQUIRED_ERROR = 'Name, email and password are required.';
@@ -330,17 +331,13 @@ export const restoreLabel = (restoring) => (restoring ? 'Restoring…' : 'Restor
 export const refreshingLabel = (loading) => (loading ? 'Loading…' : REFRESH_LABEL);
 export const backupSizeLabel = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
 
-// ── Projects (admin) ──
+// ── Projects & access (Project tab) ──
 export const MANAGE_PROJECTS_LINK_LABEL = 'Manage projects & access →';
-export const PROJECTS_TITLE = 'Projects';
-export const PROJECTS_SUBTITLE =
-	'Each project has its own test cases, reports and automated tests. Members only see the projects you assign them to.';
+export const CURRENT_PROJECT_LABEL = 'Current project';
 export const NEW_PROJECT_LABEL = 'New project';
 export const NEW_PROJECT_BASE_URL_LABEL = 'Base URL (optional)';
 export const CREATE_PROJECT_LABEL = 'Create';
-export const PROJECT_MEMBERS_LABEL = 'Members';
+export const PROJECT_MEMBERS_LABEL = 'Members of this project';
 export const SAVE_MEMBERS_LABEL = 'Save members';
-export const PROJECT_ADMINS_ALL_HINT =
-	'Admins can see every project — only non-admin members are listed here.';
-export const projectFolderHint = (slug) => `projects/${slug}/tests/`;
-export const PROJECT_MEMBERS_COUNT = (n) => `${n} member${n === 1 ? '' : 's'}`;
+export const PROJECT_MEMBERS_HINT =
+	'The owner is on every project. Assign admins and users to this project — an admin gets full settings for it, a user just sees its tests and reports.';

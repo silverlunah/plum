@@ -6,9 +6,19 @@
 const express = require('express');
 const router = express.Router();
 const { jwtAuth } = require('../middleware/jwtAuth');
-const { requireAdmin } = require('../middleware/requireAdmin');
+const { requireOwner } = require('../middleware/requireOwner');
 const projectService = require('../services/projectService');
 const { slugify } = require('../lib/slugify');
+
+// Owner, or an admin assigned to the project named by :id.
+async function requireProjectAdmin(req, res, next) {
+	try {
+		if (await projectService.canAdminister(req.user, Number(req.params.id))) return next();
+		res.status(403).json({ error: 'Admin access required' });
+	} catch (e) {
+		next(e);
+	}
+}
 
 // The switcher: projects the caller can reach.
 router.get('/', jwtAuth, async (req, res, next) => {
@@ -19,7 +29,7 @@ router.get('/', jwtAuth, async (req, res, next) => {
 	}
 });
 
-router.get('/all', jwtAuth, requireAdmin, async (req, res, next) => {
+router.get('/all', jwtAuth, requireOwner, async (req, res, next) => {
 	try {
 		res.json({ projects: await projectService.listAll() });
 	} catch (e) {
@@ -27,7 +37,7 @@ router.get('/all', jwtAuth, requireAdmin, async (req, res, next) => {
 	}
 });
 
-router.post('/', jwtAuth, requireAdmin, async (req, res, next) => {
+router.post('/', jwtAuth, requireOwner, async (req, res, next) => {
 	try {
 		const name = (req.body.name || '').trim();
 		if (!name) return res.status(400).json({ error: 'name is required' });
@@ -43,7 +53,7 @@ router.post('/', jwtAuth, requireAdmin, async (req, res, next) => {
 	}
 });
 
-router.get('/:id/members', jwtAuth, requireAdmin, async (req, res, next) => {
+router.get('/:id/members', jwtAuth, requireProjectAdmin, async (req, res, next) => {
 	try {
 		res.json({ members: await projectService.getMembers(Number(req.params.id)) });
 	} catch (e) {
@@ -51,7 +61,7 @@ router.get('/:id/members', jwtAuth, requireAdmin, async (req, res, next) => {
 	}
 });
 
-router.put('/:id/members', jwtAuth, requireAdmin, async (req, res, next) => {
+router.put('/:id/members', jwtAuth, requireProjectAdmin, async (req, res, next) => {
 	try {
 		const { userIds } = req.body;
 		if (!Array.isArray(userIds)) return res.status(400).json({ error: 'userIds must be an array' });
