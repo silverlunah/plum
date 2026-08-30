@@ -23,14 +23,21 @@ async function firstOwnerId() {
 async function resolveApiKey(token) {
 	if (!token) return null;
 	if (process.env.PLUM_MCP_KEY && token === process.env.PLUM_MCP_KEY) {
-		return { userId: await firstOwnerId(), role: ROLE.OWNER };
+		return { userId: await firstOwnerId(), role: ROLE.OWNER, apiKey: 'instance' };
 	}
 	const project = await prisma.project.findFirst({
 		where: { mcpKey: token },
 		select: { id: true }
 	});
 	if (!project) return null;
-	return { userId: await firstOwnerId(), role: ROLE.OWNER, mcpProjectId: project.id };
+	// `apiKey: 'scoped'` marks a key generated in one project's settings — it acts
+	// as the owner for that project's data but must not reach account-wide admin.
+	return {
+		userId: await firstOwnerId(),
+		role: ROLE.OWNER,
+		mcpProjectId: project.id,
+		apiKey: 'scoped'
+	};
 }
 
 function jwtAuth(req, res, next) {

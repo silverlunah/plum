@@ -39,8 +39,8 @@ const updateProject = async (projectId, { name, logoUrl, timezone, baseUrl, maxR
 	});
 
 	if (timezone !== undefined) {
-		// Cron jobs read the timezone at schedule time, so a change here must
-		// re-schedule this project's jobs for the new offset to take effect.
+		// Cron jobs read the timezone at schedule time. reload() re-schedules every
+		// project's jobs — coarse, but there's no per-project reload.
 		await require('./cronService').reload();
 	}
 

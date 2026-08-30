@@ -11,8 +11,10 @@ function authHeaders() {
 }
 
 export async function fetchActiveRuns() {
+	// accessibleProjectIds stays null on failure — callers use "not null" to mean
+	// "we actually know", so a transient error must not read as "no access".
 	const res = await fetch(`${API_BASE}/active-runs`, { headers: authHeaders() });
-	if (!res.ok) return { runs: [], accessibleProjectIds: [] };
+	if (!res.ok) return { runs: [], accessibleProjectIds: null };
 	const data = await res.json();
-	return { runs: data.runs ?? [], accessibleProjectIds: data.accessibleProjectIds ?? [] };
+	return { runs: data.runs ?? [], accessibleProjectIds: data.accessibleProjectIds ?? null };
 }

@@ -94,11 +94,23 @@ function summariseReport(report) {
  * authenticated user for this request (see routes/mcp.routes.js — a new
  * server/transport pair is created per request in stateless mode).
  */
-function createMcpServer({ userId, projectId }) {
+function createMcpServer({ userId, projectId, role, apiKey }) {
 	const server = new McpServer({
 		name: 'plum',
 		version: '1.0.0'
 	});
+
+	// Account-admin tools act organisation-wide. Allow a genuine owner login or
+	// the instance-wide PLUM_MCP_KEY; refuse a project-scoped MCP key (it
+	// authenticates as the owner only for its own project's data) and any
+	// non-owner. Called at the top of each such tool's handler.
+	const assertAccountAdmin = () => {
+		if (apiKey === 'scoped' || role !== 'owner') {
+			throw new Error(
+				'This tool needs an owner account or the instance API key (PLUM_MCP_KEY). A project MCP key cannot manage users or projects.'
+			);
+		}
+	};
 
 	// -- Test Repository: Suites -----------------------------------------------
 
@@ -563,14 +575,16 @@ function createMcpServer({ userId, projectId }) {
 	);
 
 	// -- Account administration ------------------------------------------------
-	// These act account-wide, not on the key's project. Deleting a user or a
-	// project is deliberately left out — it must be done by a human in the UI.
+	// Organisation-wide, and gated by assertAccountAdmin (owner login or the
+	// instance key only). Deleting a user or a project is deliberately left out —
+	// a human does that in the UI.
 
 	const asJson = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] });
 
-	server.tool('list_users', 'List every Plum account with its role.', {}, async () =>
-		asJson(await userService.getAll())
-	);
+	server.tool('list_users', 'List every Plum account with its role.', {}, async () => {
+		assertAccountAdmin();
+		return asJson(await userService.getAll());
+	});
 
 	server.tool(
 		'create_user',
@@ -581,8 +595,10 @@ function createMcpServer({ userId, projectId }) {
 			password: z.string().min(8).describe('At least 8 characters'),
 			role: z.enum(['owner', 'admin', 'user']).optional().describe('Default: user')
 		},
-		async ({ name, email, password, role = 'user' }) =>
-			asJson(await userService.createUser({ name, email, password, role }))
+		async ({ name, email, password, role = 'user' }) => {
+			assertAccountAdmin();
+			return asJson(await userService.createUser({ name, email, password, role }));
+		}
 	);
 
 	server.tool(
@@ -595,6 +611,7 @@ function createMcpServer({ userId, projectId }) {
 			role: z.enum(['owner', 'admin', 'user']).optional()
 		},
 		async ({ userId, name, email, role }) => {
+			assertAccountAdmin();
 			const result = await userService.updateUser(userId, { name, email, role });
 			if (!result.ok) throw new Error(result.error);
 			return asJson(result.user);
@@ -605,7 +622,10 @@ function createMcpServer({ userId, projectId }) {
 		'list_projects',
 		'List every project in the organisation with its slug and member count.',
 		{},
-		async () => asJson(await projectService.listAll())
+		async () => {
+			assertAccountAdmin();
+			return asJson(await projectService.listAll());
+		}
 	);
 
 	server.tool(
@@ -615,7 +635,10 @@ function createMcpServer({ userId, projectId }) {
 			name: z.string().min(1),
 			baseUrl: z.string().optional().describe('Default base URL for this project’s runs')
 		},
-		async ({ name, baseUrl }) => asJson(await projectService.create({ name, baseUrl }))
+		async ({ name, baseUrl }) => {
+			assertAccountAdmin();
+			return asJson(await projectService.create({ name, baseUrl }));
+		}
 	);
 
 	server.tool(
@@ -629,10 +652,12 @@ function createMcpServer({ userId, projectId }) {
 			baseUrl: z.string().optional(),
 			maxRetries: z.number().int().min(0).optional()
 		},
-		async ({ projectId: id, name, logoUrl, timezone, baseUrl, maxRetries }) =>
-			asJson(
+		async ({ projectId: id, name, logoUrl, timezone, baseUrl, maxRetries }) => {
+			assertAccountAdmin();
+			return asJson(
 				await settingsService.updateProject(id, { name, logoUrl, timezone, baseUrl, maxRetries })
-			)
+			);
+		}
 	);
 
 	return server;

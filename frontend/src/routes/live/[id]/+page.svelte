@@ -65,8 +65,9 @@
 	$: status = run?.status ?? null;
 	$: lanes = run?.lanes ?? [];
 	$: isMulti = lanes.length > 1;
-	// Block the stream once we know the run's project and that it isn't one the
-	// viewer belongs to — the bottom bar wouldn't link here, but a pasted URL can.
+	// Hide the run once we know its project and that the viewer isn't in it — the
+	// bottom bar won't link here, but a pasted URL can. (Socket events still reach
+	// the client; server-side room isolation is a separate change.)
 	$: runProjectId = run?.projectId ?? listedProjectId;
 	$: forbidden =
 		accessibleProjectIds != null &&

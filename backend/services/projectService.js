@@ -93,7 +93,11 @@ async function remove(projectId) {
 async function getMembers(projectId) {
 	const userFields = { id: true, name: true, email: true, role: true };
 	const [owner, rows] = await Promise.all([
-		prisma.user.findFirst({ where: { role: ROLE.OWNER }, select: userFields }),
+		prisma.user.findFirst({
+			where: { role: ROLE.OWNER },
+			orderBy: { createdAt: 'asc' },
+			select: userFields
+		}),
 		prisma.projectMember.findMany({
 			where: { projectId },
 			select: { user: { select: userFields } }
