@@ -4,7 +4,8 @@
  -->
 
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 	import { fly } from 'svelte/transition';
 	import {
@@ -15,7 +16,8 @@
 		assignEntry,
 		fetchMembers
 	} from '$lib/api/repository';
-	import { runsVersion } from '$lib/stores/runner';
+	import { runsVersion, socket } from '$lib/stores/runner';
+	import { SOCKET_EVENTS } from '$lib/socketEvents';
 	import { auth } from '$lib/stores/auth';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
@@ -162,6 +164,43 @@
 			notify('error', FAILED_TO_LOAD_DATA);
 		} finally {
 			loading = false;
+		}
+	});
+
+	// Live collaboration: everyone on this run's page shares a socket room, so one
+	// person's assignment / result / edit lands on the others without a refresh.
+	function onTestRunChanged({ runId: rid, entry, reload }) {
+		if (rid !== runId || !run) return;
+		if (reload) {
+			const prevStatus = run.status;
+			fetchRun(runId).then((r) => {
+				run = r;
+				if (prevStatus !== r.status) mode = r.status === 'in-progress' ? 'execute' : 'build';
+			});
+			return;
+		}
+		if (entry) {
+			run = {
+				...run,
+				entries: run.entries.map((e) => (e.id === entry.id ? { ...e, ...entry } : e))
+			};
+		}
+	}
+
+	let _joinedRunId = null;
+	$: if ($socket && runId && _joinedRunId !== runId) {
+		if (_joinedRunId) $socket.emit(SOCKET_EVENTS.TEST_RUN_LEAVE, { runId: _joinedRunId });
+		$socket.emit(SOCKET_EVENTS.TEST_RUN_JOIN, { runId });
+		$socket.off(SOCKET_EVENTS.TEST_RUN_CHANGED, onTestRunChanged);
+		$socket.on(SOCKET_EVENTS.TEST_RUN_CHANGED, onTestRunChanged);
+		_joinedRunId = runId;
+	}
+
+	onDestroy(() => {
+		const s = get(socket);
+		if (s && _joinedRunId) {
+			s.emit(SOCKET_EVENTS.TEST_RUN_LEAVE, { runId: _joinedRunId });
+			s.off(SOCKET_EVENTS.TEST_RUN_CHANGED, onTestRunChanged);
 		}
 	});
 

@@ -47,6 +47,15 @@ const socketHandler = (io) => {
 			const id = typeof payload === 'string' ? payload : payload?.runId;
 			if (id) await runQueueService.cancel(id).catch(() => {});
 		});
+
+		// A run's execution page joins its room so every collaborator's
+		// assignment / result / edit reaches the others live.
+		socket.on(SOCKET_EVENTS.TEST_RUN_JOIN, ({ runId } = {}) => {
+			if (runId) socket.join(`test-run:${runId}`);
+		});
+		socket.on(SOCKET_EVENTS.TEST_RUN_LEAVE, ({ runId } = {}) => {
+			if (runId) socket.leave(`test-run:${runId}`);
+		});
 	});
 };
 
