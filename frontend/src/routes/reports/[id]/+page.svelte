@@ -11,6 +11,7 @@
 	import {
 		isScheduled,
 		triggerLabel,
+		mcpName,
 		fmtDuration,
 		stagger,
 		featureFile,
@@ -210,6 +211,10 @@
 						<span class="mono">{detail.tags}</span>
 						<span class="meta-sep">·</span>
 						<span>{triggerLabel(detail.triggerType)}</span>
+						{#if detail.startedBy}
+							<span class="meta-sep">·</span>
+							<span>{mcpName(detail.startedBy, detail.viaMcp)}</span>
+						{/if}
 						<span class="meta-sep">·</span>
 						<span>{new Date(detail.createdAt).toLocaleString()}</span>
 						<span class="meta-sep">·</span>

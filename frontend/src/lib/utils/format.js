@@ -17,6 +17,10 @@ export function isScheduled(type) {
 	return !!type && !NON_SCHEDULED.has(type);
 }
 
+// Appends "(MCP)" to a person's name when the thing they made or ran came in
+// over an MCP key, so its origin shows everywhere the name does.
+export const mcpName = (name, viaMcp) => (viaMcp ? `${name} (MCP)` : name);
+
 export function triggerLabel(type) {
 	if (type === TRIGGER_TYPES.MANUAL) return 'Manual';
 	if (type === TRIGGER_TYPES.CLI || type === 'undefined') return 'CLI';

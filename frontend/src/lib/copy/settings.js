@@ -52,7 +52,7 @@ export const REPOSITORY_DESC = 'Configure ID prefixes for test suites and cases.
 export const INTEGRATIONS_DESC =
 	'Connect Discord and Slack to receive run notifications with pass/fail results and report links.';
 export const MCP_DESC =
-	'Generate an API key for any MCP-compatible AI client — Claude, Cursor, Windsurf, and others.';
+	'Your personal API key for this project. An MCP client using it acts as you, with your role, scoped to this project — anything it creates or runs is tagged “(MCP)”.';
 export const ACCOUNT_DESC = 'Manage your profile, credentials and session.';
 export const USERS_DESC = 'Add and manage who can access Plum.';
 export const BACKUP_DESC =
@@ -180,16 +180,19 @@ export const saveIntegrationsLabel = (saving) => (saving ? SAVING_LABEL : 'Save 
 export const copyCiSnippetLabel = (copied) => (copied ? COPIED_LABEL : COPY_WORKFLOW_STEP_LABEL);
 
 // ── MCP ──
-export const API_KEY_CARD_TITLE = 'API Key';
-export const NO_KEY_GENERATED_MESSAGE = 'No key generated yet.';
+export const API_KEY_CARD_TITLE = 'Your API Key';
+export const NO_KEY_GENERATED_MESSAGE = 'You have no MCP key for this project yet.';
 export const HIDE_KEY_TITLE = 'Hide key';
 export const SHOW_KEY_TITLE = 'Show key';
 export const COPY_KEY_TITLE = 'Copy key';
-export const MCP_REGEN_NOTE = 'Regenerating invalidates the existing key immediately.';
+export const MCP_REGEN_NOTE = 'Regenerating invalidates your existing key immediately.';
+export const REVOKE_KEY_LABEL = 'Revoke Key';
 export const CONFIG_SNIPPET_CARD_TITLE = 'Config Snippet';
 export const CONFIG_SNIPPET_DESC_PREFIX = "Add this to your MCP client's config file (e.g.";
 export const CONFIG_SNIPPET_DESC_SUFFIX = ', Cursor MCP settings, etc.).';
 export const MCP_KEY_GENERATED_TOAST = 'MCP key generated.';
+export const MCP_KEY_REVOKED_TOAST = 'MCP key revoked.';
+export const MCP_KEY_REVOKE_FAILED = 'Could not revoke the key.';
 export const MCP_KEY_GENERATE_FAILED = 'Failed to generate MCP key.';
 
 const COPY_CONFIG_LABEL = 'Copy Config';
