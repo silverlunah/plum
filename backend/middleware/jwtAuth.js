@@ -33,6 +33,14 @@ async function resolveApiKey(token) {
 		select: { projectId: true, user: { select: { id: true, name: true, role: true } } }
 	});
 	if (!mcpKey) return null;
+	// The key stays live only while its owner can still reach the project — a
+	// member removed from the project loses their key with them.
+	const stillAMember =
+		mcpKey.user.role === ROLE.OWNER ||
+		(await prisma.projectMember.count({
+			where: { projectId: mcpKey.projectId, userId: mcpKey.user.id }
+		})) > 0;
+	if (!stillAMember) return null;
 	return {
 		userId: mcpKey.user.id,
 		name: mcpKey.user.name,
