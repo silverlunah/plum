@@ -41,6 +41,11 @@ Thumbs.db
 docker-compose.override.yml
 .plum/
 
+# Per-project test folders scaffolded by `plum server start` / `plum project init`
+/projects/
+# Legacy single-project test folder (scaffolded by `plum init`)
+/tests/
+
 #-----------------------#
 #   Backend .gitignore  #
 #-----------------------#

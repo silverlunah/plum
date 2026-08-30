@@ -309,13 +309,29 @@ async function configureServer({ force }) {
 	return cfg;
 }
 
+const FIRST_PROJECT_ID = 1;
+
+// The setup wizard's first project is always id 1. Scaffold its test folder up
+// front so it's mounted before the wizard runs — every project, the first one
+// included, then lives in projects/<id>/. Skipped for a legacy single-project
+// install (its tests are still in ./tests/) and once the folder exists.
+function ensureFirstProjectScaffold(cwd) {
+	const legacy = path.join(cwd, 'tests', 'features');
+	const dest = path.join(cwd, 'projects', String(FIRST_PROJECT_ID));
+	if (fs.existsSync(dest) || fs.existsSync(legacy)) return;
+	fse.copySync(scaffoldTestsPath, path.join(dest, 'tests'));
+	clack.log.success(`Scaffolded projects/${FIRST_PROJECT_ID}/tests/ for your first project`);
+}
+
 function applyServerConfig(cfg) {
 	const { writeEnvFile, buildOverrideYaml, discoverProjectMounts } = serverConfigLib();
 	const cwd = process.cwd();
+	ensureFirstProjectScaffold(cwd);
 	writeEnvFile(cwd, cfg);
 	copyEnvFile();
 	mergeUserPlugins();
-	const testsAbs = path.resolve(cwd, 'tests').replace(/\\/g, '/');
+	const testsDir = path.join(cwd, 'tests');
+	const testsAbs = fs.existsSync(testsDir) ? testsDir.replace(/\\/g, '/') : null;
 	const reportsAbs = path.resolve(cwd, 'reports').replace(/\\/g, '/');
 	fs.writeFileSync(
 		overrideFilePath,
