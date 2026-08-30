@@ -396,6 +396,8 @@ async function execute(run, io) {
 	}
 
 	emit(SOCKET_EVENTS.BG_RUN_START, {
+		projectId: run.projectId,
+		projectName: run.projectName ?? '',
 		kind: run.kind,
 		label: run.label,
 		meta: {

@@ -8,7 +8,7 @@ import { BROWSERS, TRIGGER_TYPES } from '$lib/constants';
 import { SOCKET_EVENTS } from '$lib/socketEvents';
 import { MANUAL_RUN_LABEL } from '$lib/copy/runners';
 import { auth } from './auth';
-import { getActiveProjectId } from './project';
+import { getActiveProjectId, projects } from './project';
 
 export const socket = writable(null);
 
@@ -18,8 +18,10 @@ export const socket = writable(null);
 // RunnerPanel.
 export const backgroundRuns = writable({});
 
-export function makeRunEntry({ kind, label, meta, status }) {
+export function makeRunEntry({ projectId = null, projectName = '', kind, label, meta, status }) {
 	return {
+		projectId,
+		projectName,
 		kind,
 		label,
 		status, // 'queued' | 'running' | 'done'
@@ -91,10 +93,14 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 	const tag = (id !== undefined ? id : testID).trim().replace(/\sOR\s/gi, (m) => m.toLowerCase());
 	const runId = newRunId();
 	const startedBy = get(auth).user?.name ?? null;
+	const projectId = getActiveProjectId();
+	const projectName = get(projects).find((p) => p.id === projectId)?.name ?? '';
 
 	backgroundRuns.update((r) => ({
 		...r,
 		[runId]: makeRunEntry({
+			projectId,
+			projectName,
 			kind: TRIGGER_TYPES.MANUAL,
 			label: runTitle || tag || MANUAL_RUN_LABEL,
 			meta: { tag, workers, browser, startedBy },
@@ -105,7 +111,7 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 
 	s.emit(SOCKET_EVENTS.RUN_TEST, {
 		runId,
-		projectId: getActiveProjectId(),
+		projectId,
 		tag,
 		workers,
 		browser,

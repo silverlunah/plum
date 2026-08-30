@@ -9,6 +9,8 @@ const runQueueService = require('./runQueueService');
 const { BUILT_IN_RUNNER_ID, TRIGGER_TYPE } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 
+// Keyed by CronJob.id, not taskName — task names are only unique per project, so
+// two projects can each have a "nightly" job without clobbering each other.
 const scheduledJobs = {};
 
 /** Parses the stored comma-separated runnerIds string into an array. */
@@ -38,14 +40,13 @@ async function runCronJob(job) {
 }
 
 async function scheduleJob(job) {
-	const { taskName, cronExpression } = job;
-	if (scheduledJobs[taskName]) {
-		scheduledJobs[taskName].stop();
-		delete scheduledJobs[taskName];
+	if (scheduledJobs[job.id]) {
+		scheduledJobs[job.id].stop();
+		delete scheduledJobs[job.id];
 	}
 	if (job.enabled === false) return;
 	const project = await prisma.project.findUnique({ where: { id: job.projectId } });
-	scheduledJobs[taskName] = cron.schedule(cronExpression, () => runCronJob(job), {
+	scheduledJobs[job.id] = cron.schedule(job.cronExpression, () => runCronJob(job), {
 		timezone: project?.timezone || 'UTC'
 	});
 }
@@ -57,9 +58,9 @@ const init = async () => {
 };
 
 const reload = async () => {
-	for (const name of Object.keys(scheduledJobs)) {
-		scheduledJobs[name].stop();
-		delete scheduledJobs[name];
+	for (const id of Object.keys(scheduledJobs)) {
+		scheduledJobs[id].stop();
+		delete scheduledJobs[id];
 	}
 	await init();
 };
@@ -103,9 +104,9 @@ const removeCronJob = async (projectId, taskName) => {
 	const job = await ownedJob(projectId, taskName);
 	if (!job) return { status: 404, message: `Cron job "${taskName}" not found` };
 
-	if (scheduledJobs[taskName]) {
-		scheduledJobs[taskName].stop();
-		delete scheduledJobs[taskName];
+	if (scheduledJobs[job.id]) {
+		scheduledJobs[job.id].stop();
+		delete scheduledJobs[job.id];
 	}
 	await prisma.cronJob.delete({ where: { id: job.id } });
 	return { status: 200, message: `Cron job "${taskName}" deleted` };
@@ -128,9 +129,9 @@ const updateCronJob = async (
 	const job = await ownedJob(projectId, oldTaskName);
 	if (!job) return { status: 404, message: `Cron job "${oldTaskName}" not found` };
 
-	if (scheduledJobs[oldTaskName]) {
-		scheduledJobs[oldTaskName].stop();
-		delete scheduledJobs[oldTaskName];
+	if (scheduledJobs[job.id]) {
+		scheduledJobs[job.id].stop();
+		delete scheduledJobs[job.id];
 	}
 
 	const effectiveName = newTaskName?.trim() || oldTaskName;

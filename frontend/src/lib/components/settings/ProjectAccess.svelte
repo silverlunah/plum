@@ -4,7 +4,7 @@
  -->
 
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, createEventDispatcher } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import { activeProjectId, setProjects } from '$lib/stores/project';
 	import { fetchAssignablePool } from '$lib/api/users';
@@ -20,17 +20,12 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Paginator from '$lib/components/ui/Paginator.svelte';
 	import { CANCEL_LABEL, SEARCH_PLACEHOLDER } from '$lib/copy/common';
-
-	const PAGE_SIZE = 20;
-	const nameMatch = (u, q) =>
-		!q.trim() || `${u.name} ${u.email}`.toLowerCase().includes(q.trim().toLowerCase());
 	import {
 		NEW_PROJECT_LABEL,
 		NAME_LABEL,
 		NEW_PROJECT_BASE_URL_LABEL,
 		CREATE_PROJECT_LABEL,
 		OTHER_PROJECTS_LABEL,
-		OTHER_PROJECTS_HINT,
 		DELETE_PROJECT_LABEL,
 		projectRowMeta,
 		DELETE_PROJECT_MODAL_TITLE,
@@ -40,15 +35,30 @@
 		CONFIRM_DELETE_PROJECT_LABEL,
 		PROJECT_MEMBERS_LABEL,
 		PROJECT_MEMBERS_HINT,
+		ROLE_PERMISSIONS_LINK,
+		MANAGE_USERS_LINK,
 		MEMBER_SEARCH_PLACEHOLDER,
 		NO_MEMBERS_YET,
-		REMOVE_MEMBER_TITLE
+		REMOVE_MEMBER_TITLE,
+		OWNER_MEMBER_TAG,
+		ROLE_PERMISSIONS_MODAL_TITLE,
+		ROLE_COLUMNS,
+		ROLE_PERMISSION_ROWS
 	} from '$lib/copy/settings';
+
+	const PAGE_SIZE = 20;
+	const PROJECT_PAGE_SIZE = 10;
+	const nameMatch = (u, q) =>
+		!q.trim() || `${u.name} ${u.email}`.toLowerCase().includes(q.trim().toLowerCase());
+
+	const dispatch = createEventDispatcher();
+	let rolesOpen = false;
 
 	$: isOwner = $auth.user?.role === 'owner';
 
 	// ── Members of the active project ──
 	let assignable = []; // every non-owner user
+	let ownerRow = null; // shown read-only on every project — access is implicit
 	let memberIds = [];
 	let loadedFor = null;
 	let query = '';
@@ -70,8 +80,11 @@
 	async function loadMembers(id) {
 		loadedFor = id;
 		try {
-			memberIds = (await fetchProjectMembers(id)).map((m) => m.userId);
+			const rows = await fetchProjectMembers(id);
+			ownerRow = rows.find((m) => m.role === 'owner') ?? null;
+			memberIds = rows.filter((m) => m.role !== 'owner').map((m) => m.id);
 		} catch {
+			ownerRow = null;
 			memberIds = [];
 		}
 	}
@@ -110,7 +123,10 @@
 	$: filteredProjects = allProjects.filter(
 		(p) => !projQuery.trim() || p.name.toLowerCase().includes(projQuery.trim().toLowerCase())
 	);
-	$: pagedProjects = filteredProjects.slice(projPage * PAGE_SIZE, (projPage + 1) * PAGE_SIZE);
+	$: pagedProjects = filteredProjects.slice(
+		projPage * PROJECT_PAGE_SIZE,
+		(projPage + 1) * PROJECT_PAGE_SIZE
+	);
 
 	onMount(async () => {
 		try {
@@ -153,10 +169,13 @@
 		deleting = true;
 		deleteError = '';
 		try {
+			const wasActive = deleteTarget.id === $activeProjectId;
 			await deleteProject(deleteTarget.id);
 			setProjects(await fetchProjects());
-			await loadAllProjects();
 			deleteTarget = null;
+			// Every page is scoped to the active project — reload so it re-resolves.
+			if (wasActive) return window.location.reload();
+			await loadAllProjects();
 		} catch (e) {
 			deleteError = e.message;
 		} finally {
@@ -187,8 +206,7 @@
 
 		<section>
 			<h4>{OTHER_PROJECTS_LABEL}</h4>
-			<p class="hint">{OTHER_PROJECTS_HINT}</p>
-			{#if allProjects.length >= PAGE_SIZE}
+			{#if allProjects.length > 1}
 				<input
 					class="field-input"
 					bind:value={projQuery}
@@ -199,11 +217,11 @@
 			{#each pagedProjects as p (p.id)}
 				<div class="project-row">
 					<span class="p-name">{p.name}</span>
-					<span class="p-meta">{projectRowMeta(p.id, p.slug, p.memberCount ?? 0)}</span>
+					<span class="p-meta">{projectRowMeta(p.slug, p.memberCount ?? 0)}</span>
 					<button class="danger-link" on:click={() => openDelete(p)}>{DELETE_PROJECT_LABEL}</button>
 				</div>
 			{/each}
-			<Paginator bind:page={projPage} total={filteredProjects.length} perPage={PAGE_SIZE} />
+			<Paginator bind:page={projPage} total={filteredProjects.length} perPage={PROJECT_PAGE_SIZE} />
 		</section>
 	</div>
 {/if}
@@ -211,6 +229,14 @@
 <div class="card">
 	<p class="card-title">{PROJECT_MEMBERS_LABEL}</p>
 	<p class="hint">{PROJECT_MEMBERS_HINT}</p>
+	<div class="links">
+		<button class="link" on:click={() => (rolesOpen = true)}>{ROLE_PERMISSIONS_LINK}</button>
+		{#if isOwner}
+			<button class="link" on:click={() => dispatch('navigate', 'users')}
+				>{MANAGE_USERS_LINK}</button
+			>
+		{/if}
+	</div>
 
 	<div class="search-wrap">
 		<input class="field-input" bind:value={query} placeholder={MEMBER_SEARCH_PLACEHOLDER} />
@@ -229,29 +255,37 @@
 		{/if}
 	</div>
 
+	{#if showMemberControls}
+		<input
+			class="field-input"
+			bind:value={memberQuery}
+			placeholder={SEARCH_PLACEHOLDER}
+			on:input={() => (memberPage = 0)}
+		/>
+	{/if}
+	<ul class="members">
+		{#if ownerRow}
+			<li>
+				<span>{ownerRow.name}</span>
+				<span class="role">{ownerRow.role}</span>
+				<span class="email">{ownerRow.email}</span>
+				<span class="owner-tag">{OWNER_MEMBER_TAG}</span>
+			</li>
+		{/if}
+		{#each pagedMembers as u (u.id)}
+			<li>
+				<span>{u.name}</span>
+				<span class="role">{u.role}</span>
+				<span class="email">{u.email}</span>
+				<button class="remove" title={REMOVE_MEMBER_TITLE} on:click={() => removeMember(u.id)}>
+					×
+				</button>
+			</li>
+		{/each}
+	</ul>
 	{#if members.length === 0}
 		<p class="hint">{NO_MEMBERS_YET}</p>
 	{:else}
-		{#if showMemberControls}
-			<input
-				class="field-input"
-				bind:value={memberQuery}
-				placeholder={SEARCH_PLACEHOLDER}
-				on:input={() => (memberPage = 0)}
-			/>
-		{/if}
-		<ul class="members">
-			{#each pagedMembers as u (u.id)}
-				<li>
-					<span>{u.name}</span>
-					<span class="role">{u.role}</span>
-					<span class="email">{u.email}</span>
-					<button class="remove" title={REMOVE_MEMBER_TITLE} on:click={() => removeMember(u.id)}>
-						×
-					</button>
-				</li>
-			{/each}
-		</ul>
 		<Paginator bind:page={memberPage} total={filteredMembers.length} perPage={PAGE_SIZE} />
 	{/if}
 </div>
@@ -267,14 +301,14 @@
 		</div>
 	{:else if deleteTarget}
 		<label class="confirm-label" for="delete-confirm">
-			{deleteProjectConfirmPrompt(deleteTarget.id)}
+			{deleteProjectConfirmPrompt(deleteTarget.slug)}
 		</label>
 		<input id="delete-confirm" class="field-input" bind:value={deleteInput} autocomplete="off" />
 		{#if deleteError}<p class="error">{deleteError}</p>{/if}
 		<div class="modal-actions">
 			<button
 				class="btn-danger"
-				disabled={deleting || deleteInput.trim() !== String(deleteTarget.id)}
+				disabled={deleting || deleteInput.trim() !== deleteTarget.slug}
 				on:click={confirmDelete}
 			>
 				{CONFIRM_DELETE_PROJECT_LABEL}
@@ -284,6 +318,25 @@
 			</button>
 		</div>
 	{/if}
+</Modal>
+
+<Modal bind:open={rolesOpen} title={ROLE_PERMISSIONS_MODAL_TITLE}>
+	<table class="roles">
+		<thead>
+			<tr>
+				<th></th>
+				{#each ROLE_COLUMNS as c}<th>{c}</th>{/each}
+			</tr>
+		</thead>
+		<tbody>
+			{#each ROLE_PERMISSION_ROWS as row}
+				<tr>
+					<td>{row.label}</td>
+					{#each row.cells as cell}<td class="cell">{cell}</td>{/each}
+				</tr>
+			{/each}
+		</tbody>
+	</table>
 </Modal>
 
 <style>
@@ -309,6 +362,48 @@
 		font-size: 0.8125rem;
 		color: var(--text-muted);
 		line-height: 1.5;
+	}
+	.links {
+		display: flex;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+	.link {
+		padding: 0;
+		font: inherit;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--accent);
+		background: none;
+		border: none;
+		cursor: pointer;
+	}
+	.link:hover {
+		text-decoration: underline;
+	}
+	.roles {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.8rem;
+	}
+	.roles th,
+	.roles td {
+		padding: 0.4rem 0.6rem;
+		text-align: left;
+		border-bottom: 1px solid var(--border);
+	}
+	.roles th {
+		font-size: 0.7rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-muted);
+	}
+	.roles td {
+		color: var(--text);
+	}
+	.roles .cell {
+		color: var(--text-muted);
+		white-space: nowrap;
 	}
 	.error {
 		margin: 0.25rem 0 0;
@@ -362,9 +457,11 @@
 		position: relative;
 	}
 	.results {
+		/* The members card sits at the bottom of the page above the fixed run bar,
+		   so the list opens upward to stay clear of it. */
 		position: absolute;
 		z-index: 5;
-		top: calc(100% + 2px);
+		bottom: calc(100% + 2px);
 		left: 0;
 		right: 0;
 		margin: 0;
@@ -421,6 +518,13 @@
 	.email {
 		flex: 1;
 		font-size: 0.78rem;
+		color: var(--text-muted);
+	}
+	.owner-tag {
+		flex-shrink: 0;
+		font-size: 0.66rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 		color: var(--text-muted);
 	}
 	.remove {

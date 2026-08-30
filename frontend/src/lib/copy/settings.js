@@ -219,6 +219,7 @@ export const REMOVE_USER_LABEL = 'Remove';
 export const REMOVE_USER_BODY_PREFIX = 'Remove';
 export const REMOVE_USER_BODY_SUFFIX = '? They will lose access immediately.';
 export const ADD_USER_CARD_TITLE = 'Add User';
+export const ALL_USERS_CARD_TITLE = 'All Users';
 export const USER_NAME_PLACEHOLDER = 'Jane Smith';
 export const USER_EMAIL_PLACEHOLDER = 'jane@example.com';
 export const PASSWORD_LABEL = 'Password';
@@ -229,6 +230,9 @@ export const OWNER_ROLE_OPTION = 'Owner';
 export const REMOVE_USER_ICON_TITLE = 'Remove user';
 export const YOU_CHIP_LABEL = 'you';
 export const USER_FORM_REQUIRED_ERROR = 'Name, email and password are required.';
+export const USER_PROJECTS_LABEL = 'Assigned projects';
+export const USER_NO_PROJECTS = 'Not assigned to any project.';
+export const USER_ALL_PROJECTS = 'Every project (owner).';
 
 export const addUserLabel = (saving) => (saving ? 'Adding…' : 'Add User');
 export const userAddedToast = (name) => `User "${name}" added.`;
@@ -347,22 +351,42 @@ export const NEW_PROJECT_BASE_URL_LABEL = 'Base URL (optional)';
 export const CREATE_PROJECT_LABEL = 'Create';
 
 export const OTHER_PROJECTS_LABEL = 'Other projects';
-export const OTHER_PROJECTS_HINT =
-	'Every project in this organisation. Deleting one wipes it for good.';
 export const DELETE_PROJECT_LABEL = 'Delete';
-export const projectRowMeta = (id, slug, n) =>
-	`#${id} · ${slug} · ${n} member${n === 1 ? '' : 's'}`;
+export const projectRowMeta = (slug, n) => `${slug} · ${n} member${n === 1 ? '' : 's'}`;
 export const DELETE_PROJECT_MODAL_TITLE = 'Delete project';
 export const deleteProjectWarning = (name) =>
 	`Deleting “${name}” permanently removes every test case, run, report, schedule and its test folder. Users keep their accounts and their names stay on past runs, but the project itself cannot be recovered.`;
 export const DELETE_CONTINUE_LABEL = 'I understand — continue';
-export const deleteProjectConfirmPrompt = (id) =>
-	`Type the project ID (${id}) to permanently delete:`;
+export const deleteProjectConfirmPrompt = (slug) =>
+	`Type the project folder name (${slug}) to permanently delete:`;
 export const CONFIRM_DELETE_PROJECT_LABEL = 'Delete this project';
 
 export const PROJECT_MEMBERS_LABEL = 'Members of this project';
 export const PROJECT_MEMBERS_HINT =
-	'The owner is on every project. Add admins (full settings for this project) and users (see its tests and reports). Removing someone only revokes access — their test cases and their name on past runs stay.';
+	'The owner is on every project. Add admins and users, then remove them any time — removing someone only revokes access, their test cases and their name on past runs stay.';
+export const ROLE_PERMISSIONS_LINK = 'What can each role do?';
+export const MANAGE_USERS_LINK = 'Add or edit users →';
 export const MEMBER_SEARCH_PLACEHOLDER = 'Search people to add…';
-export const NO_MEMBERS_YET = 'No one is assigned yet — search above to add someone.';
+export const NO_MEMBERS_YET = 'No one else is assigned yet — search above to add someone.';
 export const REMOVE_MEMBER_TITLE = 'Remove from this project';
+export const OWNER_MEMBER_TAG = 'Every project';
+
+// Role capability matrix shown in the "What can each role do?" modal.
+export const ROLE_PERMISSIONS_MODAL_TITLE = 'Role permissions';
+export const ROLE_COLUMNS = ['Owner', 'Admin', 'User'];
+export const ROLE_PERMISSION_ROWS = [
+	{
+		label: 'See a project’s tests, reports and runs',
+		cells: ['all projects', 'assigned', 'assigned']
+	},
+	{
+		label: 'Run tests and manage the test repository',
+		cells: ['all projects', 'assigned', 'assigned']
+	},
+	{
+		label: 'Project settings (name, logo, integrations, MCP, members)',
+		cells: ['all projects', 'assigned', '—']
+	},
+	{ label: 'Create and delete projects', cells: ['✓', '—', '—'] },
+	{ label: 'Manage users, runners and backups', cells: ['✓', '—', '—'] }
+];
