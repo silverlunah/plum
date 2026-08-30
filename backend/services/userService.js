@@ -144,8 +144,7 @@ async function updatePassword(id, { currentPassword, newPassword }) {
 	return { ok: true };
 }
 
-// Admin edit of another account: name, email, role. Refuses to leave the
-// instance without an owner.
+// Refuses to demote the last owner — the instance must always have one.
 async function updateUser(id, { name, email, role }) {
 	const user = await prisma.user.findUnique({ where: { id } });
 	if (!user) return { ok: false, error: 'User not found' };

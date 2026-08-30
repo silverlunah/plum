@@ -102,7 +102,9 @@ router.post('/integrations', scopedAdmin, async (req, res, next) => {
 	}
 });
 
-router.get('/mcp', scoped, async (req, res, next) => {
+// The MCP key authenticates as the owner, so only a project admin may see or
+// rotate it — never a plain member.
+router.get('/mcp', scopedAdmin, async (req, res, next) => {
 	try {
 		res.json(await settingsService.getMcpConfig(req.projectId));
 	} catch (e) {
@@ -110,7 +112,7 @@ router.get('/mcp', scoped, async (req, res, next) => {
 	}
 });
 
-router.post('/mcp/generate', scoped, async (req, res, next) => {
+router.post('/mcp/generate', scopedAdmin, async (req, res, next) => {
 	try {
 		res.json(await settingsService.generateMcpKey(req.projectId));
 	} catch (e) {
