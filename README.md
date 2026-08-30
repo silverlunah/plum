@@ -63,18 +63,21 @@ Full documentation is available at:
 
 **[https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd)**
 
-| Guide                                                                                                                                      | What it covers                                                         |
-| ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| [Installation](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/installation-JftwFX9csC)                         | Requirements, global install, first-user setup, plugins                |
-| [Initializing the Project](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/initializing-the-project-ilfc8LUyO7) | What `plum init` generates, config files explained                     |
-| [Writing Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/writing-tests-XeHJQdtH49)                       | Feature files, step definitions, optional page objects, best practices |
-| [Running Tests Locally](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/running-tests-locally-GGhFcqaAQ8)       | `plum run-test` flags, parallel runs, debugging tips                   |
-| [Reports & Session Replay](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/reports-session-replay-EfhxJXaaDD)   | The report page, session replay, step rail, inspector, export          |
-| [Retrying Flaky Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/retrying-flaky-tests-NXwRF5SXru)         | Auto-retry failed scenarios, global setting, report badges             |
-| [Setting Up the Server](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-the-server-vj0Ab1kJVs)       | Production server setup, reverse proxy (Nginx/Caddy), Docker           |
-| [Setting Up Nodes](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-nodes-dtmekJGJia)                 | Nodes, systemd service, managing nodes                                 |
-| [Integrations](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/integrations-qfiqfmdP0j)                         | Discord & Slack webhook notifications, CI/external triggers            |
-| [Backup](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/backup-RNNObJfct9)                                     | Backup strategy                                                        |
+| Guide                                                                                                                                    | What it covers                                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [Installation](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/installation-JftwFX9csC)                       | Requirements, global install, first-user setup, plugins                             |
+| [Setting Up the Server](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-the-server-vj0Ab1kJVs)     | Production server setup, reverse proxy (Nginx/Caddy), Docker                        |
+| [Setting Up Nodes](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-nodes-dtmekJGJia)               | Runner nodes, systemd service, managing nodes                                       |
+| [Running Tests Locally](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/running-tests-locally-GGhFcqaAQ8)     | `plum run-test` flags, parallel runs, debugging tips                                |
+| [Writing Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/writing-tests-XeHJQdtH49)                     | Feature files, step definitions, optional page objects, best practices              |
+| [Projects](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/projects-ilfc8LUyO7)                               | One organisation, many projects — anatomy, on-disk layout, create / switch / delete |
+| [Roles & Access](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/roles-access-s0wx91Uo7g)                     | Owner / admin / user, per-project membership, what each role sees                   |
+| [Test Repository](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/test-repository-NJh4BbRzcK)                 | Suites & cases, test runs, linking automation to cases by tag                       |
+| [Reports & Session Replay](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/reports-session-replay-EfhxJXaaDD) | The report page, session replay, step rail, inspector, export                       |
+| [Retrying Flaky Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/retrying-flaky-tests-NXwRF5SXru)       | Auto-retry failed scenarios, global setting, report badges                          |
+| [Integrations](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/integrations-qfiqfmdP0j)                       | Per-project Discord & Slack webhook notifications, CI/external triggers             |
+| [MCP Integration](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/mcp-integration-yGjbsFrI76)                 | Per-member MCP keys, connecting an AI client, tools, `(MCP)` attribution            |
+| [Backup](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/backup-RNNObJfct9)                                   | Instance-level database backup, schedule, S3 target                                 |
 
 ---
 
