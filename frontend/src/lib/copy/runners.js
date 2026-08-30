@@ -41,6 +41,10 @@ export const runKindLabel = (kind) => `${triggerLabel(kind)} run`;
 export const startedByLabel = (name) => `started by ${name}`;
 export const collapseOrExpandLabel = (expanded) => (expanded ? 'Collapse panel' : 'Expand panel');
 export const queuePositionLabel = (n) => (n > 0 ? `Queued · #${n}` : 'Queued');
+export const lockedRunTitle = (projectName) =>
+	projectName
+		? `Switch to ${projectName} to open this run`
+		: 'Switch to this run’s project to open it';
 
 export function statusLabel({ running, queued, verdict }) {
 	if (running > 0 && queued > 0) return `${running} running · ${queued} queued`;
