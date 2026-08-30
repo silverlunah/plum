@@ -104,25 +104,30 @@ model ProjectMember {
 
 - add `orgId Int` + relation, `slug String @unique`, `baseUrl String @default("")`
 - keep the existing config columns (prefixes, seq counters, webhooks, retries, `mcpKey`)
-- move backup columns → `Organization` (instance-level backup)
+- backup columns stay on `Project` for now — moving them would break `backupService`
+  / `backupCronService` on boot before P2 rewires the readers. Relocate to
+  `Organization` in a later phase, once those readers take an org id.
 - add `members ProjectMember[]`, and `projectId` back-relations to the scoped models
 
 **`projectId` (required) added to:** `TestSuite`, `TestCase`, `TestRun`, `Report`,
-`CronJob`, `RunQueue`. `Recording` inherits via `Report`. Add matching `@@index`.
+`CronJob`, `RunQueue`. `Recording` inherits via `Report`. Matching `@@index` each.
 
-**Migration**
+**Migration** — one hand-written `migration.sql` (`prisma migrate deploy` runs it on
+container boot against real data):
 
-1. create `Organization`, `ProjectMember`, add nullable `projectId` columns
-2. `INSERT` org `"Default"`; copy the existing `Project` row's config, set
-   `orgId`, `slug = "default"`
-3. backfill every scoped table `projectId = <that project id>`
-4. one `ProjectMember(role: "admin")` per existing user for that project
-5. `ALTER` the `projectId` columns to `NOT NULL`
-6. move backup config values to the org row, drop the columns from `Project`
+1. create `Organization`, `ProjectMember` (+ its unique/index)
+2. `Project`: add `orgId`/`slug` nullable, `baseUrl` with a default
+3. ensure a `Project` row exists (fresh installs create it lazily); fix the id sequence
+4. `INSERT` org `"Default"`; set every project's `orgId` + `slug` (`default` for the
+   lowest id)
+5. `NOT NULL` + unique `slug` + FKs on `Project` / `ProjectMember`
+6. one `ProjectMember(role: "admin")` per existing user for the default project
+7. per scoped table: add `projectId` nullable → backfill to the default project →
+   `NOT NULL` → FK (`onDelete: Cascade`) → index
 
-**Acceptance:** `npx prisma migrate deploy` on a populated single-tenant DB leaves
-every existing suite/case/run/report attached to one "Default" project; the app
-still boots.
+**Status: done.** Verified against the populated dev DB — Default org + project,
+existing user is an admin member, the one report scoped to project 1, `projectId`
+`NOT NULL`, backend boots, all read APIs still 200.
 
 ---
 

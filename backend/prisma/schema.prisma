@@ -23,6 +23,8 @@ model Runner {
 
 model CronJob {
   id             Int      @id @default(autoincrement())
+  projectId      Int
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   taskName       String   @unique
   cronExpression String
   tags           String
@@ -37,10 +39,14 @@ model CronJob {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   reports        Report[]
+
+  @@index([projectId])
 }
 
 model Report {
   id          Int               @id @default(autoincrement())
+  projectId   Int
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   status      String
   tags        String
   triggerType String            @default("manual-trigger")
@@ -70,6 +76,7 @@ model Report {
   @@index([testRunId])
   @@index([runnerId])
   @@index([cronJobId])
+  @@index([projectId])
 }
 
 // One row per (report, scenario, worker, browser tab) — a scenario that opens
@@ -95,31 +102,64 @@ model Recording {
   @@index([reportId, scenarioId])
 }
 
+model Organization {
+  id        Int       @id @default(autoincrement())
+  name      String    @default("")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  projects  Project[]
+}
+
 model Project {
-  id                   Int       @id @default(autoincrement())
-  name                 String    @default("")
-  logoUrl              String    @default("")
-  timezone             String    @default("UTC")
-  testCasePrefix       String    @default("TC")
-  testSuitePrefix      String    @default("TS")
-  caseSeqNext          Int       @default(0)
-  suiteSeqNext         Int       @default(0)
-  discordWebhookUrl    String    @default("")
-  slackWebhookUrl      String    @default("")
-  notifyPublicUrl      String    @default("")
-  backupEnabled        Boolean   @default(false)
-  backupCron           String    @default("0 2 * * *")
-  backupS3Endpoint     String    @default("")
-  backupS3Region       String    @default("")
-  backupS3Bucket       String    @default("")
-  backupS3AccessKey    String    @default("")
-  backupS3SecretKey    String    @default("")
-  backupS3Prefix       String    @default("")
+  id                   Int          @id @default(autoincrement())
+  orgId                Int
+  org                  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  slug                 String       @unique
+  name                 String       @default("")
+  baseUrl              String       @default("")
+  logoUrl              String       @default("")
+  timezone             String       @default("UTC")
+  testCasePrefix       String       @default("TC")
+  testSuitePrefix      String       @default("TS")
+  caseSeqNext          Int          @default(0)
+  suiteSeqNext         Int          @default(0)
+  discordWebhookUrl    String       @default("")
+  slackWebhookUrl      String       @default("")
+  notifyPublicUrl      String       @default("")
+  backupEnabled        Boolean      @default(false)
+  backupCron           String       @default("0 2 * * *")
+  backupS3Endpoint     String       @default("")
+  backupS3Region       String       @default("")
+  backupS3Bucket       String       @default("")
+  backupS3AccessKey    String       @default("")
+  backupS3SecretKey    String       @default("")
+  backupS3Prefix       String       @default("")
   backupLastRunAt      DateTime?
-  backupLastStatus     String    @default("")
-  backupIncludeReports Boolean   @default(false)
-  mcpKey               String    @default("")
-  maxRetries           Int       @default(0)
+  backupLastStatus     String       @default("")
+  backupIncludeReports Boolean      @default(false)
+  mcpKey               String       @default("")
+  maxRetries           Int          @default(0)
+
+  members  ProjectMember[]
+  suites   TestSuite[]
+  cases    TestCase[]
+  runs     TestRun[]
+  reports  Report[]
+  cronJobs CronJob[]
+  runQueue RunQueue[]
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId Int
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("member")
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+  @@index([userId])
 }
 
 model User {
@@ -131,16 +171,19 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  suites          TestSuite[]
-  cases           TestCase[]
-  runs            TestRun[]
-  executedEntries TestRunEntry[]    @relation("entryExecutor")
-  assignedEntries TestRunEntry[]    @relation("entryAssignee")
-  caseHistories   TestCaseHistory[]
+  suites             TestSuite[]
+  cases              TestCase[]
+  runs               TestRun[]
+  executedEntries    TestRunEntry[]    @relation("entryExecutor")
+  assignedEntries    TestRunEntry[]    @relation("entryAssignee")
+  caseHistories      TestCaseHistory[]
+  projectMemberships ProjectMember[]
 }
 
 model TestSuite {
   id          String     @id @default(cuid())
+  projectId   Int
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   displayId   String     @unique
   name        String
   description String     @default("")
@@ -152,10 +195,13 @@ model TestSuite {
   cases       TestCase[]
 
   @@index([createdAt])
+  @@index([projectId])
 }
 
 model TestCase {
   id          String            @id @default(cuid())
+  projectId   Int
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   displayId   String            @unique
   title       String
   description String            @default("")
@@ -172,6 +218,7 @@ model TestCase {
   history     TestCaseHistory[]
 
   @@index([suiteId])
+  @@index([projectId])
 }
 
 model TestStep {
@@ -187,6 +234,8 @@ model TestStep {
 
 model TestRun {
   id          String            @id @default(cuid())
+  projectId   Int
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   title       String
   status      String            @default("backlog")
   createdById String
@@ -198,6 +247,7 @@ model TestRun {
   reports     Report[]
 
   @@index([createdAt])
+  @@index([projectId])
 }
 
 model TestRunEntry {
@@ -225,6 +275,8 @@ model TestRunEntry {
 // reconciled to `done` on boot and queued rows resume.
 model RunQueue {
   id            String    @id
+  projectId     Int
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   kind          String
   triggerType   String    @default("manual-trigger")
   label         String    @default("")
@@ -247,6 +299,7 @@ model RunQueue {
   finishedAt    DateTime?
 
   @@index([status, queuedAt])
+  @@index([projectId])
 }
 
 model TestCaseHistory {
