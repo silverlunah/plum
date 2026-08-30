@@ -17,8 +17,10 @@
 	$: hasChildren = childElements.length > 0;
 	$: isSelected = node === selectedNode;
 	$: onSelectedPath = selectedNode && node !== selectedNode && node.contains(selectedNode);
-	$: ({ tag, attributes } = nodeTag(node));
+	$: ({ tag, attributes, isVoid } = nodeTag(node));
 	$: textPreview = nodeTextPreview(node);
+	// What follows the opening tag on the same row.
+	$: inlineTail = hasChildren && !expanded ? 'collapsed' : !hasChildren && !isVoid ? 'leaf' : '';
 
 	let expanded = depth < 2;
 	// Keep the path to the current selection open without collapsing branches the user opened.
@@ -65,18 +67,22 @@
 				class="attr-name">{' '}{attr.name}</span
 			><span class="attr-eq">=</span><span class="attr-val">"{attr.value}"</span>{/each}<span
 			class="gt">&gt;</span
-		>
-		{#if hasChildren && !expanded}
-			<span class="hint">…</span>
-		{:else if textPreview}
-			<span class="text">{textPreview}</span>
-		{/if}
+		>{#if inlineTail === 'collapsed'}<span class="hint">…</span><span class="lt">&lt;/</span><span
+				class="tag">{tag}</span
+			><span class="gt">&gt;</span>{:else if inlineTail === 'leaf'}{#if textPreview}<span
+					class="text">{textPreview}</span
+				>{/if}<span class="lt">&lt;/</span><span class="tag">{tag}</span><span class="gt">&gt;</span
+			>{/if}
 	</div>
 
 	{#if hasChildren && expanded}
 		{#each childElements as child (child)}
 			<svelte:self node={child} {selectedNode} depth={depth + 1} on:select on:hover />
 		{/each}
+		<div class="dom-row close" style="padding-left: {depth * 0.85 + 0.4}rem">
+			<span class="twisty-spacer"></span><span class="lt">&lt;/</span><span class="tag">{tag}</span
+			><span class="gt">&gt;</span>
+		</div>
 	{/if}
 </div>
 
@@ -101,6 +107,12 @@
 	}
 	.dom-row.selected {
 		background: color-mix(in srgb, var(--accent) 28%, transparent);
+	}
+	.dom-row.close {
+		cursor: default;
+	}
+	.dom-row.close:hover {
+		background: none;
 	}
 
 	.twisty {
