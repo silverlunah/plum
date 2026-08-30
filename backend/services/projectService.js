@@ -7,6 +7,15 @@ const prisma = require('./prisma');
 const { accessibleProjectIds } = require('../lib/projectContext');
 const projectPaths = require('../lib/projectPaths');
 const { slugify } = require('../lib/slugify');
+const { ROLE, ELEVATED_ROLES } = require('../constants/roles');
+
+// May this user manage a project's settings and membership? Owners: any project.
+// Admins: only the projects they're assigned to. Everyone else: no.
+async function canAdminister(user, projectId) {
+	if (!ELEVATED_ROLES.includes(user?.role)) return false;
+	if (user.role === ROLE.OWNER) return true;
+	return (await accessibleProjectIds(user)).includes(projectId);
+}
 
 // "janns-blog", then "janns-blog-2", "janns-blog-3", … if taken.
 async function uniqueSlug(base) {
@@ -25,10 +34,10 @@ async function listForUser(user) {
 	});
 }
 
-// Admins are implicit members of every project, so they're added to each count
-// on top of the stored (non-admin) ProjectMember rows.
+// The owner is an implicit member of every project, so it's added to each count
+// on top of the stored ProjectMember rows.
 async function listAll() {
-	const [rows, adminCount] = await Promise.all([
+	const [rows, ownerCount] = await Promise.all([
 		prisma.project.findMany({
 			select: {
 				id: true,
@@ -39,11 +48,11 @@ async function listAll() {
 			},
 			orderBy: { id: 'asc' }
 		}),
-		prisma.user.count({ where: { role: 'admin' } })
+		prisma.user.count({ where: { role: 'owner' } })
 	]);
 	return rows.map(({ _count, ...p }) => ({
 		...p,
-		memberCount: _count.members + adminCount
+		memberCount: _count.members + ownerCount
 	}));
 }
 
@@ -85,4 +94,4 @@ async function setMembers(projectId, userIds) {
 	return getMembers(projectId);
 }
 
-module.exports = { listForUser, listAll, create, getMembers, setMembers };
+module.exports = { listForUser, listAll, create, getMembers, setMembers, canAdminister };

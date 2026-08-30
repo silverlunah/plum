@@ -6,26 +6,31 @@
 const { verifyToken } = require('../services/userService');
 const prisma = require('../services/prisma');
 const { AUTH_SCHEME } = require('../lib/authHeader');
+const { ROLE } = require('../constants/roles');
 
-async function firstAdminId() {
-	const admin = await prisma.user.findFirst({ where: { role: 'admin' }, select: { id: true } });
-	return admin?.id ?? null;
+async function firstOwnerId() {
+	const owner = await prisma.user.findFirst({
+		where: { role: ROLE.OWNER },
+		orderBy: { createdAt: 'asc' },
+		select: { id: true }
+	});
+	return owner?.id ?? null;
 }
 
-// An API key authenticates as the first admin. A key set via PLUM_MCP_KEY (CI)
-// is instance-wide; a key generated in a project's settings is scoped to that
+// An API key authenticates as the owner. A key set via PLUM_MCP_KEY (CI) is
+// instance-wide; a key generated in a project's settings is scoped to that
 // project and pins req.user.mcpProjectId so requireProjectAccess honours it.
 async function resolveApiKey(token) {
 	if (!token) return null;
 	if (process.env.PLUM_MCP_KEY && token === process.env.PLUM_MCP_KEY) {
-		return { userId: await firstAdminId(), role: 'admin' };
+		return { userId: await firstOwnerId(), role: ROLE.OWNER };
 	}
 	const project = await prisma.project.findFirst({
 		where: { mcpKey: token },
 		select: { id: true }
 	});
 	if (!project) return null;
-	return { userId: await firstAdminId(), role: 'admin', mcpProjectId: project.id };
+	return { userId: await firstOwnerId(), role: ROLE.OWNER, mcpProjectId: project.id };
 }
 
 function jwtAuth(req, res, next) {

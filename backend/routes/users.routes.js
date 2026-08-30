@@ -6,19 +6,19 @@
 const express = require('express');
 const router = express.Router();
 const { jwtAuth } = require('../middleware/jwtAuth');
-const { requireAdmin } = require('../middleware/requireAdmin');
+const { requireOwner } = require('../middleware/requireOwner');
 const userService = require('../services/userService');
 
+// The pool of users assignable to a project or a test run (everyone but the owner).
 router.get('/members', jwtAuth, async (req, res, next) => {
 	try {
-		const users = await userService.getMembers();
-		res.json({ users });
+		res.json({ users: await userService.getMembers() });
 	} catch (e) {
 		next(e);
 	}
 });
 
-router.get('/', jwtAuth, requireAdmin, async (req, res, next) => {
+router.get('/', jwtAuth, requireOwner, async (req, res, next) => {
 	try {
 		const users = await userService.getAll();
 		res.json({ users });
@@ -27,13 +27,13 @@ router.get('/', jwtAuth, requireAdmin, async (req, res, next) => {
 	}
 });
 
-router.post('/', jwtAuth, requireAdmin, async (req, res, next) => {
+router.post('/', jwtAuth, requireOwner, async (req, res, next) => {
 	try {
 		const { name, email, password, role = 'user' } = req.body;
 		if (!name || !email || !password)
 			return res.status(400).json({ error: 'name, email and password are required' });
-		if (!['admin', 'user'].includes(role))
-			return res.status(400).json({ error: 'role must be admin or user' });
+		if (!['owner', 'admin', 'user'].includes(role))
+			return res.status(400).json({ error: 'role must be owner, admin or user' });
 		const user = await userService.createUser({ name, email, password, role });
 		res.status(201).json({ user });
 	} catch (e) {
@@ -41,7 +41,7 @@ router.post('/', jwtAuth, requireAdmin, async (req, res, next) => {
 	}
 });
 
-router.delete('/:id', jwtAuth, requireAdmin, async (req, res, next) => {
+router.delete('/:id', jwtAuth, requireOwner, async (req, res, next) => {
 	try {
 		if (req.params.id === req.user.userId)
 			return res.status(400).json({ error: 'Cannot delete your own account' });

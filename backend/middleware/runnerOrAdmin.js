@@ -4,12 +4,12 @@
  */
 
 const { jwtAuth } = require('./jwtAuth');
-const { requireAdmin } = require('./requireAdmin');
+const { requireOwner } = require('./requireOwner');
 const runnerService = require('../services/runnerService');
 const { AUTH_SCHEME } = require('../lib/authHeader');
 
 /**
- * Accepts either a logged-in admin (web Settings UI) or any currently-registered
+ * Accepts either the logged-in owner (web Settings UI) or any currently-registered
  * runner's own token (manage-nodes.mjs and node self-registration have no
  * browser session/JWT to present, but every runner already has a token
  * generated at registration — reuse it instead of a second credential).
@@ -20,7 +20,7 @@ async function runnerOrAdmin(req, res, next) {
 		const token = auth.slice(AUTH_SCHEME.BEARER.length + 1);
 		if (await runnerService.isValidToken(token)) return next();
 	}
-	jwtAuth(req, res, () => requireAdmin(req, res, next));
+	jwtAuth(req, res, () => requireOwner(req, res, next));
 }
 
 module.exports = { runnerOrAdmin };
