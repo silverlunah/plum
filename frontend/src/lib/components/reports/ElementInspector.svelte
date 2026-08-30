@@ -290,17 +290,15 @@
 		letter-spacing: 0.05em;
 		color: var(--text-muted);
 		background: transparent;
-		border: 1px solid var(--border);
+		border: none;
 		border-radius: var(--radius-sm);
 		cursor: pointer;
 		transition:
 			color var(--duration-fast),
-			border-color var(--duration-fast),
 			background var(--duration-fast);
 	}
 	.inspector-close:hover {
 		color: var(--accent);
-		border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 		background: var(--accent-soft);
 	}
 
