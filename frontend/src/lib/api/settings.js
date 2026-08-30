@@ -46,6 +46,7 @@ export async function fetchBackupConfig() {
 		return {
 			backupEnabled: false,
 			backupCron: '0 2 * * *',
+			timezone: 'UTC',
 			backupS3Endpoint: '',
 			backupS3Region: '',
 			backupS3Bucket: '',
