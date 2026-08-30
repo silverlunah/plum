@@ -311,62 +311,13 @@ async function configureServer({ force }) {
 
 const FIRST_PROJECT_ID = 1;
 
-// The files `plum init` drops beside a single-project `tests/`, written into a
-// per-project folder so `projects/<id>/tests/` is self-contained for the
-// operator who git-manages it. Idempotent — never overwrites an edited file.
-function scaffoldProjectFiles(testsDir) {
-	const backendModules = path.join(plumRoot, 'backend', 'node_modules').replace(/\\/g, '/');
-	const files = {
-		'.env': 'BASE_URL=https://www.saucedemo.com/v1/\nIS_HEADLESS=false\n',
-		'.gitignore': '# Plum\n.env\nreports/\nnode_modules/\n',
-		'.vscode/settings.json':
-			JSON.stringify(
-				{
-					'cucumber.glue': ['step_definitions/**/*.ts'],
-					'cucumber.features': ['features/**/*.feature']
-				},
-				null,
-				2
-			) + '\n',
-		'tsconfig.json':
-			JSON.stringify(
-				{
-					compilerOptions: {
-						target: 'ES2020',
-						module: 'CommonJS',
-						moduleResolution: 'node',
-						esModuleInterop: true,
-						strict: false,
-						skipLibCheck: true,
-						baseUrl: '.',
-						paths: {
-							playwright: [`${backendModules}/playwright`],
-							'@playwright/test': [`${backendModules}/@playwright/test`],
-							'@cucumber/cucumber': [`${backendModules}/@cucumber/cucumber`],
-							dotenv: [`${backendModules}/dotenv`],
-							chai: [`${backendModules}/chai`],
-							'chai-soft-assert': [`${backendModules}/chai-soft-assert`]
-						},
-						typeRoots: [`${backendModules}/@types`]
-					},
-					include: ['**/*.ts']
-				},
-				null,
-				2
-			) + '\n',
-		'README.md':
-			'# Project tests\n\n' +
-			'Managed by your team and mounted into Plum at run time.\n\n' +
-			'1. Set `BASE_URL` in `.env`.\n' +
-			'2. Merge new tests straight into this folder — no restart needed.\n' +
-			'3. `plum server restart` only when `.env` changes.\n'
-	};
-	for (const [rel, content] of Object.entries(files)) {
-		const p = path.join(testsDir, rel);
-		if (fs.existsSync(p)) continue;
-		fs.mkdirSync(path.dirname(p), { recursive: true });
-		fs.writeFileSync(p, content, 'utf8');
-	}
+// Copies the scaffold (test dirs + .gitignore, .vscode, README, .env.example)
+// into a per-project folder. `overwrite: false` makes it a safe fill-in — an
+// operator's edited files and extra tests are left untouched, missing ones added.
+function scaffoldProjectDir(testsDir) {
+	fse.copySync(scaffoldTestsPath, testsDir, { overwrite: false, errorOnExist: false });
+	const env = path.join(testsDir, '.env');
+	if (!fs.existsSync(env)) fs.copyFileSync(path.join(testsDir, '.env.example'), env);
 }
 
 // The setup wizard's first project is always id 1. Scaffold its test folder up
@@ -376,11 +327,11 @@ function scaffoldProjectFiles(testsDir) {
 function ensureFirstProjectScaffold(cwd) {
 	if (fs.existsSync(path.join(cwd, 'tests', 'features'))) return;
 	const testsDir = path.join(cwd, 'projects', String(FIRST_PROJECT_ID), 'tests');
-	if (!fs.existsSync(path.join(testsDir, 'features'))) {
-		fse.copySync(scaffoldTestsPath, testsDir);
+	const isNew = !fs.existsSync(path.join(testsDir, 'features'));
+	scaffoldProjectDir(testsDir);
+	if (isNew) {
 		clack.log.success(`Scaffolded projects/${FIRST_PROJECT_ID}/tests/ for your first project`);
 	}
-	scaffoldProjectFiles(testsDir);
 }
 
 function applyServerConfig(cfg) {
@@ -1562,13 +1513,13 @@ switch (command) {
 			process.exit(1);
 		}
 		const testsDir = path.join(process.cwd(), 'projects', id, 'tests');
-		if (fs.existsSync(path.join(testsDir, 'features'))) {
-			console.log(`projects/${id}/tests/ already exists — filling in any missing files.`);
-		} else {
-			fse.copySync(scaffoldTestsPath, testsDir);
-			console.log(`✓ Scaffolded projects/${id}/tests/`);
-		}
-		scaffoldProjectFiles(testsDir);
+		const exists = fs.existsSync(path.join(testsDir, 'features'));
+		scaffoldProjectDir(testsDir);
+		console.log(
+			exists
+				? `projects/${id}/tests/ already exists — filled in any missing files.`
+				: `✓ Scaffolded projects/${id}/tests/`
+		);
 		console.log('');
 		console.log('Next:');
 		console.log(`  1. Set the app URL:  nano projects/${id}/tests/.env   # BASE_URL=...`);
