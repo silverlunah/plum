@@ -28,5 +28,8 @@ export const SOCKET_EVENTS = Object.freeze({
 	// Collaborative test-run execution — join a run's room, get changes live
 	TEST_RUN_JOIN: 'test-run-join',
 	TEST_RUN_LEAVE: 'test-run-leave',
-	TEST_RUN_CHANGED: 'test-run-changed'
+	TEST_RUN_CHANGED: 'test-run-changed',
+
+	// Client → server: join the active project's room (scopes bg-run streams)
+	JOIN_PROJECT: 'join-project'
 });

@@ -329,6 +329,9 @@ function applyServerConfig(cfg) {
 			projectsAbs: path.join(cwd, 'projects').replace(/\\/g, '/'),
 			backendPort: cfg.backendPort,
 			apiUrl: cfg.apiUrl,
+			// Pin CORS only for a production deploy with a known UI URL — a local
+			// install is reached from too many hosts to lock down.
+			allowedOrigins: cfg.mode === 'production' && cfg.uiUrl ? cfg.uiUrl : '',
 			plumVersion: readPlumVersion()
 		}),
 		'utf8'

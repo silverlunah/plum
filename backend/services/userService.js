@@ -12,8 +12,12 @@ const { slugify } = require('../lib/slugify');
 const { ROLE } = require('../constants/roles');
 const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'plum-dev-secret-change-in-production';
+const { DEFAULT_JWT_SECRET } = require('../lib/appSecret');
 const SALT_ROUNDS = 10;
+const TOKEN_TTL = '30d';
+
+// Read at call time — server.js resolves the real secret into the env at boot.
+const jwtSecret = () => process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
 
 const userSelect = { id: true, name: true, email: true, role: true, createdAt: true };
 
@@ -75,13 +79,14 @@ async function login({ email, password }) {
 	if (!match) return null;
 	const token = jwt.sign(
 		{ userId: user.id, email: user.email, name: user.name, role: user.role },
-		JWT_SECRET
+		jwtSecret(),
+		{ expiresIn: TOKEN_TTL }
 	);
 	return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
 }
 
 function verifyToken(token) {
-	return jwt.verify(token, JWT_SECRET);
+	return jwt.verify(token, jwtSecret());
 }
 
 // Each user with the projects they can reach — the owner reaches every project

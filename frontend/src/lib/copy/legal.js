@@ -3,10 +3,7 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-// Shown on first-run setup, before the admin account is created. Plum is
-// self-hosted, MIT-licensed software with no cloud service — this notice states
-// that plainly so an operator knows exactly what they are (and are not) agreeing
-// to. Keep it factual: every claim here must stay true of the codebase.
+// Shown on first-run setup. Every claim here must stay true of the codebase.
 export const TERMS_HEADING = 'Before you begin';
 
 export const TERMS_INTRO =
