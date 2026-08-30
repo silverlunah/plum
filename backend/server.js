@@ -6,8 +6,12 @@
 const http = require('http');
 const path = require('path');
 const { Server } = require('socket.io');
-const app = require('./app');
 const { PLUM_MODE_NODE, DEFAULT_PORT } = require('./constants/env');
+
+// Resolve the JWT secret before anything that signs or verifies a token loads.
+if (process.env.PLUM_MODE !== PLUM_MODE_NODE) require('./lib/appSecret').ensureJwtSecret();
+
+const app = require('./app');
 const {
 	ensureTestsDir,
 	attachListenRetry,
@@ -33,7 +37,27 @@ const server = http.createServer(app);
 // Real-time transport for live test output, the rrweb stream, and run status.
 const io = new Server(server, { cors: { origin: '*' } });
 
+// Sockets stream live test output and DOM recordings (which can hold
+// credentials) — signed-in users only. Per-project scoping is in socketHandler.
+if (!isNodeMode) {
+	const { verifyToken } = require('./services/userService');
+	io.use((socket, next) => {
+		try {
+			socket.data.user = verifyToken(socket.handshake.auth?.token);
+			next();
+		} catch {
+			next(new Error('unauthorized'));
+		}
+	});
+}
+
 async function start() {
+	// A node runs arbitrary test code — refuse to start without the token that gates it.
+	if (isNodeMode && !process.env.NODE_TOKEN) {
+		console.error('❌ Node mode requires NODE_TOKEN — start nodes with `plum node start`.');
+		process.exit(1);
+	}
+
 	// Confirm the tests directory is in place before doing anything else.
 	ensureTestsDir(testsDir, isNodeMode);
 

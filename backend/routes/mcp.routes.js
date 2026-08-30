@@ -32,6 +32,8 @@ async function handleMcp(req, res, next) {
 			userName: req.user.name ?? null,
 			projectId: req.projectId,
 			role: req.user.role,
+			// 'instance' = PLUM_MCP_KEY (org-wide); 'scoped' = a per-project key.
+			apiKeyKind: req.user.apiKey ?? 'scoped',
 			// Anything through this endpoint is "via MCP", whatever the auth scheme.
 			viaMcp: true
 		});

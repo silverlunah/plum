@@ -359,7 +359,7 @@ export const ACTIVITY_ORG_EMPTY_BODY =
 export const ACTIVITY_LOAD_MORE_LABEL = 'Load more';
 export const ACTIVITY_RETENTION_CARD_TITLE = 'Retention';
 export const ACTIVITY_RETENTION_DESC =
-	'How long entries are kept before the nightly clean-up removes them.';
+	'How long entries are kept. A clean-up job runs every night at 3:17 AM (server time) and deletes anything older.';
 export const ACTIVITY_RETENTION_SAVED_TOAST = 'Retention updated.';
 export const ACTIVITY_RETENTION_SAVE_FAILED = 'Failed to update retention.';
 export const activityRetentionOptionLabel = (days) =>

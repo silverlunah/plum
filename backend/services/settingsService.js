@@ -12,6 +12,16 @@ const getProjectRaw = async (projectId) => {
 	return prisma.project.findUnique({ where: { id: projectId } });
 };
 
+// Non-secret columns only — the raw row also carries the webhook URLs.
+const projectPublicSelect = {
+	id: true,
+	name: true,
+	logoUrl: true,
+	timezone: true,
+	baseUrl: true,
+	maxRetries: true
+};
+
 // The single organisation. Raw accessor includes backupS3SecretKey — only for
 // internal callers (e.g. backup.routes.js needs the real secret for a
 // connection test). Never expose it directly over HTTP.
@@ -20,7 +30,7 @@ const getOrgRaw = async () => {
 };
 
 const getProject = async (projectId) => {
-	return getProjectRaw(projectId);
+	return prisma.project.findUnique({ where: { id: projectId }, select: projectPublicSelect });
 };
 
 const updateProject = async (projectId, { name, logoUrl, timezone, baseUrl, maxRetries }) => {
@@ -32,7 +42,8 @@ const updateProject = async (projectId, { name, logoUrl, timezone, baseUrl, maxR
 			...(baseUrl !== undefined && { baseUrl }),
 			...(timezone !== undefined && { timezone }),
 			...(maxRetries !== undefined && { maxRetries: Number(maxRetries) || 0 })
-		}
+		},
+		select: projectPublicSelect
 	});
 
 	if (timezone !== undefined) {

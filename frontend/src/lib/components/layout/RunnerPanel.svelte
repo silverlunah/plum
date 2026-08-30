@@ -22,6 +22,7 @@
 		mergeRRwebBatch
 	} from '$lib/stores/runner';
 	import { activeProjectId } from '$lib/stores/project';
+	import { auth } from '$lib/stores/auth';
 	import { reportUrl } from '$lib/api/reports';
 	import { fetchRunners } from '$lib/api/runners';
 	import { fetchRuns, fetchRun } from '$lib/api/repository';
@@ -98,7 +99,7 @@
 		};
 	}
 
-	let _unsubConfig, _unsubExpanded, _unsubBuiltIn, _socket;
+	let _unsubConfig, _unsubExpanded, _unsubBuiltIn, _unsubActiveProject, _socket;
 	let lastFinished = null; // { reportId, verdict } — most recent completed run, for the bar's View Report shortcut
 
 	onMount(() => {
@@ -175,9 +176,18 @@
 			});
 		});
 
-		const s = io(API_BASE, { transports: ['websocket'] });
+		const s = io(API_BASE, {
+			transports: ['websocket'],
+			auth: { token: auth.getToken() }
+		});
 		_socket = s;
 		socket.set(s);
+
+		// Join the active project's room — scopes which run streams this tab gets.
+		const joinActiveProject = () =>
+			s.emit(SOCKET_EVENTS.JOIN_PROJECT, { projectId: $activeProjectId });
+		s.on('connect', joinActiveProject);
+		_unsubActiveProject = activeProjectId.subscribe(() => s.connected && joinActiveProject());
 
 		s.on(SOCKET_EVENTS.REPORT_READY, () => reportsVersion.update((v) => v + 1));
 
@@ -185,9 +195,8 @@
 			backgroundRuns.update((r) => {
 				const run = r[runId];
 				if (!run) return r;
-				// Don't retain logs or screen frames for a run in a project the viewer
-				// can't open — the awareness entry (status only) is enough. Full
-				// socket-level isolation is a separate server-side change.
+				// Server already room-scopes streams; this also covers a project switch
+				// mid-run under the same tab.
 				if (streamOnly && !canOpenRun(run)) return r;
 				return { ...r, [runId]: updater(run) };
 			});
@@ -298,6 +307,7 @@
 		_unsubConfig?.();
 		_unsubExpanded?.();
 		_unsubBuiltIn?.();
+		_unsubActiveProject?.();
 		_socket?.disconnect();
 	});
 
