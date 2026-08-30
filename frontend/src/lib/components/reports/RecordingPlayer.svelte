@@ -17,6 +17,7 @@
 	import {
 		PLAYER_LOAD_ERROR,
 		INSPECT_TOGGLE_LABEL,
+		REPLAY_EMPTY_FRAME_HINT,
 		RESTART_LABEL,
 		recordingTabLabel
 	} from '$lib/copy/reports';
@@ -626,6 +627,7 @@
 			<div
 				class="player-mount"
 				class:player-mount-multi={segments.length > 1}
+				style="--replay-empty-hint: {JSON.stringify(REPLAY_EMPTY_FRAME_HINT)}"
 				bind:this={container}
 			></div>
 			{#if segments.length > 1}
@@ -766,8 +768,33 @@
 		box-shadow: none !important;
 		background: transparent !important;
 	}
+	/* rrweb-player hardcodes a light controller (#fff bar, #eee track, #11103e
+	   text) — retint it to theme tokens so it isn't a white slab in dark mode. */
 	.player-mount :global(.rr-controller) {
 		border-radius: 0 !important;
+		background: var(--bg-elevated) !important;
+		color: var(--text) !important;
+	}
+	.player-mount :global(.rr-timeline__time) {
+		color: var(--text-muted) !important;
+	}
+	.player-mount :global(.rr-progress) {
+		background: var(--bg-subtle) !important;
+		border-color: var(--bg-elevated) !important;
+	}
+	.player-mount :global(.rr-progress__step) {
+		background: color-mix(in srgb, var(--accent) 25%, transparent) !important;
+	}
+	.player-mount :global(.rr-controller__btns button) {
+		color: var(--text) !important;
+	}
+	.player-mount :global(.rr-controller__btns button svg) {
+		fill: currentColor;
+	}
+	.player-mount :global(.rr-controller__btns button:active),
+	.player-mount :global(.rr-controller__btns button.active) {
+		background: var(--accent) !important;
+		color: var(--white) !important;
 	}
 
 	/* Soft border on the replay iframe itself so it outlines exactly the website
@@ -779,6 +806,28 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
 		pointer-events: auto !important;
+	}
+
+	/* .replayer-wrapper is exactly iframe-sized. A step with no page leaves the
+	   iframe transparent (dot-grid shows through) — an opaque fill + a z-index:-1
+	   ::before hint sit behind the real page, visible only when it's blank. */
+	.player-mount :global(.replayer-wrapper) {
+		background: var(--bg-elevated);
+	}
+	.player-mount :global(.replayer-wrapper)::before {
+		content: var(--replay-empty-hint);
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 2rem;
+		text-align: center;
+		color: var(--text-muted);
+		font-size: 0.85rem;
+		line-height: 1.5;
+		pointer-events: none;
 	}
 
 	/* "Skip inactive" is a dead control here — hide it. */
@@ -859,15 +908,15 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: #fff;
+		background: var(--bg-elevated);
 		border: none;
 		border-radius: 50%;
-		color: #11103e;
+		color: var(--text);
 		cursor: pointer;
 		z-index: 10001;
 	}
 	.restart-overlay-btn:hover {
-		background: #f0f0f5;
+		background: var(--bg-subtle);
 	}
 
 	.inspect-fab {

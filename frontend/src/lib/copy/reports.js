@@ -55,6 +55,7 @@ export const caseLabel = (index) => `Case ${index}`;
 // ── Recording replay ──
 export const PLAYER_LOAD_ERROR = 'Could not load this recording.';
 export const INSPECT_TOGGLE_LABEL = 'Inspect element';
+export const REPLAY_EMPTY_FRAME_HINT = 'No page rendered at this point in the recording';
 
 export const REPORT_EXPORT_MENU_ITEMS = [
 	{ id: 'csv', label: 'CSV', hint: 'Download report' },
