@@ -31,7 +31,13 @@ const SOCKET_EVENTS = Object.freeze({
 	BG_RUN_LANE_RRWEB_BATCH: 'bg-run-lane-rrweb-batch',
 
 	// Global notifications (any client, not tied to a specific run)
-	REPORT_READY: 'report-ready'
+	REPORT_READY: 'report-ready',
+
+	// Collaborative test-run execution: clients on one run's page join its room
+	// and get every assignment / result / structural change live.
+	TEST_RUN_JOIN: 'test-run-join',
+	TEST_RUN_LEAVE: 'test-run-leave',
+	TEST_RUN_CHANGED: 'test-run-changed'
 });
 
 module.exports = { SOCKET_EVENTS };

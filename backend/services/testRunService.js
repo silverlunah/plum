@@ -4,6 +4,19 @@
  */
 
 const prisma = require('./prisma');
+const { SOCKET_EVENTS } = require('../constants/socketEvents');
+
+let _io = null;
+function setSocketIO(io) {
+	_io = io;
+}
+
+// Tell everyone else on this run's execution page what just changed. `entry` is
+// a partial the client merges by id; `reload` means refetch (structural change).
+function emitRunChanged(runId, payload) {
+	if (_io && runId)
+		_io.to(`test-run:${runId}`).emit(SOCKET_EVENTS.TEST_RUN_CHANGED, { runId, ...payload });
+}
 
 const runListSelect = {
 	id: true,
@@ -139,7 +152,9 @@ async function update(projectId, id, { title, status, caseIds }) {
 		);
 	}
 
-	return prisma.testRun.update({ where: { id }, data, select: runListSelect });
+	const updated = await prisma.testRun.update({ where: { id }, data, select: runListSelect });
+	emitRunChanged(id, { reload: true });
+	return updated;
 }
 
 async function duplicate(projectId, id, { createdById }) {
@@ -183,7 +198,15 @@ async function updateEntry(projectId, entryId, { status, notes, executedById }) 
 			executedById: executedById ?? null,
 			executedAt: new Date()
 		},
-		select: { id: true, status: true, notes: true, executedAt: true, runId: true, caseId: true }
+		select: {
+			id: true,
+			status: true,
+			notes: true,
+			executedAt: true,
+			executedBy: { select: { id: true, name: true } },
+			runId: true,
+			caseId: true
+		}
 	});
 
 	if (status === 'pass' || status === 'fail' || status === 'blocked' || status === 'skip') {
@@ -199,16 +222,20 @@ async function updateEntry(projectId, entryId, { status, notes, executedById }) 
 		});
 	}
 
+	emitRunChanged(entry.runId, { entry });
 	return entry;
 }
 
 async function assignEntry(projectId, entryId, { userId }) {
-	if (!(await loadEntry(projectId, entryId))) return null;
-	return prisma.testRunEntry.update({
+	const loaded = await loadEntry(projectId, entryId);
+	if (!loaded) return null;
+	const entry = await prisma.testRunEntry.update({
 		where: { id: entryId },
 		data: { assignedToId: userId ?? null },
 		select: { id: true, assignedToId: true, assignedTo: { select: { id: true, name: true } } }
 	});
+	emitRunChanged(loaded.runId, { entry });
+	return entry;
 }
 
 async function reorderEntries(projectId, runId, orderedEntryIds) {
@@ -218,9 +245,11 @@ async function reorderEntries(projectId, runId, orderedEntryIds) {
 			prisma.testRunEntry.update({ where: { id: entryId }, data: { order: i } })
 		)
 	);
+	emitRunChanged(runId, { reload: true });
 }
 
 module.exports = {
+	setSocketIO,
 	getAll,
 	getById,
 	create,
