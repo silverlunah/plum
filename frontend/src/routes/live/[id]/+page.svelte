@@ -34,6 +34,8 @@
 		QUEUED_BODY,
 		RUN_NOT_FOUND_HEADING,
 		RUN_NOT_FOUND_BODY,
+		RUN_FORBIDDEN_HEADING,
+		RUN_FORBIDDEN_BODY,
 		RUN_SKIPPED_HEADING,
 		VIEW_PAST_REPORTS_LINK,
 		queuePositionLine,
@@ -55,19 +57,30 @@
 	let hydrated = false;
 	let queuePosition = 0;
 	let posInterval = null;
+	let accessibleProjectIds = null; // null until the first fetch resolves
+	let listedProjectId = null; // the run's project as seen in the active-runs list
 
 	$: runId = $page.params.id;
 	$: run = $backgroundRuns[runId] ?? null;
 	$: status = run?.status ?? null;
 	$: lanes = run?.lanes ?? [];
 	$: isMulti = lanes.length > 1;
+	// Block the stream once we know the run's project and that it isn't one the
+	// viewer belongs to — the bottom bar wouldn't link here, but a pasted URL can.
+	$: runProjectId = run?.projectId ?? listedProjectId;
+	$: forbidden =
+		accessibleProjectIds != null &&
+		runProjectId != null &&
+		!accessibleProjectIds.includes(runProjectId);
 
 	async function refreshQueuePosition() {
 		try {
-			const runs = await fetchActiveRuns();
+			const { runs, accessibleProjectIds: ids } = await fetchActiveRuns();
 			hydrated = true;
+			accessibleProjectIds = ids;
 			const mine = runs.find((r) => r.runId === runId);
 			queuePosition = mine?.position ?? 0;
+			if (mine?.projectId != null) listedProjectId = mine.projectId;
 		} catch {
 			hydrated = true;
 		}
@@ -125,7 +138,14 @@
 
 <svelte:head><title>{LIVE_PAGE_TITLE}</title></svelte:head>
 
-{#if !run}
+{#if forbidden}
+	<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
+	<div class="notice-state">
+		<h2>{RUN_FORBIDDEN_HEADING}</h2>
+		<p>{RUN_FORBIDDEN_BODY}</p>
+		<a href="/reports" class="notice-link">{VIEW_PAST_REPORTS_LINK}</a>
+	</div>
+{:else if !run}
 	<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
 	<div class="notice-state">
 		{#if hydrated}

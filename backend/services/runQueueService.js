@@ -38,6 +38,7 @@ function rowToJob(row) {
 	return {
 		id: row.id,
 		projectId: row.projectId,
+		projectName: row.project?.name ?? '',
 		kind: row.kind,
 		triggerType: row.triggerType,
 		label: row.label,
@@ -90,7 +91,8 @@ async function pump() {
 async function pumpOnce() {
 	const rows = await prisma.runQueue.findMany({
 		where: { status: { in: [QUEUED, RUNNING] } },
-		orderBy: { queuedAt: 'asc' }
+		orderBy: { queuedAt: 'asc' },
+		include: { project: { select: { name: true } } }
 	});
 
 	// A runner is busy if a running row holds it. A queued row that can't start
@@ -163,6 +165,10 @@ async function enqueue(job) {
 	const id = job.id || randomUUID();
 	const runnerIds = normaliseRunnerIds(job.runnerIds);
 	const projectId = job.projectId ?? (await defaultProjectId());
+	const project = await prisma.project.findUnique({
+		where: { id: projectId },
+		select: { name: true }
+	});
 
 	await prisma.runQueue.create({
 		data: {
@@ -188,6 +194,8 @@ async function enqueue(job) {
 	if (_io) {
 		_io.emit(SOCKET_EVENTS.BG_RUN_QUEUED, {
 			runId: id,
+			projectId,
+			projectName: project?.name ?? '',
 			kind: job.kind,
 			label: job.label ?? '',
 			meta: meta(job),
@@ -249,17 +257,19 @@ async function getJob(id, projectId) {
 	};
 }
 
-async function listActive(projectId) {
+// Every active run across every project — the bottom bar shows them all for
+// awareness; the client marks the ones the viewer can't reach as non-clickable.
+async function listActive() {
 	const rows = await prisma.runQueue.findMany({
-		where: {
-			status: { in: [QUEUED, RUNNING] },
-			...(projectId !== undefined ? { projectId } : {})
-		},
-		orderBy: { queuedAt: 'asc' }
+		where: { status: { in: [QUEUED, RUNNING] } },
+		orderBy: { queuedAt: 'asc' },
+		include: { project: { select: { name: true } } }
 	});
 	let queuePos = 0;
 	return rows.map((r) => ({
 		runId: r.id,
+		projectId: r.projectId,
+		projectName: r.project?.name ?? '',
 		status: r.status,
 		kind: r.kind,
 		label: r.label,

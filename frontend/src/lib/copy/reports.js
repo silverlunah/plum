@@ -18,9 +18,6 @@ export const TREND_HINT = '← older · newer →';
 export const NO_REPORTS_MESSAGE = 'No reports yet. Run a test to generate one.';
 export const SELECT_ALL_TITLE = 'Select all on this page';
 export const SELECT_ROW_TITLE = 'Select';
-export const LEGACY_SCREENSHOTS_NOTICE =
-	'Screenshots have been replaced by full session replay. Reports created before this change no longer have screenshots — steps and logs are still available.';
-export const DISMISS_NOTICE_TITLE = 'Dismiss';
 export const DELETE_REPORT_TITLE = 'Delete report';
 
 export const deleteReportsTitle = (count) =>
@@ -111,4 +108,7 @@ export const RUN_NOT_FOUND_HEADING = 'Run not found';
 export const RUN_NOT_FOUND_BODY =
 	'This run has finished or was never started. Check the reports list for its results.';
 export const RUN_SKIPPED_HEADING = 'Run skipped';
+export const RUN_FORBIDDEN_HEADING = 'Not your project';
+export const RUN_FORBIDDEN_BODY =
+	'This run belongs to a project you don’t have access to. Ask an admin to add you if you need to see it.';
 export const queuePositionLine = (n) => (n > 0 ? `Position ${n} in the queue` : 'Next up');
