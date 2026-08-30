@@ -22,6 +22,12 @@ function featuresDir(projectId) {
 	return path.join(resolveTestsRoot(projectId), 'features');
 }
 
+// True when the project has its own mounted test folder (projects/<id>/), as
+// opposed to falling back to the legacy shared `tests/` dir.
+function isPerProjectScaffolded(projectId) {
+	return fs.existsSync(path.join(PROJECTS_DIR, String(projectId), 'features'));
+}
+
 // Minimal KEY=VALUE parse of a project's own .env — merged into a run's spawn
 // env so BASE_URL and per-project secrets are read live, no restart.
 function loadProjectEnv(projectId) {
@@ -38,4 +44,4 @@ function loadProjectEnv(projectId) {
 	return out;
 }
 
-module.exports = { resolveTestsRoot, featuresDir, loadProjectEnv };
+module.exports = { resolveTestsRoot, featuresDir, isPerProjectScaffolded, loadProjectEnv };

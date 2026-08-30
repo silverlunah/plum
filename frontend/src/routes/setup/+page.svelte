@@ -292,7 +292,9 @@
 
 	.submit-btn {
 		flex: 1;
-		height: 40px;
+		width: 100%;
+		min-height: 44px;
+		padding: 0.7rem 1rem;
 		background: var(--accent);
 		color: var(--white);
 		border: none;
@@ -312,7 +314,7 @@
 	}
 
 	.ghost-btn {
-		height: 40px;
+		min-height: 44px;
 		padding: 0 1rem;
 		background: transparent;
 		color: var(--text-muted);

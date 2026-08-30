@@ -363,6 +363,41 @@ goes near `master`.
 
 ---
 
+## P6b — first-project consistency + UI polish (from user test feedback)
+
+Branch `299-p6b-first-project-fixes` off the integration branch.
+
+- **First project lives in `projects/1/`, not root `tests/`.** Migration
+  `20260830100000` resets `Project_id_seq` to 1 on a fresh DB so the wizard's
+  first project is id 1. `plum server start` runs `ensureFirstProjectScaffold()` —
+  scaffolds `projects/1/tests/` from `_scaffold` before the stack comes up, so
+  it's mounted before the wizard. Skipped when a legacy `./tests/features`
+  exists (single-project upgrade) or the folder is already there.
+- **No blank root `tests/`.** `buildOverrideYaml` only mounts `./tests` when the
+  folder actually exists — a fresh install has none, and mounting a missing host
+  path just recreated an empty dir.
+- **Admins are implicit members everywhere.** Migration `20260830100000` also
+  drops admin `ProjectMember` rows; `bootstrap()` no longer creates one;
+  `projectService.listAll` returns `memberCount = ProjectMember rows + admin
+count` so every project counts admins consistently (was 1 vs 0).
+- **Projects admin screen** shows `Project ID <n>` and, when the folder isn't
+  scaffolded yet (`isPerProjectScaffolded`), a copyable
+  `plum project init <n> && plum server restart` hint that disappears once the
+  folder exists.
+- **Nav switcher** is a custom dropdown (logo/initial, active check, themed) —
+  replaces the native `<select>`.
+- **Setup wizard** Continue/Back buttons `min-height: 44px` + padding.
+- **Settings** — `Manage projects & access →` link now on the Project tab too,
+  kept on Users.
+
+**Status: done.** Verified on a fresh DB + build: wizard project → id 1,
+`scaffolded: true`, `memberCount: 1`; second project → id 2, `memberCount: 1`,
+`scaffolded: false` → UI shows the init hint; `plum project init 2` +
+override regen + restart → `scaffolded: true`; switcher + admin screen checked in
+the browser.
+
+---
+
 ## P7 — documentation rewrite
 
 Rewrite the Outline collection + `README.md` + the scaffolded README string in

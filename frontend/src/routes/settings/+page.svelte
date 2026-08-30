@@ -61,6 +61,7 @@
 		HEADING,
 		NAME_LABEL,
 		NETWORK_ERROR,
+		MANAGE_PROJECTS_LINK_LABEL,
 		PROJECT_LABEL,
 		RUNNERS_LABEL,
 		REPOSITORY_NAV_LABEL,
@@ -1060,6 +1061,7 @@
 				<div class="content-header">
 					<h2>{PROJECT_LABEL}</h2>
 					<p class="content-desc">{PROJECT_DESC}</p>
+					<a class="content-link" href="/settings/projects">{MANAGE_PROJECTS_LINK_LABEL}</a>
 				</div>
 
 				<div class="card settings-card">
@@ -1830,7 +1832,7 @@
 				<div class="content-header">
 					<h2>{USERS_LABEL}</h2>
 					<p class="content-desc">{USERS_DESC}</p>
-					<a class="content-link" href="/settings/projects">Manage projects &amp; access →</a>
+					<a class="content-link" href="/settings/projects">{MANAGE_PROJECTS_LINK_LABEL}</a>
 				</div>
 
 				<ConfirmModal

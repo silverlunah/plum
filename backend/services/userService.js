@@ -32,8 +32,8 @@ const slugify = (s) =>
 		.replace(/[^a-z0-9]+/g, '-')
 		.replace(/^-+|-+$/g, '') || 'project';
 
-// First boot: the organisation, its first project, and an admin who owns it —
-// all or nothing.
+// First boot: the organisation, its first project, and an admin — all or
+// nothing. Admins reach every project implicitly, so no ProjectMember row.
 async function bootstrap({ organizationName, projectName, name, email, password }) {
 	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 	return prisma.$transaction(async (tx) => {
@@ -44,9 +44,6 @@ async function bootstrap({ organizationName, projectName, name, email, password 
 		const user = await tx.user.create({
 			data: { name, email, password: hashed, role: 'admin' },
 			select: userSelect
-		});
-		await tx.projectMember.create({
-			data: { projectId: project.id, userId: user.id, role: 'admin' }
 		});
 		return { org, project, user };
 	});

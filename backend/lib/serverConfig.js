@@ -94,7 +94,9 @@ function writeEnvFile(dir, { headless }) {
  */
 // `projects` is an array of { id, absPath } — each is mounted at /app/projects/<id>
 // so the backend's resolveTestsRoot(id) finds it. The legacy single `tests/`
-// mount is kept for single-project installs.
+// mount is only added when that folder actually exists (single-project installs
+// predating multi-project) — a fresh install has none, and mounting a missing
+// host path would just recreate an empty ./tests/ dir.
 function buildOverrideYaml({ testsAbs, reportsAbs, backendPort, apiUrl, projects = [] }) {
 	const projectMounts = projects.map(
 		(p) => `      - "${p.absPath.replace(/\\/g, '/')}:/app/projects/${p.id}"`
@@ -105,7 +107,7 @@ function buildOverrideYaml({ testsAbs, reportsAbs, backendPort, apiUrl, projects
 			'  backend:',
 			'    volumes:',
 			`      - "${reportsAbs}:/app/reports"`,
-			`      - "${testsAbs}:/app/tests"`,
+			...(testsAbs ? [`      - "${testsAbs}:/app/tests"`] : []),
 			...projectMounts,
 			'  frontend:',
 			'    environment:',
