@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const prisma = require('./prisma');
-const { isScheduledTrigger, normaliseTrigger } = require('../constants/triggers');
+const { isScheduledTrigger, normaliseTrigger, TRIGGER_TYPE } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { REPORT_STATUS } = require('../constants/jobStatus');
 
@@ -318,6 +318,8 @@ const reportListSelect = {
 	status: true,
 	tags: true,
 	triggerType: true,
+	viaMcp: true,
+	startedBy: true,
 	runnerCount: true,
 	workerCount: true,
 	browser: true,
@@ -367,6 +369,8 @@ const getReportDetail = async (projectId, id) => {
 			status: true,
 			tags: true,
 			triggerType: true,
+			viaMcp: true,
+			startedBy: true,
 			runnerCount: true,
 			workerCount: true,
 			browser: true,
@@ -453,6 +457,7 @@ const saveReport = async ({
 	rawCucumberJson,
 	tags,
 	triggerType,
+	startedBy = null,
 	runnerCount = 1,
 	workerCount = 1,
 	browser,
@@ -479,6 +484,8 @@ const saveReport = async ({
 			status,
 			tags: (tags ?? '').replace(/^\(|\)$/g, '') || '@all-tests',
 			triggerType: normTrigger,
+			viaMcp: normTrigger === TRIGGER_TYPE.MCP,
+			startedBy: startedBy || null,
 			runnerCount,
 			workerCount,
 			browser: browser ?? DEFAULT_BROWSER,
@@ -523,6 +530,7 @@ const saveCombinedReport = async ({
 	overallCode,
 	tag,
 	triggerType,
+	startedBy = null,
 	browser,
 	testRunId,
 	laneLogs = null,
@@ -578,6 +586,7 @@ const saveCombinedReport = async ({
 		rawCucumberJson: combined,
 		tags: tag,
 		triggerType,
+		startedBy,
 		runnerCount: runners.length,
 		workerCount: workers,
 		browser,

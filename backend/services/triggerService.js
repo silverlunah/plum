@@ -16,7 +16,8 @@ async function startRun({
 	workers = 1,
 	baseUrl,
 	testRunId,
-	trigger
+	trigger,
+	startedBy = null
 }) {
 	return runQueueService.enqueue({
 		projectId,
@@ -28,6 +29,7 @@ async function startRun({
 		workers,
 		baseUrl,
 		testRunId,
+		startedBy,
 		runnerIds: [BUILT_IN_RUNNER_ID]
 	});
 }

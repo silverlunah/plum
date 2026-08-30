@@ -34,7 +34,8 @@
 		WORKERS_MIN,
 		WORKERS_MAX,
 		RUN_PICKER_LIMIT,
-		REDIRECT_DELAY_MS
+		REDIRECT_DELAY_MS,
+		TRIGGER_TYPES
 	} from '$lib/constants';
 	import { BUILTIN_RUNNER_LABEL, CLEAR_LABEL, DISCORD_LABEL, SLACK_LABEL } from '$lib/copy/common';
 	import {
@@ -69,7 +70,7 @@
 		statusLabel as computeStatusLabel,
 		runnerSummary as computeRunnerSummary
 	} from '$lib/copy/runners';
-	import { triggerLabel, triggerVariant } from '$lib/utils/format';
+	import { triggerLabel, triggerVariant, mcpName } from '$lib/utils/format';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 
@@ -804,7 +805,10 @@
 										)
 									: runKindLabel(run.kind)}
 								{#if run.currentRun?.startedBy}
-									<span class="meta-dot">·</span> {startedByLabel(run.currentRun.startedBy)}
+									<span class="meta-dot">·</span>
+									{startedByLabel(
+										mcpName(run.currentRun.startedBy, run.kind === TRIGGER_TYPES.MCP)
+									)}
 								{/if}
 							</span>
 						</div>

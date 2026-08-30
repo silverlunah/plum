@@ -22,7 +22,8 @@
 		fetchS3Backups,
 		restoreFromS3,
 		fetchMcpConfig,
-		generateMcpKey as generateMcpKeyApi
+		generateMcpKey as generateMcpKeyApi,
+		revokeMcpKey as revokeMcpKeyApi
 	} from '$lib/api/settings';
 	import {
 		fetchRunners,
@@ -202,6 +203,9 @@
 		CONFIG_SNIPPET_DESC_SUFFIX,
 		MCP_KEY_GENERATED_TOAST,
 		MCP_KEY_GENERATE_FAILED,
+		MCP_KEY_REVOKED_TOAST,
+		MCP_KEY_REVOKE_FAILED,
+		REVOKE_KEY_LABEL,
 		generateKeyLabel,
 		regenerateKeyLabel,
 		copyMcpSnippetLabel,
@@ -867,6 +871,18 @@
 		}
 	}
 
+	async function handleRevokeMcpKey() {
+		try {
+			await revokeMcpKeyApi();
+			mcpKey = '';
+			mcpKeySet = false;
+			mcpShowKey = false;
+			notify('success', MCP_KEY_REVOKED_TOAST);
+		} catch {
+			notify('error', MCP_KEY_REVOKE_FAILED);
+		}
+	}
+
 	function handleCopyMcpKey() {
 		copyText(mcpKey).then(() => {
 			mcpKeyCopied = true;
@@ -1045,7 +1061,7 @@
 	].join('\n');
 
 	// Per-project settings — the owner and an admin of the active project.
-	const ELEVATED_SECTIONS = new Set(['project', 'testcases', 'integrations', 'mcp']);
+	const ELEVATED_SECTIONS = new Set(['project', 'testcases', 'integrations']);
 	// Account-wide settings — the owner only.
 	const OWNER_SECTIONS = new Set(['runners', 'users', 'backup']);
 
@@ -1062,10 +1078,10 @@
 			? [
 					{ id: 'project', label: PROJECT_LABEL },
 					{ id: 'testcases', label: TEST_CASES_NAV_LABEL },
-					{ id: 'integrations', label: INTEGRATIONS_LABEL },
-					{ id: 'mcp', label: MCP_NAV_LABEL }
+					{ id: 'integrations', label: INTEGRATIONS_LABEL }
 				]
 			: []),
+		{ id: 'mcp', label: MCP_NAV_LABEL },
 		...(isOwner ? [{ id: 'runners', label: RUNNERS_LABEL }] : []),
 		{ id: 'account', label: ACCOUNT_LABEL },
 		...(isOwner
@@ -1766,6 +1782,7 @@
 							<Button variant="ghost" on:click={handleGenerateMcpKey} disabled={mcpGenerating}>
 								{regenerateKeyLabel(mcpGenerating)}
 							</Button>
+							<Button variant="ghost" on:click={handleRevokeMcpKey}>{REVOKE_KEY_LABEL}</Button>
 						</div>
 					{/if}
 				</div>
