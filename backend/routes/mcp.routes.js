@@ -32,8 +32,8 @@ async function handleMcp(req, res, next) {
 			userName: req.user.name ?? null,
 			projectId: req.projectId,
 			role: req.user.role,
-			apiKey: req.user.apiKey ?? null,
-			viaMcp: req.user.viaMcp === true
+			// Anything through this endpoint is "via MCP", whatever the auth scheme.
+			viaMcp: true
 		});
 		const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 		res.on('close', () => {
