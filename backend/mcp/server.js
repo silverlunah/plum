@@ -94,20 +94,17 @@ function summariseReport(report) {
  * authenticated user for this request (see routes/mcp.routes.js — a new
  * server/transport pair is created per request in stateless mode).
  */
-function createMcpServer({ userId, projectId, role, apiKey }) {
+function createMcpServer({ userId, userName, projectId, role, viaMcp }) {
 	const server = new McpServer({
 		name: 'plum',
 		version: '1.0.0'
 	});
 
-	// A project-scoped MCP key resolves to role 'owner' too, but only for its own
-	// project's data — it must not reach the organisation-wide account tools.
-	// Those need a real owner login or the instance-wide PLUM_MCP_KEY.
+	// The account tools are organisation-wide — an admin or user key (or their
+	// login) can't reach them.
 	const assertAccountAdmin = () => {
-		if (apiKey === 'scoped' || role !== 'owner') {
-			throw new Error(
-				'This tool needs an owner account or the instance API key (PLUM_MCP_KEY). A project MCP key cannot manage users or projects.'
-			);
+		if (role !== 'owner') {
+			throw new Error('This tool needs an owner account or the instance API key (PLUM_MCP_KEY).');
 		}
 	};
 
@@ -161,7 +158,8 @@ function createMcpServer({ userId, projectId, role, apiKey }) {
 				name,
 				description,
 				priority,
-				createdById: userId
+				createdById: userId,
+				viaMcp
 			});
 			return { content: [{ type: 'text', text: JSON.stringify(suite, null, 2) }] };
 		}
@@ -218,7 +216,8 @@ function createMcpServer({ userId, projectId, role, apiKey }) {
 				title,
 				description,
 				priority,
-				createdById: userId
+				createdById: userId,
+				viaMcp
 			});
 			return { content: [{ type: 'text', text: JSON.stringify(testCase, null, 2) }] };
 		}
@@ -341,7 +340,8 @@ function createMcpServer({ userId, projectId, role, apiKey }) {
 				workers,
 				baseUrl,
 				testRunId,
-				trigger: TRIGGER_TYPE.MCP
+				trigger: TRIGGER_TYPE.MCP,
+				startedBy: userName
 			});
 
 			const job = await pollJob(projectId, jobId);

@@ -28,6 +28,7 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import { SUITE_CASES_PER_PAGE, CASE_HISTORY_BARS_MAX } from '$lib/constants';
+	import { mcpName } from '$lib/utils/format';
 	import {
 		CANCEL_LABEL,
 		SAVE_LABEL,
@@ -540,7 +541,7 @@
 		<div class="suite-meta">
 			<span>{caseCount(suite._count.cases)}</span>
 			<span class="meta-sep">·</span>
-			<span>{createdByCapitalized(suite.createdBy.name)}</span>
+			<span>{createdByCapitalized(mcpName(suite.createdBy.name, suite.viaMcp))}</span>
 		</div>
 	</div>
 
@@ -806,7 +807,9 @@
 							{#if selectedCase.description}
 								<p class="detail-case-desc">{selectedCase.description}</p>
 							{/if}
-							<p class="detail-meta">{createdByCapitalized(selectedCase.createdBy.name)}</p>
+							<p class="detail-meta">
+								{createdByCapitalized(mcpName(selectedCase.createdBy.name, selectedCase.viaMcp))}
+							</p>
 							{#if selectedCase.history && selectedCase.history.length > 0}
 								<div class="case-history-bars">
 									{#each recentHistory(selectedCase.history) as h (h.id)}

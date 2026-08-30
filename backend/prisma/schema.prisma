@@ -51,6 +51,8 @@ model Report {
   status      String
   tags        String
   triggerType String            @default("manual-trigger")
+  viaMcp      Boolean           @default(false)
+  startedBy   String?
   // runnerCount = distinct runner machines/lanes in this run (built-in counts as one).
   // workerCount = Cucumber --parallel workers within each runner. Two independent
   // axes of parallelism — kept as separate columns since one DB column used to mean
@@ -126,23 +128,22 @@ model Organization {
 }
 
 model Project {
-  id                   Int          @id @default(autoincrement())
-  orgId                Int
-  org                  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  slug                 String       @unique
-  name                 String       @default("")
-  baseUrl              String       @default("")
-  logoUrl              String       @default("")
-  timezone             String       @default("UTC")
-  testCasePrefix       String       @default("TC")
-  testSuitePrefix      String       @default("TS")
-  caseSeqNext          Int          @default(0)
-  suiteSeqNext         Int          @default(0)
-  discordWebhookUrl    String       @default("")
-  slackWebhookUrl      String       @default("")
-  notifyPublicUrl      String       @default("")
-  mcpKey               String       @default("")
-  maxRetries           Int          @default(0)
+  id                Int          @id @default(autoincrement())
+  orgId             Int
+  org               Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  slug              String       @unique
+  name              String       @default("")
+  baseUrl           String       @default("")
+  logoUrl           String       @default("")
+  timezone          String       @default("UTC")
+  testCasePrefix    String       @default("TC")
+  testSuitePrefix   String       @default("TS")
+  caseSeqNext       Int          @default(0)
+  suiteSeqNext      Int          @default(0)
+  discordWebhookUrl String       @default("")
+  slackWebhookUrl   String       @default("")
+  notifyPublicUrl   String       @default("")
+  maxRetries        Int          @default(0)
 
   members  ProjectMember[]
   suites   TestSuite[]
@@ -151,6 +152,23 @@ model Project {
   reports  Report[]
   cronJobs CronJob[]
   runQueue RunQueue[]
+  mcpKeys  McpKey[]
+}
+
+// One per (project, member). Each person mints their own key for a project they
+// belong to; MCP requests then act as that user with that user's role, scoped to
+// the project. Regenerating replaces the row; leaving the project deletes it.
+model McpKey {
+  id        String   @id @default(cuid())
+  projectId Int
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key       String   @unique
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+  @@index([userId])
 }
 
 model ProjectMember {
@@ -182,6 +200,7 @@ model User {
   assignedEntries    TestRunEntry[]    @relation("entryAssignee")
   caseHistories      TestCaseHistory[]
   projectMemberships ProjectMember[]
+  mcpKeys            McpKey[]
 }
 
 model TestSuite {
@@ -194,6 +213,7 @@ model TestSuite {
   priority    String     @default("Medium")
   createdById String
   createdBy   User       @relation(fields: [createdById], references: [id])
+  viaMcp      Boolean    @default(false)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   cases       TestCase[]
@@ -216,6 +236,7 @@ model TestCase {
   suite       TestSuite         @relation(fields: [suiteId], references: [id], onDelete: Cascade)
   createdById String
   createdBy   User              @relation(fields: [createdById], references: [id])
+  viaMcp      Boolean           @default(false)
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   steps       TestStep[]

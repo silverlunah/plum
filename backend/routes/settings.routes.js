@@ -102,19 +102,28 @@ router.post('/integrations', scopedAdmin, async (req, res, next) => {
 	}
 });
 
-// The MCP key authenticates as the owner, so only a project admin may see or
-// rotate it — never a plain member.
-router.get('/mcp', scopedAdmin, async (req, res, next) => {
+// An MCP key acts as the member who minted it, with that member's role — so any
+// member manages their own, no admin gate.
+router.get('/mcp', scoped, async (req, res, next) => {
 	try {
-		res.json(await settingsService.getMcpConfig(req.projectId));
+		res.json(await settingsService.getMcpConfig(req.projectId, req.user.userId));
 	} catch (e) {
 		next(e);
 	}
 });
 
-router.post('/mcp/generate', scopedAdmin, async (req, res, next) => {
+router.post('/mcp/generate', scoped, async (req, res, next) => {
 	try {
-		res.json(await settingsService.generateMcpKey(req.projectId));
+		res.json(await settingsService.generateMcpKey(req.projectId, req.user.userId));
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.delete('/mcp', scoped, async (req, res, next) => {
+	try {
+		await settingsService.revokeMcpKey(req.projectId, req.user.userId);
+		res.json({ ok: true });
 	} catch (e) {
 		next(e);
 	}

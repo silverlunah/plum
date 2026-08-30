@@ -14,6 +14,7 @@ const suiteSelect = {
 	createdAt: true,
 	updatedAt: true,
 	createdBy: { select: { id: true, name: true } },
+	viaMcp: true,
 	_count: { select: { cases: true } }
 };
 
@@ -112,6 +113,7 @@ async function getById(projectId, id) {
 					isAutomated: true,
 					createdAt: true,
 					createdBy: { select: { id: true, name: true } },
+					viaMcp: true,
 					_count: { select: { steps: true } }
 				},
 				orderBy: { createdAt: 'asc' }
@@ -120,7 +122,7 @@ async function getById(projectId, id) {
 	});
 }
 
-async function create(projectId, { name, description, priority, createdById }) {
+async function create(projectId, { name, description, priority, createdById, viaMcp = false }) {
 	const project = await prisma.project.update({
 		where: { id: projectId },
 		data: { suiteSeqNext: { increment: 1 } },
@@ -136,7 +138,8 @@ async function create(projectId, { name, description, priority, createdById }) {
 			name,
 			description: description ?? '',
 			priority: priority ?? 'Medium',
-			createdById
+			createdById,
+			viaMcp
 		},
 		select: suiteSelect
 	});

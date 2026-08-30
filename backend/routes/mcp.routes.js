@@ -29,9 +29,11 @@ async function handleMcp(req, res, next) {
 	try {
 		const server = createMcpServer({
 			userId: req.user.userId,
+			userName: req.user.name ?? null,
 			projectId: req.projectId,
 			role: req.user.role,
-			apiKey: req.user.apiKey ?? null
+			apiKey: req.user.apiKey ?? null,
+			viaMcp: req.user.viaMcp === true
 		});
 		const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 		res.on('close', () => {
