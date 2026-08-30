@@ -45,6 +45,8 @@ docker-compose.override.yml
 /projects/
 # Legacy single-project test folder (scaffolded by `plum init`)
 /tests/
+# Run outputs written at the repo root when the server runs from here
+/reports/
 
 #-----------------------#
 #   Backend .gitignore  #
