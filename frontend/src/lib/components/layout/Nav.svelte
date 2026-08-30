@@ -9,16 +9,18 @@
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import { fetchProjects } from '$lib/api/projects';
-	import { activeProjectId, setProjects } from '$lib/stores/project';
+	import { activeProjectId, projects, setProjects } from '$lib/stores/project';
 
 	let menuOpen = false;
-	let projectList = [];
 	let projectMenuOpen = false;
+
+	// Reads from the shared store so the switcher updates the moment a project is
+	// created or deleted in Settings, without a reload.
+	$: projectList = $projects;
 
 	onMount(async () => {
 		try {
-			projectList = await fetchProjects();
-			setProjects(projectList);
+			setProjects(await fetchProjects());
 		} catch {}
 	});
 

@@ -222,6 +222,7 @@
 		REMOVE_USER_BODY_PREFIX,
 		REMOVE_USER_BODY_SUFFIX,
 		ADD_USER_CARD_TITLE,
+		ALL_USERS_CARD_TITLE,
 		USER_NAME_PLACEHOLDER,
 		USER_EMAIL_PLACEHOLDER,
 		PASSWORD_LABEL,
@@ -232,6 +233,9 @@
 		REMOVE_USER_ICON_TITLE,
 		YOU_CHIP_LABEL,
 		USER_FORM_REQUIRED_ERROR,
+		USER_PROJECTS_LABEL,
+		USER_NO_PROJECTS,
+		USER_ALL_PROJECTS,
 		addUserLabel,
 		userAddedToast,
 		userRemovedToast,
@@ -356,6 +360,7 @@
 	let allUsers = [];
 	let userQuery = '';
 	let userPage = 0;
+	let expandedUserId = null;
 	const USERS_PER_PAGE = 20;
 	$: filteredUsers = allUsers.filter(
 		(u) =>
@@ -1191,7 +1196,7 @@
 					</div>
 				</div>
 
-				<ProjectAccess />
+				<ProjectAccess on:navigate={(e) => setSection(e.detail)} />
 			</div>
 
 			<!-- RUNNERS -->
@@ -1943,54 +1948,79 @@
 					</div>
 				</div>
 
-				{#if allUsers.length >= USERS_PER_PAGE}
-					<input
-						class="field-input user-search"
-						bind:value={userQuery}
-						placeholder={SEARCH_PLACEHOLDER}
-						on:input={() => (userPage = 0)}
-					/>
-				{/if}
 				{#if allUsers.length > 0}
-					<div class="users-table">
-						{#each pagedUsers as u (u.id)}
-							<div class="user-row">
-								<div class="user-info">
-									<span class="user-name">{u.name}</span>
-									<span class="user-email">{u.email}</span>
-								</div>
-								<span class="role-chip {u.role}">{u.role}</span>
-								{#if u.id !== $auth.user?.id}
-									<button
-										class="icon-btn danger"
-										title={REMOVE_USER_ICON_TITLE}
-										on:click={() => {
-											confirmDeleteUser = { id: u.id, name: u.name };
-											confirmDeleteUserOpen = true;
-										}}
-									>
-										<svg
-											width="13"
-											height="13"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
+					<div class="card settings-card">
+						<p class="card-title">{ALL_USERS_CARD_TITLE}</p>
+						{#if allUsers.length > 1}
+							<input
+								class="field-input user-search"
+								bind:value={userQuery}
+								placeholder={SEARCH_PLACEHOLDER}
+								on:input={() => (userPage = 0)}
+							/>
+						{/if}
+						<div class="users-table">
+							{#each pagedUsers as u (u.id)}
+								<div class="user-row" class:expanded={expandedUserId === u.id}>
+									<div class="user-row-head">
+										<button
+											class="user-info"
+											aria-expanded={expandedUserId === u.id}
+											on:click={() => (expandedUserId = expandedUserId === u.id ? null : u.id)}
 										>
-											<polyline points="3 6 5 6 21 6" /><path
-												d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
-											/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
-										</svg>
-									</button>
-								{:else}
-									<span class="you-chip">{YOU_CHIP_LABEL}</span>
-								{/if}
-							</div>
-						{/each}
+											<span class="user-name">{u.name}</span>
+											<span class="user-email">{u.email}</span>
+										</button>
+										<span class="role-chip {u.role}">{u.role}</span>
+										{#if u.id !== $auth.user?.id}
+											<button
+												class="icon-btn danger"
+												title={REMOVE_USER_ICON_TITLE}
+												on:click={() => {
+													confirmDeleteUser = { id: u.id, name: u.name };
+													confirmDeleteUserOpen = true;
+												}}
+											>
+												<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												>
+													<polyline points="3 6 5 6 21 6" /><path
+														d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+													/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+												</svg>
+											</button>
+										{:else}
+											<span class="you-chip">{YOU_CHIP_LABEL}</span>
+										{/if}
+									</div>
+									{#if expandedUserId === u.id}
+										<div class="user-projects">
+											<p class="user-projects-label">{USER_PROJECTS_LABEL}</p>
+											{#if u.role === 'owner'}
+												<p class="user-projects-hint">{USER_ALL_PROJECTS}</p>
+											{:else if (u.projects ?? []).length === 0}
+												<p class="user-projects-hint">{USER_NO_PROJECTS}</p>
+											{:else}
+												<ul class="user-project-list">
+													{#each u.projects as p (p.id)}
+														<li><span>{p.name}</span><span class="slug">{p.slug}</span></li>
+													{/each}
+												</ul>
+											{/if}
+										</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+						<Paginator bind:page={userPage} total={filteredUsers.length} perPage={USERS_PER_PAGE} />
 					</div>
-					<Paginator bind:page={userPage} total={filteredUsers.length} perPage={USERS_PER_PAGE} />
 				{/if}
 			</div>
 
@@ -3049,17 +3079,23 @@
 	.users-table {
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
 		margin-top: 1rem;
-	}
-
-	.user-row {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
 		background: var(--bg-elevated);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
+		overflow: hidden;
+	}
+
+	.user-row:not(:last-child) {
+		border-bottom: 1px solid var(--border);
+	}
+	.user-row.expanded {
+		background: var(--bg-subtle);
+	}
+	.user-row-head {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
 		padding: 0.75rem 1rem;
 	}
 
@@ -3068,7 +3104,53 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
+		align-items: flex-start;
 		gap: 0.15rem;
+		padding: 0;
+		font: inherit;
+		text-align: left;
+		background: none;
+		border: none;
+		cursor: pointer;
+	}
+
+	.user-projects {
+		margin: 0 1rem;
+		padding: 0.75rem 0;
+		border-top: 1px solid var(--border);
+	}
+	.user-projects-label {
+		margin: 0 0 0.4rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-muted);
+	}
+	.user-projects-hint {
+		margin: 0;
+		font-size: 0.82rem;
+		color: var(--text-muted);
+	}
+	.user-project-list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+	.user-project-list li {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		font-size: 0.85rem;
+		color: var(--text);
+	}
+	.user-project-list .slug {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.72rem;
+		color: var(--text-muted);
 	}
 
 	.user-name {

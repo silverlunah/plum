@@ -21,6 +21,7 @@
 		makeRunEntry,
 		mergeRRwebBatch
 	} from '$lib/stores/runner';
+	import { activeProjectId, projects } from '$lib/stores/project';
 	import { reportUrl } from '$lib/api/reports';
 	import { fetchRunners } from '$lib/api/runners';
 	import { fetchRuns, fetchRun } from '$lib/api/repository';
@@ -133,12 +134,13 @@
 		// loaded/refreshed) — live socket events alone only reach tabs connected at
 		// the moment an event fires.
 		fetchActiveRuns()
-			.then((runs) => {
+			.then(({ runs }) => {
 				if (runs.length === 0) return;
 				backgroundRuns.update((r) => {
 					const next = { ...r };
-					for (const { runId, kind, label, meta, status } of runs) {
-						if (!next[runId]) next[runId] = makeRunEntry({ kind, label, meta, status });
+					for (const { runId, projectId, projectName, kind, label, meta, status } of runs) {
+						if (!next[runId])
+							next[runId] = makeRunEntry({ projectId, projectName, kind, label, meta, status });
 					}
 					return next;
 				});
@@ -184,20 +186,22 @@
 			});
 		}
 
-		function upsertBgRun(runId, { kind, label, meta }, status) {
+		function upsertBgRun(runId, { projectId, projectName, kind, label, meta }, status) {
 			backgroundRuns.update((r) => ({
 				...r,
-				[runId]: r[runId] ? { ...r[runId], status } : makeRunEntry({ kind, label, meta, status })
+				[runId]: r[runId]
+					? { ...r[runId], status }
+					: makeRunEntry({ projectId, projectName, kind, label, meta, status })
 			}));
 			panelExpanded.set(true);
 		}
 
-		s.on(SOCKET_EVENTS.BG_RUN_QUEUED, ({ runId, kind, label, meta }) => {
-			upsertBgRun(runId, { kind, label, meta }, 'queued');
+		s.on(SOCKET_EVENTS.BG_RUN_QUEUED, ({ runId, projectId, projectName, kind, label, meta }) => {
+			upsertBgRun(runId, { projectId, projectName, kind, label, meta }, 'queued');
 		});
 
-		s.on(SOCKET_EVENTS.BG_RUN_START, ({ runId, kind, label, meta }) => {
-			upsertBgRun(runId, { kind, label, meta }, 'running');
+		s.on(SOCKET_EVENTS.BG_RUN_START, ({ runId, projectId, projectName, kind, label, meta }) => {
+			upsertBgRun(runId, { projectId, projectName, kind, label, meta }, 'running');
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_LOG, ({ runId, log }) => {
@@ -282,6 +286,13 @@
 	$: activeRunEntries = Object.entries($backgroundRuns).filter(
 		([, r]) => r.status === 'queued' || r.status === 'running'
 	);
+	// A run is openable only if the viewer belongs to its project — others still
+	// see it in the bar (queued/running awareness) but can't reach its live view.
+	$: viewableProjectIds = new Set($projects.map((p) => p.id));
+	const canOpenRun = (run) =>
+		run.projectId == null ||
+		run.projectId === $activeProjectId ||
+		viewableProjectIds.has(run.projectId);
 	$: runningCount = activeRunEntries.filter(([, r]) => r.status === 'running').length;
 	$: queuedCount = activeRunEntries.filter(([, r]) => r.status === 'queued').length;
 	$: anyRunning = activeRunEntries.length > 0;
@@ -741,6 +752,7 @@
 	{#if $panelExpanded}
 		<div class="body" transition:slide={{ duration: 200 }}>
 			{#each activeRunEntries as [runId, run], i (runId)}
+				{@const openable = canOpenRun(run)}
 				<div
 					class="run-card"
 					class:active-run={run.status === 'running'}
@@ -752,10 +764,22 @@
 						class:pulse-accent={run.status === 'running'}
 						class:queued-dot={run.status === 'queued'}
 					></span>
-					<a href="/live/{runId}" class="run-card-main" on:click={() => panelExpanded.set(false)}>
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<svelte:element
+						this={openable ? 'a' : 'div'}
+						href={openable ? `/live/${runId}` : undefined}
+						role={openable ? undefined : 'presentation'}
+						class="run-card-main"
+						class:locked={!openable}
+						on:click={openable ? () => panelExpanded.set(false) : undefined}
+					>
 						<div class="run-card-info">
 							<span class="run-card-label">{run.label || MANUAL_RUN_LABEL}</span>
 							<span class="run-card-meta">
+								{#if run.projectName}
+									<span class="run-card-project">{run.projectName}</span>
+									<span class="meta-dot">·</span>
+								{/if}
 								{run.status === 'queued'
 									? queuePositionLabel(
 											activeRunEntries.slice(0, i).filter(([, r]) => r.status === 'queued').length +
@@ -770,34 +794,38 @@
 						<Badge variant={run.status === 'queued' ? 'tag' : triggerVariant(run.kind)}>
 							{run.status === 'queued' ? QUEUED_LABEL : triggerLabel(run.kind)}
 						</Badge>
-						<svg
-							width="13"
-							height="13"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							class="run-card-arrow"
-						>
-							<line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-						</svg>
-					</a>
-					<button
-						class="run-card-cancel"
-						title={CANCEL_RUN_LABEL}
-						aria-label={CANCEL_RUN_LABEL}
-						on:click={() => cancelRun(runId)}
-					>
-						<svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-							<path
-								d="M1 1l12 12M13 1L1 13"
+						{#if openable}
+							<svg
+								width="13"
+								height="13"
+								viewBox="0 0 24 24"
+								fill="none"
 								stroke="currentColor"
-								stroke-width="1.6"
+								stroke-width="2"
 								stroke-linecap="round"
-							/>
-						</svg>
-					</button>
+								class="run-card-arrow"
+							>
+								<line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+							</svg>
+						{/if}
+					</svelte:element>
+					{#if openable}
+						<button
+							class="run-card-cancel"
+							title={CANCEL_RUN_LABEL}
+							aria-label={CANCEL_RUN_LABEL}
+							on:click={() => cancelRun(runId)}
+						>
+							<svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+								<path
+									d="M1 1l12 12M13 1L1 13"
+									stroke="currentColor"
+									stroke-width="1.6"
+									stroke-linecap="round"
+								/>
+							</svg>
+						</button>
+					{/if}
 				</div>
 			{/each}
 
@@ -1346,6 +1374,14 @@
 		min-width: 0;
 		text-decoration: none;
 		color: inherit;
+	}
+	.run-card-main.locked {
+		cursor: default;
+	}
+
+	.run-card-project {
+		font-weight: 600;
+		color: var(--text);
 	}
 
 	.run-card-cancel {
