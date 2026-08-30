@@ -7,6 +7,25 @@ const { verifyToken } = require('../services/userService');
 const prisma = require('../services/prisma');
 const { AUTH_SCHEME } = require('../lib/authHeader');
 const { ROLE } = require('../constants/roles');
+const { runWithContext } = require('../lib/requestContext');
+const { ACTIVITY_SOURCE } = require('../constants/activity');
+
+// Open the activity-log context for the rest of the request. projectId is filled
+// in later by requireProjectAccess (the store object is mutable and shared down
+// the async chain); services that already know their project pass it explicitly.
+function proceedWithUser(req, user, next) {
+	req.user = user;
+	runWithContext(
+		{
+			actorId: user?.userId ?? null,
+			actorName: user?.name ?? null,
+			viaMcp: user?.viaMcp === true,
+			projectId: null,
+			source: user?.viaMcp ? ACTIVITY_SOURCE.MCP : ACTIVITY_SOURCE.UI
+		},
+		() => next()
+	);
+}
 
 // PLUM_MCP_KEY (CI) authenticates as the owner, instance-wide. A key minted in a
 // project's MCP settings authenticates as the member who made it, with that
@@ -58,8 +77,7 @@ function jwtAuth(req, res, next) {
 		resolveApiKey(auth.slice(AUTH_SCHEME.API_KEY.length + 1))
 			.then((user) => {
 				if (!user) return res.status(401).json({ error: 'Invalid API key' });
-				req.user = user;
-				next();
+				proceedWithUser(req, user, next);
 			})
 			.catch(() => res.status(401).json({ error: 'Invalid API key' }));
 		return;
@@ -79,12 +97,10 @@ function jwtAuth(req, res, next) {
 		.findUnique({ where: { id: payload.userId }, select: { id: true } })
 		.then((user) => {
 			if (!user) return res.status(401).json({ error: 'Session expired. Please log in again.' });
-			req.user = payload;
-			next();
+			proceedWithUser(req, payload, next);
 		})
 		.catch(() => {
-			req.user = payload;
-			next();
+			proceedWithUser(req, payload, next);
 		});
 }
 

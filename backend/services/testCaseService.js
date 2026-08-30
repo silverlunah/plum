@@ -6,7 +6,11 @@
 const fs = require('fs');
 const path = require('path');
 const prisma = require('./prisma');
+const activityService = require('./activityService');
+const { ACTIVITY_ACTION } = require('../constants/activity');
 const { featuresDir } = require('../lib/testsRoot');
+
+const caseLabel = (c) => `${c.displayId} ${c.title}`;
 
 function isTaggedInFeatures(projectId, displayId) {
 	try {
@@ -79,7 +83,7 @@ async function create(
 	const num = String(project.caseSeqNext).padStart(3, '0');
 	const displayId = `${project.testCasePrefix}-${num}`;
 
-	return prisma.testCase.create({
+	const testCase = await prisma.testCase.create({
 		data: {
 			projectId,
 			displayId,
@@ -93,6 +97,11 @@ async function create(
 		},
 		select: caseSelect
 	});
+	await activityService.record(ACTIVITY_ACTION.TEST_CASE_CREATE, {
+		projectId,
+		target: { type: 'test_case', id: testCase.id, label: caseLabel(testCase) }
+	});
+	return testCase;
 }
 
 async function update(projectId, id, { title, description, priority, suiteId }) {
@@ -106,34 +115,58 @@ async function update(projectId, id, { title, description, priority, suiteId }) 
 		}
 	});
 	if (count === 0) return null;
-	return prisma.testCase.findUnique({ where: { id }, select: caseSelect });
+	const testCase = await prisma.testCase.findUnique({ where: { id }, select: caseSelect });
+	await activityService.record(ACTIVITY_ACTION.TEST_CASE_UPDATE, {
+		projectId,
+		target: { type: 'test_case', id: testCase.id, label: caseLabel(testCase) }
+	});
+	return testCase;
 }
 
 async function remove(projectId, id) {
-	return prisma.testCase.deleteMany({ where: { id, projectId } });
+	const testCase = await prisma.testCase.findFirst({
+		where: { id, projectId },
+		select: { displayId: true, title: true }
+	});
+	const result = await prisma.testCase.deleteMany({ where: { id, projectId } });
+	if (testCase) {
+		await activityService.record(ACTIVITY_ACTION.TEST_CASE_DELETE, {
+			projectId,
+			target: { type: 'test_case', id, label: caseLabel(testCase) }
+		});
+	}
+	return result;
 }
 
 async function upsertSteps(projectId, caseId, steps) {
 	const tc = await prisma.testCase.findFirst({
 		where: { id: caseId, projectId },
-		select: { id: true }
+		select: { id: true, displayId: true, title: true }
 	});
 	if (!tc) return null;
 	await prisma.testStep.deleteMany({ where: { caseId } });
-	if (!steps || steps.length === 0) return [];
-	return prisma.$transaction(
-		steps.map((step, i) =>
-			prisma.testStep.create({
-				data: {
-					caseId,
-					action: step.action ?? '',
-					testData: step.testData ?? '',
-					expectedOutput: step.expectedOutput ?? '',
-					order: i
-				}
-			})
-		)
-	);
+	const created =
+		!steps || steps.length === 0
+			? []
+			: await prisma.$transaction(
+					steps.map((step, i) =>
+						prisma.testStep.create({
+							data: {
+								caseId,
+								action: step.action ?? '',
+								testData: step.testData ?? '',
+								expectedOutput: step.expectedOutput ?? '',
+								order: i
+							}
+						})
+					)
+				);
+	await activityService.record(ACTIVITY_ACTION.TEST_CASE_STEPS_UPDATE, {
+		projectId,
+		target: { type: 'test_case', id: caseId, label: caseLabel(tc) },
+		metadata: { steps: created.length }
+	});
+	return created;
 }
 
 async function migratePrefix(projectId, newPrefix) {

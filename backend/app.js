@@ -35,6 +35,7 @@ if (!isNodeMode()) {
 	app.use('/test-runs', require('./routes/test-runs.routes'));
 	app.use('/trigger', require('./routes/trigger.routes'));
 	app.use('/active-runs', require('./routes/active-runs.routes'));
+	app.use('/activity', require('./routes/activity.routes'));
 	app.use('/mcp', require('./routes/mcp.routes'));
 }
 

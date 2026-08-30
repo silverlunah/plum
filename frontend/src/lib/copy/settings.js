@@ -344,6 +344,98 @@ export const restoreLabel = (restoring) => (restoring ? 'Restoring…' : 'Restor
 export const refreshingLabel = (loading) => (loading ? 'Loading…' : REFRESH_LABEL);
 export const backupSizeLabel = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
 
+// ── Activity logs ──
+export const ACTIVITY_LABEL = 'Activity logs';
+export const ACTIVITY_DESC = 'Who changed what, and when.';
+export const ACTIVITY_SCOPE_PROJECT_LABEL = 'This project';
+export const ACTIVITY_SCOPE_ORG_LABEL = 'Organization';
+export const ACTIVITY_FILTER_ALL_ACTIONS = 'All events';
+export const ACTIVITY_FILTER_ALL_ACTORS = 'Anyone';
+export const ACTIVITY_SEARCH_PLACEHOLDER = 'Search by name or item…';
+export const ACTIVITY_EMPTY_TITLE = 'Nothing logged yet';
+export const ACTIVITY_EMPTY_BODY = 'Changes to this project show up here as people make them.';
+export const ACTIVITY_ORG_EMPTY_BODY =
+	'Account-wide changes — users, projects, nodes, backup — show up here.';
+export const ACTIVITY_LOAD_MORE_LABEL = 'Load more';
+export const ACTIVITY_RETENTION_CARD_TITLE = 'Retention';
+export const ACTIVITY_RETENTION_DESC =
+	'How long entries are kept before the nightly clean-up removes them.';
+export const ACTIVITY_RETENTION_SAVED_TOAST = 'Retention updated.';
+export const ACTIVITY_RETENTION_SAVE_FAILED = 'Failed to update retention.';
+export const activityRetentionOptionLabel = (days) =>
+	days === 0 ? 'Keep forever' : `${days} days`;
+export const activityCountLabel = (n) => `${n} ${n === 1 ? 'event' : 'events'}`;
+
+// action → { verb shown between actor and target, tone for the status dot }.
+// Dynamic detail (a result, a from/to) is folded in by activityDescription below.
+const ACTIVITY_ACTION_META = {
+	'test_suite.create': { verb: 'created test suite', tone: 'create' },
+	'test_suite.update': { verb: 'edited test suite', tone: 'update' },
+	'test_suite.delete': { verb: 'deleted test suite', tone: 'delete' },
+	'test_case.create': { verb: 'created test case', tone: 'create' },
+	'test_case.update': { verb: 'edited test case', tone: 'update' },
+	'test_case.delete': { verb: 'deleted test case', tone: 'delete' },
+	'test_case.steps_update': { verb: 'updated the steps of', tone: 'update' },
+	'test_run.create': { verb: 'created test run', tone: 'create' },
+	'test_run.update': { verb: 'updated test run', tone: 'update' },
+	'test_run.delete': { verb: 'deleted test run', tone: 'delete' },
+	'test_run.entry_assign': { verb: 'changed the assignee on', tone: 'neutral' },
+	'test_run.entry_result': { verb: 'recorded a result on', tone: 'update' },
+	'schedule.create': { verb: 'created schedule', tone: 'create' },
+	'schedule.update': { verb: 'edited schedule', tone: 'update' },
+	'schedule.delete': { verb: 'deleted schedule', tone: 'delete' },
+	'schedule.toggle': { verb: 'toggled schedule', tone: 'neutral' },
+	'integrations.update': { verb: 'updated integrations for', tone: 'update' },
+	'project.settings_update': { verb: 'updated settings for', tone: 'update' },
+	'project.prefixes_update': { verb: 'changed ID prefixes for', tone: 'update' },
+	'member.add': { verb: 'added', tone: 'create' },
+	'member.remove': { verb: 'removed', tone: 'delete' },
+	'mcp_key.generate': { verb: 'generated an', tone: 'neutral' },
+	'mcp_key.revoke': { verb: 'revoked an', tone: 'delete' },
+	'project.create': { verb: 'created project', tone: 'create' },
+	'project.delete': { verb: 'deleted project', tone: 'delete' },
+	'user.create': { verb: 'added user', tone: 'create' },
+	'user.update': { verb: 'edited user', tone: 'update' },
+	'user.role_change': { verb: 'changed the role of', tone: 'update' },
+	'user.delete': { verb: 'deleted user', tone: 'delete' },
+	'node.create': { verb: 'registered node', tone: 'create' },
+	'node.update': { verb: 'updated node', tone: 'update' },
+	'node.delete': { verb: 'removed node', tone: 'delete' },
+	'backup.config_update': { verb: 'updated the', tone: 'update' },
+	'activity.retention_update': { verb: 'changed', tone: 'update' }
+};
+
+export function activityTone(action) {
+	return ACTIVITY_ACTION_META[action]?.tone ?? 'neutral';
+}
+
+// { verb, target, detail } — the row renders "<actor> <verb> <target>" with an
+// optional trailing "(<detail>)".
+export function activityDescription(entry) {
+	const meta = ACTIVITY_ACTION_META[entry.action];
+	const verb = meta?.verb ?? entry.action.replace(/[._]/g, ' ');
+	const m = entry.metadata ?? {};
+	let detail = '';
+	let suffix = '';
+
+	if (entry.action === 'test_run.entry_result') detail = m.result ?? '';
+	else if (entry.action === 'test_run.update' && m.changed?.includes('status'))
+		detail = `${m.from} → ${m.to}`;
+	else if (entry.action === 'test_run.entry_assign')
+		detail = m.assignedTo ? `now ${m.assignedTo}` : 'unassigned';
+	else if (entry.action === 'schedule.toggle') detail = m.enabled ? 'enabled' : 'disabled';
+	else if (entry.action === 'user.role_change' || entry.action === 'user.update')
+		detail = m.from && m.to ? `${m.from} → ${m.to}` : '';
+	else if (entry.action === 'member.add' || entry.action === 'member.remove')
+		suffix = m.project ? ` ${entry.action === 'member.add' ? 'to' : 'from'} ${m.project}` : '';
+	else if (entry.action === 'project.prefixes_update' && m.testCasePrefix)
+		detail = `${m.testCasePrefix} · ${m.testSuitePrefix}`;
+	else if (entry.action === 'activity.retention_update')
+		detail = m.days === 0 ? 'keep forever' : `${m.days} days`;
+
+	return { verb, target: entry.targetLabel + suffix, detail };
+}
+
 // ── Update banner (owner) ──
 export const updateBannerText = (latest) =>
 	`Plum ${latest} is available. Run "plum update" on the server to upgrade.`;

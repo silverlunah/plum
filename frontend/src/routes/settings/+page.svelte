@@ -57,6 +57,7 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import ProjectAccess from '$lib/components/settings/ProjectAccess.svelte';
 	import UpdateBanner from '$lib/components/settings/UpdateBanner.svelte';
+	import ActivityLog from '$lib/components/settings/ActivityLog.svelte';
 	import Paginator from '$lib/components/ui/Paginator.svelte';
 	import { notify } from '$lib/stores/notifications';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
@@ -96,6 +97,8 @@
 		ACCOUNT_LABEL,
 		USERS_LABEL,
 		BACKUP_LABEL,
+		ACTIVITY_LABEL,
+		ACTIVITY_DESC,
 		PROJECT_DESC,
 		RUNNERS_DESC,
 		REPOSITORY_DESC,
@@ -1061,7 +1064,7 @@
 	].join('\n');
 
 	// Per-project settings — the owner and an admin of the active project.
-	const ELEVATED_SECTIONS = new Set(['project', 'testcases', 'integrations']);
+	const ELEVATED_SECTIONS = new Set(['project', 'testcases', 'integrations', 'activity']);
 	// Account-wide settings — the owner only.
 	const OWNER_SECTIONS = new Set(['runners', 'users', 'backup']);
 
@@ -1082,6 +1085,7 @@
 				]
 			: []),
 		...(isOwner ? [{ id: 'runners', label: RUNNERS_LABEL }] : []),
+		...(isElevated ? [{ id: 'activity', label: ACTIVITY_LABEL }] : []),
 		{ id: 'account', label: ACCOUNT_LABEL },
 		{ id: 'mcp', label: MCP_NAV_LABEL },
 		...(isOwner
@@ -1129,6 +1133,7 @@
 				<span class="mini-thumb"></span>
 			</span>
 		</button>
+		<button class="sidebar-item sign-out" on:click={handleLogout}>{SIGN_OUT_LABEL}</button>
 	</aside>
 
 	<!-- Right content -->
@@ -1886,12 +1891,6 @@
 						</Button>
 					</div>
 				</div>
-
-				<div class="card settings-card">
-					<div class="card-footer">
-						<Button variant="danger" size="sm" on:click={handleLogout}>{SIGN_OUT_LABEL}</Button>
-					</div>
-				</div>
 			</div>
 
 			<!-- USERS (owner only) -->
@@ -2385,6 +2384,16 @@
 					{/if}
 				</div>
 			</div>
+
+			<!-- ACTIVITY -->
+		{:else if section === 'activity'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<div class="content-header">
+					<h2>{ACTIVITY_LABEL}</h2>
+					<p class="content-desc">{ACTIVITY_DESC}</p>
+				</div>
+				<ActivityLog canSeeOrg={isOwner} />
+			</div>
 		{/if}
 	</div>
 </div>
@@ -2459,6 +2468,15 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.75rem;
+	}
+
+	.sidebar-item.sign-out {
+		color: var(--fail);
+	}
+
+	.sidebar-item.sign-out:hover {
+		background: var(--fail-soft);
+		color: var(--fail);
 	}
 	.mini-switch {
 		position: relative;

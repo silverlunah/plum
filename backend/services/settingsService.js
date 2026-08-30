@@ -5,6 +5,8 @@
 
 const crypto = require('crypto');
 const prisma = require('./prisma');
+const activityService = require('./activityService');
+const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 
 const getProjectRaw = async (projectId) => {
 	return prisma.project.findUnique({ where: { id: projectId } });
@@ -39,6 +41,10 @@ const updateProject = async (projectId, { name, logoUrl, timezone, baseUrl, maxR
 		await require('./cronService').reload();
 	}
 
+	await activityService.record(ACTIVITY_ACTION.PROJECT_SETTINGS_UPDATE, {
+		projectId,
+		target: { type: 'project', id: projectId, label: project.name }
+	});
 	return project;
 };
 
@@ -48,13 +54,19 @@ const getTestPrefixes = async (projectId) => {
 };
 
 const updateTestPrefixes = async (projectId, { testCasePrefix, testSuitePrefix }) => {
-	return prisma.project.update({
+	const project = await prisma.project.update({
 		where: { id: projectId },
 		data: {
 			...(testCasePrefix !== undefined && { testCasePrefix }),
 			...(testSuitePrefix !== undefined && { testSuitePrefix })
 		}
 	});
+	await activityService.record(ACTIVITY_ACTION.PROJECT_PREFIXES_UPDATE, {
+		projectId,
+		target: { type: 'project', id: projectId, label: project.name },
+		metadata: { testCasePrefix: project.testCasePrefix, testSuitePrefix: project.testSuitePrefix }
+	});
+	return project;
 };
 
 const getWebhooks = async (projectId) => {
@@ -70,7 +82,7 @@ const updateWebhooks = async (
 	projectId,
 	{ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl }
 ) => {
-	return prisma.project.update({
+	const project = await prisma.project.update({
 		where: { id: projectId },
 		data: {
 			discordWebhookUrl: discordWebhookUrl ?? '',
@@ -78,6 +90,16 @@ const updateWebhooks = async (
 			notifyPublicUrl: notifyPublicUrl ?? ''
 		}
 	});
+	await activityService.record(ACTIVITY_ACTION.INTEGRATIONS_UPDATE, {
+		projectId,
+		target: { type: 'project', id: projectId, label: project.name },
+		metadata: {
+			discord: (discordWebhookUrl ?? '').length > 0,
+			slack: (slackWebhookUrl ?? '').length > 0,
+			ci: (notifyPublicUrl ?? '').length > 0
+		}
+	});
+	return project;
 };
 
 const getBackupConfig = async () => {
@@ -111,7 +133,7 @@ const updateBackupConfig = async ({
 	backupIncludeReports
 }) => {
 	const org = await getOrgRaw();
-	return prisma.organization.update({
+	const updated = await prisma.organization.update({
 		where: { id: org.id },
 		data: {
 			...(timezone !== undefined && { timezone }),
@@ -126,6 +148,12 @@ const updateBackupConfig = async ({
 			...(backupIncludeReports !== undefined && { backupIncludeReports })
 		}
 	});
+	await activityService.record(ACTIVITY_ACTION.BACKUP_CONFIG_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'backup', label: 'Backup configuration' },
+		metadata: { enabled: updated.backupEnabled, cron: updated.backupCron }
+	});
+	return updated;
 };
 
 // This member's own MCP key for this project. The full key is shown so it can be
@@ -145,11 +173,40 @@ const generateMcpKey = async (projectId, userId) => {
 		create: { projectId, userId, key },
 		update: { key, createdAt: new Date() }
 	});
+	await activityService.record(ACTIVITY_ACTION.MCP_KEY_GENERATE, {
+		projectId,
+		target: { type: 'mcp_key', id: userId, label: 'MCP key' }
+	});
 	return { mcpKey: key };
 };
 
+const getActivityRetention = async () => {
+	const org = await getOrgRaw();
+	return { activityRetentionDays: org.activityRetentionDays };
+};
+
+const updateActivityRetention = async (days) => {
+	const org = await getOrgRaw();
+	const updated = await prisma.organization.update({
+		where: { id: org.id },
+		data: { activityRetentionDays: Math.max(0, Number(days) || 0) }
+	});
+	await activityService.record(ACTIVITY_ACTION.ACTIVITY_RETENTION_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'activity', label: 'Activity log retention' },
+		metadata: { days: updated.activityRetentionDays }
+	});
+	return { activityRetentionDays: updated.activityRetentionDays };
+};
+
 const revokeMcpKey = async (projectId, userId) => {
-	await prisma.mcpKey.deleteMany({ where: { projectId, userId } });
+	const { count } = await prisma.mcpKey.deleteMany({ where: { projectId, userId } });
+	if (count > 0) {
+		await activityService.record(ACTIVITY_ACTION.MCP_KEY_REVOKE, {
+			projectId,
+			target: { type: 'mcp_key', id: userId, label: 'MCP key' }
+		});
+	}
 };
 
 module.exports = {
@@ -165,5 +222,7 @@ module.exports = {
 	updateBackupConfig,
 	getMcpConfig,
 	generateMcpKey,
-	revokeMcpKey
+	revokeMcpKey,
+	getActivityRetention,
+	updateActivityRetention
 };
