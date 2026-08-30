@@ -6,9 +6,6 @@
 const crypto = require('crypto');
 const prisma = require('./prisma');
 
-// Raw accessor — includes the mcpKey secret. Only for internal use by this
-// file's own functions and other trusted internal callers. Never expose this
-// return value directly over HTTP.
 const getProjectRaw = async (projectId) => {
 	return prisma.project.findUnique({ where: { id: projectId } });
 };
@@ -20,10 +17,8 @@ const getOrgRaw = async () => {
 	return prisma.organization.findFirst({ orderBy: { id: 'asc' } });
 };
 
-// Public accessor — strips secret fields. This is what routes should use.
 const getProject = async (projectId) => {
-	const { mcpKey, ...safe } = await getProjectRaw(projectId);
-	return safe;
+	return getProjectRaw(projectId);
 };
 
 const updateProject = async (projectId, { name, logoUrl, timezone, baseUrl, maxRetries }) => {
@@ -44,8 +39,7 @@ const updateProject = async (projectId, { name, logoUrl, timezone, baseUrl, maxR
 		await require('./cronService').reload();
 	}
 
-	const { mcpKey, ...safe } = project;
-	return safe;
+	return project;
 };
 
 const getTestPrefixes = async (projectId) => {
@@ -134,15 +128,28 @@ const updateBackupConfig = async ({
 	});
 };
 
-const getMcpConfig = async (projectId) => {
-	const project = await getProjectRaw(projectId);
-	return { mcpKeySet: project.mcpKey.length > 0, mcpKey: project.mcpKey };
+// This member's own MCP key for this project. The full key is shown so it can be
+// copied; there's one per (project, user).
+const getMcpConfig = async (projectId, userId) => {
+	const row = await prisma.mcpKey.findUnique({
+		where: { projectId_userId: { projectId, userId } },
+		select: { key: true, createdAt: true }
+	});
+	return { mcpKeySet: !!row, mcpKey: row?.key ?? '', createdAt: row?.createdAt ?? null };
 };
 
-const generateMcpKey = async (projectId) => {
+const generateMcpKey = async (projectId, userId) => {
 	const key = crypto.randomBytes(32).toString('hex');
-	await prisma.project.update({ where: { id: projectId }, data: { mcpKey: key } });
+	await prisma.mcpKey.upsert({
+		where: { projectId_userId: { projectId, userId } },
+		create: { projectId, userId, key },
+		update: { key, createdAt: new Date() }
+	});
 	return { mcpKey: key };
+};
+
+const revokeMcpKey = async (projectId, userId) => {
+	await prisma.mcpKey.deleteMany({ where: { projectId, userId } });
 };
 
 module.exports = {
@@ -157,5 +164,6 @@ module.exports = {
 	getBackupConfig,
 	updateBackupConfig,
 	getMcpConfig,
-	generateMcpKey
+	generateMcpKey,
+	revokeMcpKey
 };

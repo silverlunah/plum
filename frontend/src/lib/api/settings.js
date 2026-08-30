@@ -126,3 +126,12 @@ export async function generateMcpKey() {
 	if (!res.ok) throw new Error('Failed to generate key');
 	return res.json();
 }
+
+export async function revokeMcpKey() {
+	const res = await fetch(`${API_BASE}/settings/mcp`, {
+		method: 'DELETE',
+		headers: authHeaders()
+	});
+	if (!res.ok) throw new Error('Failed to revoke key');
+	return res.json();
+}

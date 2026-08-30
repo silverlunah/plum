@@ -8,35 +8,46 @@ const prisma = require('../services/prisma');
 const { AUTH_SCHEME } = require('../lib/authHeader');
 const { ROLE } = require('../constants/roles');
 
-async function firstOwnerId() {
-	const owner = await prisma.user.findFirst({
-		where: { role: ROLE.OWNER },
-		orderBy: { createdAt: 'asc' },
-		select: { id: true }
-	});
-	return owner?.id ?? null;
-}
-
-// An API key authenticates as the owner. A key set via PLUM_MCP_KEY (CI) is
-// instance-wide; a key generated in a project's settings is scoped to that
-// project and pins req.user.mcpProjectId so requireProjectAccess honours it.
+// PLUM_MCP_KEY (CI) authenticates as the owner, instance-wide. A key minted in a
+// project's MCP settings authenticates as the member who made it, with that
+// member's role, pinned to that project (req.user.mcpProjectId). `viaMcp` flags
+// the request so created rows can be attributed "<name> (MCP)".
 async function resolveApiKey(token) {
 	if (!token) return null;
 	if (process.env.PLUM_MCP_KEY && token === process.env.PLUM_MCP_KEY) {
-		return { userId: await firstOwnerId(), role: ROLE.OWNER, apiKey: 'instance' };
+		const owner = await prisma.user.findFirst({
+			where: { role: ROLE.OWNER },
+			orderBy: { createdAt: 'asc' },
+			select: { id: true, name: true }
+		});
+		return {
+			userId: owner?.id ?? null,
+			name: owner?.name,
+			role: ROLE.OWNER,
+			apiKey: 'instance',
+			viaMcp: true
+		};
 	}
-	const project = await prisma.project.findFirst({
-		where: { mcpKey: token },
-		select: { id: true }
+	const mcpKey = await prisma.mcpKey.findUnique({
+		where: { key: token },
+		select: { projectId: true, user: { select: { id: true, name: true, role: true } } }
 	});
-	if (!project) return null;
-	// `apiKey: 'scoped'` marks a key generated in one project's settings — it acts
-	// as the owner for that project's data but must not reach account-wide admin.
+	if (!mcpKey) return null;
+	// The key stays live only while its owner can still reach the project — a
+	// member removed from the project loses their key with them.
+	const stillAMember =
+		mcpKey.user.role === ROLE.OWNER ||
+		(await prisma.projectMember.count({
+			where: { projectId: mcpKey.projectId, userId: mcpKey.user.id }
+		})) > 0;
+	if (!stillAMember) return null;
 	return {
-		userId: await firstOwnerId(),
-		role: ROLE.OWNER,
-		mcpProjectId: project.id,
-		apiKey: 'scoped'
+		userId: mcpKey.user.id,
+		name: mcpKey.user.name,
+		role: mcpKey.user.role,
+		mcpProjectId: mcpKey.projectId,
+		apiKey: 'scoped',
+		viaMcp: true
 	};
 }
 

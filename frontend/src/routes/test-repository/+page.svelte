@@ -18,6 +18,7 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import { notify } from '$lib/stores/notifications';
 	import Button from '$lib/components/ui/Button.svelte';
+	import { mcpName } from '$lib/utils/format';
 	import {
 		CLEAR_SEARCH_LABEL,
 		CANCEL_LABEL,
@@ -606,7 +607,9 @@
 										>
 										{caseCount(suite._count.cases)}
 									</span>
-									<span class="meta-item">{createdByLabel(suite.createdBy.name)}</span>
+									<span class="meta-item"
+										>{createdByLabel(mcpName(suite.createdBy.name, suite.viaMcp))}</span
+									>
 								</div>
 							</div>
 						{/each}
@@ -748,7 +751,9 @@
 								>
 								{caseCount(suite._count.cases)}
 							</span>
-							<span class="meta-item">{createdByLabel(suite.createdBy.name)}</span>
+							<span class="meta-item"
+								>{createdByLabel(mcpName(suite.createdBy.name, suite.viaMcp))}</span
+							>
 						</div>
 					</div>
 				{/each}

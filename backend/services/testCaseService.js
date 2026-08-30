@@ -32,6 +32,7 @@ const caseSelect = {
 	createdAt: true,
 	updatedAt: true,
 	createdBy: { select: { id: true, name: true } },
+	viaMcp: true,
 	suite: { select: { id: true, displayId: true, name: true } },
 	_count: { select: { steps: true } }
 };
@@ -60,7 +61,10 @@ async function getById(projectId, id) {
 	});
 }
 
-async function create(projectId, { suiteId, title, description, priority, createdById }) {
+async function create(
+	projectId,
+	{ suiteId, title, description, priority, createdById, viaMcp = false }
+) {
 	const suite = await prisma.testSuite.findFirst({
 		where: { id: suiteId, projectId },
 		select: { id: true }
@@ -84,6 +88,7 @@ async function create(projectId, { suiteId, title, description, priority, create
 			description: description ?? '',
 			priority: priority ?? 'Medium',
 			createdById,
+			viaMcp,
 			isAutomated: isTaggedInFeatures(projectId, displayId)
 		},
 		select: caseSelect

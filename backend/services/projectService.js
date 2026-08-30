@@ -107,11 +107,15 @@ async function getMembers(projectId) {
 	return owner ? [owner, ...members] : members;
 }
 
-// Replace the project's membership with `userIds` (all as 'member').
+// Replace the project's membership with `userIds` (all as 'member'). A member
+// dropped here also loses their MCP key for the project.
 async function setMembers(projectId, userIds) {
 	const ids = [...new Set(userIds)];
 	await prisma.$transaction([
 		prisma.projectMember.deleteMany({ where: { projectId, userId: { notIn: ids } } }),
+		prisma.mcpKey.deleteMany({
+			where: { projectId, userId: { notIn: ids }, user: { role: { not: 'owner' } } }
+		}),
 		...ids.map((userId) =>
 			prisma.projectMember.upsert({
 				where: { projectId_userId: { projectId, userId } },
