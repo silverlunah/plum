@@ -55,6 +55,8 @@ export const FAILED_TO_DELETE_RUN = 'Failed to delete run.';
 export const noResultsDescription = (search) => `Nothing matches "${search}".`;
 export const createdByLabel = (name) => `by ${name}`;
 export const caseCount = (count) => `${count} ${pluralize(count, 'case')}`;
+export const repoSummary = (suites, cases) =>
+	`${suites} ${pluralize(suites, 'suite')} · ${cases} ${pluralize(cases, 'case')}`;
 export const createSuiteLabel = (saving) => (saving ? 'Creating…' : 'Create Suite');
 export const createRunLabel = (saving) => (saving ? 'Creating…' : 'Create Run');
 export const deleteEntityTitle = (type) => `Delete ${type === 'suite' ? 'Suite' : 'Run'}`;
