@@ -103,6 +103,15 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
   claiming it reveals the manual override buttons — for when the automation
   itself is broken and a human needs to set the result.
 
+### Flaky scenarios
+
+- A scenario that **failed at least once, then passed on a retry** is marked
+  **flaky** on the report — an amber status dot, a `FLAKY` pill, and a `FLAKY`
+  badge plus a _flaky_ count in the header. The run still counts as a pass, so
+  pass rate is unaffected; flaky is a separate signal. The report export carries
+  a per-scenario `flaky` flag and a total. Needs retries enabled
+  (Settings → Project → _Retry failed tests_).
+
 ### MCP
 
 - **Every member has their own MCP key per project** (Settings → MCP, visible to
