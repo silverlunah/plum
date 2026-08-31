@@ -27,6 +27,9 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
   the folder" note sits in the header above the count.
 - The live run header no longer shows a title chip that just repeats the case-ID
   list when the run has no test-run title.
+- Browser and Discord / Slack now show their real brand icons across the UI, and
+  the browser is labelled **Chrome** / **Firefox** everywhere (it used to read
+  "chromium" in some places), including in Discord / Slack notifications.
 
 ---
 
