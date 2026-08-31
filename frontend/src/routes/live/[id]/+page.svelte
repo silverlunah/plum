@@ -15,6 +15,7 @@
 	import { REDIRECT_DELAY_MS } from '$lib/constants';
 	import LiveReplayer from '$lib/components/reports/LiveReplayer.svelte';
 	import { ALL_TESTS_LABEL } from '$lib/copy/common';
+	import { browserLabel } from '$lib/utils/format';
 	import {
 		REPORTS_BACK_LABEL,
 		PASSED_LABEL,
@@ -48,6 +49,7 @@
 	import BackLink from '$lib/components/ui/BackLink.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import TagList from '$lib/components/ui/TagList.svelte';
+	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 
 	let terminalEl;
 	let laneTerminalEl;
@@ -206,7 +208,10 @@
 						<span class="run-sep">·</span>
 						<span class="run-detail">{workersCountLabel(run.currentRun.workers)}</span>
 						<span class="run-sep">·</span>
-						<span class="run-detail">{run.currentRun.browser}</span>
+						<span class="run-detail browser">
+							<ServiceIcon service={run.currentRun.browser} size={12} />
+							{browserLabel(run.currentRun.browser)}
+						</span>
 						{#if lanes.length > 1}
 							<span class="run-sep">·</span>
 							<span class="run-detail">{runnersBadge(lanes.length)}</span>
@@ -536,6 +541,11 @@
 		font-size: 0.8rem;
 		color: var(--text-muted);
 		font-family: 'JetBrains Mono', monospace;
+	}
+	.run-detail.browser {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
 	}
 
 	.cancel-btn {

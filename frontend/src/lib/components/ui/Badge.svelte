@@ -14,6 +14,7 @@
 	.badge {
 		display: inline-flex;
 		align-items: center;
+		gap: 0.3rem;
 		font-size: 0.68rem;
 		font-weight: 500;
 		letter-spacing: 0.05em;

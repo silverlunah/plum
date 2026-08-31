@@ -40,6 +40,7 @@
 	import BackupSettings from '$lib/components/settings/BackupSettings.svelte';
 	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
+	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import { EMAIL_LABEL } from '$lib/copy/common';
 	import {
@@ -795,7 +796,7 @@
 
 					<div class="field">
 						<label class="field-label" for="discord-url">
-							<span>{DISCORD_WEBHOOK_LABEL}</span>
+							<span><ServiceIcon service="discord" size={13} /> {DISCORD_WEBHOOK_LABEL}</span>
 							<span class="field-hint">{DISCORD_WEBHOOK_HINT}</span>
 						</label>
 						<input
@@ -809,7 +810,7 @@
 
 					<div class="field">
 						<label class="field-label" for="slack-url">
-							<span>{SLACK_WEBHOOK_LABEL}</span>
+							<span><ServiceIcon service="slack" size={13} /> {SLACK_WEBHOOK_LABEL}</span>
 							<span class="field-hint">{SLACK_WEBHOOK_HINT}</span>
 						</label>
 						<input

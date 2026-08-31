@@ -74,6 +74,7 @@
 	import { triggerLabel, triggerVariant, mcpName } from '$lib/utils/format';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
+	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 
 	let availableRunners = [];
 	let testRuns = [];
@@ -611,7 +612,10 @@
 							browserOpen = !browserOpen;
 						}}
 					>
-						<span>{currentBrowser.label}</span>
+						<span class="browser-trigger-label">
+							<ServiceIcon service={currentBrowser.id} size={13} />
+							{currentBrowser.label}
+						</span>
 						<svg
 							width="10"
 							height="10"
@@ -637,6 +641,7 @@
 										browserOpen = false;
 									}}
 								>
+									<ServiceIcon service={b.id} size={13} />
 									{b.label}
 								</button>
 							{/each}
@@ -715,8 +720,11 @@
 								class="notify-btn"
 								class:active={notifyDiscord}
 								on:click={() => (notifyDiscord = !notifyDiscord)}
-								title={discordNotifyTitle(notifyDiscord)}>{DISCORD_LABEL}</button
+								title={discordNotifyTitle(notifyDiscord)}
 							>
+								<ServiceIcon service="discord" size={13} />
+								{DISCORD_LABEL}
+							</button>
 						{/if}
 						{#if integrations.slackWebhookUrl}
 							<button
@@ -724,8 +732,11 @@
 								class="notify-btn"
 								class:active={notifySlack}
 								on:click={() => (notifySlack = !notifySlack)}
-								title={slackNotifyTitle(notifySlack)}>{SLACK_LABEL}</button
+								title={slackNotifyTitle(notifySlack)}
 							>
+								<ServiceIcon service="slack" size={13} />
+								{SLACK_LABEL}
+							</button>
 						{/if}
 					</div>
 				</div>
@@ -1129,6 +1140,12 @@
 		position: relative;
 	}
 
+	.browser-trigger-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+
 	.dropdown-trigger {
 		display: inline-flex;
 		align-items: center;
@@ -1294,6 +1311,9 @@
 	}
 
 	.notify-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 		height: 26px;
 		padding: 0 0.5rem;
 		border-radius: var(--radius-sm);

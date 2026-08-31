@@ -4,7 +4,7 @@
  */
 
 const settingsService = require('./settingsService');
-const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { DEFAULT_BROWSER, browserLabel } = require('../constants/defaults');
 const { REPORT_STATUS } = require('../constants/jobStatus');
 
 function countScenarios(content) {
@@ -38,7 +38,7 @@ function buildDiscordPayload({ jobName, status, counts, browser, tags, reportUrl
 			value: `${counts.passed} / ${counts.total} passed`,
 			inline: true
 		},
-		{ name: 'Browser', value: browser ?? DEFAULT_BROWSER, inline: true },
+		{ name: 'Browser', value: browserLabel(browser ?? DEFAULT_BROWSER), inline: true },
 		{ name: 'Tags', value: tags || '(all tests)', inline: false }
 	];
 	if (reportUrl) {
@@ -64,7 +64,7 @@ function buildSlackPayload({ jobName, status, counts, browser, tags, reportUrl }
 		{
 			type: 'section',
 			fields: [
-				{ type: 'mrkdwn', text: `*Browser:*\n${browser ?? DEFAULT_BROWSER}` },
+				{ type: 'mrkdwn', text: `*Browser:*\n${browserLabel(browser ?? DEFAULT_BROWSER)}` },
 				{ type: 'mrkdwn', text: `*Tags:*\n${tags || '(all tests)'}` }
 			]
 		}

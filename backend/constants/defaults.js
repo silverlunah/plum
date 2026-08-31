@@ -5,4 +5,8 @@
 
 const DEFAULT_BROWSER = 'chromium';
 
-module.exports = { DEFAULT_BROWSER };
+// Stored value is the engine id; this is the brand name shown to people.
+const BROWSER_LABELS = { chromium: 'Chrome', firefox: 'Firefox' };
+const browserLabel = (id) => BROWSER_LABELS[id] ?? id ?? 'Chrome';
+
+module.exports = { DEFAULT_BROWSER, browserLabel };

@@ -8,8 +8,15 @@
 	import { fetchReports, deleteReport, deleteReports, reportUrl } from '$lib/api/reports';
 	import { reportsVersion } from '$lib/stores/runner';
 	import { REPORTS_PER_PAGE, BROWSERS } from '$lib/constants';
-	import { isScheduled, triggerLabel, triggerVariant, stagger } from '$lib/utils/format';
+	import {
+		isScheduled,
+		triggerLabel,
+		triggerVariant,
+		stagger,
+		browserLabel
+	} from '$lib/utils/format';
 	import Badge from '$lib/components/ui/Badge.svelte';
+	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
@@ -249,8 +256,11 @@
 								<Badge variant={triggerVariant(report.triggerType)}>
 									{triggerLabel(report.triggerType)}
 								</Badge>
-								{#if report.browser && report.browser !== BROWSERS[0].id}
-									<Badge variant="neutral">{report.browser}</Badge>
+								{#if report.browser}
+									<Badge variant="neutral">
+										<ServiceIcon service={report.browser} size={10} />
+										{browserLabel(report.browser)}
+									</Badge>
 								{/if}
 							</div>
 						</div>
