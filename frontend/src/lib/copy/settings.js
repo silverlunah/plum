@@ -90,7 +90,7 @@ export const RETRY_FAILED_TESTS_LABEL = 'Retry failed tests';
 export const RETRY_FAILED_TESTS_HINT =
 	'Automatically re-run failed scenarios up to this many times before finalizing the report. 0 disables retries.';
 export const DARK_MODE_LABEL = 'Dark mode';
-export const DOCUMENTATION_LABEL = 'Plum Documentation';
+export const DOCUMENTATION_LABEL = 'Plum';
 export const NAV_SECTION_GENERAL = 'General';
 export const NAV_SECTION_LAYOUT = 'Layout';
 export const NAV_SECTION_DOCS = 'Documentation';
