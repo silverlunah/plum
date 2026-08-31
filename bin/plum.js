@@ -23,35 +23,22 @@ const userTestsPath = path.join(process.cwd(), 'tests');
 const scaffoldTestsPath = path.join(plumRoot, 'backend', '_scaffold');
 const overrideFilePath = path.join(plumRoot, 'docker-compose.override.yml');
 
-// Paths for .env file
-const rootEnvPath = path.join(process.cwd(), '.env');
+// A local test project is self-contained under tests/ — same layout as a
+// server project's projects/<slug>/tests/. The cwd-root paths are only a
+// fallback for projects scaffolded before that unification.
 const backendEnvPath = path.join(plumRoot, 'backend', '.env');
+const testsEnvPath = path.join(userTestsPath, '.env');
+const legacyRootEnvPath = path.join(process.cwd(), '.env');
+const userPluginsInTests = path.join(userTestsPath, 'plum.plugins.json');
+const legacyRootPluginsPath = path.join(process.cwd(), 'plum.plugins.json');
 
-// Function to create the .env file with default values NOTE: DO NOT FORMAT envContent
-function createEnvFile() {
-	const envFilePath = path.join(process.cwd(), '.env');
+const preferring = (primary, fallback) =>
+	fs.existsSync(primary) || !fs.existsSync(fallback) ? primary : fallback;
 
-	if (fs.existsSync(envFilePath)) {
-		copyEnvFile();
-		clack.log.warn('.env already exists — synced to backend.');
-		return;
-	}
-
-	const envContent = `BASE_URL=https://www.saucedemo.com/v1/
-# IS_HEADLESS only affects local \`plum run-test\`. Set it false to watch the
-# browser while debugging. Server and node runs always force headless (no display).
-IS_HEADLESS=false
-`;
-
-	fs.writeFileSync(envFilePath, envContent, 'utf8');
-	clack.log.success('.env created with default values.');
-}
-
-// Scaffold plum.plugins.json if it doesn't exist yet
+// Scaffold tests/plum.plugins.json if it doesn't exist yet
 function scaffoldPluginsFile() {
-	const pluginsPath = path.join(process.cwd(), 'plum.plugins.json');
-	if (fs.existsSync(pluginsPath)) {
-		clack.log.warn('plum.plugins.json already exists — skipping.');
+	if (fs.existsSync(userPluginsInTests)) {
+		clack.log.warn('tests/plum.plugins.json already exists — skipping.');
 		return;
 	}
 	const content = {
@@ -60,13 +47,13 @@ function scaffoldPluginsFile() {
 			'To add a package: put its name and version under "dependencies", e.g. "@faker-js/faker": "^9.0.0"',
 		dependencies: {}
 	};
-	fs.writeFileSync(pluginsPath, JSON.stringify(content, null, 2) + '\n', 'utf8');
-	clack.log.success('plum.plugins.json created.');
+	fs.writeFileSync(userPluginsInTests, JSON.stringify(content, null, 2) + '\n', 'utf8');
+	clack.log.success('tests/plum.plugins.json created.');
 }
 
 // Install user plugins listed in plum.plugins.json into the backend
 function installPlugins() {
-	const pluginsPath = path.join(process.cwd(), 'plum.plugins.json');
+	const pluginsPath = preferring(userPluginsInTests, legacyRootPluginsPath);
 	if (!fs.existsSync(pluginsPath)) return;
 
 	let plugins;
@@ -88,36 +75,14 @@ function installPlugins() {
 	});
 }
 
-// Ensure user's .gitignore contains Plum-generated entries
-function ensureGitignore() {
-	const gitignorePath = path.join(process.cwd(), '.gitignore');
-	const plumEntries = ['.env', 'reports/'];
-	const plumBlock = `\n# Plum (auto-generated)\n${plumEntries.join('\n')}\n`;
-
-	if (!fs.existsSync(gitignorePath)) {
-		fs.writeFileSync(gitignorePath, plumBlock.trimStart(), 'utf8');
-		clack.log.success('.gitignore created with Plum entries.');
-		return;
-	}
-
-	const existing = fs.readFileSync(gitignorePath, 'utf8');
-	const missing = plumEntries.filter((e) => !existing.includes(e));
-	if (missing.length === 0) {
-		clack.log.warn('.gitignore already contains Plum entries — skipping.');
-		return;
-	}
-
-	fs.appendFileSync(gitignorePath, `\n# Plum (auto-generated)\n${missing.join('\n')}\n`);
-	clack.log.success('.gitignore updated with Plum entries.');
-}
-
-// Function to copy .env file from root to backend
-function copyEnvFile() {
+// Sync an .env into backend/.env so the local toolchain (which runs from
+// backend/, where hooks.ts calls dotenv.config()) picks it up.
+function copyEnvFile(src) {
 	try {
-		if (fs.existsSync(rootEnvPath)) {
-			fse.copySync(rootEnvPath, backendEnvPath);
+		if (fs.existsSync(src)) {
+			fse.copySync(src, backendEnvPath);
 		} else {
-			clack.log.warn('.env not found in project root — skipping backend sync.');
+			clack.log.warn(`.env not found (${src}) — skipping backend sync.`);
 		}
 	} catch (err) {
 		clack.log.error(`Error copying .env: ${err.message}`);
@@ -335,7 +300,7 @@ function applyServerConfig(cfg) {
 	// projects/<slug>/tests/ folder itself, so the dir just has to exist.
 	fs.mkdirSync(path.join(cwd, 'projects'), { recursive: true });
 	writeEnvFile(cwd);
-	copyEnvFile();
+	copyEnvFile(legacyRootEnvPath);
 	mergeUserPlugins();
 	const testsDir = path.join(cwd, 'tests');
 	const testsAbs = fs.existsSync(testsDir) ? testsDir.replace(/\\/g, '/') : null;
@@ -1136,41 +1101,32 @@ switch (command) {
 	case 'init': {
 		clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Init  ')));
 
-		// Test scaffold
-		if (fs.existsSync(userTestsPath)) {
-			clack.log.warn('`tests/` already exists — skipping scaffold.');
-		} else {
-			fse.copySync(scaffoldTestsPath, userTestsPath);
-			clack.log.success('`tests/` created with example files.');
-		}
+		// The whole test project lives in tests/ — same self-contained layout as a
+		// server project's projects/<slug>/tests/. Fill-in copy: an existing
+		// project keeps its edits, missing scaffold files are added. README.md is
+		// written separately (the scaffold's is server-oriented).
+		const existed = fs.existsSync(userTestsPath);
+		fse.copySync(scaffoldTestsPath, userTestsPath, {
+			overwrite: false,
+			errorOnExist: false,
+			filter: (src) => path.basename(src) !== 'README.md'
+		});
+		clack.log.success(existed ? '`tests/` filled in with missing files.' : '`tests/` created.');
 
-		createEnvFile();
-		ensureGitignore();
+		{
+			const env = testsEnvPath;
+			if (!fs.existsSync(env)) {
+				fs.copyFileSync(path.join(userTestsPath, '.env.example'), env);
+				clack.log.success('tests/.env created — set BASE_URL to your app.');
+			} else {
+				clack.log.warn('tests/.env already exists — skipping.');
+			}
+		}
 		scaffoldPluginsFile();
 
-		// .vscode/settings.json
+		// .vscode/settings.json ships in the scaffold at tests/.vscode/ — open the
+		// tests/ folder in your editor. Just install the Cucumber extension here.
 		{
-			const vscodeSettingsPath = path.join(process.cwd(), '.vscode', 'settings.json');
-			if (!fs.existsSync(vscodeSettingsPath)) {
-				fs.mkdirSync(path.dirname(vscodeSettingsPath), { recursive: true });
-				fs.writeFileSync(
-					vscodeSettingsPath,
-					JSON.stringify(
-						{
-							'cucumber.glue': ['tests/step_definitions/**/*.ts'],
-							'cucumber.features': ['tests/features/**/*.feature']
-						},
-						null,
-						2
-					) + '\n',
-					'utf8'
-				);
-				clack.log.success('.vscode/settings.json created for Cucumber extension.');
-			} else {
-				clack.log.warn('.vscode/settings.json already exists — skipping.');
-			}
-
-			// VS Code Cucumber extension
 			try {
 				execSync('code --version', { stdio: 'ignore' });
 				try {
@@ -1188,9 +1144,9 @@ switch (command) {
 			}
 		}
 
-		// tsconfig.json
+		// tests/tsconfig.json — IDE type resolution only; the runtime uses backend's.
 		{
-			const tsconfigPath = path.join(process.cwd(), 'tsconfig.json');
+			const tsconfigPath = path.join(userTestsPath, 'tsconfig.json');
 			if (!fs.existsSync(tsconfigPath)) {
 				const backendModules = path.join(plumRoot, 'backend', 'node_modules').replace(/\\/g, '/');
 				const tsconfig = {
@@ -1212,18 +1168,18 @@ switch (command) {
 						},
 						typeRoots: [`${backendModules}/@types`]
 					},
-					include: ['tests/**/*.ts']
+					include: ['**/*.ts']
 				};
 				fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2) + '\n', 'utf8');
-				clack.log.success('tsconfig.json created for IDE type resolution.');
+				clack.log.success('tests/tsconfig.json created for IDE type resolution.');
 			} else {
-				clack.log.warn('tsconfig.json already exists — skipping.');
+				clack.log.warn('tests/tsconfig.json already exists — skipping.');
 			}
 		}
 
-		// README.md
+		// tests/README.md
 		{
-			const userReadmePath = path.join(process.cwd(), 'README.md');
+			const userReadmePath = path.join(userTestsPath, 'README.md');
 			if (!fs.existsSync(userReadmePath)) {
 				const readmeContent = [
 					'# My Tests',
@@ -1246,9 +1202,9 @@ switch (command) {
 					'   ```',
 					'4. **Start the full UI** (requires Docker) to trigger tests, view reports, and manage your test repository:',
 					'   ```bash',
-					'   plum start',
+					'   plum server start',
 					'   ```',
-					'   On first run, Plum asks you to create an admin account. Then open **http://localhost:3002** and sign in.',
+					'   On first run, Plum walks you through creating the organisation, first project and owner account. Then open **http://localhost:3002** and sign in.',
 					'',
 					'---',
 					'',
@@ -1260,9 +1216,9 @@ switch (command) {
 					'| `plum run-test @tag` | Run tests matching a tag |',
 					'| `plum run-test --parallel N` | Run tests across N parallel workers |',
 					'| `plum run-test --browser firefox` | Run in a specific browser (chromium/firefox) |',
-					'| `plum start` | Start the full UI via Docker (interactive setup) |',
+					'| `plum server start` | Start the full UI via Docker (interactive setup) |',
 					'| `plum server reconfig` | Change server URL/ports without starting |',
-					'| `plum stop` | Stop the server |',
+					'| `plum server stop` | Stop the server |',
 					'| `plum create-step` | Interactively generate a new step definition |',
 					'| `plum node start <name>` | Register a node and start it here |',
 					'| `plum node list` | List this machine’s nodes |',
@@ -1278,15 +1234,19 @@ switch (command) {
 					'',
 					'---',
 					'',
-					'## Test Structure',
+					'## Layout',
 					'',
 					'```',
-					'tests/',
-					'  features/          — Gherkin .feature files (write your scenarios here)',
-					'  step_definitions/  — TypeScript step implementations',
-					'  pages/             — Page Object Models (optional)',
-					'  utils/             — Browser setup, hooks, shared helpers',
+					'features/          — Gherkin .feature files (write your scenarios here)',
+					'step_definitions/  — TypeScript step implementations',
+					'pages/             — Page Object Models (optional)',
+					'utils/             — Browser setup, hooks, shared helpers',
+					'.env               — BASE_URL and IS_HEADLESS',
+					'plum.plugins.json  — extra npm packages your tests need',
 					'```',
+					'',
+					'This whole folder is your test project — open it in your editor, and',
+					'`git init` here (or sync it into a server project via **Automated Tests**).',
 					'',
 					'Feature files and step definitions are the two required layers. Page objects are optional — keep the Playwright calls in your steps if you prefer — but recommended once a page grows past a few interactions.',
 					'',
@@ -1334,9 +1294,9 @@ switch (command) {
 					'- [Plum documentation](https://github.com/silverlunah/plum) — Full README and reference'
 				].join('\n');
 				fs.writeFileSync(userReadmePath, readmeContent + '\n', 'utf8');
-				clack.log.success('README.md created.');
+				clack.log.success('tests/README.md created.');
 			} else {
-				clack.log.warn('README.md already exists — skipping.');
+				clack.log.warn('tests/README.md already exists — skipping.');
 			}
 		}
 
@@ -1346,9 +1306,9 @@ switch (command) {
 
 		clack.note(
 			[
-				`Tests scaffold  ${pc.dim('→')}  ${pc.cyan('tests/')}`,
-				`Extra packages  ${pc.dim('→')}  ${pc.cyan('plum.plugins.json')}`,
-				`App URL config  ${pc.dim('→')}  ${pc.cyan('.env')}`,
+				`Your test project  ${pc.dim('→')}  ${pc.cyan('tests/')}  ${pc.dim('(open this folder in your editor)')}`,
+				`App URL            ${pc.dim('→')}  ${pc.cyan('tests/.env')}  ${pc.dim('— set BASE_URL')}`,
+				`Extra packages     ${pc.dim('→')}  ${pc.cyan('tests/plum.plugins.json')}`,
 				'',
 				`${pc.bold('Run tests locally')}`,
 				`  ${pc.cyan('plum run-test')}            run all tests`,
@@ -1430,8 +1390,9 @@ switch (command) {
 		console.log('--------------------------------------\n');
 		console.log('🚀 Running tests locally...');
 
-		// Copy .env file from root to backend
-		copyEnvFile();
+		// tests/.env is the canonical spot; fall back to a root .env for projects
+		// scaffolded before the layout was unified.
+		copyEnvFile(preferring(testsEnvPath, legacyRootEnvPath));
 
 		const runArgs = process.argv.slice(3);
 		const parallelIdx = runArgs.indexOf('--parallel');
