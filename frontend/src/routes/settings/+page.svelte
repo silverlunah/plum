@@ -41,6 +41,7 @@
 	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
+	import LearnMoreLinks from '$lib/components/ui/LearnMoreLinks.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import { EMAIL_LABEL } from '$lib/copy/common';
 	import {
@@ -529,10 +530,12 @@
 		</button>
 		<hr class="sidebar-divider" />
 		<a class="sidebar-item docs-link" href={DOCS_URL} target="_blank" rel="noopener noreferrer">
+			<img class="docs-favicon" src="/favicon-32x32.png" alt="" width="14" height="14" />
 			<span>{DOCUMENTATION_LABEL}</span>
 			<svg
-				width="13"
-				height="13"
+				class="docs-external"
+				width="12"
+				height="12"
 				viewBox="0 0 24 24"
 				fill="none"
 				stroke="currentColor"
@@ -545,6 +548,7 @@
 				<line x1="10" y1="14" x2="21" y2="3" />
 			</svg>
 		</a>
+		<div class="sidebar-learn-more"><LearnMoreLinks /></div>
 		<hr class="sidebar-divider" />
 		<button class="sidebar-item sign-out" on:click={handleLogout}>{SIGN_OUT_LABEL}</button>
 	</aside>
@@ -1179,13 +1183,20 @@
 	.docs-link {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
+		gap: 0.5rem;
 		text-decoration: none;
 	}
-	.docs-link svg {
+	.docs-favicon {
 		flex-shrink: 0;
-		opacity: 0.6;
+		border-radius: 3px;
+	}
+	.docs-external {
+		flex-shrink: 0;
+		margin-left: auto;
+		opacity: 0.5;
+	}
+	.sidebar-learn-more {
+		padding: 0.3rem 0.75rem 0.1rem;
 	}
 
 	.sidebar-item.sign-out {
