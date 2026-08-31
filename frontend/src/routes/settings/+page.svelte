@@ -1282,7 +1282,7 @@
 	}
 
 	.card-footer {
-		padding-top: 0.125rem;
+		padding-top: 0.5rem;
 	}
 
 	.form-error {
