@@ -627,6 +627,15 @@ const deleteReports = async (projectId, ids) => {
 	await prisma.report.deleteMany({ where: { id: { in: ids }, projectId } });
 };
 
+// Instance-wide nightly prune. Recordings cascade-delete with their report;
+// TestCaseHistory.reportId is SetNull so the manual-run history it holds survives.
+const pruneOldReports = async (retentionDays) => {
+	const days = Number(retentionDays);
+	if (!Number.isFinite(days) || days <= 0) return { count: 0 };
+	const cutoff = new Date(Date.now() - days * 86_400_000);
+	return prisma.report.deleteMany({ where: { createdAt: { lt: cutoff } } });
+};
+
 const { featuresDir } = require('../lib/testsRoot');
 
 async function syncAutomatedFromFeatures(projectId) {
@@ -664,6 +673,7 @@ module.exports = {
 	syncAutomatedFromFeatures,
 	deleteReport,
 	deleteReports,
+	pruneOldReports,
 	getFailedIdTags,
 	mergeRawAttempt
 };

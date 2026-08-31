@@ -335,6 +335,13 @@ export const BACKUP_UPLOADING_TOAST = 'Uploading backup to S3…';
 export const BACKUP_UPLOAD_SUCCESS_TOAST = 'Backup uploaded to S3 successfully.';
 export const BACKUP_UPLOAD_FAILED_FALLBACK = 'Backup failed. Check your S3 configuration.';
 
+export const REPORT_RETENTION_CARD_TITLE = 'Report Retention';
+export const REPORT_RETENTION_DESC =
+	'How long test reports and their session recordings are kept. A clean-up job runs every night at 3:23 AM (server time) and deletes anything older.';
+export const REPORT_RETENTION_SAVED_TOAST = 'Report retention updated.';
+export const REPORT_RETENTION_SAVE_FAILED = 'Failed to update report retention.';
+export const reportRetentionOptionLabel = (days) => (days === 0 ? 'Keep forever' : `${days} days`);
+
 const UPLOAD_TO_S3_NOW_LABEL = 'Upload to S3 Now';
 const UPLOADING_LABEL = 'Uploading…';
 const SAVE_SCHEDULE_LABEL = 'Save Schedule';
@@ -413,7 +420,8 @@ const ACTIVITY_ACTION_META = {
 	'node.update': { verb: 'updated node', tone: 'update' },
 	'node.delete': { verb: 'removed node', tone: 'delete' },
 	'backup.config_update': { verb: 'updated the', tone: 'update' },
-	'activity.retention_update': { verb: 'changed', tone: 'update' }
+	'activity.retention_update': { verb: 'changed', tone: 'update' },
+	'report.retention_update': { verb: 'changed', tone: 'update' }
 };
 
 export function activityTone(action) {
@@ -441,7 +449,10 @@ export function activityDescription(entry) {
 		suffix = m.project ? ` ${entry.action === 'member.add' ? 'to' : 'from'} ${m.project}` : '';
 	else if (entry.action === 'project.prefixes_update' && m.testCasePrefix)
 		detail = `${m.testCasePrefix} · ${m.testSuitePrefix}`;
-	else if (entry.action === 'activity.retention_update')
+	else if (
+		entry.action === 'activity.retention_update' ||
+		entry.action === 'report.retention_update'
+	)
 		detail = m.days === 0 ? 'keep forever' : `${m.days} days`;
 
 	return { verb, target: entry.targetLabel + suffix, detail };
