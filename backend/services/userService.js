@@ -36,6 +36,11 @@ async function assertRoleAssignable(role) {
 
 async function createUser({ name, email, password, role = 'user' }) {
 	await assertRoleAssignable(role);
+	if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
+		const err = new Error('A user with that email already exists.');
+		err.status = 409;
+		throw err;
+	}
 	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 	const user = await prisma.user.create({
 		data: { name, email, password: hashed, role },

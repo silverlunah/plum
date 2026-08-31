@@ -23,6 +23,7 @@ export const MANAGE_TEST_CASES_LINK = 'Import / export →';
 export const IMPORT_TEST_CASES_HREF = '/settings?section=testcases';
 export const EXPORT_TEST_CASES_WHAT = 'Test cases';
 export const EXPORT_SUITE_WHAT = 'Suite';
+export const EXPORT_RUN_WHAT = 'Test run';
 export const SUITES_TAB_LABEL = 'Suites';
 export const RUNS_TAB_LABEL = 'Test Runs';
 export const SEARCH_PLACEHOLDER = 'Search by ID or name…';
@@ -144,6 +145,7 @@ export const NOT_IN_PROGRESS_BANNER =
 	'This run is not in progress — start execution to record results.';
 export const TOGGLE_STEPS_TITLE = 'Toggle steps';
 export const ASSIGN_TO_ME_LABEL = 'Assign to me';
+export const UNASSIGN_LABEL = 'Unassign';
 export const IN_PROGRESS_LABEL = 'In Progress';
 export const PASS_LABEL = 'Pass';
 export const FAIL_LABEL = 'Fail';

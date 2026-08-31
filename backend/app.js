@@ -58,6 +58,17 @@ if (!isNodeMode()) {
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
 	console.error(err);
+	// A Prisma error's message leaks query fragments — map it to something safe.
+	// (Plain Errors from services are meant for the user and pass through below.)
+	if (typeof err?.name === 'string' && err.name.startsWith('PrismaClient')) {
+		if (err.code === 'P2002') {
+			const t = err.meta?.target;
+			const field = Array.isArray(t) ? t[t.length - 1] : typeof t === 'string' ? t : 'value';
+			return res.status(409).json({ error: `That ${field} is already in use.` });
+		}
+		if (err.code === 'P2025') return res.status(404).json({ error: 'That item no longer exists.' });
+		return res.status(400).json({ error: 'That change could not be saved.' });
+	}
 	res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
 
