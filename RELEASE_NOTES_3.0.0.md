@@ -151,6 +151,10 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
   show the project's suites.
 - Removed the obsolete "screenshots replaced by session replay" notice from the
   Reports page.
+- The replay **element inspector** has a search box — match by text, CSS
+  selector or XPath against the recorded page — and the Element tab now lists
+  ranked **locators** (test id, role + name, id/class, CSS path, XPath) with a
+  copy button and a "recommended" marker, close to Playwright's locator priority.
 
 ---
 
