@@ -5,12 +5,15 @@
 
 <script>
 	export let status = 'passed';
+	// A flaky scenario passed, but only on a retry — show it amber, not green.
+	export let flaky = false;
 </script>
 
 <span
 	class="status-dot"
-	class:pass={status === 'passed'}
+	class:pass={status === 'passed' && !flaky}
 	class:fail={status === 'failed'}
+	class:flaky={status === 'passed' && flaky}
 	class:skip={status !== 'passed' && status !== 'failed'}
 ></span>
 
@@ -28,6 +31,9 @@
 	}
 	.fail {
 		background: var(--fail);
+	}
+	.flaky {
+		background: var(--warn);
 	}
 	.skip {
 		background: var(--text-muted);
