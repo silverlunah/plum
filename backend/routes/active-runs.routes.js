@@ -7,13 +7,31 @@ const express = require('express');
 const router = express.Router();
 const runQueueService = require('../services/runQueueService');
 const { jwtAuth } = require('../middleware/jwtAuth');
+const { accessibleProjectIds } = require('../lib/projectContext');
 
-// Queued + running rows carry a real user's display name (`startedBy`) — gate
-// this the same way as other identity-bearing routes, not left open like the
-// purely operational GET routes.
+// Runs the caller can't reach are redacted to what the locked bottom-bar card
+// renders (label, project, status, position) — the tag, runner list and who
+// started it are dropped.
 router.get('/', jwtAuth, async (req, res, next) => {
 	try {
-		res.json({ runs: await runQueueService.listActive() });
+		const [runs, accessible] = await Promise.all([
+			runQueueService.listActive(),
+			accessibleProjectIds(req.user)
+		]);
+		const visible = runs.map((r) =>
+			accessible.includes(r.projectId)
+				? r
+				: {
+						runId: r.runId,
+						projectId: r.projectId,
+						projectName: r.projectName,
+						status: r.status,
+						kind: r.kind,
+						label: r.label,
+						position: r.position
+					}
+		);
+		res.json({ runs: visible });
 	} catch (e) {
 		next(e);
 	}

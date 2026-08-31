@@ -15,34 +15,42 @@
 
 ## Requirements
 
-- [Node.js](https://nodejs.org) v20.12 or higher (Node 22 LTS recommended)
-- [Docker](https://www.docker.com) — required for `plum server start` (the web UI stack). Nodes (`plum node start`) run as a plain Node process and **do not need Docker**.
+- [Node.js](https://nodejs.org) **20.12 or newer** (Node 22 LTS recommended) — enforced by the package's `engines` field.
+- [Docker](https://www.docker.com) — needed **only** for the server (web UI) stack. Writing and running tests locally needs neither Docker nor the server. Runner nodes (`plum node start`) run as a plain Node process and also don't need Docker.
 
 ---
 
 ## Quick Start
 
-### For users
-
 ```bash
-# 1. Install Plum globally
 npm install -g plum-e2e
 
-# 2. Create a project folder and initialize it
 mkdir my-tests && cd my-tests
-plum init
+plum init                       # takes no arguments — sets up this folder
 
-# 3. Set your app URL
-# Edit .env → BASE_URL=https://your-app.com
+# edit .env → BASE_URL=https://your-app.com
 
-# 4. Run the example tests locally (no server needed)
-plum run-test
+plum run-test                   # runs ./tests locally — no Docker, no database
+plum create-test                # scaffold a new .feature + Page + Steps
+```
 
-# 5. Start the web UI (requires Docker)
+### Running the server (web UI: Test Repository, reports, schedules, MCP)
+
+Run this on one machine for your team. It brings up the Docker stack, runs migrations, and — on first start — asks whether you're on a **local machine** or a **production / network server** and which ports to use (backend `3001`, frontend `3002`).
+
+```bash
+npm install -g plum-e2e
+mkdir plum && cd plum
 plum server start
 ```
 
-On first start, Plum asks whether you're setting up on a **local machine** or a **production / network server**, and whether to use the default ports (backend `3001`, frontend `3002`). Then open **http://localhost:3002** and sign in with the account you create.
+`plum server start` creates the `projects/` folder (the bind-mount target) and the Docker config in the current directory. Open **http://localhost:3002**, complete first-run setup, and create your organisation, first project, and owner account. The server scaffolds each project's `projects/<slug>/tests/` folder itself when you add the project in **Settings → Project** — you don't run `plum init` or `plum project init` for that (`plum project init "<name>"` only re-creates a folder the server lost).
+
+The stack's containers use `restart: unless-stopped`, so the server comes back after a reboot once Docker itself starts. To bring runner nodes back too, register them with `plum node start <name> --boot` (or answer the prompt).
+
+### Writing tests (no server)
+
+`plum init` scaffolds the current folder — `tests/`, `.env`, `tsconfig.json`, VS Code settings — and installs the Playwright/Cucumber toolchain. Nothing else is required to write and run tests on your machine.
 
 ### For contributors
 
@@ -63,18 +71,22 @@ Full documentation is available at:
 
 **[https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd)**
 
-| Guide                                                                                                                                      | What it covers                                                         |
-| ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| [Installation](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/installation-JftwFX9csC)                         | Requirements, global install, first-user setup, plugins                |
-| [Initializing the Project](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/initializing-the-project-ilfc8LUyO7) | What `plum init` generates, config files explained                     |
-| [Writing Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/writing-tests-XeHJQdtH49)                       | Feature files, step definitions, optional page objects, best practices |
-| [Running Tests Locally](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/running-tests-locally-GGhFcqaAQ8)       | `plum run-test` flags, parallel runs, debugging tips                   |
-| [Reports & Session Replay](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/reports-session-replay-EfhxJXaaDD)   | The report page, session replay, step rail, inspector, export          |
-| [Retrying Flaky Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/retrying-flaky-tests-NXwRF5SXru)         | Auto-retry failed scenarios, global setting, report badges             |
-| [Setting Up the Server](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-the-server-vj0Ab1kJVs)       | Production server setup, reverse proxy (Nginx/Caddy), Docker           |
-| [Setting Up Nodes](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-nodes-dtmekJGJia)                 | Nodes, systemd service, managing nodes                                 |
-| [Integrations](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/integrations-qfiqfmdP0j)                         | Discord & Slack webhook notifications, CI/external triggers            |
-| [Backup](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/backup-RNNObJfct9)                                     | Backup strategy                                                        |
+| Guide                                                                                                                                    | What it covers                                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [Installation](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/installation-JftwFX9csC)                       | Requirements, global install, first-user setup, plugins                             |
+| [Setting Up the Server](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-the-server-vj0Ab1kJVs)     | Production server setup, reverse proxy (Nginx/Caddy), Docker                        |
+| [Setting Up Nodes](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-nodes-dtmekJGJia)               | Runner nodes, the registration secret, start-on-boot, managing nodes                |
+| [Running Tests Locally](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/running-tests-locally-GGhFcqaAQ8)     | `plum run-test` flags, parallel runs, debugging tips                                |
+| [Writing Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/writing-tests-XeHJQdtH49)                     | Feature files, step definitions, optional page objects, best practices              |
+| [Projects](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/projects-ilfc8LUyO7)                               | One organisation, many projects — anatomy, on-disk layout, create / switch / delete |
+| [Roles & Access](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/roles-access-s0wx91Uo7g)                     | Owner / admin / user, per-project membership, what each role sees                   |
+| [Test Repository](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/test-repository-NJh4BbRzcK)                 | Suites & cases, test runs, linking automation to cases by tag                       |
+| [Reports & Session Replay](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/reports-session-replay-EfhxJXaaDD) | The report page, session replay, step rail, inspector, export                       |
+| [Retrying Flaky Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/retrying-flaky-tests-NXwRF5SXru)       | Auto-retry failed scenarios, global setting, report badges                          |
+| [Integrations](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/integrations-qfiqfmdP0j)                       | Per-project Discord & Slack webhook notifications, CI/external triggers             |
+| [MCP Integration](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/mcp-integration-yGjbsFrI76)                 | Per-member MCP keys, connecting an AI client, tools, `(MCP)` attribution            |
+| [Activity Logs](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/activity-logs-5BJzE7o8oU)                     | Audit feed of project and org changes, MCP attribution, retention                   |
+| [Backup](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/backup-RNNObJfct9)                                   | Instance-level database backup, schedule, S3 target                                 |
 
 ---
 
@@ -82,13 +94,14 @@ Full documentation is available at:
 
 | Command                       | Description                                                                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `plum init`                   | Initialize a new project in the current folder                                                                                                   |
+| `plum init`                   | Scaffold the current folder for local test authoring (`plum run-test`)                                                                           |
+| `plum project init "<name>"`  | Re-create a server project's `projects/<slug>/tests/` folder (the server normally does this when you add the project)                            |
 | `plum server start`           | Start the full UI stack via Docker                                                                                                               |
 | `plum server restart`         | Rebuild Docker images and restart the server without prompts                                                                                     |
 | `plum server stop`            | Stop the server (data preserved)                                                                                                                 |
 | `plum server reconfig`        | Re-enter server settings without starting                                                                                                        |
 | `plum update`                 | Update Plum if a newer version is published, then restart every registered server and node (asks before each); no-ops when already on the latest |
-| `plum node start [name]`      | Register a node with the server and start it on this machine                                                                                     |
+| `plum node start [name]`      | Register a node with the server and start it on this machine (`--boot` / `--no-boot` to (un)set start-on-boot)                                   |
 | `plum node list`              | List this machine's nodes and their status                                                                                                       |
 | `plum node restart [name]`    | Stop, refresh dependencies, and restart a node                                                                                                   |
 | `plum node stop [name]`       | Stop a node                                                                                                                                      |

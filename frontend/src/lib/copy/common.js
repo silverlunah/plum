@@ -34,6 +34,7 @@ export const EXPORT_MENU_ITEMS = [
 ];
 export const exportFailedToast = (what) => `Could not export ${what}.`;
 export const exportedToast = (what) => `${what} exported.`;
+export const exportingToast = (what) => `Exporting ${what.toLowerCase()}…`;
 
 export const CLEAR_SEARCH_LABEL = 'Clear search';
 export const SORT_BY_LABEL = 'Sort by';
@@ -42,6 +43,8 @@ export const SAVING_LABEL = 'Saving…';
 export const CREATING_LABEL = 'Creating…';
 export const SEARCHING_LABEL = 'Searching…';
 export const CANNOT_BE_UNDONE_SUFFIX = '? This cannot be undone.';
+export const SEARCH_PLACEHOLDER = 'Search…';
+export const PAGINATOR_RANGE = (from, to, total) => `${from}–${to} of ${total}`;
 
 export function pluralize(count, singular, plural = `${singular}s`) {
 	return count === 1 ? singular : plural;

@@ -8,15 +8,30 @@ const cors = require('cors');
 const { isNodeMode } = require('./constants/env');
 const app = express();
 
-app.use(cors({ origin: '*', exposedHeaders: ['Content-Disposition'] }));
+// `*` is safe here — auth is a header token, not a cookie. Operators who still
+// want the browser origin pinned can set PLUM_ALLOWED_ORIGINS (comma-separated).
+const allowedOrigins = (process.env.PLUM_ALLOWED_ORIGINS || '')
+	.split(',')
+	.map((o) => o.trim())
+	.filter(Boolean);
+app.use(
+	cors({
+		origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
+		exposedHeaders: ['Content-Disposition']
+	})
+);
 // Dispatching a run to a node ships the whole tests/ tree (base64-encoded,
 // fixtures included) as one JSON body — Express's 100kb default 413s well
 // before a real test suite does.
 app.use(express.json({ limit: '500mb' }));
 
 // Routes
-const nodeRoutes = require('./routes/node.routes');
-app.use('/api', nodeRoutes);
+
+// Node-only — these run caller-supplied test code; on the primary that's an
+// unauthenticated RCE. The primary never serves its own /api/*.
+if (isNodeMode()) {
+	app.use('/api', require('./routes/node.routes'));
+}
 
 // Primary-mode routes — skipped when running as a runner node (no DB available)
 if (!isNodeMode()) {
@@ -28,11 +43,14 @@ if (!isNodeMode()) {
 	app.use('/runners', require('./routes/runners.routes'));
 	app.use('/auth', require('./routes/auth.routes'));
 	app.use('/users', require('./routes/users.routes'));
+	app.use('/projects', require('./routes/projects.routes'));
+	app.use('/server', require('./routes/server.routes'));
 	app.use('/test-suites', require('./routes/test-suites.routes'));
 	app.use('/test-cases', require('./routes/test-cases.routes'));
 	app.use('/test-runs', require('./routes/test-runs.routes'));
 	app.use('/trigger', require('./routes/trigger.routes'));
 	app.use('/active-runs', require('./routes/active-runs.routes'));
+	app.use('/activity', require('./routes/activity.routes'));
 	app.use('/mcp', require('./routes/mcp.routes'));
 }
 
@@ -40,6 +58,17 @@ if (!isNodeMode()) {
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
 	console.error(err);
+	// A Prisma error's message leaks query fragments — map it to something safe.
+	// (Plain Errors from services are meant for the user and pass through below.)
+	if (typeof err?.name === 'string' && err.name.startsWith('PrismaClient')) {
+		if (err.code === 'P2002') {
+			const t = err.meta?.target;
+			const field = Array.isArray(t) ? t[t.length - 1] : typeof t === 'string' ? t : 'value';
+			return res.status(409).json({ error: `That ${field} is already in use.` });
+		}
+		if (err.code === 'P2025') return res.status(404).json({ error: 'That item no longer exists.' });
+		return res.status(400).json({ error: 'That change could not be saved.' });
+	}
 	res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
 

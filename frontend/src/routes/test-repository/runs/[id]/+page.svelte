@@ -4,7 +4,8 @@
  -->
 
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 	import { fly } from 'svelte/transition';
 	import {
@@ -13,19 +14,31 @@
 		fetchAllSuitesWithCases,
 		recordEntryResult,
 		assignEntry,
-		fetchMembers
+		fetchMembers,
+		downloadTestCaseExport
 	} from '$lib/api/repository';
-	import { runsVersion } from '$lib/stores/runner';
+	import { runsVersion, socket } from '$lib/stores/runner';
+	import { SOCKET_EVENTS } from '$lib/socketEvents';
 	import { auth } from '$lib/stores/auth';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
-	import { notify } from '$lib/stores/notifications';
+	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import AutomatedBadge from '$lib/components/ui/AutomatedBadge.svelte';
+	import AssigneePicker from '$lib/components/ui/AssigneePicker.svelte';
 	import PriorityBadge from '$lib/components/ui/PriorityBadge.svelte';
 	import CaseIdChip from '$lib/components/ui/CaseIdChip.svelte';
 	import ResultChip from '$lib/components/ui/ResultChip.svelte';
-	import { CANCEL_LABEL, SAVE_LABEL, SAVING_LABEL, LOADING_LABEL } from '$lib/copy/common';
+	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
+	import {
+		CANCEL_LABEL,
+		SAVE_LABEL,
+		SAVING_LABEL,
+		LOADING_LABEL,
+		exportedToast,
+		exportFailedToast,
+		exportingToast
+	} from '$lib/copy/common';
 	import {
 		TEST_REPOSITORY_BREADCRUMB,
 		TITLE_LABEL,
@@ -41,7 +54,6 @@
 		IN_THIS_RUN_LABEL,
 		LOCKED_BADGE,
 		NO_CASES_IN_RUN_MESSAGE,
-		UNASSIGNED_OPTION,
 		SUITE_BROWSER_LABEL,
 		SEARCH_CASES_PLACEHOLDER,
 		NO_MATCHING_CASES,
@@ -51,6 +63,7 @@
 		NOT_IN_PROGRESS_BANNER,
 		TOGGLE_STEPS_TITLE,
 		ASSIGN_TO_ME_LABEL,
+		UNASSIGN_LABEL,
 		IN_PROGRESS_LABEL,
 		PASS_LABEL,
 		FAIL_LABEL,
@@ -58,12 +71,14 @@
 		SKIP_LABEL,
 		RESET_TO_PENDING_TITLE,
 		RESET_LABEL,
+		resultLockedHint,
+		RESULT_UNASSIGNED_HINT,
 		FAILED_TO_LOAD_DATA,
 		FAILED_TO_ADD_CASE,
 		RUN_UPDATED_TOAST,
-		RUN_SAVED_TOAST,
 		RUN_MARKED_COMPLETE_TOAST,
 		RUN_REOPENED_TOAST,
+		EXPORT_RUN_WHAT,
 		runDetailTitle,
 		passedCount,
 		failedCount,
@@ -81,8 +96,6 @@
 	let suites = [];
 	let members = [];
 	let loading = true;
-	let saving = false;
-	let executing = false;
 	let assigning = null;
 
 	$: currentUserId = $auth?.user?.id ?? null;
@@ -165,6 +178,43 @@
 		}
 	});
 
+	// Live collaboration: everyone on this run's page shares a socket room, so one
+	// person's assignment / result / edit lands on the others without a refresh.
+	function onTestRunChanged({ runId: rid, entry, reload }) {
+		if (rid !== runId || !run) return;
+		if (reload) {
+			const prevStatus = run.status;
+			fetchRun(runId).then((r) => {
+				run = r;
+				if (prevStatus !== r.status) mode = r.status === 'in-progress' ? 'execute' : 'build';
+			});
+			return;
+		}
+		if (entry) {
+			run = {
+				...run,
+				entries: run.entries.map((e) => (e.id === entry.id ? { ...e, ...entry } : e))
+			};
+		}
+	}
+
+	let _joinedRunId = null;
+	$: if ($socket && runId && _joinedRunId !== runId) {
+		if (_joinedRunId) $socket.emit(SOCKET_EVENTS.TEST_RUN_LEAVE, { runId: _joinedRunId });
+		$socket.emit(SOCKET_EVENTS.TEST_RUN_JOIN, { runId });
+		$socket.off(SOCKET_EVENTS.TEST_RUN_CHANGED, onTestRunChanged);
+		$socket.on(SOCKET_EVENTS.TEST_RUN_CHANGED, onTestRunChanged);
+		_joinedRunId = runId;
+	}
+
+	onDestroy(() => {
+		const s = get(socket);
+		if (s && _joinedRunId) {
+			s.emit(SOCKET_EVENTS.TEST_RUN_LEAVE, { runId: _joinedRunId });
+			s.off(SOCKET_EVENTS.TEST_RUN_CHANGED, onTestRunChanged);
+		}
+	});
+
 	async function handleAssignEntry(entryId, userId) {
 		assigning = entryId;
 		try {
@@ -208,6 +258,14 @@
 				suite.name.toLowerCase().includes(search.toLowerCase())
 		);
 
+	// The build list autosaves: every add / remove / reorder persists the run's
+	// case set immediately, so there's no separate Save step.
+	async function persistEntries() {
+		const caseIds = run.entries.map((e) => e.case.id);
+		await updateRun(runId, { caseIds });
+		run = await fetchRun(runId);
+	}
+
 	async function addCase(tc) {
 		if (!run || runCaseIds.has(tc.id)) return;
 		const previous = run;
@@ -222,17 +280,22 @@
 		};
 		run = { ...run, entries: [...run.entries, entry] };
 		try {
-			const caseIds = run.entries.map((e) => e.case.id);
-			await updateRun(runId, { caseIds });
-			run = await fetchRun(runId);
+			await persistEntries();
 		} catch (e) {
 			run = previous;
 			notify('error', FAILED_TO_ADD_CASE);
 		}
 	}
 
-	function removeEntry(entryId) {
+	async function removeEntry(entryId) {
+		const previous = run;
 		run = { ...run, entries: run.entries.filter((e) => e.id !== entryId) };
+		try {
+			await persistEntries();
+		} catch (e) {
+			run = previous;
+			notify('error', e.message);
+		}
 	}
 
 	async function handleUpdateRun() {
@@ -249,25 +312,15 @@
 		}
 	}
 
-	async function handleSaveRun() {
-		saving = true;
+	async function handleStartExecution() {
 		try {
-			const caseIds = run.entries.map((e) => e.case.id);
-			const updated = await updateRun(runId, { caseIds });
-			run = await fetchRun(runId);
-			notify('success', RUN_SAVED_TOAST);
+			await persistEntries();
+			await updateRun(runId, { status: 'in-progress' });
+			run = { ...run, status: 'in-progress' };
+			mode = 'execute';
 		} catch (e) {
 			notify('error', e.message);
-		} finally {
-			saving = false;
 		}
-	}
-
-	async function handleStartExecution() {
-		await handleSaveRun();
-		await updateRun(runId, { status: 'in-progress' });
-		run = { ...run, status: 'in-progress' };
-		mode = 'execute';
 	}
 
 	async function handleMarkEntry(entry, status) {
@@ -308,6 +361,20 @@
 		}
 	}
 
+	let exporting = false;
+	async function handleExportRun(format) {
+		exporting = true;
+		const settle = notifyProgress(exportingToast(EXPORT_RUN_WHAT));
+		try {
+			await downloadTestCaseExport('run', runId, format);
+			settle('success', exportedToast(EXPORT_RUN_WHAT));
+		} catch {
+			settle('error', exportFailedToast('this run'));
+		} finally {
+			exporting = false;
+		}
+	}
+
 	async function handleReopenRun() {
 		try {
 			await updateRun(runId, { status: 'backlog' });
@@ -332,9 +399,10 @@
 		dragOverEntryId = entryId;
 	}
 
-	function onDrop(e, targetEntryId) {
+	async function onDrop(e, targetEntryId) {
 		e.preventDefault();
 		if (!dragEntryId || dragEntryId === targetEntryId) return;
+		const previous = run;
 		const entries = [...run.entries];
 		const fromIdx = entries.findIndex((e) => e.id === dragEntryId);
 		const toIdx = entries.findIndex((e) => e.id === targetEntryId);
@@ -343,6 +411,12 @@
 		run = { ...run, entries };
 		dragEntryId = null;
 		dragOverEntryId = null;
+		try {
+			await persistEntries();
+		} catch (err) {
+			run = previous;
+			notify('error', err.message);
+		}
 	}
 
 	$: completedCount = run?.entries.filter((e) => e.status !== 'pending').length ?? 0;
@@ -406,11 +480,9 @@
 		</div>
 		<div class="run-header-actions">
 			{#if isLocked}
+				<ExportMenu busy={exporting} on:select={(e) => handleExportRun(e.detail)} />
 				<Button variant="ghost" on:click={handleReopenRun}>{REOPEN_LABEL}</Button>
 			{:else if mode === 'build'}
-				<Button variant="ghost" on:click={handleSaveRun} disabled={saving}>
-					{saving ? SAVING_LABEL : SAVE_LABEL}
-				</Button>
 				{#if run.entries.length > 0}
 					<Button on:click={handleStartExecution}>{START_EXECUTION_LABEL}</Button>
 				{/if}
@@ -513,17 +585,13 @@
 								{#if entry.case.isAutomated}
 									<AutomatedBadge />
 								{:else}
-									<select
-										class="assignee-select"
-										value={entry.assignedToId ?? ''}
+									<AssigneePicker
+										{members}
+										value={entry.assignedToId}
+										name={entry.assignedTo?.name}
 										disabled={assigning === entry.id}
-										on:change={(e) => handleAssignEntry(entry.id, e.target.value)}
-									>
-										<option value="">{UNASSIGNED_OPTION}</option>
-										{#each members as m}
-											<option value={m.id}>{m.name}</option>
-										{/each}
-									</select>
+										on:change={(e) => handleAssignEntry(entry.id, e.detail)}
+									/>
 								{/if}
 								{#if !isLocked}
 									<button class="icon-btn danger" on:click={() => removeEntry(entry.id)}>
@@ -636,6 +704,13 @@
 
 			<div class="execute-list">
 				{#each run.entries as entry (entry.id)}
+					{@const claimed = entry.assignedTo?.id === currentUserId}
+					{@const resultLocked = !entry.case.isAutomated && !claimed}
+					{@const resultLockHint = entry.assignedTo
+						? resultLockedHint(entry.assignedTo.name)
+						: RESULT_UNASSIGNED_HINT}
+					{@const showResultButtons =
+						!isLocked && run.status === 'in-progress' && (!entry.case.isAutomated || claimed)}
 					<div class="execute-row" class:expanded={executingEntryId === entry.id}>
 						<div class="execute-row-main">
 							<div class="exec-info">
@@ -666,17 +741,20 @@
 								</div>
 							</div>
 							<div class="exec-actions">
-								{#if entry.case.isAutomated}
-									<div class="exec-assignee-row">
-										<AutomatedBadge />
-									</div>
-									<div class="exec-assignee-divider"></div>
-								{:else if entry.assignedTo || (!isLocked && entry.assignedTo?.id !== currentUserId)}
+								{#if entry.assignedTo || !isLocked}
 									<div class="exec-assignee-row">
 										{#if entry.assignedTo}
 											<span class="exec-assignee-name">{entry.assignedTo.name}</span>
 										{/if}
-										{#if !isLocked && entry.assignedTo?.id !== currentUserId}
+										{#if !isLocked && claimed}
+											<button
+												class="exec-assign-me"
+												on:click={() => handleAssignEntry(entry.id, null)}
+												disabled={assigning === entry.id}
+											>
+												{UNASSIGN_LABEL}
+											</button>
+										{:else if !isLocked}
 											<button
 												class="exec-assign-me"
 												on:click={() => handleAssignEntry(entry.id, currentUserId)}
@@ -688,27 +766,43 @@
 									</div>
 									<div class="exec-assignee-divider"></div>
 								{/if}
-								{#if isLocked || run.status !== 'in-progress'}
+								{#if !showResultButtons}
 									<ResultChip status={entry.status} />
 								{:else if entry.status === 'pending' || entry.status === 'in-progress'}
-									<div class="exec-btns">
+									<div
+										class="exec-btns"
+										class:locked={resultLocked}
+										title={resultLocked ? resultLockHint : null}
+									>
 										<button
 											class="exec-btn in-progress"
 											class:active={entry.status === 'in-progress'}
-											on:click={() => handleMarkEntry(entry, 'in-progress')}
-											>{IN_PROGRESS_LABEL}</button
+											disabled={resultLocked}
+											on:click={() =>
+												handleMarkEntry(
+													entry,
+													entry.status === 'in-progress' ? 'pending' : 'in-progress'
+												)}>{IN_PROGRESS_LABEL}</button
 										>
-										<button class="exec-btn pass" on:click={() => handleMarkEntry(entry, 'pass')}
-											>{PASS_LABEL}</button
+										<button
+											class="exec-btn pass"
+											disabled={resultLocked}
+											on:click={() => handleMarkEntry(entry, 'pass')}>{PASS_LABEL}</button
 										>
-										<button class="exec-btn fail" on:click={() => handleMarkEntry(entry, 'fail')}
-											>{FAIL_LABEL}</button
+										<button
+											class="exec-btn fail"
+											disabled={resultLocked}
+											on:click={() => handleMarkEntry(entry, 'fail')}>{FAIL_LABEL}</button
 										>
-										<button class="exec-btn warn" on:click={() => handleMarkEntry(entry, 'blocked')}
-											>{BLOCKED_LABEL}</button
+										<button
+											class="exec-btn warn"
+											disabled={resultLocked}
+											on:click={() => handleMarkEntry(entry, 'blocked')}>{BLOCKED_LABEL}</button
 										>
-										<button class="exec-btn muted" on:click={() => handleMarkEntry(entry, 'skip')}
-											>{SKIP_LABEL}</button
+										<button
+											class="exec-btn muted"
+											disabled={resultLocked}
+											on:click={() => handleMarkEntry(entry, 'skip')}>{SKIP_LABEL}</button
 										>
 									</div>
 								{:else}
@@ -716,8 +810,9 @@
 										<ResultChip status={entry.status} />
 										<button
 											class="exec-reset"
-											on:click={() => handleMarkEntry(entry, 'pending')}
-											title={RESET_TO_PENDING_TITLE}>{RESET_LABEL}</button
+											disabled={resultLocked}
+											title={resultLocked ? resultLockHint : RESET_TO_PENDING_TITLE}
+											on:click={() => handleMarkEntry(entry, 'pending')}>{RESET_LABEL}</button
 										>
 									</div>
 								{/if}
@@ -850,7 +945,7 @@
 		cursor: default;
 	}
 	.entry-row.entry-locked:hover {
-		border-color: var(--border);
+		background: var(--bg-elevated);
 	}
 	.run-status-badge.in-progress {
 		background: var(--warn-soft);
@@ -999,10 +1094,8 @@
 	}
 
 	.entry-list {
-		padding: 0.625rem;
 		display: flex;
 		flex-direction: column;
-		gap: 0.375rem;
 		min-height: 120px;
 	}
 
@@ -1010,24 +1103,26 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 0.5rem;
-		padding: 0.625rem 0.75rem;
-		background: var(--bg);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
+		padding: 0.75rem 1rem;
+		background: var(--bg-elevated);
+		border-bottom: 1px solid var(--border);
 		cursor: grab;
 		transition:
-			border-color var(--duration-fast),
+			background var(--duration-fast),
 			opacity var(--duration-fast);
 	}
 
+	.entry-row:last-child {
+		border-bottom: none;
+	}
+
 	.entry-row:hover {
-		border-color: var(--accent);
+		background: var(--bg-subtle);
 	}
 	.entry-row.dragging {
 		opacity: 0.4;
 	}
 	.entry-row.drag-over {
-		border-color: var(--accent);
 		background: var(--accent-soft);
 	}
 
@@ -1068,23 +1163,6 @@
 		border-radius: var(--radius-sm);
 		padding: 0.625rem 1rem;
 		margin-bottom: 1rem;
-	}
-
-	.assignee-select {
-		font-size: 0.75rem;
-		font-family: var(--font-body);
-		color: var(--text);
-		background: var(--bg);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		padding: 0.2rem 0.4rem;
-		cursor: pointer;
-		flex-shrink: 0;
-	}
-
-	.assignee-select:focus {
-		outline: none;
-		border-color: var(--accent);
 	}
 
 	/* ── Suite browser ── */
@@ -1253,19 +1331,24 @@
 	.execute-list {
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.execute-row {
 		background: var(--bg-elevated);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
 		overflow: hidden;
-		transition: border-color var(--duration-fast);
+	}
+
+	.execute-row {
+		background: var(--bg-elevated);
+		border-bottom: 1px solid var(--border);
+		transition: background var(--duration-fast);
+	}
+
+	.execute-row:last-child {
+		border-bottom: none;
 	}
 
 	.execute-row:hover {
-		border-color: color-mix(in srgb, var(--text-muted) 40%, var(--border));
+		background: color-mix(in srgb, var(--text-muted) 6%, var(--bg-elevated));
 	}
 
 	.execute-row-main {
@@ -1307,6 +1390,10 @@
 		align-items: center;
 		gap: 0.25rem;
 		flex-wrap: wrap;
+	}
+
+	.exec-btns.locked {
+		opacity: 0.45;
 	}
 
 	.exec-btn {
@@ -1354,6 +1441,19 @@
 		background: var(--bg-subtle);
 		border-color: var(--text-muted);
 		color: var(--text-muted);
+	}
+
+	.exec-btn:disabled {
+		cursor: not-allowed;
+	}
+	.exec-btn:disabled:hover {
+		background: var(--bg);
+		border-color: var(--border);
+		color: var(--text-muted);
+	}
+	.exec-reset:disabled {
+		cursor: not-allowed;
+		opacity: 0.45;
 	}
 
 	.exec-reset {

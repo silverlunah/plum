@@ -3,16 +3,12 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
+import { apiHeaders } from '$lib/api/headers';
 import { API_BASE, REPO_PAGE_SIZE } from '$lib/constants';
-import { auth } from '$lib/stores/auth';
 import { downloadFromEndpoint } from '$lib/utils/download';
 
-function getToken() {
-	return auth.getToken();
-}
-
 function authHeaders() {
-	return { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` };
+	return apiHeaders({ json: true });
 }
 
 // ── Test Suites ──────────────────────────────────────────────────────────────
@@ -255,7 +251,7 @@ function testCaseExportUrl(scope, id, format) {
 
 export async function downloadTestCaseExport(scope, id, format) {
 	await downloadFromEndpoint(testCaseExportUrl(scope, id, format), {
-		headers: { Authorization: `Bearer ${getToken()}` },
+		headers: apiHeaders(),
 		fallbackName: `test-cases.${format}`
 	});
 }

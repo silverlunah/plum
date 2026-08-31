@@ -5,7 +5,6 @@
 
 <script>
 	import { onMount, tick } from 'svelte';
-	import { slide } from 'svelte/transition';
 	import { fetchReports, deleteReport, deleteReports, reportUrl } from '$lib/api/reports';
 	import { reportsVersion } from '$lib/stores/runner';
 	import { REPORTS_PER_PAGE, BROWSERS } from '$lib/constants';
@@ -24,8 +23,6 @@
 		SELECT_ALL_TITLE,
 		SELECT_ROW_TITLE,
 		DELETE_REPORT_TITLE,
-		LEGACY_SCREENSHOTS_NOTICE,
-		DISMISS_NOTICE_TITLE,
 		deleteReportsTitle,
 		deleteReportsBody,
 		runsRecorded,
@@ -46,7 +43,6 @@
 	let selected = new Set();
 	let deleteModal = { open: false, targets: [] };
 	let deleting = false;
-	let showLegacyNotice = false;
 
 	$: totalPages = Math.ceil(total / REPORTS_PER_PAGE);
 	$: passRate = total ? Math.round((passCount / total) * 100) : 0;
@@ -81,20 +77,8 @@
 
 	onMount(() => {
 		loadReports();
-		try {
-			showLegacyNotice = localStorage.getItem('plum:legacyScreenshotsNoticeDismissed') !== 'true';
-		} catch {
-			showLegacyNotice = true;
-		}
 	});
 	$: if ($reportsVersion) loadReports();
-
-	function dismissLegacyNotice() {
-		showLegacyNotice = false;
-		try {
-			localStorage.setItem('plum:legacyScreenshotsNoticeDismissed', 'true');
-		} catch {}
-	}
 
 	function toggleSelect(id, e) {
 		e.preventDefault();
@@ -156,32 +140,6 @@
 >
 	{deleteReportsBody(deleteModal.targets.length)}
 </ConfirmModal>
-
-{#if showLegacyNotice}
-	<div class="legacy-notice" transition:slide={{ duration: 200 }}>
-		<p>{LEGACY_SCREENSHOTS_NOTICE}</p>
-		<button
-			class="legacy-notice-dismiss"
-			title={DISMISS_NOTICE_TITLE}
-			aria-label={DISMISS_NOTICE_TITLE}
-			on:click={dismissLegacyNotice}
-		>
-			<svg
-				width="14"
-				height="14"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<line x1="18" y1="6" x2="6" y2="18" />
-				<line x1="6" y1="6" x2="18" y2="18" />
-			</svg>
-		</button>
-	</div>
-{/if}
 
 <div class="page-header">
 	<div class="header-top">
@@ -348,40 +306,6 @@
 {/if}
 
 <style>
-	.legacy-notice {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.75rem;
-		background: var(--accent-soft);
-		border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-		border-radius: var(--radius-sm);
-		padding: 0.75rem 0.875rem;
-		margin-bottom: 1.5rem;
-	}
-	.legacy-notice p {
-		flex: 1;
-		margin: 0;
-		font-size: 0.85rem;
-		line-height: 1.5;
-		color: var(--text);
-	}
-	.legacy-notice-dismiss {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-		background: none;
-		border: none;
-		color: var(--text-muted);
-		cursor: pointer;
-		padding: 0.125rem;
-		border-radius: var(--radius-sm);
-		transition: color var(--duration-fast);
-	}
-	.legacy-notice-dismiss:hover {
-		color: var(--text);
-	}
-
 	.page-header {
 		margin-bottom: 2rem;
 		padding-bottom: 1.5rem;

@@ -118,12 +118,16 @@ function migrateLegacyNodes(legacyDirs) {
  * @returns {Promise<{ id: string, reused: boolean }>}
  * @throws {Error} when the primary is unreachable or rejects the request
  */
-async function registerWithPrimary({ primary, name, url, token, browser }) {
+async function registerWithPrimary({ primary, name, url, token, browser, nodeSecret }) {
 	const base = primary.replace(/\/$/, '');
+	const authHeaders = nodeSecret ? { Authorization: `Bearer ${nodeSecret}` } : {};
 
 	let reused = false;
 	try {
-		const listRes = await fetch(`${base}/runners`, { signal: AbortSignal.timeout(10000) });
+		const listRes = await fetch(`${base}/runners`, {
+			headers: authHeaders,
+			signal: AbortSignal.timeout(10000)
+		});
 		if (listRes.ok) {
 			const { runners = [] } = await listRes.json();
 			reused = runners.some((r) => r.name === name && r.url === url);
@@ -132,7 +136,7 @@ async function registerWithPrimary({ primary, name, url, token, browser }) {
 
 	const res = await fetch(`${base}/runners`, {
 		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
+		headers: { 'Content-Type': 'application/json', ...authHeaders },
 		body: JSON.stringify({ name, url, token, browser }),
 		signal: AbortSignal.timeout(10000)
 	});

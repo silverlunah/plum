@@ -11,6 +11,7 @@
 	import {
 		isScheduled,
 		triggerLabel,
+		mcpName,
 		fmtDuration,
 		stagger,
 		featureFile,
@@ -29,10 +30,13 @@
 		FAILED_LABEL,
 		STAT_PASSED,
 		STAT_FAILED,
+		STAT_FLAKY,
 		STAT_SKIPPED,
 		STAT_DURATION,
 		RUN_LOGS_LABEL,
 		RETRY_TITLE,
+		FLAKY_LABEL,
+		FLAKY_TITLE,
 		WATCH_REPLAY_TITLE,
 		REPLAY_LABEL,
 		runnersBadge,
@@ -43,13 +47,14 @@
 		workerLabel,
 		REPORT_EXPORT_MENU_ITEMS
 	} from '$lib/copy/reports';
-	import { exportFailedToast, exportedToast } from '$lib/copy/common';
-	import { notify } from '$lib/stores/notifications';
+	import { exportFailedToast, exportedToast, exportingToast } from '$lib/copy/common';
+	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import BackLink from '$lib/components/ui/BackLink.svelte';
 	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
 	import StatusDot from '$lib/components/ui/StatusDot.svelte';
 	import TagChip from '$lib/components/ui/TagChip.svelte';
+	import TagList from '$lib/components/ui/TagList.svelte';
 	import StepKeyword from '$lib/components/ui/StepKeyword.svelte';
 	import StepStatusIcon from '$lib/components/ui/StepStatusIcon.svelte';
 	import BrowserIcon from '$lib/components/icons/BrowserIcon.svelte';
@@ -71,11 +76,12 @@
 	let exporting = false;
 	async function handleExport(format) {
 		exporting = true;
+		const settle = notifyProgress(exportingToast('Report'));
 		try {
 			await downloadReportExport(reportId, format);
-			notify('success', exportedToast('Report'));
+			settle('success', exportedToast('Report'));
 		} catch {
-			notify('error', exportFailedToast('this report'));
+			settle('error', exportFailedToast('this report'));
 		} finally {
 			exporting = false;
 		}
@@ -127,8 +133,12 @@
 
 	$: overallPass = detail?.status === 'PASS';
 	$: allScenarios = detail?.features.flatMap((f) => f.scenarios) ?? [];
+	// `flaky` is written into the report content at save time; fall back to
+	// deriving it for reports saved before the field existed.
+	$: isFlaky = (s) => s.flaky ?? (s.status === 'passed' && (s.attempts ?? 1) > 1);
 	$: passed = allScenarios.filter((s) => s.status === 'passed').length;
 	$: failed = allScenarios.filter((s) => s.status === 'failed').length;
+	$: flaky = detail?.flakyCount ?? allScenarios.filter(isFlaky).length;
 	$: skipped = allScenarios.filter((s) => s.status === 'skipped' || s.status === 'pending').length;
 	// detail.duration is real wall-clock time (recorded by the orchestrator, start to
 	// combined-report-save). Summed scenario durations overcount when scenarios ran in
@@ -200,6 +210,9 @@
 				<div>
 					<div class="h1-row">
 						<h1>{overallPass ? PASSED_LABEL : FAILED_LABEL}</h1>
+						{#if flaky > 0}
+							<span title={FLAKY_TITLE}><Badge variant="flaky">{FLAKY_LABEL}</Badge></span>
+						{/if}
 						{#if detail.testRun?.title}
 							<span class="run-name-badge">{detail.testRun.title}</span>
 						{:else if isScheduled(detail.triggerType)}
@@ -207,9 +220,13 @@
 						{/if}
 					</div>
 					<div class="header-meta">
-						<span class="mono">{detail.tags}</span>
+						<span class="mono"><TagList value={detail.tags} /></span>
 						<span class="meta-sep">·</span>
 						<span>{triggerLabel(detail.triggerType)}</span>
+						{#if detail.startedBy}
+							<span class="meta-sep">·</span>
+							<span>{mcpName(detail.startedBy, detail.viaMcp)}</span>
+						{/if}
 						<span class="meta-sep">·</span>
 						<span>{new Date(detail.createdAt).toLocaleString()}</span>
 						<span class="meta-sep">·</span>
@@ -257,6 +274,27 @@
 								<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
 							</svg>
 							{STAT_FAILED}
+						</span>
+					</div>
+				{/if}
+				{#if flaky > 0}
+					<div class="stat">
+						<span class="stat-num flaky-color">{flaky}</span>
+						<span class="stat-label" title={FLAKY_TITLE}>
+							<svg
+								width="10"
+								height="10"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<polyline points="23 4 23 10 17 10" />
+								<path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+							</svg>
+							{STAT_FLAKY}
 						</span>
 					</div>
 				{/if}
@@ -474,6 +512,7 @@
 							{@const scenId = `${ri}-${wi}-${fi}-${group.key}`}
 							{@const open = expandedScenarios.has(scenId)}
 							{@const groupHasReplay = group.scenarios.some(scenarioHasRecording)}
+							{@const groupFlaky = group.status === 'passed' && group.scenarios.some(isFlaky)}
 							<div
 								class="scenario"
 								class:scenario-fail={group.status === 'failed'}
@@ -481,7 +520,7 @@
 							>
 								<div class="scenario-row">
 									<button class="scenario-header" on:click={() => toggleScenario(scenId)}>
-										<StatusDot status={group.status} />
+										<StatusDot status={group.status} flaky={groupFlaky} />
 
 										<span class="scenario-name">
 											{group.name}
@@ -489,7 +528,9 @@
 												<span class="scenario-count">{casesCountLabel(group.scenarios.length)}</span
 												>
 											{/if}
-											{#if group.scenarios[0]?.attempts > 1}
+											{#if groupFlaky}
+												<span class="scenario-flaky" title={FLAKY_TITLE}>{FLAKY_LABEL}</span>
+											{:else if group.scenarios[0]?.attempts > 1}
 												<span class="scenario-count" title={RETRY_TITLE}>
 													{attemptsLabel(group.scenarios[0].attempts)}
 												</span>
@@ -809,6 +850,9 @@
 	.fail-color {
 		color: var(--fail);
 	}
+	.flaky-color {
+		color: var(--warn);
+	}
 	.muted-color {
 		color: var(--text-muted);
 	}
@@ -1003,6 +1047,18 @@
 		color: var(--text-muted);
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
+		border-radius: var(--radius-pill);
+		padding: 0.05rem 0.4rem;
+		white-space: nowrap;
+	}
+
+	.scenario-flaky {
+		font-size: 0.65rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--warn);
+		background: var(--warn-soft);
 		border-radius: var(--radius-pill);
 		padding: 0.05rem 0.4rem;
 		white-space: nowrap;

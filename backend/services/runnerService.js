@@ -6,9 +6,12 @@
 const fs = require('fs');
 const path = require('path');
 const prisma = require('./prisma');
+const activityService = require('./activityService');
 const { loadTestEnv } = require('../lib/testEnv');
+const { resolveTestsRoot, loadProjectEnv } = require('../lib/testsRoot');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 const { bearerHeader } = require('../lib/authHeader');
 const { JOB_STATUS } = require('../constants/jobStatus');
 
@@ -42,6 +45,13 @@ const create = async ({ name, url, token, browser = DEFAULT_BROWSER }) => {
 	const runner = existing
 		? await prisma.runner.update({ where: { id: existing.id }, data: { token, browser } })
 		: await prisma.runner.create({ data: { name, url: normalisedUrl, token, browser } });
+	await activityService.record(
+		existing ? ACTIVITY_ACTION.NODE_UPDATE : ACTIVITY_ACTION.NODE_CREATE,
+		{
+			scope: ACTIVITY_SCOPE.ORG,
+			target: { type: 'node', id: runner.id, label: runner.name }
+		}
+	);
 	return toPublicRunner(runner);
 };
 
@@ -59,37 +69,18 @@ async function remove(id) {
 			data: { runnerIds: ids.length > 0 ? ids.join(',') : BUILT_IN_RUNNER_ID }
 		});
 	}
-	return prisma.runner.delete({ where: { id } });
-}
-
-// Leaving `token` blank keeps the existing one (same pattern as the S3 backup
-// secret key) instead of clearing a runner's auth on an unrelated edit.
-const update = async (id, { name, url, token, browser }) => {
-	const runner = await prisma.runner.update({
-		where: { id },
-		data: {
-			...(name !== undefined && { name }),
-			...(url !== undefined && { url: normaliseUrl(url) }),
-			...(token && { token }),
-			...(browser !== undefined && { browser })
-		}
+	const runner = await prisma.runner.findUnique({ where: { id }, select: { name: true } });
+	const result = await prisma.runner.delete({ where: { id } });
+	await activityService.record(ACTIVITY_ACTION.NODE_DELETE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'node', id, label: runner?.name ?? id }
 	});
-	return toPublicRunner(runner);
-};
+	return result;
+}
 
 // Raw accessor (includes token) — internal use only, for authenticating
 // outbound requests to the runner node (ping/stop/restart/dispatch below).
 const getById = (id) => prisma.runner.findUnique({ where: { id } });
-
-// A runner's own token (generated once at registration) doubles as its
-// credential for calling back into the primary's control routes — no separate
-// secret to configure. Any currently-registered token is accepted, not just
-// the target runner's own, since one CLI session manages the whole fleet.
-async function isValidToken(token) {
-	if (!token) return false;
-	const runner = await prisma.runner.findFirst({ where: { token }, select: { id: true } });
-	return Boolean(runner);
-}
 
 // ---------------------------------------------------------------------------
 // Connectivity
@@ -143,12 +134,37 @@ async function callControlEndpoint(id, endpoint, timeoutMs) {
 const stop = (id) => callControlEndpoint(id, 'shutdown', 5000);
 const restart = (id) => callControlEndpoint(id, 'restart', 5000);
 
+// After PLUM_NODE_SECRET is regenerated, hand the new value to every node so its
+// saved config stays valid for the next `plum node` command. Best-effort — an
+// offline node keeps running fine, it just needs a manual update later.
+async function pushNodeSecret(secret) {
+	const runners = await prisma.runner.findMany();
+	const results = await Promise.all(
+		runners.map(async (r) => {
+			try {
+				const res = await fetch(`${r.url}/api/node-secret`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json', ...bearerHeader(r.token) },
+					body: JSON.stringify({ secret }),
+					signal: AbortSignal.timeout(8000)
+				});
+				return { name: r.name, ok: res.ok, error: res.ok ? null : `HTTP ${res.status}` };
+			} catch (e) {
+				return { name: r.name, ok: false, error: e.message };
+			}
+		})
+	);
+	return {
+		applied: results.filter((x) => x.ok).map((x) => x.name),
+		failed: results.filter((x) => !x.ok).map(({ name, error }) => ({ name, error }))
+	};
+}
+
 // ---------------------------------------------------------------------------
 // Remote execution
 // ---------------------------------------------------------------------------
 
-function collectTestFiles() {
-	const testsDir = path.resolve(process.cwd(), 'tests');
+function collectTestFiles(testsDir) {
 	const files = {};
 
 	function walk(dir, rel) {
@@ -201,7 +217,7 @@ async function fetchReportContent(runner, jobId, onLog) {
  */
 async function dispatchAndPoll(
 	runnerId,
-	{ tags, browser, workers, baseUrl },
+	{ projectId, tags, browser, workers, baseUrl },
 	onLog,
 	onDone,
 	onRRwebBatch = null,
@@ -236,8 +252,13 @@ async function dispatchAndPoll(
 				tags,
 				browser,
 				workers,
-				tests: collectTestFiles(),
-				env: { ...loadTestEnv(process.cwd()), ...(baseUrl ? { BASE_URL: baseUrl } : {}) }
+				tests: collectTestFiles(resolveTestsRoot(projectId)),
+				env: {
+					...loadTestEnv(process.cwd()),
+					...loadProjectEnv(projectId),
+					IS_HEADLESS: 'true', // node runs on a server have no display — never headed
+					...(baseUrl ? { BASE_URL: baseUrl } : {})
+				}
 			}),
 			signal: AbortSignal.timeout(10000)
 		});
@@ -310,13 +331,12 @@ module.exports = {
 	getAll,
 	create,
 	remove,
-	update,
 	getById,
-	isValidToken,
 	probe,
 	ping,
 	stop,
 	restart,
+	pushNodeSecret,
 	dispatchAndPoll,
 	cancelRemoteJob
 };

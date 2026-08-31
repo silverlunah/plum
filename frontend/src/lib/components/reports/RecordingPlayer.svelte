@@ -709,6 +709,7 @@
 		<ElementInspector
 			{selectedElement}
 			{selectedNode}
+			getSearchDoc={() => currentReplayer()?.iframe?.contentDocument ?? null}
 			on:close={toggleInspect}
 			on:select={(e) => selectElement(e.detail)}
 			on:hover={(e) => (hoverBox = e.detail ? boxFromNode(e.detail) : null)}

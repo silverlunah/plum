@@ -10,9 +10,12 @@ const settingsService = require('../services/settingsService');
 const cronService = require('../services/cronService');
 const backupCronService = require('../services/backupCronService');
 const { jwtAuth } = require('../middleware/jwtAuth');
-const { requireAdmin } = require('../middleware/requireAdmin');
+const { requireOwner } = require('../middleware/requireOwner');
 
-router.get('/export', jwtAuth, requireAdmin, async (req, res) => {
+// DB backup is instance-level (one database); its config lives on the org.
+router.use(jwtAuth, requireOwner);
+
+router.get('/export', async (req, res) => {
 	try {
 		const { backupIncludeReports } = await settingsService.getBackupConfig();
 		const data = await backupService.exportAll(backupIncludeReports);
@@ -26,7 +29,7 @@ router.get('/export', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/import', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/import', async (req, res) => {
 	try {
 		const { cronJobs, project, users, runners, testSuites, testRuns } = req.body;
 		const hasData = [cronJobs, project, users, runners, testSuites, testRuns].some(
@@ -44,7 +47,7 @@ router.post('/import', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.get('/config', jwtAuth, requireAdmin, async (req, res) => {
+router.get('/config', async (req, res) => {
 	try {
 		const config = await settingsService.getBackupConfig();
 		res.json(config);
@@ -54,7 +57,7 @@ router.get('/config', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/config', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/config', async (req, res) => {
 	try {
 		await settingsService.updateBackupConfig(req.body);
 		await backupCronService.reload();
@@ -66,12 +69,30 @@ router.post('/config', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/test-s3', jwtAuth, requireAdmin, async (req, res) => {
+router.get('/report-retention', async (req, res) => {
+	try {
+		res.json(await settingsService.getReportRetention());
+	} catch (error) {
+		console.error('Failed to get report retention:', error);
+		res.status(500).json({ error: 'Failed to get report retention' });
+	}
+});
+
+router.put('/report-retention', async (req, res) => {
+	try {
+		res.json(await settingsService.updateReportRetention(req.body?.days));
+	} catch (error) {
+		console.error('Failed to save report retention:', error);
+		res.status(500).json({ error: 'Failed to save report retention' });
+	}
+});
+
+router.post('/test-s3', async (req, res) => {
 	try {
 		// If no secret key provided in the request, fall back to the stored one
 		let config = { ...req.body };
 		if (!config.backupS3SecretKey) {
-			const stored = await settingsService.getProjectRaw();
+			const stored = await settingsService.getOrgRaw();
 			config.backupS3SecretKey = stored?.backupS3SecretKey ?? '';
 		}
 
@@ -88,9 +109,9 @@ router.post('/test-s3', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.get('/s3-backups', jwtAuth, requireAdmin, async (req, res) => {
+router.get('/s3-backups', async (req, res) => {
 	try {
-		const config = await settingsService.getProjectRaw();
+		const config = await settingsService.getOrgRaw();
 		const required = ['backupS3Bucket', 'backupS3AccessKey', 'backupS3SecretKey'];
 		const missing = required.filter((k) => !config[k]);
 		if (missing.length > 0) {
@@ -106,12 +127,12 @@ router.get('/s3-backups', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/s3-restore', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/s3-restore', async (req, res) => {
 	try {
 		const { key } = req.body;
 		if (!key) return res.status(400).json({ error: 'Missing backup key' });
 
-		const config = await settingsService.getProjectRaw();
+		const config = await settingsService.getOrgRaw();
 		const required = ['backupS3Bucket', 'backupS3AccessKey', 'backupS3SecretKey'];
 		const missing = required.filter((k) => !config[k]);
 		if (missing.length > 0) {
@@ -133,7 +154,7 @@ router.post('/s3-restore', jwtAuth, requireAdmin, async (req, res) => {
 	}
 });
 
-router.post('/run-now', jwtAuth, requireAdmin, async (req, res) => {
+router.post('/run-now', async (req, res) => {
 	try {
 		await backupCronService.runBackup();
 		const config = await settingsService.getBackupConfig();

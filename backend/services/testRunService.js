@@ -4,6 +4,21 @@
  */
 
 const prisma = require('./prisma');
+const activityService = require('./activityService');
+const { ACTIVITY_ACTION } = require('../constants/activity');
+const { SOCKET_EVENTS } = require('../constants/socketEvents');
+
+let _io = null;
+function setSocketIO(io) {
+	_io = io;
+}
+
+// Tell everyone else on this run's execution page what just changed. `entry` is
+// a partial the client merges by id; `reload` means refetch (structural change).
+function emitRunChanged(runId, payload) {
+	if (_io && runId)
+		_io.to(`test-run:${runId}`).emit(SOCKET_EVENTS.TEST_RUN_CHANGED, { runId, ...payload });
+}
 
 const runListSelect = {
 	id: true,
@@ -23,9 +38,17 @@ function runOrderBy(sortBy, sortOrder) {
 	return { createdAt: dir };
 }
 
-async function getAll({ page = 1, limit = 20, q, sortBy = 'createdAt', sortOrder = 'desc' } = {}) {
+async function ownsRun(projectId, id) {
+	const run = await prisma.testRun.findFirst({ where: { id, projectId }, select: { id: true } });
+	return !!run;
+}
+
+async function getAll(
+	projectId,
+	{ page = 1, limit = 20, q, sortBy = 'createdAt', sortOrder = 'desc' } = {}
+) {
 	const skip = (page - 1) * limit;
-	const where = q ? { title: { contains: q, mode: 'insensitive' } } : {};
+	const where = { projectId, ...(q ? { title: { contains: q, mode: 'insensitive' } } : {}) };
 	const orderBy = runOrderBy(sortBy, sortOrder);
 	const [runs, total] = await Promise.all([
 		prisma.testRun.findMany({ where, select: runListSelect, orderBy, skip, take: limit }),
@@ -34,9 +57,9 @@ async function getAll({ page = 1, limit = 20, q, sortBy = 'createdAt', sortOrder
 	return { runs, total };
 }
 
-async function getById(id) {
-	return prisma.testRun.findUnique({
-		where: { id },
+async function getById(projectId, id) {
+	return prisma.testRun.findFirst({
+		where: { id, projectId },
 		select: {
 			id: true,
 			title: true,
@@ -72,27 +95,50 @@ async function getById(id) {
 	});
 }
 
-async function create({ title, caseIds, createdById }) {
+// Keep only case ids that belong to this project.
+async function projectCaseIds(projectId, caseIds) {
+	if (!caseIds || caseIds.length === 0) return [];
+	const rows = await prisma.testCase.findMany({
+		where: { id: { in: caseIds }, projectId },
+		select: { id: true }
+	});
+	const allowed = new Set(rows.map((r) => r.id));
+	return caseIds.filter((id) => allowed.has(id));
+}
+
+async function create(projectId, { title, caseIds, createdById }) {
+	const ids = await projectCaseIds(projectId, caseIds);
 	const run = await prisma.testRun.create({
 		data: {
+			projectId,
 			title,
 			status: 'backlog',
 			createdById,
-			entries: {
-				create: (caseIds ?? []).map((caseId, i) => ({ caseId, order: i }))
-			}
+			entries: { create: ids.map((caseId, i) => ({ caseId, order: i })) }
 		},
 		select: runListSelect
+	});
+	await activityService.record(ACTIVITY_ACTION.TEST_RUN_CREATE, {
+		projectId,
+		target: { type: 'test_run', id: run.id, label: run.title },
+		metadata: { cases: ids.length }
 	});
 	return run;
 }
 
-async function update(id, { title, status, caseIds }) {
+async function update(projectId, id, { title, status, caseIds }) {
+	const before = await prisma.testRun.findFirst({
+		where: { id, projectId },
+		select: { status: true }
+	});
+	if (!before) return null;
+
 	const data = {};
 	if (title !== undefined) data.title = title;
 	if (status !== undefined) data.status = status;
 
 	if (caseIds !== undefined) {
+		const ids = await projectCaseIds(projectId, caseIds);
 		// Diff against existing entries instead of delete-all/recreate, so cases that
 		// remain in the run keep their recorded status, notes, and assignment.
 		const existing = await prisma.testRunEntry.findMany({
@@ -100,14 +146,14 @@ async function update(id, { title, status, caseIds }) {
 			select: { id: true, caseId: true }
 		});
 		const existingIdByCaseId = new Map(existing.map((e) => [e.caseId, e.id]));
-		const keepCaseIds = new Set(caseIds);
+		const keepCaseIds = new Set(ids);
 		const removedIds = existing.filter((e) => !keepCaseIds.has(e.caseId)).map((e) => e.id);
 
 		if (removedIds.length > 0) {
 			await prisma.testRunEntry.deleteMany({ where: { id: { in: removedIds } } });
 		}
 		await prisma.$transaction(
-			caseIds.map((caseId, i) =>
+			ids.map((caseId, i) =>
 				existingIdByCaseId.has(caseId)
 					? prisma.testRunEntry.update({
 							where: { id: existingIdByCaseId.get(caseId) },
@@ -118,33 +164,87 @@ async function update(id, { title, status, caseIds }) {
 		);
 	}
 
-	return prisma.testRun.update({ where: { id }, data, select: runListSelect });
+	const updated = await prisma.testRun.update({ where: { id }, data, select: runListSelect });
+	emitRunChanged(id, { reload: true });
+
+	const changed = [];
+	if (title !== undefined) changed.push('title');
+	if (caseIds !== undefined) changed.push('cases');
+	if (status !== undefined && status !== before.status) changed.push('status');
+	if (changed.length > 0) {
+		await activityService.record(ACTIVITY_ACTION.TEST_RUN_UPDATE, {
+			projectId,
+			target: { type: 'test_run', id, label: updated.title },
+			metadata: {
+				changed,
+				...(changed.includes('status') ? { from: before.status, to: status } : {})
+			}
+		});
+	}
+	return updated;
 }
 
-async function duplicate(id, { createdById }) {
-	const original = await prisma.testRun.findUnique({
-		where: { id },
+async function duplicate(projectId, id, { createdById }) {
+	const original = await prisma.testRun.findFirst({
+		where: { id, projectId },
 		select: {
 			title: true,
 			entries: { select: { caseId: true, order: true }, orderBy: { order: 'asc' } }
 		}
 	});
 	if (!original) return null;
-	return prisma.testRun.create({
+	const copy = await prisma.testRun.create({
 		data: {
+			projectId,
 			title: `Copy of ${original.title}`,
 			createdById,
 			entries: { create: original.entries.map((e, i) => ({ caseId: e.caseId, order: i })) }
 		},
 		select: runListSelect
 	});
+	await activityService.record(ACTIVITY_ACTION.TEST_RUN_CREATE, {
+		projectId,
+		target: { type: 'test_run', id: copy.id, label: copy.title },
+		metadata: { duplicatedFrom: id }
+	});
+	return copy;
 }
 
-async function remove(id) {
-	return prisma.testRun.delete({ where: { id } });
+async function remove(projectId, id) {
+	const run = await prisma.testRun.findFirst({
+		where: { id, projectId },
+		select: { title: true }
+	});
+	const result = await prisma.testRun.deleteMany({ where: { id, projectId } });
+	if (run) {
+		await activityService.record(ACTIVITY_ACTION.TEST_RUN_DELETE, {
+			projectId,
+			target: { type: 'test_run', id, label: run.title }
+		});
+	}
+	return result;
 }
 
-async function updateEntry(entryId, { status, notes, executedById }) {
+async function loadEntry(projectId, entryId) {
+	return prisma.testRunEntry.findFirst({
+		where: { id: entryId, run: { projectId } },
+		select: {
+			id: true,
+			runId: true,
+			caseId: true,
+			run: { select: { title: true } },
+			case: { select: { displayId: true, title: true } }
+		}
+	});
+}
+
+// "TC-004 Valid login — Nightly regression"
+const entryLabel = (loaded) =>
+	`${loaded.case.displayId} ${loaded.case.title} — ${loaded.run.title}`;
+
+async function updateEntry(projectId, entryId, { status, notes, executedById }) {
+	const loaded = await loadEntry(projectId, entryId);
+	if (!loaded) return null;
 	const entry = await prisma.testRunEntry.update({
 		where: { id: entryId },
 		data: {
@@ -158,6 +258,7 @@ async function updateEntry(entryId, { status, notes, executedById }) {
 			status: true,
 			notes: true,
 			executedAt: true,
+			executedBy: { select: { id: true, name: true } },
 			runId: true,
 			caseId: true
 		}
@@ -176,26 +277,45 @@ async function updateEntry(entryId, { status, notes, executedById }) {
 		});
 	}
 
+	emitRunChanged(entry.runId, { entry });
+	await activityService.record(ACTIVITY_ACTION.TEST_RUN_ENTRY_RESULT, {
+		projectId,
+		target: { type: 'test_run', id: entry.runId, label: entryLabel(loaded) },
+		metadata: { result: status }
+	});
 	return entry;
 }
 
-async function assignEntry(entryId, { userId }) {
-	return prisma.testRunEntry.update({
+async function assignEntry(projectId, entryId, { userId }) {
+	const loaded = await loadEntry(projectId, entryId);
+	if (!loaded) return null;
+	const entry = await prisma.testRunEntry.update({
 		where: { id: entryId },
 		data: { assignedToId: userId ?? null },
 		select: { id: true, assignedToId: true, assignedTo: { select: { id: true, name: true } } }
 	});
+	emitRunChanged(loaded.runId, { entry });
+	await activityService.record(ACTIVITY_ACTION.TEST_RUN_ENTRY_ASSIGN, {
+		projectId,
+		target: { type: 'test_run', id: loaded.runId, label: entryLabel(loaded) },
+		metadata: { assignedTo: entry.assignedTo?.name ?? null }
+	});
+	return entry;
 }
 
-async function reorderEntries(runId, orderedEntryIds) {
+async function reorderEntries(projectId, runId, orderedEntryIds) {
+	if (!(await ownsRun(projectId, runId))) return;
 	await prisma.$transaction(
 		orderedEntryIds.map((entryId, i) =>
 			prisma.testRunEntry.update({ where: { id: entryId }, data: { order: i } })
 		)
 	);
+	emitRunChanged(runId, { reload: true });
 }
 
 module.exports = {
+	setSocketIO,
+	emitRunChanged,
 	getAll,
 	getById,
 	create,

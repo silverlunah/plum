@@ -11,67 +11,58 @@
 	import {
 		fetchProject,
 		saveProject,
-		exportBackup,
-		importBackup,
 		fetchIntegrations,
 		saveIntegrations,
-		fetchBackupConfig,
-		saveBackupConfig,
-		testBackupS3,
-		runBackupNow,
-		fetchS3Backups,
-		restoreFromS3,
 		fetchMcpConfig,
-		generateMcpKey as generateMcpKeyApi
+		generateMcpKey as generateMcpKeyApi,
+		revokeMcpKey as revokeMcpKeyApi
 	} from '$lib/api/settings';
-	import {
-		fetchRunners,
-		createRunner,
-		updateRunner,
-		deleteRunner,
-		pingRunner,
-		probeRunner,
-		stopRunner,
-		restartRunner
-	} from '$lib/api/runners';
 	import {
 		fetchPrefixes,
 		savePrefixes,
 		migratePrefixes,
-		importTestCases
+		importTestCases,
+		downloadTestCaseExport
 	} from '$lib/api/repository';
+	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
 	import { updateProfile, changePassword } from '$lib/api/auth';
-	import {
-		fetchUsers,
-		createUser as createUserApi,
-		deleteUser as deleteUserApi
-	} from '$lib/api/users';
-	import { builtInEnabled } from '$lib/stores/runner';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
-	import { API_BASE, BROWSERS, MAX_TEST_RETRIES, COPY_TIMEOUT_MS } from '$lib/constants';
+	import { TIMEZONES } from '$lib/utils/timezones';
+	import { API_BASE, MAX_TEST_RETRIES, COPY_TIMEOUT_MS, DOCS_URL } from '$lib/constants';
 	import { copyText } from '$lib/utils/clipboard';
 	import Button from '$lib/components/ui/Button.svelte';
-	import { notify } from '$lib/stores/notifications';
+	import ProjectAccess from '$lib/components/settings/ProjectAccess.svelte';
+	import UpdateBanner from '$lib/components/settings/UpdateBanner.svelte';
+	import ActivityLog from '$lib/components/settings/ActivityLog.svelte';
+	import RunnersSettings from '$lib/components/settings/RunnersSettings.svelte';
+	import UsersSettings from '$lib/components/settings/UsersSettings.svelte';
+	import BackupSettings from '$lib/components/settings/BackupSettings.svelte';
+	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
-	import { CANCEL_LABEL, EDIT_LABEL, SAVE_LABEL, EMAIL_LABEL } from '$lib/copy/common';
+	import { EMAIL_LABEL } from '$lib/copy/common';
 	import {
 		PAGE_TITLE,
 		HEADING,
 		NAME_LABEL,
-		NETWORK_ERROR,
+		CURRENT_PROJECT_LABEL,
 		PROJECT_LABEL,
 		RUNNERS_LABEL,
-		REPOSITORY_NAV_LABEL,
 		REPOSITORY_HEADING,
 		TEST_CASES_NAV_LABEL,
 		TEST_CASES_HEADING,
 		TEST_CASES_DESC,
+		TC_IO_CARD_TITLE,
 		TC_IMPORT_CARD_TITLE,
+		TC_EXPORT_CARD_TITLE,
+		TC_EXPORT_DESC,
 		TC_IMPORT_DESC,
 		TC_IMPORT_HINT,
 		TC_IMPORT_FAILED_FALLBACK,
+		TC_IMPORTING_TOAST,
+		TC_EXPORTING_TOAST,
+		TC_EXPORTED_TOAST,
 		tcImportLabel,
 		tcImportSummary,
 		INTEGRATIONS_LABEL,
@@ -80,28 +71,13 @@
 		ACCOUNT_LABEL,
 		USERS_LABEL,
 		BACKUP_LABEL,
+		ACTIVITY_LABEL,
+		ACTIVITY_DESC,
 		PROJECT_DESC,
-		RUNNERS_DESC,
 		REPOSITORY_DESC,
 		INTEGRATIONS_DESC,
 		MCP_DESC,
 		ACCOUNT_DESC,
-		USERS_DESC,
-		BACKUP_DESC,
-		RUNNER_FIELDS_REQUIRED_ERROR,
-		ADD_RUNNER_FAILED,
-		REMOVE_RUNNER_FAILED,
-		UPDATE_RUNNER_FAILED,
-		cannotReachRunnerError,
-		runnerAddedToast,
-		runnerRemovedToast,
-		runnerStoppedToast,
-		runnerStopFailedToast,
-		runnerStopFailedGenericToast,
-		runnerRestartingToast,
-		runnerRestartFailedToast,
-		runnerRestartFailedGenericToast,
-		runnerUpdatedToast,
 		PROJECT_NAME_LABEL,
 		PROJECT_NAME_PLACEHOLDER,
 		LOGO_URL_LABEL,
@@ -114,30 +90,10 @@
 		RETRY_FAILED_TESTS_LABEL,
 		RETRY_FAILED_TESTS_HINT,
 		DARK_MODE_LABEL,
-		DARK_MODE_DESC,
+		DOCUMENTATION_LABEL,
 		PROJECT_SAVED_TOAST,
 		PROJECT_SAVE_FAILED,
 		saveProjectLabel,
-		BUILTIN_RUNNER_TOGGLE_LABEL,
-		BUILTIN_RUNNER_TOGGLE_DESC,
-		RUNNER_URL_LABEL,
-		RUNNER_URL_HINT_PREFIX,
-		RUNNER_URL_HINT_SUFFIX,
-		RUNNER_URL_PLACEHOLDER,
-		TOKEN_LABEL,
-		TOKEN_PLACEHOLDER,
-		KEEP_TOKEN_PLACEHOLDER,
-		BROWSER_LABEL,
-		RUNNER_NAME_PLACEHOLDER,
-		RUNNER_UNREACHABLE_LABEL,
-		RUNNER_PINGING_LABEL,
-		REMOVE_LABEL,
-		ADD_RUNNER_FORM_TITLE,
-		OPEN_ADD_RUNNER_LABEL,
-		editRunnerSubmitLabel,
-		addRunnerSubmitLabel,
-		restartRunnerLabel,
-		stopRunnerLabel,
 		CASE_PREFIX_LABEL,
 		CASE_PREFIX_PLACEHOLDER,
 		SUITE_PREFIX_LABEL,
@@ -187,6 +143,9 @@
 		CONFIG_SNIPPET_DESC_SUFFIX,
 		MCP_KEY_GENERATED_TOAST,
 		MCP_KEY_GENERATE_FAILED,
+		MCP_KEY_REVOKED_TOAST,
+		MCP_KEY_REVOKE_FAILED,
+		REVOKE_KEY_LABEL,
 		generateKeyLabel,
 		regenerateKeyLabel,
 		copyMcpSnippetLabel,
@@ -202,101 +161,12 @@
 		PASSWORD_CHANGED_TOAST,
 		saveProfileLabel,
 		changePasswordLabel,
-		REMOVE_USER_MODAL_TITLE,
-		REMOVE_USER_LABEL,
-		REMOVE_USER_BODY_PREFIX,
-		REMOVE_USER_BODY_SUFFIX,
-		ADD_USER_CARD_TITLE,
-		USER_NAME_PLACEHOLDER,
-		USER_EMAIL_PLACEHOLDER,
-		PASSWORD_LABEL,
-		ROLE_LABEL,
-		USER_ROLE_OPTION,
-		ADMIN_ROLE_OPTION,
-		REMOVE_USER_ICON_TITLE,
-		YOU_CHIP_LABEL,
-		USER_FORM_REQUIRED_ERROR,
-		addUserLabel,
-		userAddedToast,
-		userRemovedToast,
-		MANUAL_BACKUP_CARD_TITLE,
-		EXPORT_BLOCK_TITLE,
-		EXPORT_BLOCK_DESC_PREFIX,
-		EXPORT_BLOCK_DESC_SUFFIX,
-		IMPORT_BLOCK_TITLE,
-		IMPORT_BLOCK_DESC,
-		CHOOSE_FILE_LABEL,
-		INCLUDE_REPORTS_LABEL,
-		INCLUDE_REPORTS_HINT,
-		includeReportsDisclaimer,
-		saveIncludeReportsLabel,
-		S3_STORAGE_CARD_TITLE,
-		S3_STORAGE_DESC_PREFIX,
-		ENDPOINT_URL_LABEL,
-		S3_STORAGE_DESC_SUFFIX,
-		ENDPOINT_URL_HINT,
-		ENDPOINT_URL_PLACEHOLDER,
-		REGION_LABEL,
-		REGION_HINT_PREFIX,
-		REGION_HINT_SUFFIX,
-		REGION_PLACEHOLDER,
-		BUCKET_LABEL,
-		BUCKET_PLACEHOLDER,
-		PATH_PREFIX_LABEL,
-		PATH_PREFIX_HINT,
-		PATH_PREFIX_PLACEHOLDER,
-		ACCESS_KEY_LABEL,
-		ACCESS_KEY_PLACEHOLDER,
-		SECRET_KEY_LABEL,
-		TEST_CONNECTION_LABEL,
-		SAVE_S3_CONFIG_LABEL,
-		S3_CONNECTION_SUCCESS,
-		S3_CONNECTION_FAILED,
-		BACKUP_CONFIG_SAVED_TOAST,
-		BACKUP_CONFIG_SAVE_FAILED,
-		RESTORE_FROM_S3_CARD_TITLE,
-		RESTORE_FROM_S3_DESC,
-		CONFIGURE_S3_FIRST_RESTORE_MESSAGE,
-		NO_S3_BACKUPS_MESSAGE,
-		RESTORE_CONFIRM_TITLE,
-		restoreConfirmBody,
-		RESTORE_SUCCESS_TOAST,
-		RESTORE_FAILED_FALLBACK,
-		LIST_S3_BACKUPS_FAILED,
-		SCHEDULED_BACKUP_CARD_TITLE,
-		CONFIGURE_S3_FIRST_MESSAGE,
-		ENABLE_SCHEDULED_BACKUP_LABEL,
-		CRON_EXPRESSION_LABEL,
-		CRON_HINT_PREFIX,
-		CRON_HINT_SUFFIX,
-		CRONTAB_LINK_LABEL,
-		CRON_PLACEHOLDER,
-		BACKUP_LAST_RUN_PREFIX,
-		BACKUP_DOWNLOADED_TOAST,
-		EXPORT_FAILED_TOAST,
-		IMPORT_SUCCESS_TOAST,
-		IMPORT_FAILED_FALLBACK,
-		BACKUP_UPLOAD_SUCCESS_TOAST,
-		BACKUP_UPLOAD_FAILED_FALLBACK,
-		backupFilename,
-		exportLabel,
-		importLabel,
-		secretKeyHint,
-		secretKeyPlaceholder,
-		testConnectionLabel,
-		saveS3ConfigLabel,
-		uploadedToLabel,
-		uploadS3NowLabel,
-		saveScheduleLabel,
-		restoreLabel,
-		refreshingLabel,
-		backupSizeLabel
+		CHOOSE_FILE_LABEL
 	} from '$lib/copy/settings';
 
 	const VALID_SECTIONS = new Set([
 		'project',
 		'runners',
-		'repository',
 		'testcases',
 		'integrations',
 		'mcp',
@@ -321,14 +191,6 @@
 	let project = { name: '', logoUrl: '', timezone: 'UTC', maxRetries: 0 };
 	let projectSaving = false;
 
-	const TIMEZONES = (() => {
-		try {
-			return Intl.supportedValuesOf('timeZone');
-		} catch {
-			return ['UTC'];
-		}
-	})();
-
 	let prefixes = { testCasePrefix: 'TC', testSuitePrefix: 'TS' };
 	let prefixesSaving = false;
 	let migrateForm = { testCasePrefix: '', testSuitePrefix: '' };
@@ -338,21 +200,9 @@
 	let profileSaving = false;
 	let profileError = '';
 
-	let allUsers = [];
-	let userForm = { name: '', email: '', password: '', role: 'user' };
-	let userFormSaving = false;
-	let userFormError = '';
-	let confirmDeleteUser = null;
-	let confirmDeleteUserOpen = false;
-
 	let pwForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
 	let pwSaving = false;
 	let pwError = '';
-
-	let importFile = null;
-	let importing = false;
-	let exporting = false;
-	let fileInput;
 
 	let tcImportFile = null;
 	let tcImporting = false;
@@ -370,60 +220,9 @@
 	let mcpSnippetCopied = false;
 	let ciSnippetCopied = false;
 
-	let backupConfig = {
-		backupEnabled: false,
-		backupCron: '0 2 * * *',
-		backupS3Endpoint: '',
-		backupS3Region: '',
-		backupS3Bucket: '',
-		backupS3AccessKey: '',
-		backupS3SecretKey: '',
-		backupS3Prefix: '',
-		backupIncludeReports: false
-	};
-	let backupConfigSaving = false;
-	let includeReportsSaving = false;
-	let backupS3SecretKeySet = false;
-	let backupTestingS3 = false;
-	let backupRunningNow = false;
-	let backupS3TestResult = null;
-	let backupS3TestMessage = '';
-	let backupLastRunAt = null;
-	let backupLastStatus = '';
-
-	let s3Backups = [];
-	let s3BackupsLoaded = false;
-	let loadingS3Backups = false;
-	let restoringKey = null;
-	let restoreConfirmOpen = false;
-	let restoreTarget = null;
-
-	let runners = [];
-	let runnerForm = { name: '', url: '', token: '', browser: 'chromium' };
-	let runnerFormError = '';
-	let runnerFormSaving = false;
-	let runnerFormOpen = false;
-	let pingResults = {};
-	let stoppingId = null;
-	let restartingId = null;
-	let editingId = null;
-	let editForm = { name: '', url: '', token: '', browser: 'chromium' };
-	let editFormError = '';
-	let editFormSaving = false;
-
-	let runnersLoaded = false;
-
 	onMount(async () => {
 		try {
-			const bi = localStorage.getItem('plum:builtInEnabled');
-			if (bi !== null) builtInEnabled.set(bi !== 'false');
-		} catch {}
-		try {
 			project = await fetchProject();
-		} catch {}
-		try {
-			runners = await fetchRunners();
-			runnersLoaded = true;
 		} catch {}
 		try {
 			prefixes = await fetchPrefixes();
@@ -440,190 +239,13 @@
 			mcpKeySet = mcp.mcpKeySet;
 			mcpKey = mcp.mcpKey;
 		} catch {}
-		try {
-			const bc = await fetchBackupConfig();
-			backupS3SecretKeySet = bc.backupS3SecretKeySet;
-			backupLastRunAt = bc.backupLastRunAt;
-			backupLastStatus = bc.backupLastStatus;
-			backupConfig = {
-				backupEnabled: bc.backupEnabled,
-				backupCron: bc.backupCron,
-				backupS3Endpoint: bc.backupS3Endpoint,
-				backupS3Region: bc.backupS3Region,
-				backupS3Bucket: bc.backupS3Bucket,
-				backupS3AccessKey: bc.backupS3AccessKey,
-				backupS3SecretKey: '',
-				backupS3Prefix: bc.backupS3Prefix,
-				backupIncludeReports: bc.backupIncludeReports
-			};
-		} catch {}
 		if ($auth.user) {
 			profileForm = { name: $auth.user.name, email: $auth.user.email };
 		}
-		if ($auth.user?.role === 'admin') {
-			try {
-				allUsers = await fetchUsers();
-			} catch {}
-		}
 	});
-
-	$: if (section === 'runners' && runnersLoaded) pingAll();
-
-	async function pingAll() {
-		if (runners.length === 0) return;
-		pingResults = Object.fromEntries(runners.map((r) => [r.id, { loading: true }]));
-		await Promise.all(
-			runners.map(async (r) => {
-				try {
-					const result = await pingRunner(r.id);
-					pingResults = { ...pingResults, [r.id]: { ...result, loading: false } };
-				} catch {
-					pingResults = {
-						...pingResults,
-						[r.id]: { ok: false, error: NETWORK_ERROR, loading: false }
-					};
-				}
-			})
-		);
-	}
-
-	function handleBuiltInToggle() {
-		builtInEnabled.update((v) => {
-			const next = !v;
-			try {
-				localStorage.setItem('plum:builtInEnabled', String(next));
-			} catch {}
-			return next;
-		});
-	}
 
 	function toggleTheme() {
 		theme.update((t) => (t === 'light' ? 'dark' : 'light'));
-	}
-
-	async function handleAddRunner() {
-		if (!runnerForm.name || !runnerForm.url || !runnerForm.token) {
-			runnerFormError = RUNNER_FIELDS_REQUIRED_ERROR;
-			return;
-		}
-		runnerFormError = '';
-		runnerFormSaving = true;
-		try {
-			const probe = await probeRunner(runnerForm.url, runnerForm.token);
-			if (!probe.ok) {
-				runnerFormError = cannotReachRunnerError(probe.error);
-				return;
-			}
-			const { runner } = await createRunner(runnerForm);
-			runners = [...runners, runner];
-			pingResults = {
-				...pingResults,
-				[runner.id]: { ok: true, latency: probe.latency, loading: false }
-			};
-			runnerForm = { name: '', url: '', token: '', browser: 'chromium' };
-			runnerFormOpen = false;
-			notify('success', runnerAddedToast(runner.name));
-		} catch {
-			runnerFormError = ADD_RUNNER_FAILED;
-		} finally {
-			runnerFormSaving = false;
-		}
-	}
-
-	async function handleDeleteRunner(id, name) {
-		try {
-			await deleteRunner(id);
-			runners = runners.filter((r) => r.id !== id);
-			notify('success', runnerRemovedToast(name));
-		} catch {
-			notify('error', REMOVE_RUNNER_FAILED);
-		}
-	}
-
-	async function refreshPing(id) {
-		pingResults = { ...pingResults, [id]: { loading: true } };
-		try {
-			const result = await pingRunner(id);
-			pingResults = { ...pingResults, [id]: { ...result, loading: false } };
-		} catch {
-			pingResults = { ...pingResults, [id]: { ok: false, error: NETWORK_ERROR, loading: false } };
-		}
-	}
-
-	async function handleStopRunner(id, name) {
-		stoppingId = id;
-		try {
-			const result = await stopRunner(id);
-			if (result.ok) {
-				notify('success', runnerStoppedToast(name));
-			} else {
-				notify('error', runnerStopFailedToast(name, result.error));
-			}
-		} catch {
-			notify('error', runnerStopFailedGenericToast(name));
-		} finally {
-			stoppingId = null;
-			refreshPing(id);
-		}
-	}
-
-	async function handleRestartRunner(id, name) {
-		restartingId = id;
-		try {
-			const result = await restartRunner(id);
-			if (result.ok) {
-				notify('success', runnerRestartingToast(name));
-			} else {
-				notify('error', runnerRestartFailedToast(name, result.error));
-			}
-		} catch {
-			notify('error', runnerRestartFailedGenericToast(name));
-		} finally {
-			restartingId = null;
-			// Give the replacement process a moment to bind before checking on it.
-			setTimeout(() => refreshPing(id), 2000);
-		}
-	}
-
-	function startEdit(r) {
-		editingId = r.id;
-		// Token is never sent back by the server — leave blank; the update
-		// only replaces it if the admin types a new one (see handleUpdateRunner).
-		editForm = { name: r.name, url: r.url, token: '', browser: r.browser };
-		editFormError = '';
-	}
-
-	async function handleUpdateRunner(id) {
-		if (!editForm.name || !editForm.url) {
-			editFormError = RUNNER_FIELDS_REQUIRED_ERROR;
-			return;
-		}
-		editFormError = '';
-		editFormSaving = true;
-		try {
-			// Only re-probe (and require a reachable token) when the admin actually
-			// typed a new one — an empty token here means "keep the existing one",
-			// which the still-running node already accepts.
-			if (editForm.token) {
-				const probe = await probeRunner(editForm.url, editForm.token);
-				if (!probe.ok) {
-					editFormError = cannotReachRunnerError(probe.error);
-					return;
-				}
-				pingResults = {
-					...pingResults,
-					[id]: { ok: true, latency: probe.latency, loading: false }
-				};
-			}
-			const { runner } = await updateRunner(id, editForm);
-			runners = runners.map((r) => (r.id === id ? runner : r));
-			editingId = null;
-			notify('success', runnerUpdatedToast(runner.name));
-		} catch {
-			editFormError = UPDATE_RUNNER_FAILED;
-		} finally {
-			editFormSaving = false;
-		}
 	}
 
 	async function handleSaveProject() {
@@ -638,48 +260,6 @@
 		}
 	}
 
-	async function handleExport() {
-		exporting = true;
-		try {
-			const data = await exportBackup();
-			const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = backupFilename(new Date().toISOString().slice(0, 10));
-			a.click();
-			URL.revokeObjectURL(url);
-			notify('success', BACKUP_DOWNLOADED_TOAST);
-		} catch {
-			notify('error', EXPORT_FAILED_TOAST);
-		} finally {
-			exporting = false;
-		}
-	}
-
-	async function handleImport() {
-		if (!importFile) return;
-		importing = true;
-		try {
-			const text = await importFile.text();
-			const data = JSON.parse(text);
-			const result = await importBackup(data);
-			if (result.error) throw new Error(result.error);
-			notify('success', IMPORT_SUCCESS_TOAST);
-			project = await fetchProject();
-			importFile = null;
-			if (fileInput) fileInput.value = '';
-		} catch (e) {
-			notify('error', e.message || IMPORT_FAILED_FALLBACK);
-		} finally {
-			importing = false;
-		}
-	}
-
-	function handleFileChange(e) {
-		importFile = e.target.files[0] ?? null;
-	}
-
 	function handleTcFileChange(e) {
 		tcImportFile = e.target.files[0] ?? null;
 		tcImportResult = null;
@@ -689,16 +269,31 @@
 		if (!tcImportFile) return;
 		tcImporting = true;
 		tcImportResult = null;
+		const settle = notifyProgress(TC_IMPORTING_TOAST);
 		try {
 			const data = JSON.parse(await tcImportFile.text());
 			tcImportResult = await importTestCases(data);
-			notify('success', tcImportSummary(tcImportResult));
+			settle('success', tcImportSummary(tcImportResult));
 			tcImportFile = null;
 			if (tcFileInput) tcFileInput.value = '';
 		} catch (e) {
-			notify('error', e.message || TC_IMPORT_FAILED_FALLBACK);
+			settle('error', e.message || TC_IMPORT_FAILED_FALLBACK);
 		} finally {
 			tcImporting = false;
+		}
+	}
+
+	let tcExporting = false;
+	async function handleTcExport(format) {
+		tcExporting = true;
+		const settle = notifyProgress(TC_EXPORTING_TOAST);
+		try {
+			await downloadTestCaseExport('all', null, format);
+			settle('success', TC_EXPORTED_TOAST);
+		} catch (e) {
+			settle('error', e.message || TC_IMPORT_FAILED_FALLBACK);
+		} finally {
+			tcExporting = false;
 		}
 	}
 
@@ -743,37 +338,6 @@
 		} finally {
 			profileSaving = false;
 		}
-	}
-
-	async function handleCreateUser() {
-		userFormError = '';
-		if (!userForm.name || !userForm.email || !userForm.password) {
-			userFormError = USER_FORM_REQUIRED_ERROR;
-			return;
-		}
-		userFormSaving = true;
-		try {
-			const user = await createUserApi(userForm);
-			allUsers = [...allUsers, user];
-			userForm = { name: '', email: '', password: '', role: 'user' };
-			notify('success', userAddedToast(user.name));
-		} catch (e) {
-			userFormError = e.message;
-		} finally {
-			userFormSaving = false;
-		}
-	}
-
-	async function handleDeleteUser(id, name) {
-		try {
-			await deleteUserApi(id);
-			allUsers = allUsers.filter((u) => u.id !== id);
-			notify('success', userRemovedToast(name));
-		} catch (e) {
-			notify('error', e.message);
-		}
-		confirmDeleteUser = null;
-		confirmDeleteUserOpen = false;
 	}
 
 	async function handleChangePassword() {
@@ -822,6 +386,18 @@
 		}
 	}
 
+	async function handleRevokeMcpKey() {
+		try {
+			await revokeMcpKeyApi();
+			mcpKey = '';
+			mcpKeySet = false;
+			mcpShowKey = false;
+			notify('success', MCP_KEY_REVOKED_TOAST);
+		} catch {
+			notify('error', MCP_KEY_REVOKE_FAILED);
+		}
+	}
+
 	function handleCopyMcpKey() {
 		copyText(mcpKey).then(() => {
 			mcpKeyCopied = true;
@@ -855,125 +431,6 @@
 		}
 	}
 
-	async function handleSaveBackupConfig() {
-		backupConfigSaving = true;
-		try {
-			const payload = { ...backupConfig };
-			if (!payload.backupS3SecretKey) delete payload.backupS3SecretKey;
-			const result = await saveBackupConfig(payload);
-			if (result.error) throw new Error(result.error);
-			if (backupConfig.backupS3SecretKey) backupS3SecretKeySet = true;
-			backupConfig = { ...backupConfig, backupS3SecretKey: '' };
-			notify('success', BACKUP_CONFIG_SAVED_TOAST);
-		} catch (e) {
-			notify('error', e.message || BACKUP_CONFIG_SAVE_FAILED);
-		} finally {
-			backupConfigSaving = false;
-		}
-	}
-
-	async function handleSaveIncludeReports() {
-		includeReportsSaving = true;
-		try {
-			const payload = { ...backupConfig };
-			if (!payload.backupS3SecretKey) delete payload.backupS3SecretKey;
-			const result = await saveBackupConfig(payload);
-			if (result.error) throw new Error(result.error);
-			if (backupConfig.backupS3SecretKey) backupS3SecretKeySet = true;
-			backupConfig = { ...backupConfig, backupS3SecretKey: '' };
-			notify('success', BACKUP_CONFIG_SAVED_TOAST);
-		} catch (e) {
-			notify('error', e.message || BACKUP_CONFIG_SAVE_FAILED);
-		} finally {
-			includeReportsSaving = false;
-		}
-	}
-
-	async function handleTestS3() {
-		backupTestingS3 = true;
-		backupS3TestResult = null;
-		backupS3TestMessage = '';
-		try {
-			const result = await testBackupS3(backupConfig);
-			if (result.error) throw new Error(result.error);
-			backupS3TestResult = 'success';
-			backupS3TestMessage = S3_CONNECTION_SUCCESS;
-		} catch (e) {
-			backupS3TestResult = 'error';
-			backupS3TestMessage = e.message || S3_CONNECTION_FAILED;
-		} finally {
-			backupTestingS3 = false;
-		}
-	}
-
-	async function handleRunBackupNow() {
-		backupRunningNow = true;
-		try {
-			const result = await runBackupNow();
-			if (result.error) throw new Error(result.error);
-			backupLastRunAt = result.lastRunAt;
-			backupLastStatus = result.lastStatus ?? '';
-			notify('success', BACKUP_UPLOAD_SUCCESS_TOAST);
-		} catch (e) {
-			notify('error', e.message || BACKUP_UPLOAD_FAILED_FALLBACK);
-			const bc = await fetchBackupConfig().catch(() => null);
-			if (bc) {
-				backupLastRunAt = bc.backupLastRunAt;
-				backupLastStatus = bc.backupLastStatus;
-			}
-		} finally {
-			backupRunningNow = false;
-		}
-	}
-
-	$: s3Configured = !!(
-		backupConfig.backupS3Bucket &&
-		backupConfig.backupS3AccessKey &&
-		backupS3SecretKeySet
-	);
-
-	// Fetch the list once, the first time S3 looks configured — the Refresh
-	// button covers reloading after a new upload or a bucket/prefix change.
-	$: if (s3Configured && !s3BackupsLoaded) {
-		s3BackupsLoaded = true;
-		loadS3Backups();
-	}
-
-	async function loadS3Backups() {
-		loadingS3Backups = true;
-		try {
-			const result = await fetchS3Backups();
-			if (result.error) throw new Error(result.error);
-			s3Backups = result.backups ?? [];
-		} catch (e) {
-			notify('error', e.message || LIST_S3_BACKUPS_FAILED);
-		} finally {
-			loadingS3Backups = false;
-		}
-	}
-
-	function openRestoreConfirm(backup) {
-		restoreTarget = backup;
-		restoreConfirmOpen = true;
-	}
-
-	async function handleRestoreFromS3() {
-		if (!restoreTarget) return;
-		restoringKey = restoreTarget.key;
-		try {
-			const result = await restoreFromS3(restoreTarget.key);
-			if (result.error) throw new Error(result.error);
-			notify('success', RESTORE_SUCCESS_TOAST);
-			project = await fetchProject();
-			restoreConfirmOpen = false;
-			restoreTarget = null;
-		} catch (e) {
-			notify('error', e.message || RESTORE_FAILED_FALLBACK);
-		} finally {
-			restoringKey = null;
-		}
-	}
-
 	$: mcpConfigSnippet = JSON.stringify(
 		{
 			mcpServers: {
@@ -999,35 +456,38 @@
 		'      -d \'{"tag": "@smoke", "baseUrl": "https://your-pr-preview-url"}\''
 	].join('\n');
 
-	const ADMIN_SECTIONS = new Set([
-		'project',
-		'runners',
-		'repository',
-		'testcases',
-		'integrations',
-		'mcp',
-		'users',
-		'backup'
-	]);
+	// Per-project settings — the owner and an admin of the active project.
+	const ELEVATED_SECTIONS = new Set(['project', 'testcases', 'integrations', 'activity']);
+	// Account-wide settings — the owner only.
+	const OWNER_SECTIONS = new Set(['runners', 'users', 'backup']);
 
-	$: if ($auth.user && $auth.user.role !== 'admin' && ADMIN_SECTIONS.has(section)) {
-		section = 'account';
+	$: isOwner = $auth.user?.role === 'owner';
+	$: isElevated = $auth.user?.role === 'owner' || $auth.user?.role === 'admin';
+
+	$: {
+		if (OWNER_SECTIONS.has(section) && !isOwner) section = 'account';
+		else if (ELEVATED_SECTIONS.has(section) && !isElevated) section = 'account';
 	}
 
-	$: navItems =
-		$auth.user?.role === 'admin'
+	$: navItems = [
+		...(isElevated
 			? [
 					{ id: 'project', label: PROJECT_LABEL },
-					{ id: 'runners', label: RUNNERS_LABEL },
-					{ id: 'repository', label: REPOSITORY_NAV_LABEL },
 					{ id: 'testcases', label: TEST_CASES_NAV_LABEL },
-					{ id: 'integrations', label: INTEGRATIONS_LABEL },
-					{ id: 'mcp', label: MCP_NAV_LABEL },
-					{ id: 'account', label: ACCOUNT_LABEL },
+					{ id: 'integrations', label: INTEGRATIONS_LABEL }
+				]
+			: []),
+		...(isOwner ? [{ id: 'runners', label: RUNNERS_LABEL }] : []),
+		...(isElevated ? [{ id: 'activity', label: ACTIVITY_LABEL }] : []),
+		{ id: 'account', label: ACCOUNT_LABEL },
+		{ id: 'mcp', label: MCP_NAV_LABEL },
+		...(isOwner
+			? [
 					{ id: 'users', label: USERS_LABEL },
 					{ id: 'backup', label: BACKUP_LABEL }
 				]
-			: [{ id: 'account', label: ACCOUNT_LABEL }];
+			: [])
+	];
 </script>
 
 <svelte:head><title>{PAGE_TITLE}</title></svelte:head>
@@ -1035,6 +495,10 @@
 <div class="page-header">
 	<h1>{HEADING}</h1>
 </div>
+
+{#if isOwner}
+	<UpdateBanner />
+{/if}
 
 <div class="settings-layout">
 	<!-- Left sidebar -->
@@ -1050,6 +514,38 @@
 				</button>
 			{/each}
 		</nav>
+		<hr class="sidebar-divider" />
+		<button
+			class="sidebar-item dark-toggle"
+			role="switch"
+			aria-checked={$theme === 'dark'}
+			on:click={toggleTheme}
+		>
+			<span>{DARK_MODE_LABEL}</span>
+			<span class="mini-switch" class:on={$theme === 'dark'}>
+				<span class="mini-thumb"></span>
+			</span>
+		</button>
+		<hr class="sidebar-divider" />
+		<a class="sidebar-item docs-link" href={DOCS_URL} target="_blank" rel="noopener noreferrer">
+			<span>{DOCUMENTATION_LABEL}</span>
+			<svg
+				width="13"
+				height="13"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+				<polyline points="15 3 21 3 21 9" />
+				<line x1="10" y1="14" x2="21" y2="3" />
+			</svg>
+		</a>
+		<hr class="sidebar-divider" />
+		<button class="sidebar-item sign-out" on:click={handleLogout}>{SIGN_OUT_LABEL}</button>
 	</aside>
 
 	<!-- Right content -->
@@ -1063,6 +559,7 @@
 				</div>
 
 				<div class="card settings-card">
+					<p class="card-title">{CURRENT_PROJECT_LABEL}</p>
 					<div class="field">
 						<label class="field-label" for="project-name">{PROJECT_NAME_LABEL}</label>
 						<input
@@ -1129,281 +626,70 @@
 						/>
 					</div>
 
-					<!-- Dark mode toggle -->
-					<div class="toggle-row">
-						<div class="toggle-info">
-							<span class="toggle-label">{DARK_MODE_LABEL}</span>
-							<span class="toggle-desc">{DARK_MODE_DESC}</span>
-						</div>
-						<button
-							class="toggle-switch"
-							class:on={$theme === 'dark'}
-							role="switch"
-							aria-checked={$theme === 'dark'}
-							on:click={toggleTheme}
-						>
-							<span class="toggle-thumb"></span>
-						</button>
-					</div>
-
 					<div class="card-footer">
-						<Button on:click={handleSaveProject} disabled={projectSaving}>
+						<Button on:click={handleSaveProject} disabled={projectSaving || !project.name?.trim()}>
 							{saveProjectLabel(projectSaving)}
 						</Button>
 					</div>
 				</div>
+
+				<ProjectAccess on:navigate={(e) => setSection(e.detail)} />
 			</div>
 
 			<!-- RUNNERS -->
 		{:else if section === 'runners'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<RunnersSettings />
+			</div>
+
+			<!-- TEST CASES (repository config + import) -->
+		{:else if section === 'testcases'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<div class="content-header">
-					<h2>{RUNNERS_LABEL}</h2>
-					<p class="content-desc">
-						{RUNNERS_DESC}
-					</p>
+					<h2>{TEST_CASES_HEADING}</h2>
+					<p class="content-desc">{TEST_CASES_DESC}</p>
 				</div>
 
 				<div class="card settings-card">
-					<!-- Built-in runner toggle -->
-					<div class="toggle-row">
-						<div class="toggle-info">
-							<span class="toggle-label">{BUILTIN_RUNNER_TOGGLE_LABEL}</span>
-							<span class="toggle-desc">
-								{BUILTIN_RUNNER_TOGGLE_DESC}
-							</span>
+					<p class="card-title">{TC_IO_CARD_TITLE}</p>
+					<div class="backup-row">
+						<div class="backup-block">
+							<p class="backup-block-title">{TC_EXPORT_CARD_TITLE}</p>
+							<p class="backup-block-desc">{TC_EXPORT_DESC}</p>
+							<ExportMenu busy={tcExporting} on:select={(e) => handleTcExport(e.detail)} />
 						</div>
-						<button
-							class="toggle-switch"
-							class:on={$builtInEnabled}
-							role="switch"
-							aria-checked={$builtInEnabled}
-							on:click={handleBuiltInToggle}
-						>
-							<span class="toggle-thumb"></span>
-						</button>
-					</div>
 
-					<!-- External runner cards -->
-					{#if runners.length > 0}
-						<div class="runner-cards">
-							{#each runners as r (r.id)}
-								{@const ping = pingResults[r.id]}
-								{#if editingId === r.id}
-									<div class="runner-card editing" transition:fly={{ y: -4, duration: 180 }}>
-										<div class="runner-form-fields">
-											<div class="field">
-												<label class="field-label" for="edit-name-{r.id}">{NAME_LABEL}</label>
-												<input
-													id="edit-name-{r.id}"
-													type="text"
-													class="field-input"
-													bind:value={editForm.name}
-													placeholder={RUNNER_NAME_PLACEHOLDER}
-												/>
-											</div>
-											<div class="field">
-												<label class="field-label" for="edit-url-{r.id}">
-													{RUNNER_URL_LABEL}
-													<span class="field-hint"
-														>{RUNNER_URL_HINT_PREFIX} <code>host.docker.internal</code>
-														{RUNNER_URL_HINT_SUFFIX}</span
-													>
-												</label>
-												<input
-													id="edit-url-{r.id}"
-													type="url"
-													class="field-input"
-													bind:value={editForm.url}
-													placeholder={RUNNER_URL_PLACEHOLDER}
-												/>
-											</div>
-											<div class="field">
-												<label class="field-label" for="edit-token-{r.id}">{TOKEN_LABEL}</label>
-												<input
-													id="edit-token-{r.id}"
-													type="text"
-													class="field-input"
-													bind:value={editForm.token}
-													placeholder={KEEP_TOKEN_PLACEHOLDER}
-													spellcheck="false"
-													autocomplete="off"
-												/>
-											</div>
-											<div class="field">
-												<label class="field-label" for="edit-browser-{r.id}">{BROWSER_LABEL}</label>
-												<select
-													id="edit-browser-{r.id}"
-													class="field-input"
-													bind:value={editForm.browser}
-												>
-													{#each BROWSERS as b}
-														<option value={b.id}>{b.label}</option>
-													{/each}
-												</select>
-											</div>
-										</div>
-										{#if editFormError}
-											<p class="form-error">{editFormError}</p>
-										{/if}
-										<div class="runner-form-actions">
-											<Button on:click={() => handleUpdateRunner(r.id)} disabled={editFormSaving}>
-												{editRunnerSubmitLabel(editFormSaving)}
-											</Button>
-											<Button
-												variant="ghost"
-												on:click={() => {
-													editingId = null;
-													editFormError = '';
-												}}
-												disabled={editFormSaving}>{CANCEL_LABEL}</Button
-											>
-										</div>
-									</div>
-								{:else}
-									<div class="runner-card" transition:fly={{ y: -4, duration: 180 }}>
-										<div class="runner-card-header">
-											<svg
-												class="runner-card-icon"
-												width="13"
-												height="13"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												stroke-linecap="round"
-											>
-												<rect x="2" y="3" width="20" height="14" rx="2" />
-												<path d="M8 21h8M12 17v4" />
-											</svg>
-											<span class="runner-card-name">{r.name}</span>
-											<span class="runner-browser-pill">{r.browser}</span>
-											{#if ping && !ping.loading}
-												{#if ping.ok}
-													<span class="ping-badge ok">{ping.latency}ms</span>
-												{:else}
-													<span class="ping-badge fail" title={ping.error}
-														>{RUNNER_UNREACHABLE_LABEL}</span
-													>
-												{/if}
-											{:else if ping?.loading}
-												<span class="ping-badge pinging">{RUNNER_PINGING_LABEL}</span>
-											{/if}
-										</div>
-										<p class="runner-card-url">{r.url}</p>
-										<div class="runner-card-actions">
-											<Button variant="ghost" size="sm" on:click={() => startEdit(r)}
-												>{EDIT_LABEL}</Button
-											>
-											<Button
-												variant="ghost"
-												size="sm"
-												disabled={restartingId === r.id}
-												on:click={() => handleRestartRunner(r.id, r.name)}
-												>{restartRunnerLabel(restartingId === r.id)}</Button
-											>
-											<Button
-												variant="ghost"
-												size="sm"
-												disabled={stoppingId === r.id}
-												on:click={() => handleStopRunner(r.id, r.name)}
-												>{stopRunnerLabel(stoppingId === r.id)}</Button
-											>
-											<Button
-												variant="danger"
-												size="sm"
-												on:click={() => handleDeleteRunner(r.id, r.name)}>{REMOVE_LABEL}</Button
-											>
-										</div>
-									</div>
-								{/if}
-							{/each}
-						</div>
-					{/if}
+						<div class="backup-divider"></div>
 
-					<!-- Add runner form / button -->
-					{#if runnerFormOpen}
-						<div class="runner-form" transition:fly={{ y: -6, duration: 200 }}>
-							<p class="runner-form-title">{ADD_RUNNER_FORM_TITLE}</p>
-							<div class="runner-form-fields">
-								<div class="field">
-									<label class="field-label" for="rn-name">{NAME_LABEL}</label>
+						<div class="backup-block">
+							<p class="backup-block-title">{TC_IMPORT_CARD_TITLE}</p>
+							<p class="backup-block-desc">{TC_IMPORT_DESC}</p>
+							<div class="import-row">
+								<label class="file-label">
 									<input
-										id="rn-name"
-										type="text"
-										class="field-input"
-										bind:value={runnerForm.name}
-										placeholder={RUNNER_NAME_PLACEHOLDER}
+										bind:this={tcFileInput}
+										type="file"
+										accept=".json,application/json"
+										class="file-input-hidden"
+										on:change={handleTcFileChange}
 									/>
-								</div>
-								<div class="field">
-									<label class="field-label" for="rn-url">
-										{RUNNER_URL_LABEL}
-										<span class="field-hint"
-											>{RUNNER_URL_HINT_PREFIX} <code>host.docker.internal</code>
-											{RUNNER_URL_HINT_SUFFIX}</span
-										>
-									</label>
-									<input
-										id="rn-url"
-										type="url"
-										class="field-input"
-										bind:value={runnerForm.url}
-										placeholder={RUNNER_URL_PLACEHOLDER}
-									/>
-								</div>
-								<div class="field">
-									<label class="field-label" for="rn-token">{TOKEN_LABEL}</label>
-									<input
-										id="rn-token"
-										type="text"
-										class="field-input"
-										bind:value={runnerForm.token}
-										placeholder={TOKEN_PLACEHOLDER}
-										spellcheck="false"
-										autocomplete="off"
-									/>
-								</div>
-								<div class="field">
-									<label class="field-label" for="rn-browser">{BROWSER_LABEL}</label>
-									<select id="rn-browser" class="field-input" bind:value={runnerForm.browser}>
-										{#each BROWSERS as b}
-											<option value={b.id}>{b.label}</option>
-										{/each}
-									</select>
-								</div>
-							</div>
-							{#if runnerFormError}
-								<p class="form-error">{runnerFormError}</p>
-							{/if}
-							<div class="runner-form-actions">
-								<Button on:click={handleAddRunner} disabled={runnerFormSaving}>
-									{addRunnerSubmitLabel(runnerFormSaving)}
+									<span class="file-btn"
+										>{tcImportFile ? tcImportFile.name : CHOOSE_FILE_LABEL}</span
+									>
+								</label>
+								<Button on:click={handleTcImport} disabled={!tcImportFile || tcImporting}>
+									{tcImportLabel(tcImporting)}
 								</Button>
-								<Button
-									variant="ghost"
-									on:click={() => {
-										runnerFormOpen = false;
-										runnerFormError = '';
-									}}
-									disabled={runnerFormSaving}>{CANCEL_LABEL}</Button
-								>
 							</div>
+							{#if tcImportResult}
+								<p class="tc-import-result">{tcImportSummary(tcImportResult)}</p>
+							{/if}
+							<p class="backup-block-desc">{TC_IMPORT_HINT}</p>
 						</div>
-					{:else}
-						<div class="card-footer">
-							<Button variant="ghost" on:click={() => (runnerFormOpen = true)}
-								>{OPEN_ADD_RUNNER_LABEL}</Button
-							>
-						</div>
-					{/if}
+					</div>
 				</div>
-			</div>
 
-			<!-- REPOSITORY -->
-		{:else if section === 'repository'}
-			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
-				<div class="content-header">
+				<div class="content-header" style="margin-top: 1rem">
 					<h2>{REPOSITORY_HEADING}</h2>
 					<p class="content-desc">{REPOSITORY_DESC}</p>
 				</div>
@@ -1442,7 +728,12 @@
 						>
 					</p>
 					<div class="card-footer">
-						<Button on:click={handleSavePrefixes} disabled={prefixesSaving}>
+						<Button
+							on:click={handleSavePrefixes}
+							disabled={prefixesSaving ||
+								!prefixes.testCasePrefix.trim() ||
+								!prefixes.testSuitePrefix.trim()}
+						>
 							{savePrefixesLabel(prefixesSaving)}
 						</Button>
 					</div>
@@ -1485,41 +776,6 @@
 						<Button variant="ghost" on:click={handleMigratePrefixes} disabled={migrating}>
 							{runMigrationLabel(migrating)}
 						</Button>
-					</div>
-				</div>
-			</div>
-
-			<!-- TEST CASES -->
-		{:else if section === 'testcases'}
-			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
-				<div class="content-header">
-					<h2>{TEST_CASES_HEADING}</h2>
-					<p class="content-desc">{TEST_CASES_DESC}</p>
-				</div>
-
-				<div class="card settings-card">
-					<p class="card-title">{TC_IMPORT_CARD_TITLE}</p>
-					<div class="backup-block">
-						<p class="backup-block-desc">{TC_IMPORT_DESC}</p>
-						<div class="import-row">
-							<label class="file-label">
-								<input
-									bind:this={tcFileInput}
-									type="file"
-									accept=".json,application/json"
-									class="file-input-hidden"
-									on:change={handleTcFileChange}
-								/>
-								<span class="file-btn">{tcImportFile ? tcImportFile.name : CHOOSE_FILE_LABEL}</span>
-							</label>
-							<Button on:click={handleTcImport} disabled={!tcImportFile || tcImporting}>
-								{tcImportLabel(tcImporting)}
-							</Button>
-						</div>
-						{#if tcImportResult}
-							<p class="tc-import-result">{tcImportSummary(tcImportResult)}</p>
-						{/if}
-						<p class="backup-block-desc">{TC_IMPORT_HINT}</p>
 					</div>
 				</div>
 			</div>
@@ -1713,6 +969,7 @@
 							<Button variant="ghost" on:click={handleGenerateMcpKey} disabled={mcpGenerating}>
 								{regenerateKeyLabel(mcpGenerating)}
 							</Button>
+							<Button variant="ghost" on:click={handleRevokeMcpKey}>{REVOKE_KEY_LABEL}</Button>
 						</div>
 					{/if}
 				</div>
@@ -1810,460 +1067,37 @@
 					<div class="card-footer">
 						<Button
 							on:click={handleChangePassword}
-							disabled={pwSaving || !pwForm.currentPassword || !pwForm.newPassword}
+							disabled={pwSaving ||
+								!pwForm.currentPassword ||
+								!pwForm.newPassword ||
+								!pwForm.confirmPassword}
 						>
 							{changePasswordLabel(pwSaving)}
 						</Button>
 					</div>
 				</div>
-
-				<div class="card settings-card">
-					<div class="card-footer">
-						<Button variant="danger" size="sm" on:click={handleLogout}>{SIGN_OUT_LABEL}</Button>
-					</div>
-				</div>
 			</div>
 
-			<!-- USERS (admin only) -->
+			<!-- USERS (owner only) -->
 		{:else if section === 'users'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
-				<div class="content-header">
-					<h2>{USERS_LABEL}</h2>
-					<p class="content-desc">{USERS_DESC}</p>
-				</div>
-
-				<ConfirmModal
-					bind:open={confirmDeleteUserOpen}
-					title={REMOVE_USER_MODAL_TITLE}
-					confirmLabel={REMOVE_USER_LABEL}
-					on:confirm={() => handleDeleteUser(confirmDeleteUser?.id, confirmDeleteUser?.name)}
-				>
-					{#if confirmDeleteUser}
-						{REMOVE_USER_BODY_PREFIX}
-						<strong>{confirmDeleteUser.name}</strong>{REMOVE_USER_BODY_SUFFIX}
-					{/if}
-				</ConfirmModal>
-
-				<div class="card settings-card">
-					<p class="card-title">{ADD_USER_CARD_TITLE}</p>
-					<div class="field-row">
-						<div class="field">
-							<label class="field-label" for="u-name">{NAME_LABEL}</label>
-							<input
-								id="u-name"
-								type="text"
-								class="field-input"
-								bind:value={userForm.name}
-								placeholder={USER_NAME_PLACEHOLDER}
-							/>
-						</div>
-						<div class="field">
-							<label class="field-label" for="u-email">{EMAIL_LABEL}</label>
-							<input
-								id="u-email"
-								type="email"
-								class="field-input"
-								bind:value={userForm.email}
-								placeholder={USER_EMAIL_PLACEHOLDER}
-							/>
-						</div>
-					</div>
-					<div class="field-row">
-						<div class="field">
-							<label class="field-label" for="u-pw">{PASSWORD_LABEL}</label>
-							<input
-								id="u-pw"
-								type="password"
-								class="field-input"
-								bind:value={userForm.password}
-								autocomplete="new-password"
-							/>
-						</div>
-						<div class="field">
-							<label class="field-label" for="u-role">{ROLE_LABEL}</label>
-							<select id="u-role" class="field-input" bind:value={userForm.role}>
-								<option value="user">{USER_ROLE_OPTION}</option>
-								<option value="admin">{ADMIN_ROLE_OPTION}</option>
-							</select>
-						</div>
-					</div>
-					{#if userFormError}<p class="form-error">{userFormError}</p>{/if}
-					<div class="card-footer">
-						<Button on:click={handleCreateUser} disabled={userFormSaving}>
-							{addUserLabel(userFormSaving)}
-						</Button>
-					</div>
-				</div>
-
-				{#if allUsers.length > 0}
-					<div class="users-table">
-						{#each allUsers as u (u.id)}
-							<div class="user-row">
-								<div class="user-info">
-									<span class="user-name">{u.name}</span>
-									<span class="user-email">{u.email}</span>
-								</div>
-								<span class="role-chip {u.role}">{u.role}</span>
-								{#if u.id !== $auth.user?.id}
-									<button
-										class="icon-btn danger"
-										title={REMOVE_USER_ICON_TITLE}
-										on:click={() => {
-											confirmDeleteUser = { id: u.id, name: u.name };
-											confirmDeleteUserOpen = true;
-										}}
-									>
-										<svg
-											width="13"
-											height="13"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-										>
-											<polyline points="3 6 5 6 21 6" /><path
-												d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
-											/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
-										</svg>
-									</button>
-								{:else}
-									<span class="you-chip">{YOU_CHIP_LABEL}</span>
-								{/if}
-							</div>
-						{/each}
-					</div>
-				{/if}
+				<UsersSettings on:navigate={(e) => setSection(e.detail)} />
 			</div>
 
 			<!-- BACKUP -->
 		{:else if section === 'backup'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<BackupSettings />
+			</div>
+
+			<!-- ACTIVITY -->
+		{:else if section === 'activity'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<div class="content-header">
-					<h2>{BACKUP_LABEL}</h2>
-					<p class="content-desc">
-						{BACKUP_DESC}
-					</p>
+					<h2>{ACTIVITY_LABEL}</h2>
+					<p class="content-desc">{ACTIVITY_DESC}</p>
 				</div>
-
-				<!-- Manual export / import -->
-				<div class="card settings-card">
-					<p class="card-title">{MANUAL_BACKUP_CARD_TITLE}</p>
-					<div class="backup-row">
-						<div class="backup-block">
-							<p class="backup-block-title">{EXPORT_BLOCK_TITLE}</p>
-							<p class="backup-block-desc">
-								{EXPORT_BLOCK_DESC_PREFIX} <code>.json</code>
-								{EXPORT_BLOCK_DESC_SUFFIX}
-							</p>
-							<Button on:click={handleExport} disabled={exporting}>
-								{exportLabel(exporting)}
-							</Button>
-						</div>
-
-						<div class="backup-divider"></div>
-
-						<div class="backup-block">
-							<p class="backup-block-title">{IMPORT_BLOCK_TITLE}</p>
-							<p class="backup-block-desc">
-								{IMPORT_BLOCK_DESC}
-							</p>
-							<div class="import-row">
-								<label class="file-label">
-									<input
-										bind:this={fileInput}
-										type="file"
-										accept=".json"
-										class="file-input-hidden"
-										on:change={handleFileChange}
-									/>
-									<span class="file-btn">{importFile ? importFile.name : CHOOSE_FILE_LABEL}</span>
-								</label>
-								<Button on:click={handleImport} disabled={!importFile || importing}>
-									{importLabel(importing)}
-								</Button>
-							</div>
-						</div>
-					</div>
-
-					<div class="include-reports-row">
-						<label class="field-label backup-toggle-label" for="include-reports">
-							<span>
-								{INCLUDE_REPORTS_LABEL}
-								<span class="field-hint">{INCLUDE_REPORTS_HINT}</span>
-							</span>
-							<button
-								id="include-reports"
-								class="toggle-btn"
-								class:active={backupConfig.backupIncludeReports}
-								on:click={() =>
-									(backupConfig.backupIncludeReports = !backupConfig.backupIncludeReports)}
-								role="switch"
-								aria-checked={backupConfig.backupIncludeReports}
-							>
-								<span class="toggle-thumb"></span>
-							</button>
-						</label>
-						<Button
-							variant="ghost"
-							on:click={handleSaveIncludeReports}
-							disabled={includeReportsSaving}
-						>
-							{saveIncludeReportsLabel(includeReportsSaving)}
-						</Button>
-					</div>
-
-					<p class="backup-disclaimer">
-						{includeReportsDisclaimer(backupConfig.backupIncludeReports)}
-					</p>
-				</div>
-
-				<!-- S3 cloud backup -->
-				<div class="card settings-card">
-					<p class="card-title">{S3_STORAGE_CARD_TITLE}</p>
-					<p class="backup-block-desc" style="margin-bottom: 1.25rem;">
-						{S3_STORAGE_DESC_PREFIX} <strong>{ENDPOINT_URL_LABEL}</strong>
-						{S3_STORAGE_DESC_SUFFIX}
-					</p>
-
-					<div class="field-row">
-						<div class="field">
-							<label class="field-label" for="s3-endpoint">
-								<span>{ENDPOINT_URL_LABEL}</span>
-								<span class="field-hint">{ENDPOINT_URL_HINT}</span>
-							</label>
-							<input
-								id="s3-endpoint"
-								type="url"
-								class="field-input"
-								bind:value={backupConfig.backupS3Endpoint}
-								placeholder={ENDPOINT_URL_PLACEHOLDER}
-							/>
-						</div>
-						<div class="field">
-							<label class="field-label" for="s3-region">
-								<span>{REGION_LABEL}</span>
-								<span class="field-hint"
-									>{REGION_HINT_PREFIX} <code>auto</code> {REGION_HINT_SUFFIX}</span
-								>
-							</label>
-							<input
-								id="s3-region"
-								type="text"
-								class="field-input"
-								bind:value={backupConfig.backupS3Region}
-								placeholder={REGION_PLACEHOLDER}
-							/>
-						</div>
-					</div>
-
-					<div class="field-row">
-						<div class="field">
-							<label class="field-label" for="s3-bucket">
-								<span>{BUCKET_LABEL}</span>
-							</label>
-							<input
-								id="s3-bucket"
-								type="text"
-								class="field-input"
-								bind:value={backupConfig.backupS3Bucket}
-								placeholder={BUCKET_PLACEHOLDER}
-							/>
-						</div>
-						<div class="field">
-							<label class="field-label" for="s3-prefix">
-								<span>{PATH_PREFIX_LABEL}</span>
-								<span class="field-hint">{PATH_PREFIX_HINT}</span>
-							</label>
-							<input
-								id="s3-prefix"
-								type="text"
-								class="field-input"
-								bind:value={backupConfig.backupS3Prefix}
-								placeholder={PATH_PREFIX_PLACEHOLDER}
-							/>
-						</div>
-					</div>
-
-					<div class="field-row">
-						<div class="field">
-							<label class="field-label" for="s3-access-key">
-								<span>{ACCESS_KEY_LABEL}</span>
-							</label>
-							<input
-								id="s3-access-key"
-								type="text"
-								class="field-input"
-								bind:value={backupConfig.backupS3AccessKey}
-								placeholder={ACCESS_KEY_PLACEHOLDER}
-								autocomplete="off"
-							/>
-						</div>
-						<div class="field">
-							<label class="field-label" for="s3-secret-key">
-								<span>{SECRET_KEY_LABEL}</span>
-								<span class="field-hint">{secretKeyHint(backupS3SecretKeySet)}</span>
-							</label>
-							<input
-								id="s3-secret-key"
-								type="password"
-								class="field-input"
-								bind:value={backupConfig.backupS3SecretKey}
-								placeholder={secretKeyPlaceholder(backupS3SecretKeySet)}
-								autocomplete="new-password"
-							/>
-						</div>
-					</div>
-
-					<div class="backup-actions">
-						<Button variant="ghost" on:click={handleTestS3} disabled={backupTestingS3}>
-							{testConnectionLabel(backupTestingS3)}
-						</Button>
-						<Button on:click={handleSaveBackupConfig} disabled={backupConfigSaving}>
-							{saveS3ConfigLabel(backupConfigSaving)}
-						</Button>
-					</div>
-
-					{#if backupS3TestResult}
-						<p
-							class="s3-test-result"
-							class:s3-test-success={backupS3TestResult === 'success'}
-							class:s3-test-error={backupS3TestResult === 'error'}
-						>
-							{backupS3TestResult === 'success' ? '✓' : '✗'}
-							{backupS3TestMessage}
-						</p>
-					{/if}
-				</div>
-
-				<!-- Restore from S3 -->
-				<ConfirmModal
-					bind:open={restoreConfirmOpen}
-					title={RESTORE_CONFIRM_TITLE}
-					confirmLabel={restoreLabel(false)}
-					loading={!!restoringKey}
-					on:confirm={handleRestoreFromS3}
-				>
-					{#if restoreTarget}
-						{restoreConfirmBody(restoreTarget.key)}
-					{/if}
-				</ConfirmModal>
-
-				<div class="card settings-card" class:card-disabled={!s3Configured}>
-					<div class="card-title-row">
-						<p class="card-title">{RESTORE_FROM_S3_CARD_TITLE}</p>
-						{#if s3Configured}
-							<Button variant="ghost" on:click={loadS3Backups} disabled={loadingS3Backups}>
-								{refreshingLabel(loadingS3Backups)}
-							</Button>
-						{/if}
-					</div>
-
-					{#if !s3Configured}
-						<p class="backup-block-desc">{CONFIGURE_S3_FIRST_RESTORE_MESSAGE}</p>
-					{:else}
-						<p class="backup-block-desc" style="margin-bottom: 1rem;">{RESTORE_FROM_S3_DESC}</p>
-
-						{#if s3Backups.length === 0}
-							<p class="backup-block-desc">
-								{loadingS3Backups ? refreshingLabel(true) : NO_S3_BACKUPS_MESSAGE}
-							</p>
-						{:else}
-							<ul class="s3-backup-list">
-								{#each s3Backups as backup (backup.key)}
-									<li class="s3-backup-row">
-										<div class="s3-backup-info">
-											<span class="s3-backup-key">{backup.key}</span>
-											<span class="s3-backup-meta">
-												{new Date(backup.lastModified).toLocaleString()} · {backupSizeLabel(
-													backup.size
-												)}
-											</span>
-										</div>
-										<Button
-											variant="ghost"
-											on:click={() => openRestoreConfirm(backup)}
-											disabled={restoringKey === backup.key}
-										>
-											{restoreLabel(restoringKey === backup.key)}
-										</Button>
-									</li>
-								{/each}
-							</ul>
-						{/if}
-					{/if}
-				</div>
-
-				<!-- Scheduled backup -->
-				<div class="card settings-card" class:card-disabled={!s3Configured}>
-					<p class="card-title">{SCHEDULED_BACKUP_CARD_TITLE}</p>
-
-					{#if !s3Configured}
-						<p class="backup-block-desc">{CONFIGURE_S3_FIRST_MESSAGE}</p>
-					{:else}
-						<div class="field">
-							<label class="field-label backup-toggle-label" for="backup-enabled">
-								<span>{ENABLE_SCHEDULED_BACKUP_LABEL}</span>
-								<button
-									id="backup-enabled"
-									class="toggle-btn"
-									class:active={backupConfig.backupEnabled}
-									on:click={() => (backupConfig.backupEnabled = !backupConfig.backupEnabled)}
-									role="switch"
-									aria-checked={backupConfig.backupEnabled}
-								>
-									<span class="toggle-thumb"></span>
-								</button>
-							</label>
-						</div>
-
-						<div class="field">
-							<label class="field-label" for="backup-cron">
-								<span>{CRON_EXPRESSION_LABEL}</span>
-								<span class="field-hint">
-									{CRON_HINT_PREFIX} <code>0 2 * * *</code>
-									{CRON_HINT_SUFFIX}
-									<a href="https://crontab.guru" target="_blank" rel="noopener noreferrer"
-										>{CRONTAB_LINK_LABEL}</a
-									>
-								</span>
-							</label>
-							<input
-								id="backup-cron"
-								type="text"
-								class="field-input field-input-mono"
-								bind:value={backupConfig.backupCron}
-								placeholder={CRON_PLACEHOLDER}
-							/>
-						</div>
-
-						{#if backupLastRunAt}
-							<p class="backup-last-run">
-								{BACKUP_LAST_RUN_PREFIX}
-								{new Date(backupLastRunAt).toLocaleString()} —
-								{#if backupLastStatus?.startsWith('success:')}
-									<span class="status-success"
-										>{uploadedToLabel(backupLastStatus.replace('success:', ''))}</span
-									>
-								{:else if backupLastStatus?.startsWith('error:')}
-									<span class="status-error">{backupLastStatus.replace('error:', '')}</span>
-								{:else}
-									<span>{backupLastStatus}</span>
-								{/if}
-							</p>
-						{/if}
-
-						<div class="backup-actions">
-							<Button variant="ghost" on:click={handleRunBackupNow} disabled={backupRunningNow}>
-								{uploadS3NowLabel(backupRunningNow)}
-							</Button>
-							<Button on:click={handleSaveBackupConfig} disabled={backupConfigSaving}>
-								{saveScheduleLabel(backupConfigSaving)}
-							</Button>
-						</div>
-					{/if}
-				</div>
+				<ActivityLog canSeeOrg={isOwner} />
 			</div>
 		{/if}
 	</div>
@@ -2326,6 +1160,65 @@
 		background: var(--accent-soft);
 		color: var(--accent);
 		font-weight: 500;
+	}
+
+	.sidebar-divider {
+		border: none;
+		border-top: 1px solid var(--border);
+		margin: 0.5rem 0.25rem;
+	}
+
+	.dark-toggle {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+
+	.docs-link {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		text-decoration: none;
+	}
+	.docs-link svg {
+		flex-shrink: 0;
+		opacity: 0.6;
+	}
+
+	.sidebar-item.sign-out {
+		color: var(--fail);
+	}
+
+	.sidebar-item.sign-out:hover {
+		background: var(--fail-soft);
+		color: var(--fail);
+	}
+	.mini-switch {
+		position: relative;
+		flex-shrink: 0;
+		width: 32px;
+		height: 18px;
+		border-radius: var(--radius-pill);
+		background: var(--border);
+		transition: background var(--duration-fast);
+	}
+	.mini-switch.on {
+		background: var(--accent);
+	}
+	.mini-thumb {
+		position: absolute;
+		top: 2px;
+		left: 2px;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: var(--white);
+		transition: transform var(--duration-fast);
+	}
+	.mini-switch.on .mini-thumb {
+		transform: translateX(14px);
 	}
 
 	/* ── Content area ── */
@@ -2401,165 +1294,7 @@
 	}
 
 	.card-footer {
-		padding-top: 0.125rem;
-	}
-
-	/* ── Toggle switch ── */
-	.toggle-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1.5rem;
-		padding: 0.875rem 1rem;
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-	}
-
-	.toggle-info {
-		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-	}
-
-	.toggle-label {
-		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--text);
-	}
-
-	.toggle-desc {
-		font-size: 0.78rem;
-		color: var(--text-muted);
-		line-height: 1.4;
-	}
-
-	.toggle-switch {
-		flex-shrink: 0;
-		width: 40px;
-		height: 22px;
-		border-radius: var(--radius-pill);
-		border: none;
-		background: var(--border);
-		cursor: pointer;
-		position: relative;
-		transition: background 0.2s var(--ease-out);
-	}
-
-	.toggle-switch.on {
-		background: var(--accent);
-	}
-
-	.toggle-thumb {
-		position: absolute;
-		top: 3px;
-		left: 3px;
-		width: 16px;
-		height: 16px;
-		border-radius: 50%;
-		background: white;
-		transition: transform 0.2s var(--ease-out);
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-	}
-
-	.toggle-switch.on .toggle-thumb {
-		transform: translateX(18px);
-	}
-
-	/* ── Runner cards ── */
-	.runner-cards {
-		display: flex;
-		flex-direction: column;
-		gap: 0.625rem;
-	}
-
-	.runner-card {
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		padding: 0.75rem 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.375rem;
-		transition: border-color var(--duration-fast);
-	}
-
-	.runner-card:hover {
-		border-color: color-mix(in srgb, var(--text-muted) 40%, var(--border));
-	}
-
-	.runner-card.editing {
-		border-color: var(--accent);
-		background: var(--accent-soft);
-		gap: 0.875rem;
-		padding: 1rem;
-	}
-
-	.runner-card-header {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.runner-card-icon {
-		color: var(--node);
-		flex-shrink: 0;
-	}
-
-	.runner-card-name {
-		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--text);
-		flex: 1;
-	}
-
-	.runner-browser-pill {
-		font-size: 0.65rem;
-		font-family: 'JetBrains Mono', monospace;
-		color: var(--text-muted);
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-pill);
-		padding: 0.1rem 0.45rem;
-		flex-shrink: 0;
-	}
-
-	.runner-card-url {
-		font-size: 0.75rem;
-		font-family: 'JetBrains Mono', monospace;
-		color: var(--text-muted);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		padding-left: calc(13px + 0.5rem);
-	}
-
-	.runner-card-actions {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 0.375rem;
-		padding-left: calc(13px + 0.5rem);
-		margin-top: 0.125rem;
-	}
-
-	.ping-badge {
-		font-size: 0.7rem;
-		font-weight: 500;
-		padding: 0.15rem 0.5rem;
-		border-radius: var(--radius-pill);
-		flex-shrink: 0;
-	}
-
-	.ping-badge.ok {
-		background: var(--pass-soft);
-		color: var(--pass);
-	}
-	.ping-badge.fail {
-		background: var(--fail-soft);
-		color: var(--fail);
-	}
-	.ping-badge.pinging {
-		color: var(--text-muted);
+		padding-top: 0.5rem;
 	}
 
 	.form-error {
@@ -2567,42 +1302,15 @@
 		color: var(--fail);
 	}
 
-	.runner-form {
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		padding: 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.875rem;
-		background: var(--bg-subtle);
-	}
-
-	.runner-form-title {
-		font-size: 0.8125rem;
-		font-weight: 500;
-		color: var(--text);
-	}
-
-	.runner-form-fields {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 0.75rem;
-	}
-
-	.runner-form-actions {
-		display: flex;
-		gap: 0.5rem;
-	}
-
-	.card-disabled {
-		opacity: 0.5;
-		pointer-events: none;
-	}
-
-	/* ── Backup ── */
 	.backup-row {
 		display: flex;
 		gap: 2rem;
+	}
+
+	.backup-divider {
+		width: 1px;
+		background: var(--border);
+		flex-shrink: 0;
 	}
 
 	.backup-block {
@@ -2610,12 +1318,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.875rem;
-	}
-
-	.backup-divider {
-		width: 1px;
-		background: var(--border);
-		flex-shrink: 0;
 	}
 
 	.backup-block-title {
@@ -2628,173 +1330,6 @@
 		font-size: 0.8125rem;
 		color: var(--text-muted);
 		line-height: 1.6;
-	}
-
-	.backup-block-desc code {
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.78rem;
-		background: var(--bg-subtle);
-		padding: 0.1em 0.3em;
-		border-radius: 3px;
-	}
-
-	.include-reports-row {
-		display: flex;
-		align-items: center;
-		gap: 1.25rem;
-		margin-top: 1.25rem;
-		padding-top: 1.25rem;
-		border-top: 1px solid var(--border);
-	}
-	.include-reports-row .backup-toggle-label {
-		flex: 1;
-	}
-	.include-reports-row .field-label > span {
-		display: flex;
-		flex-direction: column;
-		gap: 0.15rem;
-	}
-
-	.backup-disclaimer {
-		margin-top: 1rem;
-		padding: 0.625rem 0.875rem;
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		font-size: 0.8125rem;
-		color: var(--text-muted);
-		line-height: 1.5;
-	}
-
-	.backup-actions {
-		display: flex;
-		gap: 0.625rem;
-		margin-top: 0.25rem;
-		flex-wrap: wrap;
-	}
-
-	.s3-test-result {
-		margin-top: 0.625rem;
-		font-size: 0.8125rem;
-		font-weight: 500;
-	}
-
-	.s3-test-success {
-		color: var(--pass);
-	}
-
-	.s3-test-error {
-		color: var(--fail);
-	}
-
-	.card-title-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		margin-bottom: 0.75rem;
-	}
-	.card-title-row .card-title {
-		margin-bottom: 0;
-	}
-
-	.s3-backup-list {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-
-	.s3-backup-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 0.625rem 0.875rem;
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-	}
-
-	.s3-backup-info {
-		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-		min-width: 0;
-	}
-
-	.s3-backup-key {
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.8125rem;
-		color: var(--text);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.s3-backup-meta {
-		font-size: 0.75rem;
-		color: var(--text-muted);
-	}
-
-	.backup-last-run {
-		font-size: 0.8125rem;
-		color: var(--text-muted);
-		margin-top: 0.25rem;
-	}
-
-	.status-success {
-		color: var(--pass);
-	}
-
-	.status-error {
-		color: var(--fail);
-	}
-
-	.backup-toggle-label {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		cursor: default;
-	}
-
-	.toggle-btn {
-		flex-shrink: 0;
-		width: 40px;
-		height: 22px;
-		border-radius: var(--radius-pill);
-		border: none;
-		background: var(--border);
-		cursor: pointer;
-		position: relative;
-		transition: background 0.2s var(--ease-out);
-	}
-
-	.toggle-btn.active {
-		background: var(--accent);
-	}
-
-	.toggle-btn .toggle-thumb {
-		position: absolute;
-		top: 3px;
-		left: 3px;
-		width: 16px;
-		height: 16px;
-		border-radius: 50%;
-		background: white;
-		transition: transform 0.2s var(--ease-out);
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-	}
-
-	.toggle-btn.active .toggle-thumb {
-		transform: translateX(18px);
-	}
-
-	.field-input-mono {
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.8125rem;
 	}
 
 	.tc-import-result {
@@ -2877,23 +1412,6 @@
 		text-decoration: underline;
 	}
 
-	.account-info {
-		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-	}
-
-	.account-name {
-		font-size: 0.9375rem;
-		font-weight: 500;
-		color: var(--text);
-	}
-
-	.account-email {
-		font-size: 0.8125rem;
-		color: var(--text-muted);
-	}
-
 	.form-error {
 		font-size: 0.8125rem;
 		color: var(--fail);
@@ -2915,85 +1433,19 @@
 			flex-wrap: wrap;
 		}
 
+		.field-row {
+			grid-template-columns: 1fr;
+		}
+
 		.backup-row {
 			flex-direction: column;
+			gap: 1.5rem;
 		}
 
 		.backup-divider {
 			width: 100%;
 			height: 1px;
 		}
-
-		.runner-form-fields,
-		.field-row {
-			grid-template-columns: 1fr;
-		}
-	}
-
-	/* ── Users table ── */
-	.users-table {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		margin-top: 1rem;
-	}
-
-	.user-row {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		background: var(--bg-elevated);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-md);
-		padding: 0.75rem 1rem;
-	}
-
-	.user-info {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.15rem;
-	}
-
-	.user-name {
-		font-size: 0.9rem;
-		font-weight: 500;
-		color: var(--text);
-	}
-
-	.user-email {
-		font-size: 0.8rem;
-		color: var(--text-muted);
-	}
-
-	.role-chip {
-		font-size: 0.7rem;
-		font-weight: 500;
-		border-radius: var(--radius-pill);
-		padding: 0.15rem 0.55rem;
-		flex-shrink: 0;
-	}
-
-	.role-chip.admin {
-		background: var(--accent-soft);
-		color: var(--accent);
-	}
-
-	.role-chip.user {
-		background: var(--bg-subtle);
-		color: var(--text-muted);
-		border: 1px solid var(--border);
-	}
-
-	.you-chip {
-		font-size: 0.7rem;
-		color: var(--text-muted);
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-pill);
-		padding: 0.15rem 0.55rem;
-		flex-shrink: 0;
 	}
 
 	/* ── MCP ── */
@@ -3045,10 +1497,5 @@
 			background var(--duration-fast),
 			color var(--duration-fast);
 		flex-shrink: 0;
-	}
-
-	.icon-btn.danger:hover {
-		background: var(--fail-soft);
-		color: var(--fail);
 	}
 </style>

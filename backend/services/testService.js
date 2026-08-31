@@ -5,12 +5,17 @@
 
 const fs = require('fs');
 const path = require('path');
+const { featuresDir } = require('../lib/testsRoot');
 
-const FEATURES_DIR = path.join(__dirname, '../tests/features');
-
-const getTestSuites = () => {
+const getTestSuites = (projectId) => {
+	const FEATURES_DIR = featuresDir(projectId);
 	const suites = [];
-	const files = fs.readdirSync(FEATURES_DIR).filter((f) => f.endsWith('.feature'));
+	let files = [];
+	try {
+		files = fs.readdirSync(FEATURES_DIR).filter((f) => f.endsWith('.feature'));
+	} catch {
+		return { suites };
+	}
 
 	files.forEach((file) => {
 		const content = fs.readFileSync(path.join(FEATURES_DIR, file), 'utf8');

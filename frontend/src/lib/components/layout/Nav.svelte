@@ -8,16 +8,30 @@
 	import { slide } from 'svelte/transition';
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
-	import { fetchProject } from '$lib/api/settings';
+	import { fetchProjects } from '$lib/api/projects';
+	import { activeProjectId, projects, setProjects } from '$lib/stores/project';
 
 	let menuOpen = false;
-	let project = { name: '', logoUrl: '' };
+	let projectMenuOpen = false;
+
+	// Shared store, so a project created or deleted in Settings shows here without a reload.
+	$: projectList = $projects;
 
 	onMount(async () => {
 		try {
-			project = await fetchProject();
+			setProjects(await fetchProjects());
 		} catch {}
 	});
+
+	$: activeProject = projectList.find((p) => p.id === $activeProjectId) ?? projectList[0];
+
+	function switchProject(id) {
+		projectMenuOpen = false;
+		if (id === $activeProjectId) return;
+		activeProjectId.set(id);
+		// Every page's data is scoped by the header — reload so it all refetches.
+		window.location.reload();
+	}
 
 	const links = [
 		{ href: '/', label: 'Automated Tests' },
@@ -56,12 +70,73 @@
 		</div>
 
 		<div class="actions">
-			{#if project.name}
-				<div class="project-card">
-					{#if project.logoUrl}
-						<img src={project.logoUrl} alt="" class="project-logo" />
+			{#if projectList.length > 0 && activeProject}
+				<div class="project-switcher">
+					<button
+						class="project-trigger"
+						on:click={() => (projectMenuOpen = !projectMenuOpen)}
+						aria-haspopup="listbox"
+						aria-expanded={projectMenuOpen}
+					>
+						{#if activeProject.logoUrl}
+							<img src={activeProject.logoUrl} alt="" class="project-logo" />
+						{:else}
+							<span class="project-logo project-logo-fallback">{activeProject.name[0]}</span>
+						{/if}
+						<span class="project-name">{activeProject.name}</span>
+						<svg
+							class="chevron"
+							width="12"
+							height="12"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></svg
+						>
+					</button>
+					{#if projectMenuOpen}
+						<button
+							class="project-backdrop"
+							on:click={() => (projectMenuOpen = false)}
+							tabindex="-1"
+							aria-label="Close"
+						></button>
+						<ul class="project-menu" role="listbox" transition:slide={{ duration: 120 }}>
+							{#each projectList as p (p.id)}
+								<li>
+									<button
+										class="project-option"
+										class:selected={p.id === $activeProjectId}
+										on:click={() => switchProject(p.id)}
+										role="option"
+										aria-selected={p.id === $activeProjectId}
+									>
+										{#if p.logoUrl}
+											<img src={p.logoUrl} alt="" class="project-logo" />
+										{:else}
+											<span class="project-logo project-logo-fallback">{p.name[0]}</span>
+										{/if}
+										<span class="project-name">{p.name}</span>
+										{#if p.id === $activeProjectId}
+											<svg
+												class="check"
+												width="14"
+												height="14"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="3"
+												stroke-linecap="round"
+												stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg
+											>
+										{/if}
+									</button>
+								</li>
+							{/each}
+						</ul>
 					{/if}
-					<span class="project-name">{project.name}</span>
 				</div>
 			{/if}
 			{#if $auth.user}
@@ -175,34 +250,111 @@
 		color: var(--text);
 	}
 
-	/* Project card */
-	.project-card {
+	.project-switcher {
+		position: relative;
+	}
+	.project-trigger {
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		padding: 0.25rem 0.6rem 0.25rem 0.5rem;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		background: var(--bg-elevated);
-		flex-shrink: 0;
-	}
-
-	.project-logo {
-		width: 16px;
-		height: 16px;
-		object-fit: contain;
-		border-radius: 2px;
-		flex-shrink: 0;
-	}
-
-	.project-name {
-		font-size: 0.78rem;
+		font-family: var(--font-body);
+		font-size: 0.8rem;
 		font-weight: 500;
 		color: var(--text);
-		max-width: 140px;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.28rem 0.55rem;
+		max-width: 200px;
+		cursor: pointer;
+		transition:
+			border-color var(--duration-fast),
+			background var(--duration-fast);
+	}
+	.project-trigger:hover {
+		border-color: var(--text-muted);
+		background: var(--bg-subtle);
+	}
+	.project-logo {
+		width: 18px;
+		height: 18px;
+		border-radius: var(--radius-sm);
+		object-fit: cover;
+		flex-shrink: 0;
+	}
+	.project-logo-fallback {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--accent-soft);
+		color: var(--accent);
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+	}
+	.project-trigger .project-name {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.chevron {
+		color: var(--text-muted);
+		flex-shrink: 0;
+	}
+	.project-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 50;
+		background: transparent;
+		border: none;
+		cursor: default;
+	}
+	.project-menu {
+		position: absolute;
+		top: calc(100% + 6px);
+		right: 0;
+		z-index: 51;
+		min-width: 200px;
+		max-width: 260px;
+		margin: 0;
+		padding: 0.25rem;
+		list-style: none;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+	}
+	.project-option {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.4rem 0.5rem;
+		background: transparent;
+		border: none;
+		border-radius: var(--radius-sm);
+		font-family: var(--font-body);
+		font-size: 0.82rem;
+		color: var(--text);
+		cursor: pointer;
+		text-align: left;
+	}
+	.project-option:hover {
+		background: var(--bg-subtle);
+	}
+	.project-option.selected {
+		color: var(--accent);
+		font-weight: 600;
+	}
+	.project-option .project-name {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.check {
+		color: var(--accent);
+		flex-shrink: 0;
 	}
 
 	/* Desktop links */

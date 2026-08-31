@@ -6,6 +6,7 @@
 const prisma = require('./prisma');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { slugify } = require('../lib/slugify');
 
 // ---------------------------------------------------------------------------
 // Export
@@ -36,7 +37,7 @@ async function exportReports() {
 const exportAll = async (includeReports = false) => {
 	const [cronJobs, project, testSuites, testRuns, users, runners, reports] = await Promise.all([
 		prisma.cronJob.findMany({ orderBy: { createdAt: 'asc' } }),
-		prisma.project.findUnique({ where: { id: 1 } }),
+		prisma.project.findFirst({ orderBy: { id: 'asc' } }),
 		prisma.testSuite.findMany({
 			orderBy: { createdAt: 'asc' },
 			include: {
@@ -75,7 +76,12 @@ const exportAll = async (includeReports = false) => {
 				}
 			: null,
 		users: users.map(({ updatedAt: _, ...u }) => u),
-		runners: runners.map(({ createdAt: _, cronJobs: __, reports: ___, ...r }) => r),
+		// A backup file travels (S3, laptops); the node token is a live secret, so
+		// drop it — nodes re-register their token on the next `plum node start`.
+		runners: runners.map(({ createdAt: _, cronJobs: __, reports: ___, token: ____, ...r }) => ({
+			...r,
+			token: ''
+		})),
 		testSuites: testSuites.map(({ cases, ...suite }) => ({
 			...suite,
 			cases: cases.map(({ steps, runEntries: _, history: __, ...tc }) => ({
@@ -109,6 +115,45 @@ const importAll = async (
 ) => {
 	await prisma.$transaction(
 		async (tx) => {
+			// 0. Project — resolved first because cron jobs, suites, cases and runs
+			// all carry a projectId FK and the compound (projectId, displayId) /
+			// (projectId, taskName) unique keys the upserts below key on. The id in
+			// the backup file is only right for a same-instance round-trip; a
+			// cross-instance restore gets a different one, so every child row is
+			// re-pointed at whatever project this database actually has.
+			let projectId;
+			{
+				const fields = [
+					'name',
+					'logoUrl',
+					'timezone',
+					'testCasePrefix',
+					'testSuitePrefix',
+					'discordWebhookUrl',
+					'slackWebhookUrl',
+					'notifyPublicUrl'
+				];
+				const data = project
+					? Object.fromEntries(
+							fields.filter((f) => project[f] !== undefined).map((f) => [f, project[f]])
+						)
+					: {};
+				const existing = await tx.project.findFirst({ orderBy: { id: 'asc' } });
+				if (existing) {
+					if (project) await tx.project.update({ where: { id: existing.id }, data });
+					projectId = existing.id;
+				} else {
+					// Restore into an empty database — a project needs an org and a slug.
+					const org =
+						(await tx.organization.findFirst({ orderBy: { id: 'asc' } })) ??
+						(await tx.organization.create({ data: { name: 'Default' } }));
+					const created = await tx.project.create({
+						data: { orgId: org.id, slug: slugify(data.name || 'default') || 'default', ...data }
+					});
+					projectId = created.id;
+				}
+			}
+
 			// 1. Users (needed before suites/runs reference createdById)
 			for (const user of users) {
 				await tx.user.upsert({
@@ -126,7 +171,8 @@ const importAll = async (
 					update: {
 						name: runner.name,
 						url: runner.url,
-						token: runner.token,
+						// Backups no longer carry the token — keep whatever the live row has.
+						...(runner.token && { token: runner.token }),
 						browser: runner.browser
 					}
 				});
@@ -135,8 +181,9 @@ const importAll = async (
 			// 3. CronJobs
 			for (const job of cronJobs) {
 				await tx.cronJob.upsert({
-					where: { taskName: job.taskName },
+					where: { projectId_taskName: { projectId, taskName: job.taskName } },
 					create: {
+						projectId,
 						taskName: job.taskName,
 						cronExpression: job.cronExpression,
 						tags: job.tags,
@@ -159,21 +206,12 @@ const importAll = async (
 				});
 			}
 
-			// 4. Project settings
-			if (project) {
-				await tx.project.upsert({
-					where: { id: 1 },
-					create: { id: 1, ...project },
-					update: project
-				});
-			}
-
-			// 5. Test suites + cases + steps
+			// 4. Test suites + cases + steps
 			for (const suite of testSuites) {
 				const { cases = [], ...suiteData } = suite;
 				await tx.testSuite.upsert({
-					where: { displayId: suiteData.displayId },
-					create: suiteData,
+					where: { projectId_displayId: { projectId, displayId: suiteData.displayId } },
+					create: { ...suiteData, projectId },
 					update: {
 						name: suiteData.name,
 						description: suiteData.description,
@@ -184,8 +222,8 @@ const importAll = async (
 				for (const tc of cases) {
 					const { steps = [], ...caseData } = tc;
 					await tx.testCase.upsert({
-						where: { displayId: caseData.displayId },
-						create: caseData,
+						where: { projectId_displayId: { projectId, displayId: caseData.displayId } },
+						create: { ...caseData, projectId },
 						update: {
 							title: caseData.title,
 							description: caseData.description,
@@ -202,12 +240,12 @@ const importAll = async (
 				}
 			}
 
-			// 6. Test runs + entries
+			// 5. Test runs + entries
 			for (const run of testRuns) {
 				const { entries = [], ...runData } = run;
 				await tx.testRun.upsert({
 					where: { id: runData.id },
-					create: runData,
+					create: { ...runData, projectId },
 					update: { title: runData.title, status: runData.status }
 				});
 
@@ -220,7 +258,7 @@ const importAll = async (
 				}
 			}
 
-			// 7. Reports + recordings (opt-in — only present if this backup
+			// 6. Reports + recordings (opt-in — only present if this backup
 			// included them). Recordings are always deleted and recreated
 			// rather than upserted — same pattern as test steps above.
 			for (const report of reports) {
@@ -233,10 +271,12 @@ const importAll = async (
 				// report is first created: a scheduled report's triggerType is
 				// always its cron job's taskName.
 				const cronJob = reportData.triggerType
-					? await tx.cronJob.findUnique({ where: { taskName: reportData.triggerType } })
+					? await tx.cronJob.findUnique({
+							where: { projectId_taskName: { projectId, taskName: reportData.triggerType } }
+						})
 					: null;
 
-				const data = { ...reportData, cronJobId: cronJob?.id ?? null };
+				const data = { ...reportData, projectId, cronJobId: cronJob?.id ?? null };
 				await tx.report.upsert({ where: { id: data.id }, create: data, update: data });
 
 				await tx.recording.deleteMany({ where: { reportId: data.id } });

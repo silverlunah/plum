@@ -33,16 +33,19 @@ const testCaseService = require('../services/testCaseService');
 const triggerService = require('../services/triggerService');
 const reportService = require('../services/reportService');
 const exportService = require('../services/exportService');
+const userService = require('../services/userService');
+const projectService = require('../services/projectService');
+const settingsService = require('../services/settingsService');
 
 // ---------------------------------------------------------------------------
 // Polling helper for test runs
 // ---------------------------------------------------------------------------
 
-async function pollJob(jobId, { maxMs = 600_000, intervalMs = 5_000 } = {}) {
+async function pollJob(projectId, jobId, { maxMs = 600_000, intervalMs = 5_000 } = {}) {
 	const deadline = Date.now() + maxMs;
 	while (Date.now() < deadline) {
 		await new Promise((r) => setTimeout(r, intervalMs));
-		const job = await triggerService.getJob(jobId);
+		const job = await triggerService.getJob(jobId, projectId);
 		if (job && job.status !== JOB_STATUS.RUNNING) return job;
 	}
 	return { status: 'timeout', jobId };
@@ -91,11 +94,19 @@ function summariseReport(report) {
  * authenticated user for this request (see routes/mcp.routes.js — a new
  * server/transport pair is created per request in stateless mode).
  */
-function createMcpServer({ userId }) {
+function createMcpServer({ userId, userName, projectId, role, viaMcp, apiKeyKind }) {
 	const server = new McpServer({
 		name: 'plum',
 		version: '1.0.0'
 	});
+
+	// Org-wide tools need the instance key — a per-project key stays scoped even
+	// when the owner holds it.
+	const assertAccountAdmin = () => {
+		if (apiKeyKind !== 'instance') {
+			throw new Error('This tool needs the instance API key (PLUM_MCP_KEY).');
+		}
+	};
 
 	// -- Test Repository: Suites -----------------------------------------------
 
@@ -113,7 +124,7 @@ function createMcpServer({ userId }) {
 				.describe('Results per page (default 20)')
 		},
 		async ({ page = 1, limit = 20 }) => {
-			const data = await testSuiteService.getAll({ page, limit });
+			const data = await testSuiteService.getAll(projectId, { page, limit });
 			return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
 		}
 	);
@@ -125,7 +136,7 @@ function createMcpServer({ userId }) {
 			suiteId: z.string().describe('The suite ID (e.g. the database UUID, not the displayId)')
 		},
 		async ({ suiteId }) => {
-			const suite = await testSuiteService.getById(suiteId);
+			const suite = await testSuiteService.getById(projectId, suiteId);
 			if (!suite) throw new Error('Suite not found');
 			return { content: [{ type: 'text', text: JSON.stringify(suite, null, 2) }] };
 		}
@@ -143,11 +154,12 @@ function createMcpServer({ userId }) {
 				.describe('Suite priority (default Medium)')
 		},
 		async ({ name, description, priority }) => {
-			const suite = await testSuiteService.create({
+			const suite = await testSuiteService.create(projectId, {
 				name,
 				description,
 				priority,
-				createdById: userId
+				createdById: userId,
+				viaMcp
 			});
 			return { content: [{ type: 'text', text: JSON.stringify(suite, null, 2) }] };
 		}
@@ -163,7 +175,11 @@ function createMcpServer({ userId }) {
 			priority: z.enum(['Critical', 'High', 'Medium', 'Low']).optional()
 		},
 		async ({ suiteId, name, description, priority }) => {
-			const suite = await testSuiteService.update(suiteId, { name, description, priority });
+			const suite = await testSuiteService.update(projectId, suiteId, {
+				name,
+				description,
+				priority
+			});
 			return { content: [{ type: 'text', text: JSON.stringify(suite, null, 2) }] };
 		}
 	);
@@ -175,7 +191,7 @@ function createMcpServer({ userId }) {
 			suiteId: z.string().describe('UUID of the suite to delete')
 		},
 		async ({ suiteId }) => {
-			await testSuiteService.remove(suiteId);
+			await testSuiteService.remove(projectId, suiteId);
 			return { content: [{ type: 'text', text: `Suite ${suiteId} deleted.` }] };
 		}
 	);
@@ -195,12 +211,13 @@ function createMcpServer({ userId }) {
 			priority: z.enum(['Critical', 'High', 'Medium', 'Low']).optional()
 		},
 		async ({ suiteId, title, description, priority }) => {
-			const testCase = await testCaseService.create({
+			const testCase = await testCaseService.create(projectId, {
 				suiteId,
 				title,
 				description,
 				priority,
-				createdById: userId
+				createdById: userId,
+				viaMcp
 			});
 			return { content: [{ type: 'text', text: JSON.stringify(testCase, null, 2) }] };
 		}
@@ -213,7 +230,7 @@ function createMcpServer({ userId }) {
 			caseId: z.string().describe('UUID of the test case')
 		},
 		async ({ caseId }) => {
-			const testCase = await testCaseService.getById(caseId);
+			const testCase = await testCaseService.getById(projectId, caseId);
 			if (!testCase) throw new Error('Test case not found');
 			return { content: [{ type: 'text', text: JSON.stringify(testCase, null, 2) }] };
 		}
@@ -229,7 +246,11 @@ function createMcpServer({ userId }) {
 			priority: z.enum(['Critical', 'High', 'Medium', 'Low']).optional()
 		},
 		async ({ caseId, title, description, priority }) => {
-			const testCase = await testCaseService.update(caseId, { title, description, priority });
+			const testCase = await testCaseService.update(projectId, caseId, {
+				title,
+				description,
+				priority
+			});
 			return { content: [{ type: 'text', text: JSON.stringify(testCase, null, 2) }] };
 		}
 	);
@@ -241,7 +262,7 @@ function createMcpServer({ userId }) {
 			caseId: z.string().describe('UUID of the test case to delete')
 		},
 		async ({ caseId }) => {
-			await testCaseService.remove(caseId);
+			await testCaseService.remove(projectId, caseId);
 			return { content: [{ type: 'text', text: `Test case ${caseId} deleted.` }] };
 		}
 	);
@@ -262,7 +283,7 @@ function createMcpServer({ userId }) {
 				.describe('Ordered list of steps. Replaces any existing steps.')
 		},
 		async ({ caseId, steps }) => {
-			const saved = await testCaseService.upsertSteps(caseId, steps);
+			const saved = await testCaseService.upsertSteps(projectId, caseId, steps);
 			return { content: [{ type: 'text', text: JSON.stringify(saved, null, 2) }] };
 		}
 	);
@@ -313,15 +334,17 @@ function createMcpServer({ userId }) {
 		},
 		async ({ tag, browser, workers, baseUrl, testRunId }) => {
 			const jobId = await triggerService.startRun({
+				projectId,
 				tag,
 				browser,
 				workers,
 				baseUrl,
 				testRunId,
-				trigger: TRIGGER_TYPE.MCP
+				trigger: TRIGGER_TYPE.MCP,
+				startedBy: userName
 			});
 
-			const job = await pollJob(jobId);
+			const job = await pollJob(projectId, jobId);
 
 			if (job.status === 'timeout') {
 				return {
@@ -345,7 +368,7 @@ function createMcpServer({ userId }) {
 				};
 			}
 
-			const report = await reportService.getReportDetail(job.reportId);
+			const report = await reportService.getReportDetail(projectId, job.reportId);
 			const summary = summariseReport(report);
 
 			const lines = [
@@ -380,7 +403,7 @@ function createMcpServer({ userId }) {
 			jobId: z.string().uuid().describe('Job ID returned by run_tests')
 		},
 		async ({ jobId }) => {
-			const job = await triggerService.getJob(jobId);
+			const job = await triggerService.getJob(jobId, projectId);
 			if (!job) throw new Error('Job not found');
 			return { content: [{ type: 'text', text: JSON.stringify(job, null, 2) }] };
 		}
@@ -401,7 +424,7 @@ function createMcpServer({ userId }) {
 				.describe('Number of reports (default 10)')
 		},
 		async ({ limit = 10 }) => {
-			const data = await reportService.getReports({ limit });
+			const data = await reportService.getReports(projectId, { limit });
 			return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
 		}
 	);
@@ -413,7 +436,7 @@ function createMcpServer({ userId }) {
 			reportId: z.number().int().describe('Numeric report ID')
 		},
 		async ({ reportId }) => {
-			const detail = await reportService.getReportDetail(reportId);
+			const detail = await reportService.getReportDetail(projectId, reportId);
 			if (!detail) throw new Error('Report not found');
 			const summary = summariseReport(detail);
 			const lines = [
@@ -454,7 +477,7 @@ function createMcpServer({ userId }) {
 				.describe('Only include scenarios with a failed step (default true)')
 		},
 		async ({ reportId, onlyFailed = true }) => {
-			const detail = await reportService.getReportDetail(reportId);
+			const detail = await reportService.getReportDetail(projectId, reportId);
 			if (!detail) throw new Error('Report not found');
 			const features = detail.features ?? [];
 
@@ -497,7 +520,7 @@ function createMcpServer({ userId }) {
 				.describe('Only return the last N lines (default: full log)')
 		},
 		async ({ reportId, tail }) => {
-			const detail = await reportService.getReportDetail(reportId);
+			const detail = await reportService.getReportDetail(projectId, reportId);
 			if (!detail) throw new Error('Report not found');
 			let logs = detail.logs ?? '';
 			if (tail) {
@@ -524,7 +547,7 @@ function createMcpServer({ userId }) {
 			if ((scope === 'suite' || scope === 'run') && !id) {
 				throw new Error(`scope "${scope}" needs an id`);
 			}
-			const data = await exportService.buildTestCaseExport(scope, {
+			const data = await exportService.buildTestCaseExport(projectId, scope, {
 				suiteId: id,
 				runId: id
 			});
@@ -543,10 +566,101 @@ function createMcpServer({ userId }) {
 			format: z.enum(['csv', 'json']).describe('csv or json')
 		},
 		async ({ reportId, format }) => {
-			const data = await exportService.buildReportExport(reportId);
+			const data = await exportService.buildReportExport(projectId, reportId);
 			if (!data) throw new Error('Report not found');
 			const text = format === 'csv' ? exportService.reportCsv(data) : JSON.stringify(data, null, 2);
 			return { content: [{ type: 'text', text }] };
+		}
+	);
+
+	// -- Account administration ------------------------------------------------
+	// Deleting a user or a project is deliberately not here — a human does that
+	// in the UI.
+
+	const asJson = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] });
+
+	server.tool('list_users', 'List every Plum account with its role.', {}, async () => {
+		assertAccountAdmin();
+		return asJson(await userService.getAll());
+	});
+
+	server.tool(
+		'create_user',
+		'Create a Plum account. The person can sign in immediately with the password you set.',
+		{
+			name: z.string().min(1),
+			email: z.string().email(),
+			password: z.string().min(8).describe('At least 8 characters'),
+			role: z.enum(['owner', 'admin', 'user']).optional().describe('Default: user')
+		},
+		async ({ name, email, password, role = 'user' }) => {
+			assertAccountAdmin();
+			return asJson(await userService.createUser({ name, email, password, role }));
+		}
+	);
+
+	server.tool(
+		'update_user',
+		'Change a Plum account’s name, email or role. Does not set passwords.',
+		{
+			userId: z.string().describe('The account id (cuid), not the email'),
+			name: z.string().min(1).optional(),
+			email: z.string().email().optional(),
+			role: z.enum(['owner', 'admin', 'user']).optional()
+		},
+		async ({ userId, name, email, role }) => {
+			assertAccountAdmin();
+			const result = await userService.updateUser(userId, { name, email, role });
+			if (!result.ok) throw new Error(result.error);
+			return asJson(result.user);
+		}
+	);
+
+	server.tool(
+		'list_projects',
+		'List every project in the organisation with its slug and member count.',
+		{},
+		async () => {
+			assertAccountAdmin();
+			return asJson(await projectService.listAll());
+		}
+	);
+
+	server.tool(
+		'create_project',
+		'Create a project. Its slug (folder + API identity) is derived from the name and never changes.',
+		{
+			name: z.string().min(1),
+			baseUrl: z.string().optional().describe('Default base URL for this project’s runs')
+		},
+		async ({ name, baseUrl }) => {
+			assertAccountAdmin();
+			return asJson(await projectService.create({ name, baseUrl }));
+		}
+	);
+
+	server.tool(
+		'update_project',
+		'Change a project’s name, logo, timezone, base URL or retry count. The slug never changes.',
+		{
+			projectId: z.number().int().describe('Numeric project id'),
+			name: z.string().min(1).optional(),
+			logoUrl: z.string().optional(),
+			timezone: z.string().optional().describe('IANA name, e.g. "Asia/Manila"'),
+			baseUrl: z.string().optional(),
+			maxRetries: z.number().int().min(0).optional()
+		},
+		async ({ projectId: id, name, logoUrl, timezone, baseUrl, maxRetries }) => {
+			if (role !== 'owner' && role !== 'admin') {
+				throw new Error('Updating project settings needs an admin or owner key.');
+			}
+			// A scoped key stays on its own project; only the instance key roams.
+			if (apiKeyKind !== 'instance' && id !== projectId) {
+				throw new Error(`This key is scoped to project ${projectId}.`);
+			}
+			return asJson(
+				await settingsService.updateProject(id, { name, logoUrl, timezone, baseUrl, maxRetries })
+			);
 		}
 	);
 

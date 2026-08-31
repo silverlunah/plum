@@ -23,6 +23,13 @@ export const TRIGGER_TYPES = Object.freeze({
 export const REPORTS_PER_PAGE = 15;
 export const REPO_PAGE_SIZE = 20;
 export const SUITE_CASES_PER_PAGE = 20;
+export const ACTIVITY_PER_PAGE = 30;
+// Retention windows (days) offered in Settings → Activity. 0 = keep forever.
+// Mirrors backend/constants/activity.js ACTIVITY_RETENTION_DAYS.
+export const ACTIVITY_RETENTION_DAYS = [0, 30, 90, 180, 365];
+// Retention windows (days) offered in Settings → Backup for report history.
+// Mirrors backend/constants/activity.js REPORT_RETENTION_DAYS.
+export const REPORT_RETENTION_DAYS = [0, 30, 60, 90];
 
 export const COPY_TIMEOUT_MS = 1400;
 export const TOAST_TIMEOUT_MS = 8000;
@@ -41,3 +48,5 @@ export const CASE_HISTORY_BARS_MAX = 20;
 export const INSPECTOR_MIN_WIDTH = 280;
 
 export const BUILTIN_RUNNER_ID = 'built-in';
+
+export const DOCS_URL = 'https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd';

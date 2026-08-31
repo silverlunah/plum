@@ -17,6 +17,10 @@ export function isScheduled(type) {
 	return !!type && !NON_SCHEDULED.has(type);
 }
 
+// Appends "(MCP)" to a person's name when the thing they made or ran came in
+// over an MCP key, so its origin shows everywhere the name does.
+export const mcpName = (name, viaMcp) => (viaMcp ? `${name} (MCP)` : name);
+
 export function triggerLabel(type) {
 	if (type === TRIGGER_TYPES.MANUAL) return 'Manual';
 	if (type === TRIGGER_TYPES.CLI || type === 'undefined') return 'CLI';
@@ -36,6 +40,20 @@ export function triggerVariant(type) {
 /** Returns an inline style string for staggered fadeUp animations. */
 export function stagger(i, stepMs = 45) {
 	return `animation-delay: ${i * stepMs}ms`;
+}
+
+// "just now" / "5m ago" / "3h ago" / "2d ago", then an absolute date once it's a
+// week old — for feeds where the exact second stops mattering.
+export function relativeTime(iso) {
+	const then = new Date(iso).getTime();
+	if (Number.isNaN(then)) return '';
+	const diff = Date.now() - then;
+	const min = 60_000;
+	if (diff < min) return 'just now';
+	if (diff < 60 * min) return `${Math.floor(diff / min)}m ago`;
+	if (diff < 24 * 60 * min) return `${Math.floor(diff / (60 * min))}h ago`;
+	if (diff < 7 * 24 * 60 * min) return `${Math.floor(diff / (24 * 60 * min))}d ago`;
+	return new Date(iso).toLocaleDateString();
 }
 
 export function fmtDuration(ms) {

@@ -18,9 +18,6 @@ export const TREND_HINT = '← older · newer →';
 export const NO_REPORTS_MESSAGE = 'No reports yet. Run a test to generate one.';
 export const SELECT_ALL_TITLE = 'Select all on this page';
 export const SELECT_ROW_TITLE = 'Select';
-export const LEGACY_SCREENSHOTS_NOTICE =
-	'Screenshots have been replaced by full session replay. Reports created before this change no longer have screenshots — steps and logs are still available.';
-export const DISMISS_NOTICE_TITLE = 'Dismiss';
 export const DELETE_REPORT_TITLE = 'Delete report';
 
 export const deleteReportsTitle = (count) =>
@@ -40,10 +37,13 @@ export const DETAIL_PAGE_TITLE = 'Report — Plum';
 export const LOAD_ERROR = 'Could not load report.';
 export const STAT_PASSED = 'passed';
 export const STAT_FAILED = 'failed';
+export const STAT_FLAKY = 'flaky';
 export const STAT_SKIPPED = 'skipped';
 export const STAT_DURATION = 'duration';
 export const RUN_LOGS_LABEL = 'Run Logs';
 export const RETRY_TITLE = 'Failed and was automatically retried before the final result';
+export const FLAKY_LABEL = 'flaky';
+export const FLAKY_TITLE = 'Failed at least once, then passed on a retry';
 export const WATCH_REPLAY_TITLE = 'Watch replay';
 export const REPLAY_LABEL = 'Replay';
 
@@ -73,6 +73,18 @@ export const ELEMENT_SIZE_LABEL = 'Size';
 export const INSPECTOR_TAB_ELEMENT = 'Element';
 export const INSPECTOR_TAB_DOM = 'DOM';
 export const DOM_TREE_EMPTY = 'Click an element in the replay to locate it in the DOM.';
+export const ELEMENT_LOCATORS_LABEL = 'Locators';
+export const LOCATOR_RECOMMENDED_LABEL = 'recommended';
+export const LOCATOR_NOT_UNIQUE_LABEL = 'matches multiple';
+export const COPY_LOCATOR_TITLE = 'Copy';
+export const LOCATOR_COPIED_TITLE = 'Copied';
+export const INSPECTOR_SEARCH_PLACEHOLDER = 'Search text, CSS selector or XPath…';
+export const inspectorSearchCount = (kind, n) => {
+	const what = { css: 'CSS', xpath: 'XPath', keyword: 'text' }[kind] ?? '';
+	if (n === 0) return `No ${what} matches`.replace('  ', ' ');
+	return `${n} ${what} ${n === 1 ? 'match' : 'matches'}`.replace('  ', ' ');
+};
+export const INSPECTOR_SEARCH_INVALID = 'Invalid selector';
 export const recordingTabLabel = (tabIndex) =>
 	tabIndex === 0 ? 'Main tab' : `Tab/Window ${tabIndex + 1}`;
 
@@ -111,4 +123,7 @@ export const RUN_NOT_FOUND_HEADING = 'Run not found';
 export const RUN_NOT_FOUND_BODY =
 	'This run has finished or was never started. Check the reports list for its results.';
 export const RUN_SKIPPED_HEADING = 'Run skipped';
+export const RUN_FORBIDDEN_HEADING = 'Another project’s run';
+export const RUN_FORBIDDEN_BODY =
+	'This run belongs to a different project. Switch to that project to watch it — or ask an admin for access if you’re not a member.';
 export const queuePositionLine = (n) => (n > 0 ? `Position ${n} in the queue` : 'Next up');

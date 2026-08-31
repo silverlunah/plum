@@ -10,54 +10,65 @@ const testSuiteService = require('../services/testSuiteService');
 const testCaseService = require('../services/testCaseService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireAdmin } = require('../middleware/requireAdmin');
+const { requireProjectAccess } = require('../middleware/requireProjectAccess');
 
-router.get('/project', jwtAuth, requireAdmin, async (req, res, next) => {
+const scoped = [jwtAuth, requireProjectAccess];
+const scopedAdmin = [jwtAuth, requireProjectAccess, requireAdmin];
+
+router.get('/project', scopedAdmin, async (req, res, next) => {
 	try {
-		const project = await settingsService.getProject();
+		res.json(await settingsService.getProject(req.projectId));
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/project', scopedAdmin, async (req, res, next) => {
+	try {
+		const { name, logoUrl, timezone, baseUrl, maxRetries } = req.body;
+		const project = await settingsService.updateProject(req.projectId, {
+			name,
+			logoUrl,
+			timezone,
+			baseUrl,
+			maxRetries
+		});
 		res.json(project);
 	} catch (e) {
 		next(e);
 	}
 });
 
-router.post('/project', jwtAuth, requireAdmin, async (req, res, next) => {
+router.get('/test-prefixes', scoped, async (req, res, next) => {
 	try {
-		const { name, logoUrl, timezone, maxRetries } = req.body;
-		const project = await settingsService.updateProject({ name, logoUrl, timezone, maxRetries });
-		res.json(project);
+		res.json(await settingsService.getTestPrefixes(req.projectId));
 	} catch (e) {
 		next(e);
 	}
 });
 
-router.get('/test-prefixes', jwtAuth, async (req, res, next) => {
-	try {
-		const prefixes = await settingsService.getTestPrefixes();
-		res.json(prefixes);
-	} catch (e) {
-		next(e);
-	}
-});
-
-router.post('/test-prefixes', jwtAuth, async (req, res, next) => {
+router.post('/test-prefixes', scoped, async (req, res, next) => {
 	try {
 		const { testCasePrefix, testSuitePrefix } = req.body;
-		const project = await settingsService.updateTestPrefixes({ testCasePrefix, testSuitePrefix });
+		const project = await settingsService.updateTestPrefixes(req.projectId, {
+			testCasePrefix,
+			testSuitePrefix
+		});
 		res.json(project);
 	} catch (e) {
 		next(e);
 	}
 });
 
-router.post('/test-prefixes/migrate', jwtAuth, async (req, res, next) => {
+router.post('/test-prefixes/migrate', scoped, async (req, res, next) => {
 	try {
 		const { testCasePrefix, testSuitePrefix } = req.body;
 		const results = {};
 		if (testCasePrefix) {
-			results.cases = await testCaseService.migratePrefix(testCasePrefix);
+			results.cases = await testCaseService.migratePrefix(req.projectId, testCasePrefix);
 		}
 		if (testSuitePrefix) {
-			results.suites = await testSuiteService.migratePrefix(testSuitePrefix);
+			results.suites = await testSuiteService.migratePrefix(req.projectId, testSuitePrefix);
 		}
 		res.json({ ok: true, ...results });
 	} catch (e) {
@@ -65,19 +76,18 @@ router.post('/test-prefixes/migrate', jwtAuth, async (req, res, next) => {
 	}
 });
 
-router.get('/integrations', jwtAuth, requireAdmin, async (req, res, next) => {
+router.get('/integrations', scopedAdmin, async (req, res, next) => {
 	try {
-		const webhooks = await settingsService.getWebhooks();
-		res.json(webhooks);
+		res.json(await settingsService.getWebhooks(req.projectId));
 	} catch (e) {
 		next(e);
 	}
 });
 
-router.post('/integrations', jwtAuth, requireAdmin, async (req, res, next) => {
+router.post('/integrations', scopedAdmin, async (req, res, next) => {
 	try {
 		const { discordWebhookUrl, slackWebhookUrl, notifyPublicUrl } = req.body;
-		const project = await settingsService.updateWebhooks({
+		const project = await settingsService.updateWebhooks(req.projectId, {
 			discordWebhookUrl,
 			slackWebhookUrl,
 			notifyPublicUrl
@@ -92,19 +102,28 @@ router.post('/integrations', jwtAuth, requireAdmin, async (req, res, next) => {
 	}
 });
 
-router.get('/mcp', jwtAuth, async (req, res, next) => {
+// An MCP key acts as the member who minted it, with that member's role — so any
+// member manages their own, no admin gate.
+router.get('/mcp', scoped, async (req, res, next) => {
 	try {
-		const config = await settingsService.getMcpConfig();
-		res.json(config);
+		res.json(await settingsService.getMcpConfig(req.projectId, req.user.userId));
 	} catch (e) {
 		next(e);
 	}
 });
 
-router.post('/mcp/generate', jwtAuth, async (req, res, next) => {
+router.post('/mcp/generate', scoped, async (req, res, next) => {
 	try {
-		const config = await settingsService.generateMcpKey();
-		res.json(config);
+		res.json(await settingsService.generateMcpKey(req.projectId, req.user.userId));
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.delete('/mcp', scoped, async (req, res, next) => {
+	try {
+		await settingsService.revokeMcpKey(req.projectId, req.user.userId);
+		res.json({ ok: true });
 	} catch (e) {
 		next(e);
 	}

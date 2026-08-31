@@ -7,6 +7,8 @@
 	import { onDestroy, createEventDispatcher } from 'svelte';
 	import CodeViewer from '$lib/components/ui/CodeViewer.svelte';
 	import DomTree from './DomTree.svelte';
+	import { copyText } from '$lib/utils/clipboard';
+	import { searchDom } from '$lib/utils/inspectElement';
 	import {
 		INSPECTOR_HEADING,
 		CLOSE_INSPECTOR_LABEL,
@@ -14,16 +16,72 @@
 		DOM_TREE_EMPTY,
 		ELEMENT_ATTRIBUTES_LABEL,
 		ELEMENT_SIZE_LABEL,
+		ELEMENT_LOCATORS_LABEL,
+		LOCATOR_RECOMMENDED_LABEL,
+		LOCATOR_NOT_UNIQUE_LABEL,
+		COPY_LOCATOR_TITLE,
+		LOCATOR_COPIED_TITLE,
+		INSPECTOR_SEARCH_PLACEHOLDER,
+		INSPECTOR_SEARCH_INVALID,
+		inspectorSearchCount,
 		INSPECTOR_TAB_ELEMENT,
 		INSPECTOR_TAB_DOM
 	} from '$lib/copy/reports';
-	import { INSPECTOR_MIN_WIDTH } from '$lib/constants';
+	import { INSPECTOR_MIN_WIDTH, COPY_TIMEOUT_MS } from '$lib/constants';
 
 	const dispatch = createEventDispatcher();
 
 	export let selectedElement = null;
 	export let selectedNode = null;
 	export let panelWidth = INSPECTOR_MIN_WIDTH;
+	export let getSearchDoc = () => null;
+
+	let searchQuery = '';
+	let searchResults = [];
+	let searchKind = '';
+	let searchError = '';
+	let searchIndex = -1;
+
+	let lastSearched = null;
+
+	function runSearch() {
+		const { kind, nodes, error } = searchDom(getSearchDoc(), searchQuery);
+		lastSearched = searchQuery;
+		searchKind = kind;
+		searchError = error ?? '';
+		searchResults = nodes;
+		searchIndex = nodes.length > 0 ? 0 : -1;
+		if (nodes.length > 0) dispatch('select', nodes[0]);
+	}
+
+	function onSearchEnter() {
+		if (searchQuery === lastSearched && searchResults.length > 0) stepSearch(1);
+		else runSearch();
+	}
+
+	function stepSearch(delta) {
+		if (searchResults.length === 0) return;
+		searchIndex = (searchIndex + delta + searchResults.length) % searchResults.length;
+		dispatch('select', searchResults[searchIndex]);
+	}
+
+	function clearSearch() {
+		searchQuery = '';
+		searchResults = [];
+		searchKind = '';
+		searchError = '';
+		searchIndex = -1;
+		lastSearched = null;
+	}
+
+	let copiedLocator = null;
+	async function copyLocator(value) {
+		await copyText(value);
+		copiedLocator = value;
+		setTimeout(() => {
+			if (copiedLocator === value) copiedLocator = null;
+		}, COPY_TIMEOUT_MS);
+	}
 
 	const TAB_KEY = 'plum:inspectorTab';
 	const WIDTH_KEY = 'plum:inspectorWidth';
@@ -160,6 +218,38 @@
 			</button>
 		</div>
 
+		<div class="inspector-search">
+			<input
+				class="inspector-search-input"
+				type="text"
+				placeholder={INSPECTOR_SEARCH_PLACEHOLDER}
+				spellcheck="false"
+				autocomplete="off"
+				bind:value={searchQuery}
+				on:keydown={(e) => {
+					if (e.key === 'Enter') onSearchEnter();
+					else if (e.key === 'Escape') clearSearch();
+				}}
+			/>
+			{#if searchQuery}
+				<button class="inspector-search-clear" on:click={clearSearch} aria-label="Clear">×</button>
+			{/if}
+			{#if searchError}
+				<span class="inspector-search-status err">{INSPECTOR_SEARCH_INVALID}</span>
+			{:else if searchKind && searchKind !== 'empty'}
+				<span class="inspector-search-status">
+					{inspectorSearchCount(searchKind, searchResults.length)}
+				</span>
+				{#if searchResults.length > 1}
+					<span class="inspector-search-nav">
+						<button on:click={() => stepSearch(-1)} aria-label="Previous">‹</button>
+						<span>{searchIndex + 1}/{searchResults.length}</span>
+						<button on:click={() => stepSearch(1)} aria-label="Next">›</button>
+					</span>
+				{/if}
+			{/if}
+		</div>
+
 		{#if activeTab === 'dom'}
 			{#if selectedNode}
 				<DomTree {selectedNode} on:select on:hover />
@@ -178,6 +268,36 @@
 							>{selectedElement.box.width} × {selectedElement.box.height}</span
 						>
 					</div>
+					{#if selectedElement.locators?.length > 0}
+						<div class="inspector-section">
+							<span class="inspector-section-label">{ELEMENT_LOCATORS_LABEL}</span>
+						</div>
+						<ul class="inspector-locators">
+							{#each selectedElement.locators as loc}
+								<li class="locator-row" class:recommended={loc.recommended}>
+									<div class="locator-head">
+										<span class="locator-kind">{loc.label}</span>
+										{#if loc.recommended}
+											<span class="locator-tag rec">{LOCATOR_RECOMMENDED_LABEL}</span>
+										{:else if loc.unique === false}
+											<span class="locator-tag warn">{LOCATOR_NOT_UNIQUE_LABEL}</span>
+										{/if}
+										<button
+											class="locator-copy"
+											title={copiedLocator === loc.value
+												? LOCATOR_COPIED_TITLE
+												: COPY_LOCATOR_TITLE}
+											on:click={() => copyLocator(loc.value)}
+										>
+											{copiedLocator === loc.value ? '✓' : '⧉'}
+										</button>
+									</div>
+									<code class="locator-value">{loc.value}</code>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+
 					{#if selectedElement.attributes.length > 0}
 						<div class="inspector-section">
 							<span class="inspector-section-label">{ELEMENT_ATTRIBUTES_LABEL}</span>
@@ -392,6 +512,124 @@
 	}
 	.inspector-attr-row dd {
 		margin: 0;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.72rem;
+		color: var(--text-muted);
+		word-break: break-all;
+	}
+
+	.inspector-search {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		flex-shrink: 0;
+		padding: 0.5rem 0.75rem;
+		border-bottom: 1px solid var(--border);
+	}
+	.inspector-search-input {
+		flex: 1;
+		min-width: 8rem;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.72rem;
+		padding: 0.3rem 0.45rem;
+		color: var(--text);
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+	}
+	.inspector-search-input:focus {
+		outline: none;
+		border-color: var(--accent);
+	}
+	.inspector-search-clear {
+		border: none;
+		background: transparent;
+		color: var(--text-muted);
+		font-size: 0.95rem;
+		line-height: 1;
+		cursor: pointer;
+	}
+	.inspector-search-status {
+		font-size: 0.68rem;
+		color: var(--text-muted);
+	}
+	.inspector-search-status.err {
+		color: var(--fail);
+	}
+	.inspector-search-nav {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.68rem;
+		color: var(--text-muted);
+	}
+	.inspector-search-nav button {
+		border: 1px solid var(--border);
+		background: var(--bg);
+		color: var(--text);
+		border-radius: var(--radius-sm);
+		width: 1.25rem;
+		height: 1.25rem;
+		line-height: 1;
+		cursor: pointer;
+	}
+
+	.inspector-locators {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.locator-row {
+		padding: 0.4rem 0;
+		border-top: 1px solid var(--border);
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+	.locator-row.recommended .locator-value {
+		color: var(--text);
+	}
+	.locator-head {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+	.locator-kind {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.68rem;
+		color: var(--accent);
+	}
+	.locator-tag {
+		font-size: 0.6rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		padding: 0.05rem 0.3rem;
+		border-radius: var(--radius-pill);
+	}
+	.locator-tag.rec {
+		background: var(--pass-soft);
+		color: var(--pass);
+	}
+	.locator-tag.warn {
+		background: var(--fail-soft);
+		color: var(--fail);
+	}
+	.locator-copy {
+		margin-left: auto;
+		border: none;
+		background: transparent;
+		color: var(--text-muted);
+		font-size: 0.8rem;
+		line-height: 1;
+		cursor: pointer;
+	}
+	.locator-copy:hover {
+		color: var(--accent);
+	}
+	.locator-value {
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.72rem;
 		color: var(--text-muted);
