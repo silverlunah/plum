@@ -21,6 +21,7 @@ export const REPOSITORY_HEADING = 'Test Repository';
 export const TEST_CASES_NAV_LABEL = 'Test Cases';
 export const TEST_CASES_HEADING = 'Test Cases';
 export const TEST_CASES_DESC = 'Import, export and configure this project’s test repository.';
+export const TC_IO_CARD_TITLE = 'Import & Export';
 export const TC_EXPORT_CARD_TITLE = 'Export';
 export const TC_EXPORT_DESC =
 	'Download every suite and case in this project as a JSON or CSV file.';
