@@ -24,7 +24,7 @@
 	import { activeProjectId } from '$lib/stores/project';
 	import { auth } from '$lib/stores/auth';
 	import { reportUrl } from '$lib/api/reports';
-	import { fetchRunners, fetchBuiltInEnabled } from '$lib/api/runners';
+	import { fetchRunners, fetchBuiltInEnabled, pingRunner } from '$lib/api/runners';
 	import { fetchRuns, fetchRun } from '$lib/api/repository';
 	import { fetchIntegrations } from '$lib/api/settings';
 	import { fetchActiveRuns } from '$lib/api/activeRuns';
@@ -68,6 +68,7 @@
 		collapseOrExpandLabel,
 		queuePositionLabel,
 		lockedRunTitle,
+		OFFLINE_LABEL,
 		statusLabel as computeStatusLabel,
 		runnerSummary as computeRunnerSummary
 	} from '$lib/copy/runners';
@@ -77,6 +78,9 @@
 	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 
 	let availableRunners = [];
+	// { [runnerId]: 'checking' | 'up' | 'down' } — the runner list is DB-only and
+	// carries no health, so its dots would otherwise always read healthy.
+	let nodePings = {};
 	let testRuns = [];
 	let selectedRun = null; // { id, title, tags: string[] | null }
 	let selectedRunLoading = false;
@@ -126,6 +130,7 @@
 					const pruned = c.selectedRunners.filter((id) => validIds.has(id));
 					return { ...c, selectedRunners: pruned.length > 0 ? pruned : [BUILTIN_RUNNER_ID] };
 				});
+				pingNodes();
 			})
 			.catch(() => {});
 
@@ -138,16 +143,22 @@
 		// the moment an event fires.
 		fetchActiveRuns()
 			.then(({ runs }) => {
-				if (runs.length === 0) return;
+				const activeIds = new Set(runs.map((r) => r.runId));
 				backgroundRuns.update((r) => {
 					const next = { ...r };
 					for (const { runId, projectId, projectName, kind, label, meta, status } of runs) {
 						if (!next[runId])
 							next[runId] = makeRunEntry({ projectId, projectName, kind, label, meta, status });
 					}
+					// Drop a client-side run the server no longer tracks (its node died
+					// and a restart cleared it) — but keep a freshly-`done` one so the
+					// completion bar still shows.
+					for (const [runId, entry] of Object.entries(next)) {
+						if (!activeIds.has(runId) && entry.status !== 'done') delete next[runId];
+					}
 					return next;
 				});
-				panelExpanded.set(true);
+				if (runs.length > 0) panelExpanded.set(true);
 			})
 			.catch(() => {});
 
@@ -394,15 +405,45 @@
 
 	function toggleRunner(id) {
 		runnerConfig.update((c) => {
-			const current = c.selectedRunners;
-			if (current.includes(id) && current.length === 1) return c;
-			const next = current.includes(id) ? current.filter((r) => r !== id) : [...current, id];
-			return { ...c, selectedRunners: next };
+			const set = new Set(c.selectedRunners);
+			if (set.has(id)) {
+				set.delete(id);
+				// Never leave the selection empty — fall back to the built-in runner
+				// when it's available, otherwise keep this one selected.
+				if (set.size === 0) {
+					if ($builtInEnabled) set.add(BUILTIN_RUNNER_ID);
+					else return c;
+				}
+			} else {
+				set.add(id);
+			}
+			return { ...c, selectedRunners: [...set] };
 		});
 	}
 
 	function isRunnerSelected(id) {
 		return $runnerConfig.selectedRunners.includes(id);
+	}
+
+	// A checkbox's `checked={isRunnerSelected(id)}` isn't reactive — Svelte can't
+	// see the `$runnerConfig` read hidden in the call. Bind to this set instead so
+	// the picker always mirrors the model, including a sibling flipped by a toggle.
+	$: selectedRunnerSet = new Set($runnerConfig.selectedRunners);
+
+	async function pingNodes() {
+		if (availableRunners.length === 0) return;
+		nodePings = Object.fromEntries(availableRunners.map((r) => [r.id, 'checking']));
+		await Promise.all(
+			availableRunners.map(async (r) => {
+				let ok = false;
+				try {
+					ok = (await pingRunner(r.id))?.ok === true;
+				} catch {
+					ok = false;
+				}
+				nodePings = { ...nodePings, [r.id]: ok ? 'up' : 'down' };
+			})
+		);
 	}
 </script>
 
@@ -662,6 +703,7 @@
 							class:has-remote={cfg.selectedRunners.some((r) => r !== BUILTIN_RUNNER_ID)}
 							on:click={() => {
 								runnersOpen = !runnersOpen;
+								if (runnersOpen) pingNodes();
 							}}
 						>
 							<span>{runnerSummary}</span>
@@ -681,11 +723,11 @@
 						</button>
 						{#if runnersOpen}
 							<div class="dropdown-menu runners-menu" transition:fly={{ y: 6, duration: 130 }}>
-								{#if $builtInEnabled || isRunnerSelected(BUILTIN_RUNNER_ID)}
+								{#if $builtInEnabled || selectedRunnerSet.has(BUILTIN_RUNNER_ID)}
 									<label class="runner-option">
 										<input
 											type="checkbox"
-											checked={isRunnerSelected(BUILTIN_RUNNER_ID)}
+											checked={selectedRunnerSet.has(BUILTIN_RUNNER_ID)}
 											on:change={() => toggleRunner(BUILTIN_RUNNER_ID)}
 										/>
 										<span class="runner-dot built-in"></span>
@@ -693,14 +735,24 @@
 									</label>
 								{/if}
 								{#each availableRunners as r}
-									<label class="runner-option">
+									{@const state = nodePings[r.id]}
+									{@const selected = selectedRunnerSet.has(r.id)}
+									<label class="runner-option" class:offline={state === 'down'}>
 										<input
 											type="checkbox"
-											checked={isRunnerSelected(r.id)}
+											checked={selected}
+											disabled={state === 'down' && !selected}
 											on:change={() => toggleRunner(r.id)}
 										/>
-										<span class="runner-dot remote"></span>
+										<span
+											class="runner-dot remote"
+											class:up={state === 'up'}
+											class:down={state === 'down'}
+											class:checking={state === 'checking'}
+										></span>
 										<span>{r.name}</span>
+										{#if state === 'down'}<span class="runner-offline-tag">{OFFLINE_LABEL}</span
+											>{/if}
 									</label>
 								{/each}
 							</div>
@@ -1251,12 +1303,18 @@
 	.runner-option:hover {
 		background: var(--bg-subtle);
 	}
+	.runner-option:has(input:disabled) {
+		cursor: not-allowed;
+	}
 	.runner-option input[type='checkbox'] {
 		accent-color: var(--accent);
 		width: 13px;
 		height: 13px;
 		cursor: pointer;
 		flex-shrink: 0;
+	}
+	.runner-option input[type='checkbox']:disabled {
+		cursor: not-allowed;
 	}
 	.runner-dot {
 		width: 6px;
@@ -1267,8 +1325,30 @@
 	.runner-dot.built-in {
 		background: var(--accent);
 	}
+	/* Remote node health — grey until a ping lands, then pass/fail. */
 	.runner-dot.remote {
+		background: var(--border);
+	}
+	.runner-dot.remote.up {
 		background: var(--pass);
+	}
+	.runner-dot.remote.down {
+		background: var(--fail);
+	}
+	.runner-dot.remote.checking {
+		background: var(--text-muted);
+		animation: dotPulse 1.2s ease-in-out infinite;
+	}
+
+	.runner-option.offline {
+		opacity: 0.6;
+	}
+	.runner-offline-tag {
+		margin-left: auto;
+		font-size: 0.68rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--fail);
 	}
 
 	/* Run button */
