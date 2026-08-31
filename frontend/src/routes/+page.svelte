@@ -180,6 +180,7 @@
 	<div class="header-top">
 		<div>
 			<h1>{HEADING}</h1>
+			<p class="repo-note">{REPO_MANAGED_NOTE}</p>
 			<p class="subtitle">
 				{#if q}
 					{visibleOfTotal(visibleTests, totalTests)}
@@ -187,7 +188,6 @@
 					{suiteSummary(suites.length, totalTests)}
 				{/if}
 			</p>
-			<p class="repo-note">{REPO_MANAGED_NOTE}</p>
 		</div>
 	</div>
 
@@ -415,7 +415,7 @@
 	}
 
 	.repo-note {
-		margin-top: 0.5rem;
+		margin-top: 0.35rem;
 		max-width: 62ch;
 		font-size: 0.8125rem;
 		line-height: 1.5;
@@ -436,6 +436,7 @@
 	}
 
 	.subtitle {
+		margin-top: 0.5rem;
 		color: var(--text-muted);
 		font-size: 0.875rem;
 	}

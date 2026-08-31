@@ -60,10 +60,10 @@ async function cancel(runId) {
 // Stand-in Cucumber JSON for a lane that never produced a real report (process
 // crashed, node unreachable) so its scenarios still show as failed by name
 // instead of silently vanishing from the combined report.
-function makeSyntheticFailReport(laneName, testIds, reason) {
+function makeSyntheticFailReport(projectId, laneName, testIds, reason) {
 	const nameMap = {};
 	try {
-		const { suites } = getTestSuites();
+		const { suites } = getTestSuites(projectId);
 		for (const suite of suites) {
 			for (const test of suite.tests) {
 				for (const id of Array.isArray(test.id) ? test.id : [test.id]) {
@@ -177,7 +177,9 @@ async function runBuiltIn(run, io, emit) {
 	};
 
 	emit(SOCKET_EVENTS.BG_RUN_LANES_INIT, {
-		lanes: [{ id: laneId, name: 'Built-in', testCount: getTestIdsForTag(run.tag).length }]
+		lanes: [
+			{ id: laneId, name: 'Built-in', testCount: getTestIdsForTag(run.projectId, run.tag).length }
+		]
 	});
 
 	const { code, rawJson, attempts } = await runWithRetries({
@@ -308,7 +310,13 @@ function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
 					}).then(({ code, raw }) => ({
 						code,
 						rawJson: JSON.parse(
-							raw ?? makeSyntheticFailReport(lane.name, chunkIds, 'process exited with error')
+							raw ??
+								makeSyntheticFailReport(
+									run.projectId,
+									lane.name,
+									chunkIds,
+									'process exited with error'
+								)
 						)
 					}))
 			: (currentTag) =>
@@ -329,6 +337,7 @@ function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
 									rawJson: JSON.parse(
 										content ??
 											makeSyntheticFailReport(
+												run.projectId,
 												lane.name,
 												chunkIds,
 												'could not fetch report from runner'
@@ -425,7 +434,7 @@ async function execute(run, io) {
 		const isSingleBuiltIn = validated.length === 1 && validated[0] === BUILT_IN_RUNNER_ID;
 		if (isSingleBuiltIn) return await runBuiltIn(run, roomIo, emit);
 
-		const allIds = getTestIdsForTag(run.tag);
+		const allIds = getTestIdsForTag(run.projectId, run.tag);
 		const chunks = chunkTests(allIds, validated.length);
 		// Surplus runners beyond the non-empty chunk count would each re-run the
 		// full tag expression and duplicate scenarios — drop them.
