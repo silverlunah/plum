@@ -29,7 +29,7 @@
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { TIMEZONES } from '$lib/utils/timezones';
-	import { API_BASE, MAX_TEST_RETRIES, COPY_TIMEOUT_MS } from '$lib/constants';
+	import { API_BASE, MAX_TEST_RETRIES, COPY_TIMEOUT_MS, DOCS_URL } from '$lib/constants';
 	import { copyText } from '$lib/utils/clipboard';
 	import Button from '$lib/components/ui/Button.svelte';
 	import ProjectAccess from '$lib/components/settings/ProjectAccess.svelte';
@@ -86,6 +86,7 @@
 		RETRY_FAILED_TESTS_LABEL,
 		RETRY_FAILED_TESTS_HINT,
 		DARK_MODE_LABEL,
+		DOCUMENTATION_LABEL,
 		PROJECT_SAVED_TOAST,
 		PROJECT_SAVE_FAILED,
 		saveProjectLabel,
@@ -518,6 +519,25 @@
 				<span class="mini-thumb"></span>
 			</span>
 		</button>
+		<hr class="sidebar-divider" />
+		<a class="sidebar-item docs-link" href={DOCS_URL} target="_blank" rel="noopener noreferrer">
+			<span>{DOCUMENTATION_LABEL}</span>
+			<svg
+				width="13"
+				height="13"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+				<polyline points="15 3 21 3 21 9" />
+				<line x1="10" y1="14" x2="21" y2="3" />
+			</svg>
+		</a>
+		<hr class="sidebar-divider" />
 		<button class="sidebar-item sign-out" on:click={handleLogout}>{SIGN_OUT_LABEL}</button>
 	</aside>
 
@@ -600,7 +620,7 @@
 					</div>
 
 					<div class="card-footer">
-						<Button on:click={handleSaveProject} disabled={projectSaving}>
+						<Button on:click={handleSaveProject} disabled={projectSaving || !project.name?.trim()}>
 							{saveProjectLabel(projectSaving)}
 						</Button>
 					</div>
@@ -696,7 +716,12 @@
 						>
 					</p>
 					<div class="card-footer">
-						<Button on:click={handleSavePrefixes} disabled={prefixesSaving}>
+						<Button
+							on:click={handleSavePrefixes}
+							disabled={prefixesSaving ||
+								!prefixes.testCasePrefix.trim() ||
+								!prefixes.testSuitePrefix.trim()}
+						>
 							{savePrefixesLabel(prefixesSaving)}
 						</Button>
 					</div>
@@ -1030,7 +1055,10 @@
 					<div class="card-footer">
 						<Button
 							on:click={handleChangePassword}
-							disabled={pwSaving || !pwForm.currentPassword || !pwForm.newPassword}
+							disabled={pwSaving ||
+								!pwForm.currentPassword ||
+								!pwForm.newPassword ||
+								!pwForm.confirmPassword}
 						>
 							{changePasswordLabel(pwSaving)}
 						</Button>
@@ -1133,6 +1161,18 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.75rem;
+	}
+
+	.docs-link {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		text-decoration: none;
+	}
+	.docs-link svg {
+		flex-shrink: 0;
+		opacity: 0.6;
 	}
 
 	.sidebar-item.sign-out {

@@ -14,7 +14,8 @@
 		fetchAllSuitesWithCases,
 		recordEntryResult,
 		assignEntry,
-		fetchMembers
+		fetchMembers,
+		downloadTestCaseExport
 	} from '$lib/api/repository';
 	import { runsVersion, socket } from '$lib/stores/runner';
 	import { SOCKET_EVENTS } from '$lib/socketEvents';
@@ -28,7 +29,15 @@
 	import PriorityBadge from '$lib/components/ui/PriorityBadge.svelte';
 	import CaseIdChip from '$lib/components/ui/CaseIdChip.svelte';
 	import ResultChip from '$lib/components/ui/ResultChip.svelte';
-	import { CANCEL_LABEL, SAVE_LABEL, SAVING_LABEL, LOADING_LABEL } from '$lib/copy/common';
+	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
+	import {
+		CANCEL_LABEL,
+		SAVE_LABEL,
+		SAVING_LABEL,
+		LOADING_LABEL,
+		exportedToast,
+		exportFailedToast
+	} from '$lib/copy/common';
 	import {
 		TEST_REPOSITORY_BREADCRUMB,
 		TITLE_LABEL,
@@ -53,6 +62,7 @@
 		NOT_IN_PROGRESS_BANNER,
 		TOGGLE_STEPS_TITLE,
 		ASSIGN_TO_ME_LABEL,
+		UNASSIGN_LABEL,
 		IN_PROGRESS_LABEL,
 		PASS_LABEL,
 		FAIL_LABEL,
@@ -66,6 +76,7 @@
 		RUN_SAVED_TOAST,
 		RUN_MARKED_COMPLETE_TOAST,
 		RUN_REOPENED_TOAST,
+		EXPORT_RUN_WHAT,
 		runDetailTitle,
 		passedCount,
 		failedCount,
@@ -347,6 +358,19 @@
 		}
 	}
 
+	let exporting = false;
+	async function handleExportRun(format) {
+		exporting = true;
+		try {
+			await downloadTestCaseExport('run', runId, format);
+			notify('success', exportedToast(EXPORT_RUN_WHAT));
+		} catch {
+			notify('error', exportFailedToast('this run'));
+		} finally {
+			exporting = false;
+		}
+	}
+
 	async function handleReopenRun() {
 		try {
 			await updateRun(runId, { status: 'backlog' });
@@ -445,6 +469,7 @@
 		</div>
 		<div class="run-header-actions">
 			{#if isLocked}
+				<ExportMenu busy={exporting} on:select={(e) => handleExportRun(e.detail)} />
 				<Button variant="ghost" on:click={handleReopenRun}>{REOPEN_LABEL}</Button>
 			{:else if mode === 'build'}
 				<Button variant="ghost" on:click={handleSaveRun} disabled={saving}>
@@ -706,12 +731,20 @@
 										<AutomatedBadge />
 									</div>
 									<div class="exec-assignee-divider"></div>
-								{:else if entry.assignedTo || (!isLocked && entry.assignedTo?.id !== currentUserId)}
+								{:else if entry.assignedTo || !isLocked}
 									<div class="exec-assignee-row">
 										{#if entry.assignedTo}
 											<span class="exec-assignee-name">{entry.assignedTo.name}</span>
 										{/if}
-										{#if !isLocked && entry.assignedTo?.id !== currentUserId}
+										{#if !isLocked && entry.assignedTo?.id === currentUserId}
+											<button
+												class="exec-assign-me"
+												on:click={() => handleAssignEntry(entry.id, null)}
+												disabled={assigning === entry.id}
+											>
+												{UNASSIGN_LABEL}
+											</button>
+										{:else if !isLocked}
 											<button
 												class="exec-assign-me"
 												on:click={() => handleAssignEntry(entry.id, currentUserId)}
@@ -730,8 +763,11 @@
 										<button
 											class="exec-btn in-progress"
 											class:active={entry.status === 'in-progress'}
-											on:click={() => handleMarkEntry(entry, 'in-progress')}
-											>{IN_PROGRESS_LABEL}</button
+											on:click={() =>
+												handleMarkEntry(
+													entry,
+													entry.status === 'in-progress' ? 'pending' : 'in-progress'
+												)}>{IN_PROGRESS_LABEL}</button
 										>
 										<button class="exec-btn pass" on:click={() => handleMarkEntry(entry, 'pass')}
 											>{PASS_LABEL}</button

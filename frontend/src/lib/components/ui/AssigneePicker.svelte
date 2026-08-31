@@ -19,6 +19,10 @@
 	const dispatch = createEventDispatcher();
 	let open = false;
 	let query = '';
+	let triggerEl;
+	// Menu is fixed-positioned off the trigger's rect so a card with `overflow:
+	// hidden` further up can't clip it (the last row's menu used to be unusable).
+	let menuPos = { top: 0, right: 0 };
 
 	const matchName = (m, q) =>
 		!q.trim() || `${m.name} ${m.email}`.toLowerCase().includes(q.trim().toLowerCase());
@@ -27,6 +31,10 @@
 		if (disabled) return;
 		open = !open;
 		query = '';
+		if (open && triggerEl) {
+			const r = triggerEl.getBoundingClientRect();
+			menuPos = { top: r.bottom + 4, right: window.innerWidth - r.right };
+		}
 	}
 
 	function pick(id) {
@@ -39,7 +47,12 @@
 	}
 </script>
 
-<svelte:window on:click={onWindowClick} on:keydown={(e) => e.key === 'Escape' && (open = false)} />
+<svelte:window
+	on:click={onWindowClick}
+	on:keydown={(e) => e.key === 'Escape' && (open = false)}
+	on:scroll|capture={() => (open = false)}
+	on:resize={() => (open = false)}
+/>
 
 <div class="assignee-picker">
 	<button
@@ -48,12 +61,18 @@
 		class:open
 		class:unassigned={!value}
 		{disabled}
+		bind:this={triggerEl}
 		on:click|stopPropagation={toggle}
 	>
 		{name ?? UNASSIGNED_OPTION}
 	</button>
 	{#if open}
-		<div class="assignee-menu" role="presentation" on:click|stopPropagation>
+		<div
+			class="assignee-menu"
+			role="presentation"
+			style="top: {menuPos.top}px; right: {menuPos.right}px"
+			on:click|stopPropagation
+		>
 			<!-- svelte-ignore a11y_autofocus -->
 			<input
 				class="assignee-search"
@@ -113,10 +132,8 @@
 		color: var(--text-muted);
 	}
 	.assignee-menu {
-		position: absolute;
-		top: calc(100% + 4px);
-		right: 0;
-		z-index: 20;
+		position: fixed;
+		z-index: 100;
 		width: 15rem;
 		background: var(--bg-elevated);
 		border: 1px solid var(--border);
