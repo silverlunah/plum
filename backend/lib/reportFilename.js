@@ -6,7 +6,8 @@
 const path = require('path');
 const fs = require('fs');
 
-const REPORTS_DIR = path.resolve(process.cwd(), 'reports');
+// Anchored to backend/, not cwd — see appSecret.js.
+const REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
 
 /**
  * Reads the transient cucumber_report.json written by the most recent local test run.
