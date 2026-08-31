@@ -30,6 +30,9 @@ export const TC_IMPORT_DESC =
 export const TC_IMPORT_HINT =
 	'A case is skipped when its ID already exists here. Cases with a different prefix or no ID are imported with a fresh ID.';
 export const TC_IMPORT_FAILED_FALLBACK = 'Could not read that file.';
+export const TC_IMPORTING_TOAST = 'Importing test cases…';
+export const TC_EXPORTING_TOAST = 'Preparing export…';
+export const TC_EXPORTED_TOAST = 'Export downloaded.';
 export const tcImportLabel = (importing) => (importing ? 'Importing…' : 'Import');
 export const tcImportSummary = ({ importedCases, importedSuites, skippedCases, skippedSuites }) => {
 	const imported = `Imported ${importedCases} ${importedCases === 1 ? 'case' : 'cases'} in ${importedSuites} ${importedSuites === 1 ? 'suite' : 'suites'}`;
@@ -322,10 +325,13 @@ export const BACKUP_TIMEZONE_LABEL = 'Schedule Timezone';
 export const BACKUP_TIMEZONE_HINT =
 	'The cron above fires on this timezone. Backup is instance-wide.';
 export const BACKUP_LAST_RUN_PREFIX = 'Last backup:';
+export const BACKUP_EXPORTING_TOAST = 'Preparing backup…';
 export const BACKUP_DOWNLOADED_TOAST = 'Backup downloaded.';
 export const EXPORT_FAILED_TOAST = 'Export failed.';
+export const BACKUP_IMPORTING_TOAST = 'Importing backup…';
 export const IMPORT_SUCCESS_TOAST = 'Import successful. Cron jobs have been re-scheduled.';
 export const IMPORT_FAILED_FALLBACK = 'Import failed. Check the file format.';
+export const BACKUP_UPLOADING_TOAST = 'Uploading backup to S3…';
 export const BACKUP_UPLOAD_SUCCESS_TOAST = 'Backup uploaded to S3 successfully.';
 export const BACKUP_UPLOAD_FAILED_FALLBACK = 'Backup failed. Check your S3 configuration.';
 

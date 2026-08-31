@@ -19,12 +19,12 @@
 		downloadTestCaseExport
 	} from '$lib/api/repository';
 	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
-	import { exportFailedToast, exportedToast } from '$lib/copy/common';
+	import { exportFailedToast, exportedToast, exportingToast } from '$lib/copy/common';
 	import { EXPORT_SUITE_WHAT } from '$lib/copy/repository';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
-	import { notify } from '$lib/stores/notifications';
+	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import { SUITE_CASES_PER_PAGE, CASE_HISTORY_BARS_MAX } from '$lib/constants';
@@ -190,11 +190,12 @@
 	let exporting = false;
 	async function handleExport(format) {
 		exporting = true;
+		const settle = notifyProgress(exportingToast(EXPORT_SUITE_WHAT));
 		try {
 			await downloadTestCaseExport('suite', suite.id, format);
-			notify('success', exportedToast(EXPORT_SUITE_WHAT));
+			settle('success', exportedToast(EXPORT_SUITE_WHAT));
 		} catch {
-			notify('error', exportFailedToast('this suite'));
+			settle('error', exportFailedToast('this suite'));
 		} finally {
 			exporting = false;
 		}

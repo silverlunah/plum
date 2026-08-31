@@ -22,7 +22,7 @@
 	import { auth } from '$lib/stores/auth';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
-	import { notify } from '$lib/stores/notifications';
+	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import AutomatedBadge from '$lib/components/ui/AutomatedBadge.svelte';
 	import AssigneePicker from '$lib/components/ui/AssigneePicker.svelte';
@@ -36,7 +36,8 @@
 		SAVING_LABEL,
 		LOADING_LABEL,
 		exportedToast,
-		exportFailedToast
+		exportFailedToast,
+		exportingToast
 	} from '$lib/copy/common';
 	import {
 		TEST_REPOSITORY_BREADCRUMB,
@@ -361,11 +362,12 @@
 	let exporting = false;
 	async function handleExportRun(format) {
 		exporting = true;
+		const settle = notifyProgress(exportingToast(EXPORT_RUN_WHAT));
 		try {
 			await downloadTestCaseExport('run', runId, format);
-			notify('success', exportedToast(EXPORT_RUN_WHAT));
+			settle('success', exportedToast(EXPORT_RUN_WHAT));
 		} catch {
-			notify('error', exportFailedToast('this run'));
+			settle('error', exportFailedToast('this run'));
 		} finally {
 			exporting = false;
 		}
