@@ -31,7 +31,15 @@ async function listForUser(user) {
 	const ids = await accessibleProjectIds(user);
 	return prisma.project.findMany({
 		where: { id: { in: ids } },
-		select: { id: true, name: true, slug: true, baseUrl: true, logoUrl: true },
+		select: {
+			id: true,
+			name: true,
+			slug: true,
+			baseUrl: true,
+			logoUrl: true,
+			defaultHome: true,
+			manualRepositoryOnly: true
+		},
 		orderBy: { id: 'asc' }
 	});
 }

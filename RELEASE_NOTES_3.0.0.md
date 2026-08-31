@@ -6,6 +6,46 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
 
 ---
 
+## 3.0.1 (hotfix)
+
+- **Multi-runner runs no longer skip.** A distributed run (built-in + a node, or
+  two nodes) was scanning the shared demo `tests/` folder for its tag instead of
+  the project's own features, matching nothing and skipping with "No tests
+  matched". Single-runner runs were unaffected.
+- `plum node start` no longer crashes when it can't set the node to start on
+  boot. On a headless server the `systemd --user` bus is often unreachable over
+  SSH (no lingering session); the failure is now a warning with a
+  `loginctl enable-linger` hint, and the node — which is already running —
+  stays up.
+- **`plum init` scaffolds a self-contained `tests/` folder** — feature files,
+  `.env`, `tsconfig.json`, `.vscode/`, `plum.plugins.json`, `.gitignore` all
+  inside `tests/`, the same layout a project has on the server. Open the `tests/`
+  folder in your editor. `plum run-test` reads `tests/.env`, falling back to a
+  root `.env` for projects made before this. Existing local projects keep
+  working.
+- Automated Tests page: heading is now "Automated Tests"; the "this list follows
+  the folder" note sits in the header above the count.
+- The live run header no longer shows a title chip that just repeats the case-ID
+  list when the run has no test-run title.
+- Browser and Discord / Slack now show their real brand icons across the UI, and
+  the browser is labelled **Chrome** / **Firefox** everywhere (it used to read
+  "chromium" in some places), including in Discord / Slack notifications.
+- A live run now looks the same as its replay: the stream sits on the dot-grid
+  canvas with a framed browser viewport, matching the report's session player.
+- Settings sidebar is grouped under **General** / **Layout** / **Documentation**
+  / **Authentication**, with links to the Plum, Playwright, and Cucumber docs.
+  "Learn more" links to Playwright and Cucumber also appear under the Automated
+  Tests heading.
+- **Project homepage & mode** (Settings → Project). Choose whether members land
+  on Automated Tests or the Test Repository, and reorder the nav to match.
+  Automated Tests now has its own URL (`/automated-tests`); `/` redirects to
+  whichever homepage the project has set. A new "Use as manual repository only"
+  switch hides Automated Tests, Reports, Scheduled and the run bar project-wide,
+  turning Plum into a pure manual test repository. Presentational only — no
+  runs, schedules, or reports are deleted.
+
+---
+
 ## Highlights
 
 ### Projects

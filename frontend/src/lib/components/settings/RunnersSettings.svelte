@@ -9,9 +9,11 @@
 	import { builtInEnabled } from '$lib/stores/runner';
 	import { notify } from '$lib/stores/notifications';
 	import { copyText } from '$lib/utils/clipboard';
+	import { browserLabel } from '$lib/utils/format';
 	import { COPY_TIMEOUT_MS } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
+	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 	import {
 		fetchRunners,
 		deleteRunner,
@@ -237,7 +239,10 @@
 							<path d="M8 21h8M12 17v4" />
 						</svg>
 						<span class="runner-card-name">{r.name}</span>
-						<span class="runner-browser-pill">{r.browser}</span>
+						<span class="runner-browser-pill">
+							<ServiceIcon service={r.browser} size={11} />
+							{browserLabel(r.browser)}
+						</span>
 						{#if ping && !ping.loading}
 							{#if ping.ok}
 								<span class="ping-badge ok">{ping.latency}ms</span>
@@ -444,6 +449,9 @@
 		flex: 1;
 	}
 	.runner-browser-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 		font-size: 0.65rem;
 		font-family: 'JetBrains Mono', monospace;
 		color: var(--text-muted);

@@ -1,4 +1,4 @@
-![Plum social preview](https://repository-images.githubusercontent.com/936477779/3accb0f2-72b4-447c-b255-d171f6284104)
+![Plum social preview](https://repository-images.githubusercontent.com/936477779/c7897789-fd10-40dc-8cd5-5ebe41b59bfd)
 
 <p align="center">
   <a href="https://www.npmjs.com/package/plum-e2e"><img src="https://img.shields.io/npm/v/plum-e2e?color=7c3aed&label=plum-e2e" alt="npm version" /></a>
@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  A ready-to-use E2E test automation environment built on <a href="https://playwright.dev">Playwright</a> + <a href="https://cucumber.io">Cucumber</a>.<br/>
-  Write tests in Gherkin, run them from the CLI or UI, view reports, schedule jobs, manage your entire test case repository, and get notified on Discord or Slack — all in one place.
+  A self-hosted QA platform for teams doing manual <em>and</em> automated testing: a full test-case repository alongside a ready-to-use <a href="https://playwright.dev">Playwright</a> + <a href="https://cucumber.io">Cucumber</a> automation environment.<br/><br/>
+Author tests in Gherkin, run them from the CLI or UI, track manual test runs, view and export reports, schedule jobs, and get Discord / Slack notifications.
 </p>
 
 ---
@@ -26,13 +26,15 @@
 npm install -g plum-e2e
 
 mkdir my-tests && cd my-tests
-plum init                       # takes no arguments — sets up this folder
+plum init                       # takes no arguments — scaffolds ./tests/
 
-# edit .env → BASE_URL=https://your-app.com
+# edit tests/.env → BASE_URL=https://your-app.com
 
 plum run-test                   # runs ./tests locally — no Docker, no database
 plum create-test                # scaffold a new .feature + Page + Steps
 ```
+
+`plum init` creates a self-contained `tests/` folder — feature files, steps, page objects, `.env`, `tsconfig.json`, `.vscode/`, `plum.plugins.json` — the same layout a project has on the server. Open the `tests/` folder in your editor.
 
 ### Running the server (web UI: Test Repository, reports, schedules, MCP)
 
@@ -50,7 +52,7 @@ The stack's containers use `restart: unless-stopped`, so the server comes back a
 
 ### Writing tests (no server)
 
-`plum init` scaffolds the current folder — `tests/`, `.env`, `tsconfig.json`, VS Code settings — and installs the Playwright/Cucumber toolchain. Nothing else is required to write and run tests on your machine.
+`plum init` scaffolds a self-contained `tests/` folder — feature files, step definitions, page objects, `tests/.env`, `tests/tsconfig.json`, `tests/.vscode/`, `tests/plum.plugins.json` — and installs the Playwright/Cucumber toolchain. Open the `tests/` folder in your editor; it's the same layout a project folder has on the server, so a local project drops straight into `projects/<slug>/tests/`. Nothing else is required to write and run tests on your machine.
 
 ### For contributors
 
@@ -94,7 +96,7 @@ Full documentation is available at:
 
 | Command                       | Description                                                                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `plum init`                   | Scaffold the current folder for local test authoring (`plum run-test`)                                                                           |
+| `plum init`                   | Scaffold a self-contained `./tests/` folder for local test authoring (`plum run-test`)                                                           |
 | `plum project init "<name>"`  | Re-create a server project's `projects/<slug>/tests/` folder (the server normally does this when you add the project)                            |
 | `plum server start`           | Start the full UI stack via Docker                                                                                                               |
 | `plum server restart`         | Rebuild Docker images and restart the server without prompts                                                                                     |

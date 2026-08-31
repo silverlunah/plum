@@ -3,7 +3,7 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-import { writable, get } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 
 const KEY = 'plum:project';
@@ -18,6 +18,17 @@ function read() {
 export const activeProjectId = writable(read());
 // The projects the current user can reach — filled by the switcher on load.
 export const projects = writable([]);
+
+// The active project's full record (name, logo, homepage mode…), or null until
+// the list has loaded. Nav and the automation-surface guards read from here.
+export const activeProject = derived(
+	[projects, activeProjectId],
+	([$projects, $id]) => $projects.find((p) => p.id === $id) ?? $projects[0] ?? null
+);
+
+// Automated Tests / Reports / Scheduled and the run bar are hidden when the
+// active project is set to manual-repository-only.
+export const automationHidden = derived(activeProject, ($p) => $p?.manualRepositoryOnly ?? false);
 
 activeProjectId.subscribe((v) => {
 	if (browser && v) localStorage.setItem(KEY, String(v));

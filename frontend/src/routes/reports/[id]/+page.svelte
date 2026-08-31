@@ -18,7 +18,8 @@
 		groupScenariosByRunnerAndWorker,
 		parseRunnerLogs,
 		featureSuiteTag,
-		visibleTags
+		visibleTags,
+		browserLabel
 	} from '$lib/utils/format';
 	import { BROWSERS } from '$lib/constants';
 	import { pluralize } from '$lib/copy/common';
@@ -57,7 +58,7 @@
 	import TagList from '$lib/components/ui/TagList.svelte';
 	import StepKeyword from '$lib/components/ui/StepKeyword.svelte';
 	import StepStatusIcon from '$lib/components/ui/StepStatusIcon.svelte';
-	import BrowserIcon from '$lib/components/icons/BrowserIcon.svelte';
+	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 	import RecordingPlayer from '$lib/components/reports/RecordingPlayer.svelte';
 
 	const reportId = parseInt($page.params.id, 10);
@@ -231,8 +232,8 @@
 						<span>{new Date(detail.createdAt).toLocaleString()}</span>
 						<span class="meta-sep">·</span>
 						<span class="browser-pill">
-							<BrowserIcon browser={detail.browser ?? BROWSERS[0].id} />
-							{detail.browser ?? BROWSERS[0].id}
+							<ServiceIcon service={detail.browser ?? BROWSERS[0].id} size={12} />
+							{browserLabel(detail.browser ?? BROWSERS[0].id)}
 						</span>
 					</div>
 				</div>

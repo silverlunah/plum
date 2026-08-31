@@ -60,9 +60,34 @@ function hasSystemd() {
 	}
 }
 
+// `systemctl --user --version` works with no session at all; anything that
+// actually touches the user bus ("show-environment") fails with
+// "Failed to connect to bus: No medium found" over an SSH login that has no
+// lingering user session — which is the common production case.
+function userBusReachable() {
+	try {
+		execFileSync('systemctl', ['--user', 'show-environment'], { stdio: 'ignore' });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 function installLinux(name) {
 	if (!hasSystemd()) {
-		return { ok: false, reason: 'systemd (systemctl --user) not available on this machine' };
+		return { ok: false, reason: 'systemd (systemctl --user) is not available on this machine' };
+	}
+	if (!userBusReachable()) {
+		let user = 'your-user';
+		try {
+			user = os.userInfo().username;
+		} catch {}
+		return {
+			ok: false,
+			reason:
+				'the systemd user session is not reachable (a headless SSH login with no lingering session)',
+			hint: `Run \`sudo loginctl enable-linger ${user}\`, log out and back in, then start the node again with --boot.`
+		};
 	}
 	const file = linuxUnitPath(name);
 	const quote = (parts) => parts.map((a) => `"${a}"`).join(' ');
@@ -87,8 +112,14 @@ function installLinux(name) {
 			''
 		].join('\n')
 	);
-	run('systemctl', ['--user', 'daemon-reload']);
-	run('systemctl', ['--user', 'enable', `plum-node-${name}.service`]);
+	try {
+		run('systemctl', ['--user', 'daemon-reload']);
+		run('systemctl', ['--user', 'enable', `plum-node-${name}.service`]);
+	} catch (e) {
+		fs.rmSync(file, { force: true });
+		const detail = (e.stderr && e.stderr.toString().trim()) || e.message;
+		return { ok: false, reason: `systemctl --user failed: ${detail}` };
+	}
 	return {
 		ok: true,
 		file,
@@ -157,7 +188,13 @@ function installDarwin(name) {
 	try {
 		run('launchctl', ['unload', file]);
 	} catch {}
-	run('launchctl', ['load', '-w', file]);
+	try {
+		run('launchctl', ['load', '-w', file]);
+	} catch (e) {
+		fs.rmSync(file, { force: true });
+		const detail = (e.stderr && e.stderr.toString().trim()) || e.message;
+		return { ok: false, reason: `launchctl failed: ${detail}` };
+	}
 	return { ok: true, file };
 }
 
@@ -184,18 +221,23 @@ function installWindows(name) {
 	// schtasks takes the whole command as one /TR string; the exe paths hold
 	// spaces, so each token is double-quoted inside it.
 	const tr = [process.execPath, ...bootArgs(name)].map((a) => `"${a}"`).join(' ');
-	run('schtasks', [
-		'/Create',
-		'/TN',
-		windowsTaskName(name),
-		'/TR',
-		tr,
-		'/SC',
-		'ONLOGON',
-		'/RL',
-		'LIMITED',
-		'/F'
-	]);
+	try {
+		run('schtasks', [
+			'/Create',
+			'/TN',
+			windowsTaskName(name),
+			'/TR',
+			tr,
+			'/SC',
+			'ONLOGON',
+			'/RL',
+			'LIMITED',
+			'/F'
+		]);
+	} catch (e) {
+		const detail = (e.stderr && e.stderr.toString().trim()) || e.message;
+		return { ok: false, reason: `schtasks failed: ${detail}` };
+	}
 	return { ok: true, task: windowsTaskName(name) };
 }
 

@@ -12,15 +12,30 @@ function authHeaders() {
 
 export async function fetchProject() {
 	const res = await fetch(`${API_BASE}/settings/project`, { headers: authHeaders() });
-	if (!res.ok) return { name: '', logoUrl: '', timezone: 'UTC', maxRetries: 0 };
+	if (!res.ok)
+		return {
+			name: '',
+			logoUrl: '',
+			timezone: 'UTC',
+			maxRetries: 0,
+			defaultHome: 'automated',
+			manualRepositoryOnly: false
+		};
 	return res.json();
 }
 
-export async function saveProject({ name, logoUrl, timezone, maxRetries }) {
+export async function saveProject({
+	name,
+	logoUrl,
+	timezone,
+	maxRetries,
+	defaultHome,
+	manualRepositoryOnly
+}) {
 	const res = await fetch(`${API_BASE}/settings/project`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', ...authHeaders() },
-		body: JSON.stringify({ name, logoUrl, timezone, maxRetries })
+		body: JSON.stringify({ name, logoUrl, timezone, maxRetries, defaultHome, manualRepositoryOnly })
 	});
 	return res.json();
 }
