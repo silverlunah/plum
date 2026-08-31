@@ -14,7 +14,9 @@
 		deleteRunner,
 		pingRunner,
 		stopRunner,
-		restartRunner
+		restartRunner,
+		fetchBuiltInEnabled,
+		setBuiltInEnabled
 	} from '$lib/api/runners';
 	import {
 		RUNNERS_LABEL,
@@ -30,6 +32,7 @@
 		runnerRestartFailedGenericToast,
 		BUILTIN_RUNNER_TOGGLE_LABEL,
 		BUILTIN_RUNNER_TOGGLE_DESC,
+		BUILTIN_RUNNER_TOGGLE_FAILED,
 		RUNNER_UNREACHABLE_LABEL,
 		RUNNER_PINGING_LABEL,
 		REMOVE_LABEL,
@@ -48,8 +51,8 @@
 
 	onMount(async () => {
 		try {
-			const bi = localStorage.getItem('plum:builtInEnabled');
-			if (bi !== null) builtInEnabled.set(bi !== 'false');
+			const { builtInRunnerEnabled } = await fetchBuiltInEnabled();
+			builtInEnabled.set(builtInRunnerEnabled);
 		} catch {}
 		try {
 			runners = await fetchRunners();
@@ -85,14 +88,20 @@
 		}
 	}
 
-	function handleBuiltInToggle() {
-		builtInEnabled.update((v) => {
-			const next = !v;
-			try {
-				localStorage.setItem('plum:builtInEnabled', String(next));
-			} catch {}
-			return next;
-		});
+	let savingBuiltIn = false;
+	async function handleBuiltInToggle() {
+		if (savingBuiltIn) return;
+		const next = !$builtInEnabled;
+		savingBuiltIn = true;
+		builtInEnabled.set(next);
+		try {
+			await setBuiltInEnabled(next);
+		} catch {
+			builtInEnabled.set(!next);
+			notify('error', BUILTIN_RUNNER_TOGGLE_FAILED);
+		} finally {
+			savingBuiltIn = false;
+		}
 	}
 
 	async function handleDeleteRunner(id, name) {
@@ -152,6 +161,7 @@
 			class:on={$builtInEnabled}
 			role="switch"
 			aria-checked={$builtInEnabled}
+			disabled={savingBuiltIn}
 			on:click={handleBuiltInToggle}
 		>
 			<span class="toggle-thumb"></span>
