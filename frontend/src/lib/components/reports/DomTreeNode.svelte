@@ -106,7 +106,7 @@
 		background: rgb(255 255 255 / 0.06);
 	}
 	.dom-row.selected {
-		background: color-mix(in srgb, var(--accent) 28%, transparent);
+		background: color-mix(in srgb, var(--inspect-highlight) 22%, transparent);
 	}
 	.dom-row.close {
 		cursor: default;
