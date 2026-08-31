@@ -12,8 +12,9 @@ function authHeaders() {
 
 export async function fetchRunners() {
 	const res = await fetch(`${API_BASE}/runners`, { headers: authHeaders() });
+	if (!res.ok) return [];
 	const { runners } = await res.json();
-	return runners;
+	return runners ?? [];
 }
 
 export async function deleteRunner(id) {
@@ -50,6 +51,7 @@ export async function restartRunner(id) {
 
 export async function fetchBuiltInEnabled() {
 	const res = await fetch(`${API_BASE}/runners/built-in`, { headers: authHeaders() });
+	if (!res.ok) return { builtInRunnerEnabled: true };
 	return res.json();
 }
 

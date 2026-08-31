@@ -899,8 +899,8 @@
 	.inspect-highlight {
 		position: absolute;
 		pointer-events: none;
-		background: color-mix(in srgb, var(--accent) 18%, transparent);
-		border: 1.5px solid var(--accent);
+		background: color-mix(in srgb, var(--inspect-highlight) 12%, transparent);
+		border: 1.5px solid color-mix(in srgb, var(--inspect-highlight) 85%, transparent);
 		border-radius: 2px;
 	}
 
