@@ -183,6 +183,13 @@ model Project {
   slackWebhookUrl   String       @default("")
   notifyPublicUrl   String       @default("")
   maxRetries        Int          @default(0)
+  // Which page members land on: "automated" (Automated Tests) or "repository"
+  // (Test Repository). Purely presentational — reorders the nav, no route changes.
+  defaultHome          String    @default("automated")
+  // When true, the automated-testing surface (Automated Tests, Reports,
+  // Scheduled, the run bar) is hidden project-wide and this is a manual test
+  // repository only. Forces defaultHome to "repository" in effect.
+  manualRepositoryOnly Boolean   @default(false)
 
   members  ProjectMember[]
   suites   TestSuite[]

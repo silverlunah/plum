@@ -26,6 +26,8 @@
 	} from '$lib/api/repository';
 	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
 	import { updateProfile, changePassword } from '$lib/api/auth';
+	import { fetchProjects } from '$lib/api/projects';
+	import { setProjects } from '$lib/stores/project';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { TIMEZONES } from '$lib/utils/timezones';
@@ -98,6 +100,14 @@
 		TIMEZONE_HINT,
 		RETRY_FAILED_TESTS_LABEL,
 		RETRY_FAILED_TESTS_HINT,
+		HOMEPAGE_CARD_TITLE,
+		HOMEPAGE_CARD_HINT,
+		DEFAULT_HOME_LABEL,
+		DEFAULT_HOME_HINT,
+		DEFAULT_HOME_AUTOMATED_OPTION,
+		DEFAULT_HOME_REPOSITORY_OPTION,
+		MANUAL_REPO_ONLY_LABEL,
+		MANUAL_REPO_ONLY_HINT,
 		DARK_MODE_LABEL,
 		DOCUMENTATION_LABEL,
 		NAV_SECTION_GENERAL,
@@ -201,7 +211,14 @@
 		} catch {}
 	}
 
-	let project = { name: '', logoUrl: '', timezone: 'UTC', maxRetries: 0 };
+	let project = {
+		name: '',
+		logoUrl: '',
+		timezone: 'UTC',
+		maxRetries: 0,
+		defaultHome: 'automated',
+		manualRepositoryOnly: false
+	};
 	let projectSaving = false;
 
 	let prefixes = { testCasePrefix: 'TC', testSuitePrefix: 'TS' };
@@ -265,6 +282,11 @@
 		projectSaving = true;
 		try {
 			await saveProject(project);
+			// Nav reads homepage mode from the projects store — refresh it so the
+			// reorder / hide takes effect without a reload.
+			try {
+				setProjects(await fetchProjects());
+			} catch {}
 			notify('success', PROJECT_SAVED_TOAST);
 		} catch {
 			notify('error', PROJECT_SAVE_FAILED);
@@ -633,6 +655,53 @@
 							max={MAX_TEST_RETRIES}
 							bind:value={project.maxRetries}
 						/>
+					</div>
+
+					<div class="card-footer">
+						<Button on:click={handleSaveProject} disabled={projectSaving || !project.name?.trim()}>
+							{saveProjectLabel(projectSaving)}
+						</Button>
+					</div>
+				</div>
+
+				<div class="card settings-card">
+					<div>
+						<p class="card-title">{HOMEPAGE_CARD_TITLE}</p>
+						<p class="card-subtitle">{HOMEPAGE_CARD_HINT}</p>
+					</div>
+
+					<div class="field">
+						<label class="field-label" for="project-home">
+							<span>{DEFAULT_HOME_LABEL}</span>
+							<span class="field-hint">{DEFAULT_HOME_HINT}</span>
+						</label>
+						<select
+							id="project-home"
+							class="field-input"
+							bind:value={project.defaultHome}
+							disabled={project.manualRepositoryOnly}
+						>
+							<option value="automated">{DEFAULT_HOME_AUTOMATED_OPTION}</option>
+							<option value="repository">{DEFAULT_HOME_REPOSITORY_OPTION}</option>
+						</select>
+					</div>
+
+					<div class="toggle-field">
+						<div class="toggle-field-text">
+							<span class="toggle-field-name">{MANUAL_REPO_ONLY_LABEL}</span>
+							<span class="field-hint">{MANUAL_REPO_ONLY_HINT}</span>
+						</div>
+						<button
+							type="button"
+							class="mini-switch"
+							class:on={project.manualRepositoryOnly}
+							role="switch"
+							aria-checked={project.manualRepositoryOnly}
+							aria-label={MANUAL_REPO_ONLY_LABEL}
+							on:click={() => (project.manualRepositoryOnly = !project.manualRepositoryOnly)}
+						>
+							<span class="mini-thumb"></span>
+						</button>
 					</div>
 
 					<div class="card-footer">
@@ -1216,9 +1285,31 @@
 		flex-shrink: 0;
 		width: 32px;
 		height: 18px;
+		padding: 0;
+		border: none;
 		border-radius: var(--radius-pill);
 		background: var(--border);
+		cursor: pointer;
 		transition: background var(--duration-fast);
+	}
+
+	.toggle-field {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1.5rem;
+	}
+	.toggle-field-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+	.toggle-field-name {
+		font-size: 0.8125rem;
+		color: var(--text);
+	}
+	.toggle-field .mini-switch {
+		margin-top: 0.15rem;
 	}
 	.mini-switch.on {
 		background: var(--accent);
