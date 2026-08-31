@@ -37,6 +37,7 @@ export const discordNotifyTitle = (active) =>
 export const slackNotifyTitle = (active) =>
 	active ? 'Slack notification on' : 'Slack notification off';
 export const runnersCountLabel = (count) => `${count} runners`;
+export const OFFLINE_LABEL = 'offline';
 export const runKindLabel = (kind) => `${triggerLabel(kind)} run`;
 export const startedByLabel = (name) => `started by ${name}`;
 export const collapseOrExpandLabel = (expanded) => (expanded ? 'Collapse panel' : 'Expand panel');
