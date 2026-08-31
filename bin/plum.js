@@ -131,6 +131,23 @@ const runnerProcessLib = () => require(path.join(backendLib, 'runnerProcess.js')
 const globalRegistryLib = () => require(path.join(backendLib, 'globalRegistry.js'));
 const bootServiceLib = () => require(path.join(backendLib, 'bootService.js'));
 
+// A real secret is one hex/base64 line — drop a stray license header (the
+// add-license bug used to prepend one to persisted secrets / node configs).
+function cleanSecret(v) {
+	if (!v) return null;
+	const last = String(v)
+		.split(/\r?\n/)
+		.map((l) =>
+			l
+				.trim()
+				.replace(/^\/\*|\*\/$/g, '')
+				.trim()
+		)
+		.filter(Boolean)
+		.pop();
+	return last && /^[A-Za-z0-9+/=_-]{16,}$/.test(last) ? last : null;
+}
+
 /* -----------------------------------------------------
  *                 Interactive prompts
  * ------------------------------------------------------ */
@@ -722,12 +739,13 @@ async function configureNode({ force, name: nameArg }) {
 	let browser = getFlag(args, '--browser') ?? saved.browser ?? 'chromium';
 	let token = getFlag(args, '--token') ?? process.env.NODE_TOKEN ?? saved.token ?? generateToken();
 	let url = getFlag(args, '--url') ?? saved.url ?? '';
-	// Read from a co-located server; a remote node needs it passed in.
+	// Read from a co-located server; a remote node needs it passed in. cleanSecret
+	// drops a stray license header that the old add-license bug prepended.
 	let nodeSecret =
-		getFlag(args, '--node-secret') ??
-		process.env.PLUM_NODE_SECRET ??
-		saved.nodeSecret ??
-		readNodeSecretFromPrimary() ??
+		cleanSecret(getFlag(args, '--node-secret')) ||
+		cleanSecret(process.env.PLUM_NODE_SECRET) ||
+		cleanSecret(saved.nodeSecret) ||
+		cleanSecret(readNodeSecretFromPrimary()) ||
 		'';
 
 	if (interactive) {
@@ -774,20 +792,21 @@ async function configureNode({ force, name: nameArg }) {
 				'Public URL or IP the Plum server uses to reach this node',
 				url && !url.includes('host.docker.internal') ? url : 'https://node-1.example.com'
 			);
-			if (!nodeSecret) {
-				const s = await clack.text({
-					message:
-						'Node registration secret — run `plum server` on the primary and copy PLUM_NODE_SECRET',
-					placeholder: 'a1b2c3…'
-				});
-				if (clack.isCancel(s)) cancelAndExit();
-				nodeSecret = (s || '').trim();
-			}
 		} else {
 			// Local primary runs in Docker — it reaches a host node via
 			// host.docker.internal, not localhost.
 			url = `http://host.docker.internal:${port}`;
 			clack.log.info(`This node will register with the server as ${pc.cyan(url)}`);
+		}
+
+		// Couldn't read it from a co-located server — ask, whatever the mode.
+		if (!nodeSecret) {
+			const s = await clack.text({
+				message: 'PLUM_NODE_SECRET — Settings → Runners → Registration secret (or `plum server`)',
+				placeholder: 'a1b2c3…'
+			});
+			if (clack.isCancel(s)) cancelAndExit();
+			nodeSecret = cleanSecret(s) || '';
 		}
 	}
 
@@ -1081,14 +1100,12 @@ function readNodeSecretFromPrimary() {
 	return null;
 }
 
-async function openManageNodesMenu(primaryUrl) {
+async function openManageNodesMenu(primaryUrl, nodeSecret) {
 	const manageScript = path.join(plumRoot, 'backend', 'scripts', 'manage-nodes.mjs');
 	const apiUrl = primaryUrl || 'http://localhost:3001';
 	const env = { ...process.env, PLUM_API_URL: apiUrl };
-	if (!env.PLUM_NODE_SECRET) {
-		const secret = readNodeSecretFromPrimary();
-		if (secret) env.PLUM_NODE_SECRET = secret;
-	}
+	const resolved = nodeSecret || env.PLUM_NODE_SECRET || readNodeSecretFromPrimary();
+	if (resolved) env.PLUM_NODE_SECRET = resolved;
 	const menu = spawn(process.execPath, [manageScript], { stdio: 'inherit', env });
 	await new Promise((resolve) => menu.on('exit', resolve));
 }
@@ -1545,7 +1562,7 @@ switch (command) {
 			process.env.PLUM_API_URL ??
 			firstNode?.primary ??
 			'http://localhost:3001';
-		await openManageNodesMenu(primaryUrl);
+		await openManageNodesMenu(primaryUrl, getFlag(process.argv.slice(3), '--node-secret'));
 		break;
 	}
 
@@ -1651,6 +1668,9 @@ switch (command) {
 		console.log('  manage-nodes         Open the node management menu');
 		console.log(
 			'    --primary <url>    Primary server URL (default: saved config or localhost:3001)'
+		);
+		console.log(
+			'    --node-secret <s> PLUM_NODE_SECRET (auto-read on the server host; else prompts)'
 		);
 		console.log('  run-test             Run tests locally without Docker');
 		console.log('    @tag               Run only tests matching a tag');
