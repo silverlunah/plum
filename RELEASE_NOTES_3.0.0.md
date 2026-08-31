@@ -8,13 +8,25 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
 
 ## 3.0.1 (hotfix)
 
+- **Multi-runner runs no longer skip.** A distributed run (built-in + a node, or
+  two nodes) was scanning the shared demo `tests/` folder for its tag instead of
+  the project's own features, matching nothing and skipping with "No tests
+  matched". Single-runner runs were unaffected.
 - `plum node start` no longer crashes when it can't set the node to start on
   boot. On a headless server the `systemd --user` bus is often unreachable over
   SSH (no lingering session); the failure is now a warning with a
   `loginctl enable-linger` hint, and the node — which is already running —
   stays up.
-- The Automated Tests "this list follows the folder" note moved into the page
-  header instead of sitting at the bottom of the list.
+- **`plum init` scaffolds a self-contained `tests/` folder** — feature files,
+  `.env`, `tsconfig.json`, `.vscode/`, `plum.plugins.json`, `.gitignore` all
+  inside `tests/`, the same layout a project has on the server. Open the `tests/`
+  folder in your editor. `plum run-test` reads `tests/.env`, falling back to a
+  root `.env` for projects made before this. Existing local projects keep
+  working.
+- Automated Tests page: heading is now "Automated Tests"; the "this list follows
+  the folder" note sits in the header above the count.
+- The live run header no longer shows a title chip that just repeats the case-ID
+  list when the run has no test-run title.
 
 ---
 
