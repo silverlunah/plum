@@ -111,6 +111,18 @@ async function resolveCronJobId(projectId, triggerType) {
 	return job?.id ?? null;
 }
 
+// An MCP run through the CI trigger endpoint (or an old client) may carry no
+// actor — attribute it to the org owner rather than leaving it blank.
+async function resolveMcpActor(startedBy, triggerType) {
+	if (startedBy || normaliseTrigger(triggerType) !== TRIGGER_TYPE.MCP) return startedBy || null;
+	const owner = await prisma.user.findFirst({
+		where: { role: 'owner' },
+		orderBy: { createdAt: 'asc' },
+		select: { name: true }
+	});
+	return owner?.name ?? null;
+}
+
 /**
  * Stable identity for a Cucumber feature across distributed lanes. Dispatched
  * runs report an absolute temp uri (…/plum-job-<uuid>/features/Login.feature)
@@ -493,6 +505,7 @@ const saveReport = async ({
 	} = processCucumberJson(rawCucumberJson, attempts);
 	const status = forceFail ? REPORT_STATUS.FAIL : derivedStatus;
 	const cronJobId = await resolveCronJobId(projectId, normTrigger);
+	const actor = await resolveMcpActor(startedBy, normTrigger);
 
 	const report = await prisma.report.create({
 		data: {
@@ -501,7 +514,7 @@ const saveReport = async ({
 			tags: (tags ?? '').replace(/^\(|\)$/g, '') || '@all-tests',
 			triggerType: normTrigger,
 			viaMcp: normTrigger === TRIGGER_TYPE.MCP,
-			startedBy: startedBy || null,
+			startedBy: actor,
 			runnerCount,
 			workerCount,
 			flakyCount,

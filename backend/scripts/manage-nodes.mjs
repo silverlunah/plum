@@ -37,7 +37,10 @@ const API_URL = process.env.PLUM_API_URL || 'http://localhost:3001';
 // there is exactly one code path and it matches `plum node start` exactly.
 const PLUM_BIN = path.resolve(fileURLToPath(import.meta.url), '../../../bin/plum.js');
 function plumNode(...args) {
-	execFileSync(process.execPath, [PLUM_BIN, 'node', ...args], { stdio: 'inherit' });
+	// The spawned `plum node start` gets all its flags here, so it never prompts
+	// for the registration secret — pass it, or node registration 401s.
+	const env = NODE_SECRET ? { ...process.env, PLUM_NODE_SECRET: NODE_SECRET } : process.env;
+	execFileSync(process.execPath, [PLUM_BIN, 'node', ...args], { stdio: 'inherit', env });
 }
 
 const cancelled = (v) => clack.isCancel(v);
