@@ -13,7 +13,11 @@ const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 const { bearerHeader } = require('../lib/authHeader');
-const { JOB_STATUS } = require('../constants/jobStatus');
+const { JOB_STATUS, CANCEL_CODE } = require('../constants/jobStatus');
+
+// Liveness, not a run-duration cap: a healthy run keeps answering the 1s poll,
+// so only a node that has gone silent this long has its lane marked failed.
+const NODE_UNREACHABLE_GRACE_MS = 45_000;
 
 // ---------------------------------------------------------------------------
 // Runner CRUD
@@ -221,7 +225,8 @@ async function dispatchAndPoll(
 	onLog,
 	onDone,
 	onRRwebBatch = null,
-	onJobId = null
+	onJobId = null,
+	shouldStop = () => false
 ) {
 	// The async poll callback can overlap if a tick takes longer than the interval;
 	// guard so the run resolves exactly once and can't be finalised while a lane
@@ -276,12 +281,22 @@ async function dispatchAndPoll(
 	let logOffset = 0;
 	let rrwebOffset = 0;
 	let polling = false;
+	let unreachableSince = null;
 	// Tight interval: the live viewer reads logs and rrweb batches straight off
 	// this poll — primary→node, so nothing has to connect the other way.
 	const poll = setInterval(async () => {
 		if (polling) return;
 		polling = true;
 		try {
+			// Stop the moment the user cancels — don't wait on an unreachable node
+			// to acknowledge it.
+			if (shouldStop()) {
+				clearInterval(poll);
+				cancelRemoteJob(runnerId, jobId).catch(() => {});
+				finish(CANCEL_CODE, null);
+				return;
+			}
+
 			const res = await fetch(
 				`${runner.url}/api/execute/${jobId}?offset=${logOffset}&rrwebOffset=${rrwebOffset}`,
 				{
@@ -291,6 +306,7 @@ async function dispatchAndPoll(
 			);
 			if (!res.ok) return;
 			const body = await res.json();
+			unreachableSince = null;
 
 			if (body.logs) {
 				onLog(body.logs);
@@ -305,7 +321,13 @@ async function dispatchAndPoll(
 				finish(body.exitCode ?? (body.status === JOB_STATUS.DONE ? 0 : 1), content);
 			}
 		} catch {
-			// transient polling error — keep trying
+			if (unreachableSince === null) {
+				unreachableSince = Date.now();
+			} else if (Date.now() - unreachableSince > NODE_UNREACHABLE_GRACE_MS) {
+				clearInterval(poll);
+				onLog(`\n[ERROR] Runner "${runner.name}" stopped responding — marking this lane failed.\n`);
+				finish(1, null);
+			}
 		} finally {
 			polling = false;
 		}

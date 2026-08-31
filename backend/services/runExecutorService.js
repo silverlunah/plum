@@ -16,14 +16,13 @@ const { runWithRetries } = require('../lib/retryRunner');
 const { BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
 const { PLUM_MODE_NODE } = require('../constants/env');
 const { SOCKET_EVENTS } = require('../constants/socketEvents');
-const { JOB_STATUS, REPORT_STATUS } = require('../constants/jobStatus');
+const { JOB_STATUS, REPORT_STATUS, CANCEL_CODE } = require('../constants/jobStatus');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { getTestSuites } = require('./testService');
 const { resolveTestsRoot, loadProjectEnv } = require('../lib/testsRoot');
 const { readCucumberReportFile } = require('../lib/reportFilename');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
-const CANCEL_CODE = 130;
 
 // runId → live handles, so cancel() can stop every process and remote job a run owns.
 const inflight = new Map();
@@ -351,7 +350,8 @@ function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
 									id: laneId,
 									...batch
 								}),
-							(jobId) => handles(run.id).remoteJobs.push({ runnerId: laneId, jobId })
+							(jobId) => handles(run.id).remoteJobs.push({ runnerId: laneId, jobId }),
+							() => isCancelled(run.id)
 						);
 					});
 
