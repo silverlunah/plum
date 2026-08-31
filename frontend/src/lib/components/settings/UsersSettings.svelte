@@ -257,6 +257,21 @@
 {/if}
 
 <style>
+	.content-header {
+		margin-bottom: 0.25rem;
+	}
+	.content-header h2 {
+		font-size: 1.1rem;
+		font-weight: 500;
+		font-family: var(--font-body);
+		color: var(--text);
+		margin-bottom: 0.25rem;
+	}
+	.content-desc {
+		font-size: 0.875rem;
+		color: var(--text-muted);
+		line-height: 1.5;
+	}
 	.settings-card {
 		display: flex;
 		flex-direction: column;

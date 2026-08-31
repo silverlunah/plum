@@ -5,7 +5,7 @@
 
 <script>
 	import { onMount } from 'svelte';
-	import { notify } from '$lib/stores/notifications';
+	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import { TIMEZONES } from '$lib/utils/timezones';
 	import Button from '$lib/components/ui/Button.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
@@ -76,10 +76,13 @@
 		CRONTAB_LINK_LABEL,
 		CRON_PLACEHOLDER,
 		BACKUP_LAST_RUN_PREFIX,
+		BACKUP_EXPORTING_TOAST,
 		BACKUP_DOWNLOADED_TOAST,
 		EXPORT_FAILED_TOAST,
+		BACKUP_IMPORTING_TOAST,
 		IMPORT_SUCCESS_TOAST,
 		IMPORT_FAILED_FALLBACK,
+		BACKUP_UPLOADING_TOAST,
 		BACKUP_UPLOAD_SUCCESS_TOAST,
 		BACKUP_UPLOAD_FAILED_FALLBACK,
 		backupFilename,
@@ -154,6 +157,7 @@
 
 	async function handleExport() {
 		exporting = true;
+		const settle = notifyProgress(BACKUP_EXPORTING_TOAST);
 		try {
 			const data = await exportBackup();
 			const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -163,9 +167,9 @@
 			a.download = backupFilename(new Date().toISOString().slice(0, 10));
 			a.click();
 			URL.revokeObjectURL(url);
-			notify('success', BACKUP_DOWNLOADED_TOAST);
+			settle('success', BACKUP_DOWNLOADED_TOAST);
 		} catch {
-			notify('error', EXPORT_FAILED_TOAST);
+			settle('error', EXPORT_FAILED_TOAST);
 		} finally {
 			exporting = false;
 		}
@@ -174,15 +178,16 @@
 	async function handleImport() {
 		if (!importFile) return;
 		importing = true;
+		const settle = notifyProgress(BACKUP_IMPORTING_TOAST);
 		try {
 			const data = JSON.parse(await importFile.text());
 			const result = await importBackup(data);
 			if (result.error) throw new Error(result.error);
-			notify('success', IMPORT_SUCCESS_TOAST);
+			settle('success', IMPORT_SUCCESS_TOAST);
 			importFile = null;
 			if (fileInput) fileInput.value = '';
 		} catch (e) {
-			notify('error', e.message || IMPORT_FAILED_FALLBACK);
+			settle('error', e.message || IMPORT_FAILED_FALLBACK);
 		} finally {
 			importing = false;
 		}
@@ -231,14 +236,15 @@
 
 	async function handleRunBackupNow() {
 		backupRunningNow = true;
+		const settle = notifyProgress(BACKUP_UPLOADING_TOAST);
 		try {
 			const result = await runBackupNow();
 			if (result.error) throw new Error(result.error);
 			backupLastRunAt = result.lastRunAt;
 			backupLastStatus = result.lastStatus ?? '';
-			notify('success', BACKUP_UPLOAD_SUCCESS_TOAST);
+			settle('success', BACKUP_UPLOAD_SUCCESS_TOAST);
 		} catch (e) {
-			notify('error', e.message || BACKUP_UPLOAD_FAILED_FALLBACK);
+			settle('error', e.message || BACKUP_UPLOAD_FAILED_FALLBACK);
 			const bc = await fetchBackupConfig().catch(() => null);
 			if (bc) {
 				backupLastRunAt = bc.backupLastRunAt;
@@ -620,6 +626,21 @@
 </div>
 
 <style>
+	.content-header {
+		margin-bottom: 0.25rem;
+	}
+	.content-header h2 {
+		font-size: 1.1rem;
+		font-weight: 500;
+		font-family: var(--font-body);
+		color: var(--text);
+		margin-bottom: 0.25rem;
+	}
+	.content-desc {
+		font-size: 0.875rem;
+		color: var(--text-muted);
+		line-height: 1.5;
+	}
 	.settings-card {
 		display: flex;
 		flex-direction: column;

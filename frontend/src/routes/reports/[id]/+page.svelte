@@ -44,8 +44,8 @@
 		workerLabel,
 		REPORT_EXPORT_MENU_ITEMS
 	} from '$lib/copy/reports';
-	import { exportFailedToast, exportedToast } from '$lib/copy/common';
-	import { notify } from '$lib/stores/notifications';
+	import { exportFailedToast, exportedToast, exportingToast } from '$lib/copy/common';
+	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import BackLink from '$lib/components/ui/BackLink.svelte';
 	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
@@ -72,11 +72,12 @@
 	let exporting = false;
 	async function handleExport(format) {
 		exporting = true;
+		const settle = notifyProgress(exportingToast('Report'));
 		try {
 			await downloadReportExport(reportId, format);
-			notify('success', exportedToast('Report'));
+			settle('success', exportedToast('Report'));
 		} catch {
-			notify('error', exportFailedToast('this report'));
+			settle('error', exportFailedToast('this report'));
 		} finally {
 			exporting = false;
 		}

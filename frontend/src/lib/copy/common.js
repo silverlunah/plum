@@ -34,6 +34,7 @@ export const EXPORT_MENU_ITEMS = [
 ];
 export const exportFailedToast = (what) => `Could not export ${what}.`;
 export const exportedToast = (what) => `${what} exported.`;
+export const exportingToast = (what) => `Exporting ${what.toLowerCase()}…`;
 
 export const CLEAR_SEARCH_LABEL = 'Clear search';
 export const SORT_BY_LABEL = 'Sort by';
