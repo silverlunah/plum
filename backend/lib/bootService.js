@@ -24,6 +24,23 @@ function bootArgs(name) {
 	return [PLUM_BIN, 'node', 'start', name];
 }
 
+// systemd / launchd hand the process a bare PATH — `node`, `npx`, `docker` won't
+// resolve. Bake in the dir node lives in plus the PATH the (interactive) install
+// is running with, so the boot invocation sees exactly what the operator does.
+function bootPath() {
+	const parts = [
+		path.dirname(process.execPath),
+		process.env.PATH || '',
+		'/usr/local/bin',
+		'/usr/bin',
+		'/bin',
+		'/opt/homebrew/bin'
+	];
+	return [...new Set(parts.flatMap((p) => p.split(path.delimiter)).filter(Boolean))].join(
+		path.delimiter
+	);
+}
+
 function run(cmd, args) {
 	execFileSync(cmd, args, { stdio: 'pipe', windowsHide: true });
 }
@@ -61,6 +78,7 @@ function installLinux(name) {
 			'[Service]',
 			'Type=oneshot',
 			'RemainAfterExit=yes',
+			`Environment="PATH=${bootPath()}"`,
 			`ExecStart=${quote([process.execPath, ...bootArgs(name)])}`,
 			`ExecStop=${quote([process.execPath, PLUM_BIN, 'node', 'stop', name])}`,
 			'',
@@ -126,6 +144,8 @@ function installDarwin(name) {
 			'  <array>',
 			argv,
 			'  </array>',
+			'  <key>EnvironmentVariables</key>',
+			`  <dict><key>PATH</key><string>${bootPath()}</string></dict>`,
 			'  <key>RunAtLoad</key><true/>',
 			`  <key>StandardOutPath</key><string>${path.join(logDir, `boot-${name}.log`)}</string>`,
 			`  <key>StandardErrorPath</key><string>${path.join(logDir, `boot-${name}.log`)}</string>`,
