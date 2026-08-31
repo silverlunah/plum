@@ -51,6 +51,7 @@
 	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
 	import StatusDot from '$lib/components/ui/StatusDot.svelte';
 	import TagChip from '$lib/components/ui/TagChip.svelte';
+	import TagList from '$lib/components/ui/TagList.svelte';
 	import StepKeyword from '$lib/components/ui/StepKeyword.svelte';
 	import StepStatusIcon from '$lib/components/ui/StepStatusIcon.svelte';
 	import BrowserIcon from '$lib/components/icons/BrowserIcon.svelte';
@@ -209,7 +210,7 @@
 						{/if}
 					</div>
 					<div class="header-meta">
-						<span class="mono">{detail.tags}</span>
+						<span class="mono"><TagList value={detail.tags} /></span>
 						<span class="meta-sep">·</span>
 						<span>{triggerLabel(detail.triggerType)}</span>
 						{#if detail.startedBy}

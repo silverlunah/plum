@@ -47,6 +47,7 @@
 	} from '$lib/copy/reports';
 	import BackLink from '$lib/components/ui/BackLink.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
+	import TagList from '$lib/components/ui/TagList.svelte';
 
 	let terminalEl;
 	let laneTerminalEl;
@@ -195,7 +196,13 @@
 							<span class="run-title-label">{run.currentRun.runTitle}</span>
 							<span class="run-sep">·</span>
 						{/if}
-						<span class="run-tag-label">{run.currentRun.tag || ALL_TESTS_LABEL}</span>
+						<span class="run-tag-label">
+							{#if run.currentRun.tag}
+								<TagList value={run.currentRun.tag} />
+							{:else}
+								{ALL_TESTS_LABEL}
+							{/if}
+						</span>
 						<span class="run-sep">·</span>
 						<span class="run-detail">{workersCountLabel(run.currentRun.workers)}</span>
 						<span class="run-sep">·</span>
@@ -518,6 +525,7 @@
 		font-size: 0.8125rem;
 		font-weight: 500;
 		color: var(--text);
+		min-width: 0;
 	}
 	.run-sep {
 		color: var(--text-muted);
