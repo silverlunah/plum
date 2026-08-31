@@ -34,9 +34,9 @@
 	--code-string: #86efac;
 	--code-comment: #9ca3af;
 	/* Element-inspector highlight — draws over arbitrary replayed website content
-	   and the always-dark DOM tree, so it's a fixed mid-violet that reads on both
-	   light and dark, not the theme accent (which goes muddy on one of them). */
-	--inspect-highlight: #a56ee0;
+	   and the always-dark DOM tree, so it's a fixed bright cyan that stays legible
+	   on both light and dark, not the theme accent (which goes muddy on one). */
+	--inspect-highlight: #22d3ee;
 
 	--font-display: 'Playfair Display', Georgia, serif;
 	--font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
