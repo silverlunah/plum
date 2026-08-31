@@ -6,6 +6,18 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
 
 ---
 
+## 3.0.1 (hotfix)
+
+- `plum node start` no longer crashes when it can't set the node to start on
+  boot. On a headless server the `systemd --user` bus is often unreachable over
+  SSH (no lingering session); the failure is now a warning with a
+  `loginctl enable-linger` hint, and the node — which is already running —
+  stays up.
+- The Automated Tests "this list follows the folder" note moved into the page
+  header instead of sitting at the bottom of the list.
+
+---
+
 ## Highlights
 
 ### Projects

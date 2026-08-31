@@ -187,6 +187,7 @@
 					{suiteSummary(suites.length, totalTests)}
 				{/if}
 			</p>
+			<p class="repo-note">{REPO_MANAGED_NOTE}</p>
 		</div>
 	</div>
 
@@ -404,7 +405,6 @@
 			</div>
 		{/each}
 	</div>
-	<p class="repo-note">{REPO_MANAGED_NOTE}</p>
 {/if}
 
 <style>
@@ -415,9 +415,8 @@
 	}
 
 	.repo-note {
-		margin-top: 1.5rem;
-		padding-top: 1.25rem;
-		border-top: 1px solid var(--border);
+		margin-top: 0.5rem;
+		max-width: 62ch;
 		font-size: 0.8125rem;
 		line-height: 1.5;
 		color: var(--text-muted);
