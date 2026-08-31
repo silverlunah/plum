@@ -6,16 +6,37 @@
 const express = require('express');
 const router = express.Router();
 const runnerService = require('../services/runnerService');
-const { nodeControlAuth } = require('../middleware/nodeControlAuth');
+const settingsService = require('../services/settingsService');
+const { jwtAuth } = require('../middleware/jwtAuth');
+const { requireOwner } = require('../middleware/requireOwner');
+const { nodeControlAuth, nodeReadAuth } = require('../middleware/nodeControlAuth');
 
 // An open POST /runners let anyone register a rogue node, which then received
-// the test tree and env secrets on dispatch — every route is now gated.
-router.get('/', nodeControlAuth, async (req, res) => {
+// the test tree and env secrets on dispatch — mutation is owner/secret-gated.
+// Listing is open to any member so they can target a node for a run.
+router.get('/', nodeReadAuth, async (req, res) => {
 	try {
 		const runners = await runnerService.getAll();
 		res.json({ runners });
 	} catch (e) {
 		res.status(500).json({ error: 'Failed to fetch runners' });
+	}
+});
+
+// Instance-wide "run on the primary" switch — every member reads it, the owner sets it.
+router.get('/built-in', jwtAuth, async (req, res) => {
+	try {
+		res.json(await settingsService.getBuiltInRunnerEnabled());
+	} catch (e) {
+		res.status(500).json({ error: 'Failed to fetch built-in runner setting' });
+	}
+});
+
+router.put('/built-in', jwtAuth, requireOwner, async (req, res) => {
+	try {
+		res.json(await settingsService.updateBuiltInRunnerEnabled(req.body.enabled));
+	} catch (e) {
+		res.status(500).json({ error: 'Failed to update built-in runner setting' });
 	}
 });
 

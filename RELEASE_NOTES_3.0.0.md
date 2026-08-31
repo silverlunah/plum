@@ -21,12 +21,14 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
 
 ### Roles & access
 
-- **Owner** — one per instance. Reaches every project and every account-wide
-  setting (users, runner nodes, backup, project CRUD).
+- **Owner** — reaches every project and every account-wide setting (users,
+  runner nodes, backup, project CRUD). An instance can have **several owners**;
+  an owner promotes another account in Settings → Users, and the last owner
+  can't be demoted.
 - **Admin** — full settings _within the projects they're assigned to_.
 - **User** — sees the tests, reports and runs of assigned projects; no settings.
 - Assign people per project in Settings → Project → _Members of this project_,
-  with a search box for large teams. The owner is always listed (read-only);
+  with a search box for large teams. Owners are always listed (read-only);
   admins and users can be added and removed at any time — removing someone only
   revokes access, their test cases and their name on past runs stay.
 - **"What can each role do?"** shows the full capability matrix.
@@ -44,6 +46,10 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
 - The per-project `.env` is **BASE_URL only** — everything else is injected.
 - Remote runner nodes need no per-project setup: the server bundles the right
   project's test files and env into the dispatch payload.
+- Every member sees the built-in runner and all registered nodes in the run bar
+  and can pick one for a run; only owners register or control nodes. The
+  built-in-runner on/off switch is now instance-wide (owner-set, applies to
+  everyone) instead of a per-browser preference.
 - The API separates local test authoring from the server: `plum init` (no
   arguments) scaffolds a folder for `plum run-test` and needs neither Docker
   nor the server; `plum server start` runs the web UI and creates the

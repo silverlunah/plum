@@ -196,6 +196,25 @@ const getActivityRetention = async () => {
 	return { activityRetentionDays: org.activityRetentionDays };
 };
 
+const getBuiltInRunnerEnabled = async () => {
+	const org = await getOrgRaw();
+	return { builtInRunnerEnabled: org.builtInRunnerEnabled };
+};
+
+const updateBuiltInRunnerEnabled = async (enabled) => {
+	const org = await getOrgRaw();
+	const updated = await prisma.organization.update({
+		where: { id: org.id },
+		data: { builtInRunnerEnabled: Boolean(enabled) }
+	});
+	await activityService.record(ACTIVITY_ACTION.NODE_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'node', label: 'Built-in runner' },
+		metadata: { enabled: updated.builtInRunnerEnabled }
+	});
+	return { builtInRunnerEnabled: updated.builtInRunnerEnabled };
+};
+
 const updateActivityRetention = async (days) => {
 	const org = await getOrgRaw();
 	const updated = await prisma.organization.update({
@@ -235,5 +254,7 @@ module.exports = {
 	generateMcpKey,
 	revokeMcpKey,
 	getActivityRetention,
-	updateActivityRetention
+	updateActivityRetention,
+	getBuiltInRunnerEnabled,
+	updateBuiltInRunnerEnabled
 };
