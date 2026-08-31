@@ -148,6 +148,8 @@ export const NOT_IN_PROGRESS_BANNER =
 export const TOGGLE_STEPS_TITLE = 'Toggle steps';
 export const ASSIGN_TO_ME_LABEL = 'Assign to me';
 export const UNASSIGN_LABEL = 'Unassign';
+export const resultLockedHint = (name) =>
+	`Assigned to ${name} — use "Assign to me" to record a result yourself.`;
 export const IN_PROGRESS_LABEL = 'In Progress';
 export const PASS_LABEL = 'Pass';
 export const FAIL_LABEL = 'Fail';
