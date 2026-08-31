@@ -255,6 +255,13 @@
 		backupS3SecretKeySet
 	);
 
+	// Enough to save/test: bucket + access key + a secret (freshly typed or already stored).
+	$: s3FormFilled = !!(
+		backupConfig.backupS3Bucket?.trim() &&
+		backupConfig.backupS3AccessKey?.trim() &&
+		(backupConfig.backupS3SecretKey?.trim() || backupS3SecretKeySet)
+	);
+
 	// Fetch the list once, the first time S3 looks configured — Refresh covers reloads.
 	$: if (s3Configured && !s3BackupsLoaded) {
 		s3BackupsLoaded = true;
@@ -454,10 +461,10 @@
 	</div>
 
 	<div class="backup-actions">
-		<Button variant="ghost" on:click={handleTestS3} disabled={backupTestingS3}>
+		<Button variant="ghost" on:click={handleTestS3} disabled={backupTestingS3 || !s3FormFilled}>
 			{testConnectionLabel(backupTestingS3)}
 		</Button>
-		<Button on:click={handleSaveBackupConfig} disabled={backupConfigSaving}>
+		<Button on:click={handleSaveBackupConfig} disabled={backupConfigSaving || !s3FormFilled}>
 			{saveS3ConfigLabel(backupConfigSaving)}
 		</Button>
 	</div>
@@ -702,7 +709,7 @@
 	.backup-actions {
 		display: flex;
 		gap: 0.625rem;
-		margin-top: 0.25rem;
+		margin-top: 0.75rem;
 		flex-wrap: wrap;
 	}
 	.s3-test-result {
