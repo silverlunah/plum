@@ -10,7 +10,7 @@ export const HEADING = 'Automated Tests';
 export const SEARCH_PLACEHOLDER = 'Search suites or tests…';
 export const NO_SUITES_MESSAGE = 'No test suites found.';
 export const REPO_MANAGED_NOTE =
-	'These tests live in your project’s test repository. When a code change is detected, it will update on its own.';
+	'These tests are managed in your project’s test repository. When a code change is detected, it will update on its own.';
 export const RUN_SUITE_LABEL = 'Run suite';
 export const OUTLINE_BADGE = 'outline';
 export const HIDE_LABEL = 'Hide';
