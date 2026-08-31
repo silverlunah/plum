@@ -26,6 +26,8 @@ export const BROWSER_LABEL = 'Browser';
 export const RUNNERS_LABEL = 'Runners';
 export const RUNNERS_HINT = 'Select one or more nodes';
 export const THIS_SERVER_HINT = 'this server';
+export const NO_RUNNERS_AVAILABLE =
+	'The built-in runner is off and no nodes are registered — start a node or re-enable the built-in runner in Settings → Runners.';
 export const NOTIFICATIONS_LABEL = 'Notifications';
 
 export const ALL_FIELDS_REQUIRED = 'All fields are required.';

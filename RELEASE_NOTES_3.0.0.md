@@ -6,6 +6,19 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
 
 ---
 
+## 3.0.2 (hotfix)
+
+- The live-run stream shows its own "Waiting for the browser to open a page…"
+  hint on a blank frame, instead of the replay player's wording.
+- `plum manage-nodes` → **Add new node** no longer fails with an authorization
+  error — the registration secret the menu already resolved is now passed to the
+  `plum node start` it spawns.
+- The scheduled-job form only lists the **Built-in** runner when the owner has
+  it enabled; a new job defaults to a node instead, and a note explains what to
+  do when neither is available.
+- MCP config snippet names the server `plum-<slug>` (so several projects can
+  coexist in one client config) and states which project the key is bound to.
+
 ## 3.0.1 (hotfix)
 
 - **Multi-runner runs no longer skip.** A distributed run (built-in + a node, or

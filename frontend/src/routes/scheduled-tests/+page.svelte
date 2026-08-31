@@ -12,9 +12,9 @@
 		runCronJobNow,
 		toggleCronJob
 	} from '$lib/api/schedules';
-	import { fetchRunners } from '$lib/api/runners';
+	import { fetchRunners, fetchBuiltInEnabled } from '$lib/api/runners';
 	import { fetchIntegrations } from '$lib/api/settings';
-	import { backgroundRuns, findActiveCronRun } from '$lib/stores/runner';
+	import { backgroundRuns, findActiveCronRun, builtInEnabled } from '$lib/stores/runner';
 	import { BROWSERS, BUILTIN_RUNNER_ID } from '$lib/constants';
 	import {
 		BUILTIN_RUNNER_LABEL,
@@ -47,6 +47,7 @@
 		RUNNERS_LABEL,
 		RUNNERS_HINT,
 		THIS_SERVER_HINT,
+		NO_RUNNERS_AVAILABLE,
 		NOTIFICATIONS_LABEL,
 		ALL_FIELDS_REQUIRED,
 		INVALID_CRON_EXPRESSION_ERROR,
@@ -130,6 +131,14 @@
 		}
 	}
 
+	// Don't default a new job to the built-in runner when it's off — reach for a
+	// node instead (still falls back to built-in if that's genuinely all there is).
+	$: fallbackRunnerIds = $builtInEnabled
+		? [BUILTIN_RUNNER_ID]
+		: availableRunners[0]
+			? [availableRunners[0].id]
+			: [BUILTIN_RUNNER_ID];
+
 	function toggleFormRunner(id) {
 		const current = form.runnerIds;
 		if (current.includes(id) && current.length === 1) return;
@@ -149,7 +158,7 @@
 			tags: '',
 			workers: 1,
 			browser: BROWSERS[0].id,
-			runnerIds: [BUILTIN_RUNNER_ID],
+			runnerIds: [...fallbackRunnerIds],
 			notifyDiscord: false,
 			notifySlack: false
 		};
@@ -173,7 +182,7 @@
 			tags: job.tags,
 			workers: job.workers ?? 1,
 			browser: job.browser ?? BROWSERS[0].id,
-			runnerIds: prunedIds.length > 0 ? prunedIds : [BUILTIN_RUNNER_ID],
+			runnerIds: prunedIds.length > 0 ? prunedIds : [...fallbackRunnerIds],
 			notifyDiscord: job.notifyDiscord ?? false,
 			notifySlack: job.notifySlack ?? false
 		};
@@ -258,6 +267,9 @@
 				notifyPublicUrl: ''
 			}))
 		]);
+		fetchBuiltInEnabled()
+			.then(({ builtInRunnerEnabled }) => builtInEnabled.set(builtInRunnerEnabled))
+			.catch(() => {});
 	});
 </script>
 
@@ -371,16 +383,18 @@
 				<span class="field-hint">{RUNNERS_HINT}</span>
 			</div>
 			<div class="runner-checks">
-				<label class="runner-check-option">
-					<input
-						type="checkbox"
-						checked={form.runnerIds.includes(BUILTIN_RUNNER_ID)}
-						on:change={() => toggleFormRunner(BUILTIN_RUNNER_ID)}
-					/>
-					<span class="runner-check-dot built-in"></span>
-					<span>{BUILTIN_RUNNER_LABEL}</span>
-					<span class="runner-check-hint">{THIS_SERVER_HINT}</span>
-				</label>
+				{#if $builtInEnabled || form.runnerIds.includes(BUILTIN_RUNNER_ID)}
+					<label class="runner-check-option">
+						<input
+							type="checkbox"
+							checked={form.runnerIds.includes(BUILTIN_RUNNER_ID)}
+							on:change={() => toggleFormRunner(BUILTIN_RUNNER_ID)}
+						/>
+						<span class="runner-check-dot built-in"></span>
+						<span>{BUILTIN_RUNNER_LABEL}</span>
+						<span class="runner-check-hint">{THIS_SERVER_HINT}</span>
+					</label>
+				{/if}
 				{#each availableRunners as r}
 					<label class="runner-check-option">
 						<input
@@ -393,6 +407,9 @@
 						<span class="runner-check-hint">{r.url}</span>
 					</label>
 				{/each}
+				{#if !$builtInEnabled && availableRunners.length === 0 && !form.runnerIds.includes(BUILTIN_RUNNER_ID)}
+					<p class="runner-empty">{NO_RUNNERS_AVAILABLE}</p>
+				{/if}
 			</div>
 		</div>
 
@@ -865,6 +882,13 @@
 		border-radius: var(--radius-sm);
 		padding: 0.375rem 0.5rem;
 		background: var(--bg-subtle);
+	}
+
+	.runner-empty {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		line-height: 1.5;
+		padding: 0.25rem 0.25rem 0.375rem;
 	}
 
 	.runner-check-option {

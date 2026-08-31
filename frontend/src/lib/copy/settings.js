@@ -215,6 +215,8 @@ export const REVOKE_KEY_LABEL = 'Revoke Key';
 export const CONFIG_SNIPPET_CARD_TITLE = 'Config Snippet';
 export const CONFIG_SNIPPET_DESC_PREFIX = "Add this to your MCP client's config file (e.g.";
 export const CONFIG_SNIPPET_DESC_SUFFIX = ', Cursor MCP settings, etc.).';
+export const mcpProjectScopeNote = (name) =>
+	`Every call through this server runs in ${name}. To work with another project, add its own key as a second server — the name (\`plum-<slug>\`) keeps them apart.`;
 export const MCP_KEY_GENERATED_TOAST = 'MCP key generated.';
 export const MCP_KEY_REVOKED_TOAST = 'MCP key revoked.';
 export const MCP_KEY_REVOKE_FAILED = 'Could not revoke the key.';

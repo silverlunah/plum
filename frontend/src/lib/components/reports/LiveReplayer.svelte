@@ -7,6 +7,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import Player from 'rrweb-player';
 	import 'rrweb-player/dist/style.css';
+	import { LIVE_EMPTY_FRAME_HINT } from '$lib/copy/reports';
 
 	// A growing array — new events are appended by the caller as they stream
 	// in over the socket. liveMode lets rrweb-player start from zero events
@@ -88,7 +89,11 @@
 
 <div class="live-viewport" bind:this={viewport}>
 	<div class="live-stage" bind:this={stage}>
-		<div class="live-mount" bind:this={container}></div>
+		<div
+			class="live-mount"
+			style="--live-empty-hint: {JSON.stringify(LIVE_EMPTY_FRAME_HINT)}"
+			bind:this={container}
+		></div>
 	</div>
 </div>
 
@@ -132,5 +137,21 @@
 		border-radius: var(--radius-md);
 		overflow: hidden;
 		background: var(--bg-elevated);
+	}
+	/* Shows only before the browser navigates — the live counterpart to RecordingPlayer's replay hint. */
+	.live-mount :global(.replayer-wrapper)::before {
+		content: var(--live-empty-hint);
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 2rem;
+		text-align: center;
+		color: var(--text-muted);
+		font-size: 0.85rem;
+		line-height: 1.5;
+		pointer-events: none;
 	}
 </style>
