@@ -58,7 +58,7 @@
 
 	// ── Members of the active project ──
 	let assignable = []; // every non-owner user
-	let ownerRow = null; // shown read-only on every project — access is implicit
+	let ownerRows = []; // shown read-only on every project — access is implicit
 	let memberIds = [];
 	let loadedFor = null;
 	let query = '';
@@ -81,10 +81,10 @@
 		loadedFor = id;
 		try {
 			const rows = await fetchProjectMembers(id);
-			ownerRow = rows.find((m) => m.role === 'owner') ?? null;
+			ownerRows = rows.filter((m) => m.role === 'owner');
 			memberIds = rows.filter((m) => m.role !== 'owner').map((m) => m.id);
 		} catch {
-			ownerRow = null;
+			ownerRows = [];
 			memberIds = [];
 		}
 	}
@@ -264,14 +264,14 @@
 		/>
 	{/if}
 	<ul class="members">
-		{#if ownerRow}
+		{#each ownerRows as o (o.id)}
 			<li>
-				<span>{ownerRow.name}</span>
-				<span class="role">{ownerRow.role}</span>
-				<span class="email">{ownerRow.email}</span>
+				<span>{o.name}</span>
+				<span class="role">{o.role}</span>
+				<span class="email">{o.email}</span>
 				<span class="owner-tag">{OWNER_MEMBER_TAG}</span>
 			</li>
-		{/if}
+		{/each}
 		{#each pagedMembers as u (u.id)}
 			<li>
 				<span>{u.name}</span>

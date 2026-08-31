@@ -94,7 +94,8 @@ export const saveProjectLabel = (saving) => (saving ? SAVING_LABEL : 'Save Proje
 // ── Runners ──
 export const BUILTIN_RUNNER_TOGGLE_LABEL = 'Built-in runner';
 export const BUILTIN_RUNNER_TOGGLE_DESC =
-	'Use this server to run tests locally. Disable to route all runs to external nodes.';
+	'Use this server to run tests locally. Disable to route all runs to external nodes. Applies to everyone on this instance.';
+export const BUILTIN_RUNNER_TOGGLE_FAILED = 'Could not update the built-in runner setting.';
 export const RUNNER_UNREACHABLE_LABEL = 'unreachable';
 export const RUNNER_PINGING_LABEL = 'pinging…';
 export const REMOVE_LABEL = 'Remove';

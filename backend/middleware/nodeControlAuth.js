@@ -7,19 +7,28 @@ const { jwtAuth } = require('./jwtAuth');
 const { requireOwner } = require('./requireOwner');
 const { AUTH_SCHEME } = require('../lib/authHeader');
 
-// PLUM_NODE_SECRET (CLI, no browser session) or the owner's JWT (web Settings).
-function nodeControlAuth(req, res, next) {
+function presentsNodeSecret(req) {
 	const secret = process.env.PLUM_NODE_SECRET;
 	const auth = req.headers.authorization;
-	if (
+	return (
 		secret &&
 		auth &&
 		auth.startsWith(`${AUTH_SCHEME.BEARER} `) &&
 		auth.slice(AUTH_SCHEME.BEARER.length + 1) === secret
-	) {
-		return next();
-	}
+	);
+}
+
+// Mutating a node — PLUM_NODE_SECRET (CLI, no browser session) or the owner's JWT.
+function nodeControlAuth(req, res, next) {
+	if (presentsNodeSecret(req)) return next();
 	jwtAuth(req, res, () => requireOwner(req, res, next));
 }
 
-module.exports = { nodeControlAuth };
+// Reading the fleet — any signed-in member (they pick a node for a run), plus the
+// secret so `plum node`'s pre-register check still works.
+function nodeReadAuth(req, res, next) {
+	if (presentsNodeSecret(req)) return next();
+	jwtAuth(req, res, next);
+}
+
+module.exports = { nodeControlAuth, nodeReadAuth };

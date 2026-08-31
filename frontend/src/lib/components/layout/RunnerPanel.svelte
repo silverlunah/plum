@@ -24,7 +24,7 @@
 	import { activeProjectId } from '$lib/stores/project';
 	import { auth } from '$lib/stores/auth';
 	import { reportUrl } from '$lib/api/reports';
-	import { fetchRunners } from '$lib/api/runners';
+	import { fetchRunners, fetchBuiltInEnabled } from '$lib/api/runners';
 	import { fetchRuns, fetchRun } from '$lib/api/repository';
 	import { fetchIntegrations } from '$lib/api/settings';
 	import { fetchActiveRuns } from '$lib/api/activeRuns';
@@ -111,10 +111,9 @@
 			const exp = localStorage.getItem('plum:panelExpanded');
 			if (exp !== null) panelExpanded.set(exp === 'true');
 		} catch {}
-		try {
-			const bi = localStorage.getItem('plum:builtInEnabled');
-			if (bi !== null) builtInEnabled.set(bi !== 'false');
-		} catch {}
+		fetchBuiltInEnabled()
+			.then(({ builtInRunnerEnabled }) => builtInEnabled.set(builtInRunnerEnabled))
+			.catch(() => {});
 
 		fetchRunners()
 			.then((r) => {
@@ -162,9 +161,6 @@
 			} catch {}
 		});
 		_unsubBuiltIn = builtInEnabled.subscribe((v) => {
-			try {
-				localStorage.setItem('plum:builtInEnabled', String(v));
-			} catch {}
 			runnerConfig.update((c) => {
 				if (!v && c.selectedRunners.includes(BUILTIN_RUNNER_ID)) {
 					const others = c.selectedRunners.filter((r) => r !== BUILTIN_RUNNER_ID);
