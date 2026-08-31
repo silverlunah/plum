@@ -30,6 +30,12 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
 - Browser and Discord / Slack now show their real brand icons across the UI, and
   the browser is labelled **Chrome** / **Firefox** everywhere (it used to read
   "chromium" in some places), including in Discord / Slack notifications.
+- A live run now looks the same as its replay: the stream sits on the dot-grid
+  canvas with a framed browser viewport, matching the report's session player.
+- Settings sidebar is grouped under **General** / **Layout** / **Documentation**
+  / **Authentication**, with links to the Plum, Playwright, and Cucumber docs.
+  "Learn more" links to Playwright and Cucumber also appear under the Automated
+  Tests heading.
 
 ---
 
