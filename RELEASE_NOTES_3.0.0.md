@@ -155,6 +155,23 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
   selector or XPath against the recorded page — and the Element tab now lists
   ranked **locators** (test id, role + name, id/class, CSS path, XPath) with a
   copy button and a "recommended" marker, close to Playwright's locator priority.
+- The server stack restarts on its own — its containers now use
+  `restart: unless-stopped`, so a reboot brings them back as soon as Docker
+  starts.
+- `plum node start` can register a node to **start on boot** (`--boot` /
+  `--no-boot`, or the interactive prompt) using systemd (Linux), launchd (macOS)
+  or a Scheduled Task (Windows). Toggle it from `plum manage-nodes`; `plum node
+list` marks which nodes have it.
+- CI triggers: a run started via `POST /trigger` can pass `baseUrl` to override
+  the project's `BASE_URL` for that run — point each pull request at its own
+  preview deployment. (Already worked; now documented, and the Settings snippet
+  shows it.)
+- The license-header tool no longer touches `projects/` or `*.feature` files —
+  it had been prepending a `/* … */` block to scaffolded feature files (breaking
+  Gherkin) and to the persisted secret files under a project's `reports/`
+  (invalidating sessions). If a `projects/<slug>/tests` folder has headed
+  `.feature`/`.ts` files or a `reports/.plum-*-secret` starting with `/*`, delete
+  the first four lines of each.
 
 ---
 

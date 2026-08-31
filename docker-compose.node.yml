@@ -9,6 +9,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: plum
       POSTGRES_USER: plum
@@ -25,6 +26,7 @@ services:
 
   backend:
     build: ./backend
+    restart: unless-stopped
     ports:
       - '3001:3001'
     environment:

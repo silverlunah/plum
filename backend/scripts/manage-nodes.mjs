@@ -24,9 +24,11 @@ import * as clack from '@clack/prompts';
 import pc from 'picocolors';
 import runnerProcess from '../lib/runnerProcess.js';
 import nodeRegister from '../lib/nodeRegister.js';
+import bootService from '../lib/bootService.js';
 
 const { isLocalUrl, parsePort, pruneDead, statusOf, findPidOnPort } = runnerProcess;
 const { generateToken, loadNodeByName } = nodeRegister;
+const { installNodeBoot, removeNodeBoot, nodeBootStatus } = bootService;
 
 const API_URL = process.env.PLUM_API_URL || 'http://localhost:3001';
 
@@ -149,9 +151,11 @@ async function runAction(r) {
 
 	const options = [];
 	if (isLocalNode) {
+		const bootOn = nodeBootStatus(r.name) === 'enabled';
 		options.push(
 			{ value: 'restart', label: pc.yellow(r.online ? 'Restart' : 'Start') },
 			{ value: 'stop', label: pc.red('Stop') },
+			{ value: 'boot', label: bootOn ? 'Start on boot: on' : 'Start on boot: off' },
 			{ value: 'log', label: 'Show log path' },
 			{ value: 'ping', label: 'Ping' }
 		);
@@ -221,6 +225,19 @@ async function runAction(r) {
 				s.stop(pc.green(`Deleted "${r.name}"`));
 			} catch (e) {
 				s.stop(pc.red(`Could not delete "${r.name}": ${e.message}`));
+			}
+		}
+	} else if (action === 'boot') {
+		if (nodeBootStatus(r.name) === 'enabled') {
+			removeNodeBoot(r.name);
+			clack.log.info(`"${r.name}" will not start on boot.`);
+		} else {
+			const res = installNodeBoot(r.name);
+			if (res.ok) {
+				clack.log.success(`"${r.name}" will start on boot.`);
+				if (res.hint) clack.log.info(res.hint);
+			} else {
+				clack.log.warn(`Couldn't set up start-on-boot: ${res.reason}`);
 			}
 		}
 	} else if (action === 'log') {
