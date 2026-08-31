@@ -47,3 +47,18 @@ export async function restartRunner(id) {
 	});
 	return res.json();
 }
+
+export async function fetchBuiltInEnabled() {
+	const res = await fetch(`${API_BASE}/runners/built-in`, { headers: authHeaders() });
+	return res.json();
+}
+
+export async function setBuiltInEnabled(enabled) {
+	const res = await fetch(`${API_BASE}/runners/built-in`, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json', ...authHeaders() },
+		body: JSON.stringify({ enabled })
+	});
+	if (!res.ok) throw new Error('Failed to update built-in runner setting');
+	return res.json();
+}

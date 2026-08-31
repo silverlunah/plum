@@ -26,16 +26,7 @@ async function needsSetup() {
 	return count === 0;
 }
 
-// One owner per instance — the count logic in listAll and the implicit-owner
-// row in getMembers both assume it.
-async function assertRoleAssignable(role) {
-	if (role === ROLE.OWNER && (await prisma.user.count({ where: { role: ROLE.OWNER } })) > 0) {
-		throw new Error('This instance already has an owner');
-	}
-}
-
 async function createUser({ name, email, password, role = 'user' }) {
-	await assertRoleAssignable(role);
 	if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
 		const err = new Error('A user with that email already exists.');
 		err.status = 409;
@@ -124,13 +115,12 @@ async function getAssignablePool() {
 	});
 }
 
-// Who can be assigned work within one project: its explicit members plus the
-// owner. Used by the test-run assignee picker.
+// Who can be assigned work within one project: its explicit members plus every
+// owner (owners reach every project). Used by the test-run assignee picker.
 async function getProjectMembers(projectId) {
-	const [owner, memberships] = await Promise.all([
-		prisma.user.findFirst({
+	const [owners, memberships] = await Promise.all([
+		prisma.user.findMany({
 			where: { role: ROLE.OWNER },
-			orderBy: { createdAt: 'asc' },
 			select: { id: true, name: true, email: true, role: true }
 		}),
 		prisma.projectMember.findMany({
@@ -138,9 +128,9 @@ async function getProjectMembers(projectId) {
 			select: { user: { select: { id: true, name: true, email: true, role: true } } }
 		})
 	]);
-	const users = memberships.map((m) => m.user);
-	if (owner) users.unshift(owner);
-	return users.sort((a, b) => a.name.localeCompare(b.name));
+	const byId = new Map();
+	for (const u of [...owners, ...memberships.map((m) => m.user)]) byId.set(u.id, u);
+	return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 async function getById(id) {
@@ -179,10 +169,6 @@ async function updateUser(id, { name, email, role }) {
 	if (!user) return { ok: false, error: 'User not found' };
 	if (role !== undefined && !['owner', 'admin', 'user'].includes(role)) {
 		return { ok: false, error: 'role must be owner, admin or user' };
-	}
-	if (role === ROLE.OWNER && user.role !== ROLE.OWNER) {
-		const owners = await prisma.user.count({ where: { role: ROLE.OWNER } });
-		if (owners > 0) return { ok: false, error: 'This instance already has an owner' };
 	}
 	if (email) {
 		const conflict = await prisma.user.findFirst({ where: { email, NOT: { id } } });
