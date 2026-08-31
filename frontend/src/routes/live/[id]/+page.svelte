@@ -697,14 +697,22 @@
 		animation: fadeUp 0.35s var(--ease-out) 0.05s both;
 	}
 
+	/* Dot-grid canvas kept in step with the replay player's .player-stage. */
 	.stream-panel {
 		position: relative;
-		background: var(--terminal-bg);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		overflow: hidden;
 		border-right: 1px solid var(--border);
+		padding: clamp(1rem, 3vw, 2rem);
+		background-color: var(--bg-subtle);
+		background-image: radial-gradient(
+			circle,
+			color-mix(in srgb, var(--text-muted) 22%, transparent) 1px,
+			transparent 1px
+		);
+		background-size: 18px 18px;
 	}
 
 	.awaiting-state {
@@ -712,7 +720,7 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 0.625rem;
-		color: rgba(255, 255, 255, 0.2);
+		color: var(--text-muted);
 		font-size: 0.8rem;
 		font-family: 'JetBrains Mono', monospace;
 	}
