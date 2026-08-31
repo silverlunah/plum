@@ -37,6 +37,7 @@
 		PAGE_TITLE,
 		HEADING,
 		HEADER_DESC,
+		repoSummary,
 		NEW_SUITE_LABEL,
 		NEW_RUN_LABEL,
 		SUITES_TAB_LABEL,
@@ -105,6 +106,7 @@
 
 	let suites = [];
 	let suitesTotal = 0;
+	let totalCases = 0;
 	let suitesPage = 1;
 	let suitesSort = readSort('plum:repo:suites:sort', { by: 'createdAt', order: 'desc' });
 
@@ -184,6 +186,7 @@
 		});
 		suites = isPrioritySort ? sortByPriority(result.suites, suitesSort.order) : result.suites;
 		suitesTotal = result.total;
+		totalCases = result.totalCases ?? 0;
 		suitesPage = page;
 	}
 
@@ -424,6 +427,9 @@
 	<div class="header-text">
 		<h1>{HEADING}</h1>
 		<p class="header-desc">{HEADER_DESC}</p>
+		{#if tab === 'suites' && !q}
+			<p class="header-stat">{repoSummary(suitesTotal, totalCases)}</p>
+		{/if}
 	</div>
 	<div class="header-actions">
 		{#if tab === 'suites'}
@@ -872,6 +878,12 @@
 	.header-desc {
 		font-size: 0.875rem;
 		color: var(--text-muted);
+	}
+	.header-stat {
+		margin-top: 0.3rem;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--text);
 	}
 
 	.header-actions {
