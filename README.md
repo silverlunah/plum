@@ -94,7 +94,8 @@ Full documentation is available at:
 
 | Command                       | Description                                                                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `plum init`                   | Initialize a new project in the current folder                                                                                                   |
+| `plum init`                   | Scaffold the current folder for local test authoring (`plum run-test`)                                                                           |
+| `plum project init "<name>"`  | Re-create a server project's `projects/<slug>/tests/` folder (the server normally does this when you add the project)                            |
 | `plum server start`           | Start the full UI stack via Docker                                                                                                               |
 | `plum server restart`         | Rebuild Docker images and restart the server without prompts                                                                                     |
 | `plum server stop`            | Stop the server (data preserved)                                                                                                                 |
