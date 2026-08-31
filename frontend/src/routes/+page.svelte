@@ -181,6 +181,7 @@
 	<div class="header-top">
 		<div>
 			<h1>{HEADING}</h1>
+			<div class="header-learn-more"><LearnMoreLinks /></div>
 			<p class="repo-note">{REPO_MANAGED_NOTE}</p>
 			<p class="subtitle">
 				{#if q}
@@ -189,7 +190,6 @@
 					{suiteSummary(suites.length, totalTests)}
 				{/if}
 			</p>
-			<div class="header-learn-more"><LearnMoreLinks /></div>
 		</div>
 	</div>
 
@@ -425,7 +425,8 @@
 	}
 
 	.header-learn-more {
-		margin-top: 0.6rem;
+		margin-top: 0.4rem;
+		margin-bottom: 0.55rem;
 	}
 
 	.header-top {
