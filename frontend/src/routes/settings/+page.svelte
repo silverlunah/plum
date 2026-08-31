@@ -27,7 +27,7 @@
 	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
 	import { updateProfile, changePassword } from '$lib/api/auth';
 	import { fetchProjects } from '$lib/api/projects';
-	import { setProjects } from '$lib/stores/project';
+	import { setProjects, activeProject } from '$lib/stores/project';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { TIMEZONES } from '$lib/utils/timezones';
@@ -164,6 +164,7 @@
 		CONFIG_SNIPPET_CARD_TITLE,
 		CONFIG_SNIPPET_DESC_PREFIX,
 		CONFIG_SNIPPET_DESC_SUFFIX,
+		mcpProjectScopeNote,
 		MCP_KEY_GENERATED_TOAST,
 		MCP_KEY_GENERATE_FAILED,
 		MCP_KEY_REVOKED_TOAST,
@@ -492,10 +493,12 @@
 		}
 	}
 
+	// Per-project key — name the server per project so several can coexist in one client config.
+	$: mcpServerName = `plum-${$activeProject?.slug ?? 'project'}`;
 	$: mcpConfigSnippet = JSON.stringify(
 		{
 			mcpServers: {
-				plum: {
+				[mcpServerName]: {
 					type: 'http',
 					url: `${API_BASE}/mcp`,
 					headers: {
@@ -1101,6 +1104,9 @@
 							>{CONFIG_SNIPPET_DESC_SUFFIX}
 						</p>
 						<pre class="mcp-snippet">{mcpConfigSnippet}</pre>
+						{#if $activeProject}
+							<p class="field-hint">{mcpProjectScopeNote($activeProject.name)}</p>
+						{/if}
 						<div class="card-footer">
 							<Button variant="ghost" on:click={handleCopyMcpSnippet}>
 								{copyMcpSnippetLabel(mcpSnippetCopied)}

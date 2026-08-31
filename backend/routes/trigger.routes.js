@@ -33,7 +33,8 @@ router.post('/', async (req, res, next) => {
 			workers,
 			baseUrl,
 			testRunId,
-			trigger
+			trigger,
+			startedBy: req.user.name ?? null
 		});
 		res.status(202).json({ jobId, status: JOB_STATUS.RUNNING });
 	} catch (e) {
