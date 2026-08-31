@@ -285,6 +285,8 @@ function processCucumberJson(raw, attempts = {}) {
 				return (rank[s.status] ?? 0) > (rank[acc] ?? 0) ? s.status : acc;
 			}, 'passed');
 
+			const scenarioAttempts = attempts[scenarioIdTag(scenario)] ?? 1;
+
 			return {
 				id: scenarioUniqueId(scenario),
 				name: scenario.name,
@@ -292,7 +294,10 @@ function processCucumberJson(raw, attempts = {}) {
 				tags: (scenario.tags ?? []).map((t) => t.name),
 				status: worstStatus,
 				duration: steps.reduce((s, st) => s + st.duration, 0),
-				attempts: attempts[scenarioIdTag(scenario)] ?? 1,
+				attempts: scenarioAttempts,
+				// Failed at least once, then passed — flaky. A scenario that never
+				// passed is just failed, not flaky.
+				flaky: worstStatus === 'passed' && scenarioAttempts > 1,
 				workerId: extractWorkerId(scenario),
 				runnerName: scenario.__plumRunnerName ?? null,
 				steps
@@ -308,7 +313,13 @@ function processCucumberJson(raw, attempts = {}) {
 	});
 
 	const hasFailures = features.some((f) => f.status === 'failed');
-	return { features, recordings, status: hasFailures ? REPORT_STATUS.FAIL : REPORT_STATUS.PASS };
+	const flakyCount = features.reduce((n, f) => n + f.scenarios.filter((s) => s.flaky).length, 0);
+	return {
+		features,
+		recordings,
+		status: hasFailures ? REPORT_STATUS.FAIL : REPORT_STATUS.PASS,
+		flakyCount
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -324,6 +335,7 @@ const reportListSelect = {
 	startedBy: true,
 	runnerCount: true,
 	workerCount: true,
+	flakyCount: true,
 	browser: true,
 	runnerName: true,
 	createdAt: true,
@@ -375,6 +387,7 @@ const getReportDetail = async (projectId, id) => {
 			startedBy: true,
 			runnerCount: true,
 			workerCount: true,
+			flakyCount: true,
 			browser: true,
 			runnerName: true,
 			createdAt: true,
@@ -475,7 +488,8 @@ const saveReport = async ({
 	const {
 		features,
 		recordings,
-		status: derivedStatus
+		status: derivedStatus,
+		flakyCount
 	} = processCucumberJson(rawCucumberJson, attempts);
 	const status = forceFail ? REPORT_STATUS.FAIL : derivedStatus;
 	const cronJobId = await resolveCronJobId(projectId, normTrigger);
@@ -490,6 +504,7 @@ const saveReport = async ({
 			startedBy: startedBy || null,
 			runnerCount,
 			workerCount,
+			flakyCount,
 			browser: browser ?? DEFAULT_BROWSER,
 			runnerName: runnerName ?? null,
 			runnerId: runnerId ?? null,
