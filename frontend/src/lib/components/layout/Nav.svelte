@@ -38,15 +38,16 @@
 	];
 	const REPO_LINK = { href: '/test-repository', label: 'Test Repository' };
 
-	// Manual-only hides the automation surface entirely; a "repository" default
-	// just moves Test Repository to the front, unstyled like the rest.
+	// Manual-only hides the automation surface entirely. Otherwise `sep` just
+	// draws a divider between the Test Repository link and the automation group,
+	// on whichever side the repository sits.
 	$: manualOnly = $activeProject?.manualRepositoryOnly ?? false;
 	$: repoFirst = manualOnly || $activeProject?.defaultHome === 'repository';
 	$: homeHref = repoFirst ? REPO_LINK.href : '/';
 	$: links = manualOnly
 		? [REPO_LINK]
 		: repoFirst
-			? [REPO_LINK, ...AUTOMATION_LINKS]
+			? [REPO_LINK, { ...AUTOMATION_LINKS[0], sep: true }, ...AUTOMATION_LINKS.slice(1)]
 			: [...AUTOMATION_LINKS, { ...REPO_LINK, sep: true }];
 
 	function closeMenu() {
@@ -68,7 +69,6 @@
 				<a
 					href={link.href}
 					class="link"
-					class:repo={link.sep}
 					class:active={link.href === '/'
 						? $page.url.pathname === '/'
 						: $page.url.pathname.startsWith(link.href)}
@@ -403,19 +403,6 @@
 		margin: 0 0.375rem;
 		flex-shrink: 0;
 		align-self: center;
-	}
-
-	.link.repo {
-		border: 1px solid var(--border);
-		padding: 0.3rem 0.75rem;
-	}
-
-	.link.repo:hover {
-		border-color: var(--text-muted);
-	}
-
-	.link.repo.active {
-		border-color: var(--accent);
 	}
 
 	/* Actions */
