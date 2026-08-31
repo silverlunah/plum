@@ -1,4 +1,4 @@
-![Plum social preview](https://repository-images.githubusercontent.com/936477779/3accb0f2-72b4-447c-b255-d171f6284104)
+![Plum social preview](https://repository-images.githubusercontent.com/936477779/c7897789-fd10-40dc-8cd5-5ebe41b59bfd)
 
 <p align="center">
   <a href="https://www.npmjs.com/package/plum-e2e"><img src="https://img.shields.io/npm/v/plum-e2e?color=7c3aed&label=plum-e2e" alt="npm version" /></a>
