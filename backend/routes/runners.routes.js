@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const runnerService = require('../services/runnerService');
 const settingsService = require('../services/settingsService');
+const appSecret = require('../lib/appSecret');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireOwner } = require('../middleware/requireOwner');
 const { nodeControlAuth, nodeReadAuth } = require('../middleware/nodeControlAuth');
@@ -37,6 +38,22 @@ router.put('/built-in', jwtAuth, requireOwner, async (req, res) => {
 		res.json(await settingsService.updateBuiltInRunnerEnabled(req.body.enabled));
 	} catch (e) {
 		res.status(500).json({ error: 'Failed to update built-in runner setting' });
+	}
+});
+
+// The node-registration secret, shown so an owner can set up a remote node
+// without shelling into the container. Owner-gated, like the MCP key.
+router.get('/node-secret', jwtAuth, requireOwner, (req, res) => {
+	res.json({ nodeSecret: process.env.PLUM_NODE_SECRET ?? null });
+});
+
+router.post('/node-secret/regenerate', jwtAuth, requireOwner, async (req, res) => {
+	try {
+		const nodeSecret = appSecret.regenerateNodeSecret();
+		const push = await runnerService.pushNodeSecret(nodeSecret);
+		res.json({ nodeSecret, ...push });
+	} catch (e) {
+		res.status(500).json({ error: 'Failed to regenerate the node secret' });
 	}
 });
 
