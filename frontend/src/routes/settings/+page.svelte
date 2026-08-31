@@ -26,10 +26,19 @@
 	} from '$lib/api/repository';
 	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
 	import { updateProfile, changePassword } from '$lib/api/auth';
+	import { fetchProjects } from '$lib/api/projects';
+	import { setProjects } from '$lib/stores/project';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { TIMEZONES } from '$lib/utils/timezones';
-	import { API_BASE, MAX_TEST_RETRIES, COPY_TIMEOUT_MS, DOCS_URL } from '$lib/constants';
+	import {
+		API_BASE,
+		MAX_TEST_RETRIES,
+		COPY_TIMEOUT_MS,
+		DOCS_URL,
+		PLAYWRIGHT_URL,
+		CUCUMBER_URL
+	} from '$lib/constants';
 	import { copyText } from '$lib/utils/clipboard';
 	import Button from '$lib/components/ui/Button.svelte';
 	import ProjectAccess from '$lib/components/settings/ProjectAccess.svelte';
@@ -40,8 +49,10 @@
 	import BackupSettings from '$lib/components/settings/BackupSettings.svelte';
 	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
+	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
+	import ExternalNavLink from '$lib/components/ui/ExternalNavLink.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
-	import { EMAIL_LABEL } from '$lib/copy/common';
+	import { EMAIL_LABEL, PLAYWRIGHT_LABEL, CUCUMBER_LABEL } from '$lib/copy/common';
 	import {
 		PAGE_TITLE,
 		HEADING,
@@ -89,8 +100,20 @@
 		TIMEZONE_HINT,
 		RETRY_FAILED_TESTS_LABEL,
 		RETRY_FAILED_TESTS_HINT,
+		HOMEPAGE_CARD_TITLE,
+		HOMEPAGE_CARD_HINT,
+		DEFAULT_HOME_LABEL,
+		DEFAULT_HOME_HINT,
+		DEFAULT_HOME_AUTOMATED_OPTION,
+		DEFAULT_HOME_REPOSITORY_OPTION,
+		MANUAL_REPO_ONLY_LABEL,
+		MANUAL_REPO_ONLY_HINT,
 		DARK_MODE_LABEL,
 		DOCUMENTATION_LABEL,
+		NAV_SECTION_GENERAL,
+		NAV_SECTION_LAYOUT,
+		NAV_SECTION_DOCS,
+		NAV_SECTION_AUTH,
 		PROJECT_SAVED_TOAST,
 		PROJECT_SAVE_FAILED,
 		saveProjectLabel,
@@ -188,17 +211,39 @@
 		} catch {}
 	}
 
-	let project = { name: '', logoUrl: '', timezone: 'UTC', maxRetries: 0 };
+	// Save buttons stay disabled until the form actually differs from what was
+	// loaded (or last saved). Each form keeps a JSON snapshot of its clean state.
+	const snapshot = (o) => JSON.stringify(o);
+
+	let project = {
+		name: '',
+		logoUrl: '',
+		timezone: 'UTC',
+		maxRetries: 0,
+		defaultHome: 'automated',
+		manualRepositoryOnly: false
+	};
 	let projectSaving = false;
+	let projectPristine = snapshot(project);
+	$: projectDirty = snapshot(project) !== projectPristine;
 
 	let prefixes = { testCasePrefix: 'TC', testSuitePrefix: 'TS' };
 	let prefixesSaving = false;
+	let prefixesPristine = snapshot(prefixes);
+	$: prefixesDirty = snapshot(prefixes) !== prefixesPristine;
 	let migrateForm = { testCasePrefix: '', testSuitePrefix: '' };
 	let migrating = false;
+	$: migrateReady =
+		!!migrateForm.testCasePrefix.trim() &&
+		!!migrateForm.testSuitePrefix.trim() &&
+		(migrateForm.testCasePrefix !== prefixes.testCasePrefix ||
+			migrateForm.testSuitePrefix !== prefixes.testSuitePrefix);
 
 	let profileForm = { name: '', email: '' };
 	let profileSaving = false;
 	let profileError = '';
+	let profilePristine = snapshot(profileForm);
+	$: profileDirty = snapshot(profileForm) !== profilePristine;
 
 	let pwForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
 	let pwSaving = false;
@@ -211,6 +256,8 @@
 
 	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
 	let integrationsSaving = false;
+	let integrationsPristine = snapshot(integrations);
+	$: integrationsDirty = snapshot(integrations) !== integrationsPristine;
 
 	let mcpKey = '';
 	let mcpKeySet = false;
@@ -223,9 +270,11 @@
 	onMount(async () => {
 		try {
 			project = await fetchProject();
+			projectPristine = snapshot(project);
 		} catch {}
 		try {
 			prefixes = await fetchPrefixes();
+			prefixesPristine = snapshot(prefixes);
 			migrateForm = {
 				testCasePrefix: prefixes.testCasePrefix,
 				testSuitePrefix: prefixes.testSuitePrefix
@@ -233,6 +282,7 @@
 		} catch {}
 		try {
 			integrations = await fetchIntegrations();
+			integrationsPristine = snapshot(integrations);
 		} catch {}
 		try {
 			const mcp = await fetchMcpConfig();
@@ -241,6 +291,7 @@
 		} catch {}
 		if ($auth.user) {
 			profileForm = { name: $auth.user.name, email: $auth.user.email };
+			profilePristine = snapshot(profileForm);
 		}
 	});
 
@@ -252,6 +303,12 @@
 		projectSaving = true;
 		try {
 			await saveProject(project);
+			projectPristine = snapshot(project);
+			// Nav reads homepage mode from the projects store — refresh it so the
+			// reorder / hide takes effect without a reload.
+			try {
+				setProjects(await fetchProjects());
+			} catch {}
 			notify('success', PROJECT_SAVED_TOAST);
 		} catch {
 			notify('error', PROJECT_SAVE_FAILED);
@@ -301,6 +358,7 @@
 		prefixesSaving = true;
 		try {
 			prefixes = await savePrefixes(prefixes);
+			prefixesPristine = snapshot(prefixes);
 			notify('success', PREFIXES_SAVED_TOAST);
 		} catch {
 			notify('error', PREFIXES_SAVE_FAILED);
@@ -314,6 +372,7 @@
 		try {
 			await migratePrefixes(migrateForm);
 			prefixes = { ...prefixes, ...migrateForm };
+			prefixesPristine = snapshot(prefixes);
 			notify('success', MIGRATION_COMPLETE_TOAST);
 		} catch {
 			notify('error', MIGRATION_FAILED_TOAST);
@@ -332,6 +391,7 @@
 				email: profileForm.email
 			});
 			auth.login($auth.token, { ...$auth.user, ...user });
+			profilePristine = snapshot(profileForm);
 			notify('success', PROFILE_UPDATED_TOAST);
 		} catch (e) {
 			profileError = e.message;
@@ -423,6 +483,7 @@
 		integrationsSaving = true;
 		try {
 			integrations = await saveIntegrations(integrations);
+			integrationsPristine = snapshot(integrations);
 			notify('success', INTEGRATIONS_SAVED_TOAST);
 		} catch {
 			notify('error', INTEGRATIONS_SAVE_FAILED);
@@ -503,6 +564,7 @@
 <div class="settings-layout">
 	<!-- Left sidebar -->
 	<aside class="settings-sidebar">
+		<p class="sidebar-section">{NAV_SECTION_GENERAL}</p>
 		<nav>
 			{#each navItems as item}
 				<button
@@ -515,6 +577,7 @@
 			{/each}
 		</nav>
 		<hr class="sidebar-divider" />
+		<p class="sidebar-section">{NAV_SECTION_LAYOUT}</p>
 		<button
 			class="sidebar-item dark-toggle"
 			role="switch"
@@ -527,24 +590,18 @@
 			</span>
 		</button>
 		<hr class="sidebar-divider" />
-		<a class="sidebar-item docs-link" href={DOCS_URL} target="_blank" rel="noopener noreferrer">
-			<span>{DOCUMENTATION_LABEL}</span>
-			<svg
-				width="13"
-				height="13"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-				<polyline points="15 3 21 3 21 9" />
-				<line x1="10" y1="14" x2="21" y2="3" />
-			</svg>
-		</a>
+		<p class="sidebar-section">{NAV_SECTION_DOCS}</p>
+		<ExternalNavLink href={DOCS_URL} label={DOCUMENTATION_LABEL}>
+			<img class="docs-favicon" src="/favicon-32x32.png" alt="" width="14" height="14" />
+		</ExternalNavLink>
+		<ExternalNavLink href={PLAYWRIGHT_URL} label={PLAYWRIGHT_LABEL}>
+			<ServiceIcon service="playwright" size={14} />
+		</ExternalNavLink>
+		<ExternalNavLink href={CUCUMBER_URL} label={CUCUMBER_LABEL}>
+			<ServiceIcon service="cucumber" size={14} />
+		</ExternalNavLink>
 		<hr class="sidebar-divider" />
+		<p class="sidebar-section">{NAV_SECTION_AUTH}</p>
 		<button class="sidebar-item sign-out" on:click={handleLogout}>{SIGN_OUT_LABEL}</button>
 	</aside>
 
@@ -627,7 +684,60 @@
 					</div>
 
 					<div class="card-footer">
-						<Button on:click={handleSaveProject} disabled={projectSaving || !project.name?.trim()}>
+						<Button
+							on:click={handleSaveProject}
+							disabled={projectSaving || !projectDirty || !project.name?.trim()}
+						>
+							{saveProjectLabel(projectSaving)}
+						</Button>
+					</div>
+				</div>
+
+				<div class="card settings-card">
+					<div>
+						<p class="card-title">{HOMEPAGE_CARD_TITLE}</p>
+						<p class="card-subtitle">{HOMEPAGE_CARD_HINT}</p>
+					</div>
+
+					<div class="field">
+						<label class="field-label" for="project-home">
+							<span>{DEFAULT_HOME_LABEL}</span>
+							<span class="field-hint">{DEFAULT_HOME_HINT}</span>
+						</label>
+						<select
+							id="project-home"
+							class="field-input"
+							bind:value={project.defaultHome}
+							disabled={project.manualRepositoryOnly}
+						>
+							<option value="automated">{DEFAULT_HOME_AUTOMATED_OPTION}</option>
+							<option value="repository">{DEFAULT_HOME_REPOSITORY_OPTION}</option>
+						</select>
+					</div>
+
+					<div class="toggle-field">
+						<div class="toggle-field-text">
+							<span class="toggle-field-name">{MANUAL_REPO_ONLY_LABEL}</span>
+							<span class="field-hint">{MANUAL_REPO_ONLY_HINT}</span>
+						</div>
+						<button
+							type="button"
+							class="mini-switch"
+							class:on={project.manualRepositoryOnly}
+							role="switch"
+							aria-checked={project.manualRepositoryOnly}
+							aria-label={MANUAL_REPO_ONLY_LABEL}
+							on:click={() => (project.manualRepositoryOnly = !project.manualRepositoryOnly)}
+						>
+							<span class="mini-thumb"></span>
+						</button>
+					</div>
+
+					<div class="card-footer">
+						<Button
+							on:click={handleSaveProject}
+							disabled={projectSaving || !projectDirty || !project.name?.trim()}
+						>
 							{saveProjectLabel(projectSaving)}
 						</Button>
 					</div>
@@ -731,6 +841,7 @@
 						<Button
 							on:click={handleSavePrefixes}
 							disabled={prefixesSaving ||
+								!prefixesDirty ||
 								!prefixes.testCasePrefix.trim() ||
 								!prefixes.testSuitePrefix.trim()}
 						>
@@ -773,7 +884,11 @@
 						</div>
 					</div>
 					<div class="card-footer">
-						<Button variant="ghost" on:click={handleMigratePrefixes} disabled={migrating}>
+						<Button
+							variant="ghost"
+							on:click={handleMigratePrefixes}
+							disabled={migrating || !migrateReady}
+						>
 							{runMigrationLabel(migrating)}
 						</Button>
 					</div>
@@ -795,7 +910,7 @@
 
 					<div class="field">
 						<label class="field-label" for="discord-url">
-							<span>{DISCORD_WEBHOOK_LABEL}</span>
+							<span><ServiceIcon service="discord" size={13} /> {DISCORD_WEBHOOK_LABEL}</span>
 							<span class="field-hint">{DISCORD_WEBHOOK_HINT}</span>
 						</label>
 						<input
@@ -809,7 +924,7 @@
 
 					<div class="field">
 						<label class="field-label" for="slack-url">
-							<span>{SLACK_WEBHOOK_LABEL}</span>
+							<span><ServiceIcon service="slack" size={13} /> {SLACK_WEBHOOK_LABEL}</span>
 							<span class="field-hint">{SLACK_WEBHOOK_HINT}</span>
 						</label>
 						<input
@@ -835,7 +950,10 @@
 						/>
 					</div>
 
-					<Button on:click={handleSaveIntegrations} disabled={integrationsSaving}>
+					<Button
+						on:click={handleSaveIntegrations}
+						disabled={integrationsSaving || !integrationsDirty}
+					>
 						{saveIntegrationsLabel(integrationsSaving)}
 					</Button>
 				</div>
@@ -1024,7 +1142,7 @@
 					<div class="card-footer">
 						<Button
 							on:click={handleUpdateProfile}
-							disabled={profileSaving || !profileForm.name || !profileForm.email}
+							disabled={profileSaving || !profileDirty || !profileForm.name || !profileForm.email}
 						>
 							{saveProfileLabel(profileSaving)}
 						</Button>
@@ -1168,6 +1286,20 @@
 		margin: 0.5rem 0.25rem;
 	}
 
+	.sidebar-section {
+		margin: 0.5rem 0 0.35rem;
+		padding: 0 0.75rem;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-muted);
+	}
+
+	.sidebar-section:first-child {
+		margin-top: 0;
+	}
+
 	.dark-toggle {
 		display: flex;
 		align-items: center;
@@ -1175,16 +1307,9 @@
 		gap: 0.75rem;
 	}
 
-	.docs-link {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-		text-decoration: none;
-	}
-	.docs-link svg {
+	.docs-favicon {
 		flex-shrink: 0;
-		opacity: 0.6;
+		border-radius: 3px;
 	}
 
 	.sidebar-item.sign-out {
@@ -1200,9 +1325,31 @@
 		flex-shrink: 0;
 		width: 32px;
 		height: 18px;
+		padding: 0;
+		border: none;
 		border-radius: var(--radius-pill);
 		background: var(--border);
+		cursor: pointer;
 		transition: background var(--duration-fast);
+	}
+
+	.toggle-field {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1.5rem;
+	}
+	.toggle-field-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+	.toggle-field-name {
+		font-size: 0.8125rem;
+		color: var(--text);
+	}
+	.toggle-field .mini-switch {
+		margin-top: 0.15rem;
 	}
 	.mini-switch.on {
 		background: var(--accent);

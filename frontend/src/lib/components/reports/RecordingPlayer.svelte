@@ -798,21 +798,23 @@
 		color: var(--white) !important;
 	}
 
-	/* Soft border on the replay iframe itself so it outlines exactly the website
-	   viewport. border-box keeps the 1280×720 attribute size intact for rrweb's
-	   scale math. rrweb sets pointer-events:none inline, blocking scroll — safe to
-	   override, the iframe is sandboxed. */
+	/* Round the iframe itself — Chrome won't clip it to an ancestor's radius.
+	   rrweb sets pointer-events:none inline, blocking scroll — safe to override,
+	   the iframe is sandboxed. */
 	.player-mount :global(iframe) {
-		box-sizing: border-box;
-		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
 		pointer-events: auto !important;
 	}
 
-	/* .replayer-wrapper is exactly iframe-sized. A step with no page leaves the
-	   iframe transparent (dot-grid shows through) — an opaque fill + a z-index:-1
-	   ::before hint sit behind the real page, visible only when it's blank. */
+	/* .replayer-wrapper is exactly iframe-sized — the outline border and matching
+	   radius/clip go here so the opaque fill behind the page (visible on a blank
+	   step, with the z-index:-1 ::before hint) is rounded too, not a square edge
+	   poking past the iframe's corners. */
 	.player-mount :global(.replayer-wrapper) {
+		box-sizing: border-box;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		overflow: hidden;
 		background: var(--bg-elevated);
 	}
 	.player-mount :global(.replayer-wrapper)::before {

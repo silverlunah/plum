@@ -122,6 +122,10 @@
 	};
 	let backupConfigSaving = false;
 	let includeReportsSaving = false;
+	// Save buttons stay disabled until the config differs from what was loaded.
+	const snapshot = (o) => JSON.stringify(o);
+	let backupConfigPristine = snapshot(backupConfig);
+	$: backupConfigDirty = snapshot(backupConfig) !== backupConfigPristine;
 	let backupS3SecretKeySet = false;
 	let backupTestingS3 = false;
 	let backupRunningNow = false;
@@ -166,6 +170,7 @@
 				backupS3Prefix: bc.backupS3Prefix,
 				backupIncludeReports: bc.backupIncludeReports
 			};
+			backupConfigPristine = snapshot(backupConfig);
 		} catch {}
 	});
 
@@ -234,6 +239,7 @@
 			if (result.error) throw new Error(result.error);
 			if (backupConfig.backupS3SecretKey) backupS3SecretKeySet = true;
 			backupConfig = { ...backupConfig, backupS3SecretKey: '' };
+			backupConfigPristine = snapshot(backupConfig);
 			notify('success', BACKUP_CONFIG_SAVED_TOAST);
 		} catch (e) {
 			notify('error', e.message || BACKUP_CONFIG_SAVE_FAILED);
@@ -395,7 +401,11 @@
 				<span class="toggle-thumb"></span>
 			</button>
 		</label>
-		<Button variant="ghost" on:click={handleSaveIncludeReports} disabled={includeReportsSaving}>
+		<Button
+			variant="ghost"
+			on:click={handleSaveIncludeReports}
+			disabled={includeReportsSaving || !backupConfigDirty}
+		>
 			{saveIncludeReportsLabel(includeReportsSaving)}
 		</Button>
 	</div>
@@ -514,7 +524,10 @@
 		<Button variant="ghost" on:click={handleTestS3} disabled={backupTestingS3 || !s3FormFilled}>
 			{testConnectionLabel(backupTestingS3)}
 		</Button>
-		<Button on:click={handleSaveBackupConfig} disabled={backupConfigSaving || !s3FormFilled}>
+		<Button
+			on:click={handleSaveBackupConfig}
+			disabled={backupConfigSaving || !backupConfigDirty || !s3FormFilled}
+		>
 			{saveS3ConfigLabel(backupConfigSaving)}
 		</Button>
 	</div>
@@ -662,7 +675,7 @@
 			<Button variant="ghost" on:click={handleRunBackupNow} disabled={backupRunningNow}>
 				{uploadS3NowLabel(backupRunningNow)}
 			</Button>
-			<Button on:click={handleSaveBackupConfig} disabled={backupConfigSaving}>
+			<Button on:click={handleSaveBackupConfig} disabled={backupConfigSaving || !backupConfigDirty}>
 				{saveScheduleLabel(backupConfigSaving)}
 			</Button>
 		</div>

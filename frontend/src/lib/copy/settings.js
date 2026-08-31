@@ -89,8 +89,22 @@ export const TIMEZONE_HINT = 'Used to schedule this project’s cron test runs';
 export const RETRY_FAILED_TESTS_LABEL = 'Retry failed tests';
 export const RETRY_FAILED_TESTS_HINT =
 	'Automatically re-run failed scenarios up to this many times before finalizing the report. 0 disables retries.';
+
+export const HOMEPAGE_CARD_TITLE = 'Homepage & mode';
+export const HOMEPAGE_CARD_HINT = 'Applies to everyone on this project.';
+export const DEFAULT_HOME_LABEL = 'Default homepage';
+export const DEFAULT_HOME_HINT = 'The page members land on when they open Plum.';
+export const DEFAULT_HOME_AUTOMATED_OPTION = 'Automated Tests';
+export const DEFAULT_HOME_REPOSITORY_OPTION = 'Test Repository';
+export const MANUAL_REPO_ONLY_LABEL = 'Use as manual repository only';
+export const MANUAL_REPO_ONLY_HINT =
+	'Hide Automated Tests, Reports, Scheduled and the run bar for this project. The Test Repository becomes the homepage.';
 export const DARK_MODE_LABEL = 'Dark mode';
-export const DOCUMENTATION_LABEL = 'Documentation';
+export const DOCUMENTATION_LABEL = 'Plum';
+export const NAV_SECTION_GENERAL = 'General';
+export const NAV_SECTION_LAYOUT = 'Layout';
+export const NAV_SECTION_DOCS = 'Documentation';
+export const NAV_SECTION_AUTH = 'Authentication';
 export const DARK_MODE_DESC = 'Switch between light and dark appearance';
 export const PROJECT_SAVED_TOAST = 'Project settings saved.';
 export const PROJECT_SAVE_FAILED = 'Failed to save project settings.';

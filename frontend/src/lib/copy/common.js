@@ -23,6 +23,10 @@ export const CLEAR_LABEL = 'Clear';
 export const DISCORD_LABEL = 'Discord';
 export const SLACK_LABEL = 'Slack';
 
+export const LEARN_MORE_LABEL = 'Learn more:';
+export const PLAYWRIGHT_LABEL = 'Playwright';
+export const CUCUMBER_LABEL = 'Cucumber';
+
 export const EMAIL_LABEL = 'Email';
 export const PASSWORD_LABEL = 'Password';
 

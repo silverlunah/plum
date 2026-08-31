@@ -9,7 +9,7 @@
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import { fetchProjects } from '$lib/api/projects';
-	import { activeProjectId, projects, setProjects } from '$lib/stores/project';
+	import { activeProjectId, activeProject, projects, setProjects } from '$lib/stores/project';
 
 	let menuOpen = false;
 	let projectMenuOpen = false;
@@ -23,8 +23,6 @@
 		} catch {}
 	});
 
-	$: activeProject = projectList.find((p) => p.id === $activeProjectId) ?? projectList[0];
-
 	function switchProject(id) {
 		projectMenuOpen = false;
 		if (id === $activeProjectId) return;
@@ -33,12 +31,23 @@
 		window.location.reload();
 	}
 
-	const links = [
-		{ href: '/', label: 'Automated Tests' },
+	const AUTOMATION_LINKS = [
+		{ href: '/automated-tests', label: 'Automated Tests' },
 		{ href: '/reports', label: 'Reports' },
-		{ href: '/scheduled-tests', label: 'Scheduled' },
-		{ href: '/test-repository', label: 'Test Repository', sep: true }
+		{ href: '/scheduled-tests', label: 'Scheduled' }
 	];
+	const REPO_LINK = { href: '/test-repository', label: 'Test Repository' };
+
+	// Manual-only hides the automation surface entirely. Otherwise `sep` just
+	// draws a divider between the Test Repository link and the automation group,
+	// on whichever side the repository sits.
+	$: manualOnly = $activeProject?.manualRepositoryOnly ?? false;
+	$: repoFirst = manualOnly || $activeProject?.defaultHome === 'repository';
+	$: links = manualOnly
+		? [REPO_LINK]
+		: repoFirst
+			? [REPO_LINK, { ...AUTOMATION_LINKS[0], sep: true }, ...AUTOMATION_LINKS.slice(1)]
+			: [...AUTOMATION_LINKS, { ...REPO_LINK, sep: true }];
 
 	function closeMenu() {
 		menuOpen = false;
@@ -59,10 +68,8 @@
 				<a
 					href={link.href}
 					class="link"
-					class:repo={link.sep}
-					class:active={link.href === '/'
-						? $page.url.pathname === '/'
-						: $page.url.pathname.startsWith(link.href)}
+					class:active={$page.url.pathname === link.href ||
+						$page.url.pathname.startsWith(link.href + '/')}
 				>
 					{link.label}
 				</a>
@@ -70,7 +77,7 @@
 		</div>
 
 		<div class="actions">
-			{#if projectList.length > 0 && activeProject}
+			{#if projectList.length > 0 && $activeProject}
 				<div class="project-switcher">
 					<button
 						class="project-trigger"
@@ -78,12 +85,12 @@
 						aria-haspopup="listbox"
 						aria-expanded={projectMenuOpen}
 					>
-						{#if activeProject.logoUrl}
-							<img src={activeProject.logoUrl} alt="" class="project-logo" />
+						{#if $activeProject.logoUrl}
+							<img src={$activeProject.logoUrl} alt="" class="project-logo" />
 						{:else}
-							<span class="project-logo project-logo-fallback">{activeProject.name[0]}</span>
+							<span class="project-logo project-logo-fallback">{$activeProject.name[0]}</span>
 						{/if}
-						<span class="project-name">{activeProject.name}</span>
+						<span class="project-name">{$activeProject.name}</span>
 						<svg
 							class="chevron"
 							width="12"
@@ -188,9 +195,8 @@
 				<a
 					href={link.href}
 					class="mobile-link"
-					class:active={link.href === '/'
-						? $page.url.pathname === '/'
-						: $page.url.pathname.startsWith(link.href)}
+					class:active={$page.url.pathname === link.href ||
+						$page.url.pathname.startsWith(link.href + '/')}
 					on:click={closeMenu}
 				>
 					{link.label}
@@ -394,19 +400,6 @@
 		margin: 0 0.375rem;
 		flex-shrink: 0;
 		align-self: center;
-	}
-
-	.link.repo {
-		border: 1px solid var(--border);
-		padding: 0.3rem 0.75rem;
-	}
-
-	.link.repo:hover {
-		border-color: var(--text-muted);
-	}
-
-	.link.repo.active {
-		border-color: var(--accent);
 	}
 
 	/* Actions */

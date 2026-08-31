@@ -24,16 +24,15 @@
 	let nativeHeight = 0;
 	let resizeObserver;
 
-	// rrweb-player renders at the recording's native resolution. Scale it to the
-	// full panel width and anchor it to the top: the browser frame is shown at
-	// true proportions (never zoomed or cropped), and any leftover space is a
-	// single region below the page — not the symmetric top+bottom letterbox
-	// bars a contain-fit leaves. Re-run on every resize.
+	// rrweb-player renders at the recording's native resolution. Contain-fit it
+	// inside the panel — the same sizing the replay player (RecordingPlayer)
+	// gets from rrweb-player — so a run looks identical live or replayed. Re-run
+	// on every resize.
 	function updateScale() {
 		if (!nativeWidth || !nativeHeight || !viewport) return;
 		const vp = viewport.getBoundingClientRect();
-		const scale = vp.width / nativeWidth || 0;
-		stage.style.width = `${vp.width}px`;
+		const scale = Math.min(vp.width / nativeWidth, vp.height / nativeHeight) || 0;
+		stage.style.width = `${nativeWidth * scale}px`;
 		stage.style.height = `${nativeHeight * scale}px`;
 		container.style.transformOrigin = 'top left';
 		container.style.transform = `scale(${scale})`;
@@ -94,8 +93,8 @@
 </div>
 
 <style>
-	/* Fills the panel; the stage is sized in JS to the panel width at the
-	   recording's true aspect ratio, pinned to the top. */
+	/* Fills the panel; the stage is sized in JS to a contain-fit of the recording,
+	   centred on the dot-grid canvas — matching the replay player. */
 	.live-viewport {
 		flex: 1;
 		width: 100%;
@@ -103,14 +102,13 @@
 		min-width: 0;
 		min-height: 0;
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
 		justify-content: center;
 		overflow: hidden;
 	}
 
 	.live-stage {
 		position: relative;
-		overflow: hidden;
 	}
 
 	.live-mount {
@@ -119,8 +117,20 @@
 		left: 0;
 	}
 
+	/* Kept visually in step with the replay player — see RecordingPlayer's .player-mount. */
 	.live-mount :global(.rr-player) {
 		border-radius: 0 !important;
 		box-shadow: none !important;
+		background: transparent !important;
+	}
+	.live-mount :global(iframe) {
+		border-radius: var(--radius-md);
+	}
+	.live-mount :global(.replayer-wrapper) {
+		box-sizing: border-box;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		overflow: hidden;
+		background: var(--bg-elevated);
 	}
 </style>

@@ -75,13 +75,14 @@
 		deletedToast,
 		describeCron
 	} from '$lib/copy/schedules';
-	import { stagger } from '$lib/utils/format';
+	import { stagger, browserLabel } from '$lib/utils/format';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import { notify } from '$lib/stores/notifications';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 
 	const CRON_REGEX =
 		/^(\*|([0-5]?[0-9])|\*\/[0-9]+) (\*|([01]?[0-9]|2[0-3])) (\*|([01]?[0-9]|3[01])) (\*|([1-9]|1[0-2])) (\*|[0-6](-[0-6])?)$/;
@@ -357,6 +358,7 @@
 						class:active={form.browser === b.id}
 						on:click={() => (form.browser = b.id)}
 					>
+						<ServiceIcon service={b.id} size={13} />
 						<span class="seg-num">{b.label}</span>
 					</button>
 				{/each}
@@ -401,12 +403,14 @@
 					{#if integrations.discordWebhookUrl}
 						<label class="notify-check-option">
 							<input type="checkbox" bind:checked={form.notifyDiscord} />
+							<ServiceIcon service="discord" size={13} />
 							<span>{DISCORD_LABEL}</span>
 						</label>
 					{/if}
 					{#if integrations.slackWebhookUrl}
 						<label class="notify-check-option">
 							<input type="checkbox" bind:checked={form.notifySlack} />
+							<ServiceIcon service="slack" size={13} />
 							<span>{SLACK_LABEL}</span>
 						</label>
 					{/if}
@@ -496,7 +500,12 @@
 							<td>
 								<span class="workers-badge" class:multi={job.workers > 1}>×{job.workers}</span>
 							</td>
-							<td><span class="browser-badge">{job.browser ?? BROWSERS[0].id}</span></td>
+							<td>
+								<span class="browser-badge">
+									<ServiceIcon service={job.browser ?? BROWSERS[0].id} size={11} />
+									{browserLabel(job.browser ?? BROWSERS[0].id)}
+								</span>
+							</td>
 							<td>
 								<span class="runner-badge" class:multi-node={ids.length > 1}>
 									{#if ids.length === 1 && ids[0] === BUILTIN_RUNNER_ID}
@@ -774,8 +783,8 @@
 
 	.seg-btn {
 		display: flex;
-		flex-direction: column;
 		align-items: center;
+		gap: 0.4rem;
 		padding: 0.375rem 0.875rem;
 		font-family: inherit;
 		background: var(--bg-elevated);
@@ -834,6 +843,12 @@
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.72rem;
 		color: var(--text-muted);
+	}
+
+	.browser-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
 	}
 
 	.runner-badge.multi-node {

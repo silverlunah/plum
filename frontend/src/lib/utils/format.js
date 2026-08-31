@@ -3,7 +3,11 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-import { TRIGGER_TYPES } from '$lib/constants';
+import { TRIGGER_TYPES, BROWSERS } from '$lib/constants';
+
+// Stored browser values are engine ids ('chromium', 'firefox'); show the brand
+// name everywhere the user sees one.
+export const browserLabel = (id) => BROWSERS.find((b) => b.id === id)?.label ?? id ?? '';
 
 const NON_SCHEDULED = new Set([
 	TRIGGER_TYPES.MANUAL,

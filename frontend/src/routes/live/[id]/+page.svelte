@@ -15,8 +15,10 @@
 	import { REDIRECT_DELAY_MS } from '$lib/constants';
 	import LiveReplayer from '$lib/components/reports/LiveReplayer.svelte';
 	import { ALL_TESTS_LABEL } from '$lib/copy/common';
+	import { browserLabel } from '$lib/utils/format';
 	import {
 		REPORTS_BACK_LABEL,
+		BACK_LABEL,
 		PASSED_LABEL,
 		FAILED_LABEL,
 		LIVE_PAGE_TITLE,
@@ -48,6 +50,7 @@
 	import BackLink from '$lib/components/ui/BackLink.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import TagList from '$lib/components/ui/TagList.svelte';
+	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 
 	let terminalEl;
 	let laneTerminalEl;
@@ -133,6 +136,11 @@
 		if (countdownInterval) clearInterval(countdownInterval);
 		goto(reportUrl(run.latestReportId));
 	}
+
+	function goBack() {
+		if (history.length > 1) history.back();
+		else goto('/');
+	}
 </script>
 
 <svelte:head><title>{LIVE_PAGE_TITLE}</title></svelte:head>
@@ -178,9 +186,22 @@
 			class:header-fail={run.verdict === 'fail'}
 		>
 			<div class="header-left">
-				<div class="header-back">
-					<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
-				</div>
+				<button class="header-back-btn" on:click={goBack}>
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<line x1="19" y1="12" x2="5" y2="12" />
+						<polyline points="12 19 5 12 12 5" />
+					</svg>
+					{BACK_LABEL}
+				</button>
 
 				{#if status === 'running'}
 					<span class="live-badge"><span class="live-dot"></span>{LIVE_BADGE_LABEL}</span>
@@ -192,7 +213,7 @@
 
 				{#if run.currentRun}
 					<div class="run-info">
-						{#if run.currentRun.runTitle}
+						{#if run.currentRun.runTitle && run.currentRun.runTitle !== run.currentRun.tag}
 							<span class="run-title-label">{run.currentRun.runTitle}</span>
 							<span class="run-sep">·</span>
 						{/if}
@@ -206,7 +227,10 @@
 						<span class="run-sep">·</span>
 						<span class="run-detail">{workersCountLabel(run.currentRun.workers)}</span>
 						<span class="run-sep">·</span>
-						<span class="run-detail">{run.currentRun.browser}</span>
+						<span class="run-detail browser">
+							<ServiceIcon service={run.currentRun.browser} size={12} />
+							{browserLabel(run.currentRun.browser)}
+						</span>
 						{#if lanes.length > 1}
 							<span class="run-sep">·</span>
 							<span class="run-detail">{runnersBadge(lanes.length)}</span>
@@ -354,10 +378,8 @@
 			</div>
 
 			<div class="terminal-panel">
-				<div class="terminal-bar">
-					<span class="dot red"></span>
-					<span class="dot yellow"></span>
-					<span class="dot green"></span>
+				<div class="terminal-head">
+					<span class="term-status" class:running={status === 'running'}></span>
 					<span class="terminal-label">
 						{#if isMulti}
 							{activeLane?.name ?? RUNNER_LABEL}
@@ -473,14 +495,22 @@
 		flex-wrap: wrap;
 	}
 
-	.header-back {
-		display: flex;
+	.header-back-btn {
+		display: inline-flex;
 		align-items: center;
-		padding-right: 0.875rem;
+		gap: 0.35rem;
+		padding: 0 0.875rem 0 0;
+		border: none;
 		border-right: 1px solid var(--border);
+		background: transparent;
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition: color var(--duration-fast);
 	}
-	.header-back :global(.back-row) {
-		margin-bottom: 0;
+	.header-back-btn:hover {
+		color: var(--text);
 	}
 
 	.live-badge {
@@ -536,6 +566,11 @@
 		font-size: 0.8rem;
 		color: var(--text-muted);
 		font-family: 'JetBrains Mono', monospace;
+	}
+	.run-detail.browser {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
 	}
 
 	.cancel-btn {
@@ -687,14 +722,22 @@
 		animation: fadeUp 0.35s var(--ease-out) 0.05s both;
 	}
 
+	/* Dot-grid canvas kept in step with the replay player's .player-stage. */
 	.stream-panel {
 		position: relative;
-		background: var(--terminal-bg);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		overflow: hidden;
 		border-right: 1px solid var(--border);
+		padding: clamp(1rem, 3vw, 2rem);
+		background-color: var(--bg-subtle);
+		background-image: radial-gradient(
+			circle,
+			color-mix(in srgb, var(--text-muted) 22%, transparent) 1px,
+			transparent 1px
+		);
+		background-size: 18px 18px;
 	}
 
 	.awaiting-state {
@@ -702,7 +745,7 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 0.625rem;
-		color: rgba(255, 255, 255, 0.2);
+		color: var(--text-muted);
 		font-size: 0.8rem;
 		font-family: 'JetBrains Mono', monospace;
 	}
@@ -711,39 +754,35 @@
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
+		background: var(--terminal-bg);
 	}
 
-	.terminal-bar {
+	.terminal-head {
 		display: flex;
 		align-items: center;
-		gap: 6px;
-		padding: 0.6rem 0.875rem;
-		background: rgba(0, 0, 0, 0.35);
+		gap: 0.5rem;
+		padding: 0.75rem 1.25rem;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 		flex-shrink: 0;
 	}
-	.dot {
-		display: block;
-		width: 10px;
-		height: 10px;
+	.term-status {
+		width: 6px;
+		height: 6px;
 		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.25);
+		flex-shrink: 0;
 	}
-	.dot.red {
-		background: #ff5f57;
-	}
-	.dot.yellow {
-		background: #febc2e;
-	}
-	.dot.green {
-		background: #28c840;
+	.term-status.running {
+		background: var(--pass);
+		animation: dotPulse 1.4s ease-in-out infinite;
 	}
 	.terminal-label {
-		margin-left: auto;
 		font-size: 0.68rem;
 		font-family: 'JetBrains Mono', monospace;
 		font-weight: 500;
-		letter-spacing: 0.06em;
+		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: rgba(255, 255, 255, 0.3);
+		color: rgba(255, 255, 255, 0.4);
 	}
 
 	.terminal {

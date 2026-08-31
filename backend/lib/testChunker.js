@@ -9,11 +9,12 @@ const { getTestSuites } = require('../services/testService');
  * Returns the primary test ID for every test that matches the given tag.
  * If tag is empty, all test IDs are returned.
  *
+ * @param {number} projectId  Project whose feature files to read
  * @param {string} tag  Cucumber tag expression (e.g. '@suite-login')
  * @returns {string[]}
  */
-function getTestIdsForTag(tag) {
-	const { suites } = getTestSuites();
+function getTestIdsForTag(projectId, tag) {
+	const { suites } = getTestSuites(projectId);
 	const ids = [];
 	const normalTag = tag?.trim();
 
