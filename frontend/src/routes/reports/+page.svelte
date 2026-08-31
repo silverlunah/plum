@@ -13,8 +13,10 @@
 		triggerLabel,
 		triggerVariant,
 		stagger,
-		browserLabel
+		browserLabel,
+		mcpName
 	} from '$lib/utils/format';
+	import { startedByLabel } from '$lib/copy/runners';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
@@ -263,6 +265,11 @@
 									</Badge>
 								{/if}
 							</div>
+							{#if report.startedBy}
+								<span class="item-actor"
+									>{startedByLabel(mcpName(report.startedBy, report.viaMcp))}</span
+								>
+							{/if}
 						</div>
 					</div>
 					<div class="item-right">
@@ -597,6 +604,13 @@
 	}
 
 	.item-badges {
+		flex-shrink: 0;
+	}
+
+	.item-actor {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		white-space: nowrap;
 		flex-shrink: 0;
 	}
 

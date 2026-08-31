@@ -18,6 +18,8 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
   do when neither is available.
 - MCP config snippet names the server `plum-<slug>` (so several projects can
   coexist in one client config) and states which project the key is bound to.
+- Reports list rows show **who started the run**; MCP runs that arrive with no
+  actor are attributed to the org owner instead of showing blank.
 
 ## 3.0.1 (hotfix)
 
