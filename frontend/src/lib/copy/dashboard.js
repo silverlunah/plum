@@ -9,6 +9,8 @@ export const PAGE_TITLE = 'Automated Tests — Plum';
 export const HEADING = 'Tests';
 export const SEARCH_PLACEHOLDER = 'Search suites or tests…';
 export const NO_SUITES_MESSAGE = 'No test suites found.';
+export const REPO_MANAGED_NOTE =
+	'Automated tests live in your project’s test repository. This list follows the folder — add, edit or remove a feature file and it updates here on its own.';
 export const RUN_SUITE_LABEL = 'Run suite';
 export const OUTLINE_BADGE = 'outline';
 export const HIDE_LABEL = 'Hide';

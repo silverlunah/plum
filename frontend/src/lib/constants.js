@@ -45,3 +45,5 @@ export const CASE_HISTORY_BARS_MAX = 20;
 export const INSPECTOR_MIN_WIDTH = 280;
 
 export const BUILTIN_RUNNER_ID = 'built-in';
+
+export const DOCS_URL = 'https://n.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd';

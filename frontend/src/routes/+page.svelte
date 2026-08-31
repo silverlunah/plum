@@ -20,6 +20,7 @@
 		HEADING,
 		SEARCH_PLACEHOLDER,
 		NO_SUITES_MESSAGE,
+		REPO_MANAGED_NOTE,
 		RUN_SUITE_LABEL,
 		OUTLINE_BADGE,
 		HIDE_LABEL,
@@ -403,6 +404,7 @@
 			</div>
 		{/each}
 	</div>
+	<p class="repo-note">{REPO_MANAGED_NOTE}</p>
 {/if}
 
 <style>
@@ -410,6 +412,15 @@
 		margin-bottom: 1.75rem;
 		padding-bottom: 1.5rem;
 		border-bottom: 1px solid var(--border);
+	}
+
+	.repo-note {
+		margin-top: 1.5rem;
+		padding-top: 1.25rem;
+		border-top: 1px solid var(--border);
+		font-size: 0.8125rem;
+		line-height: 1.5;
+		color: var(--text-muted);
 	}
 
 	.header-top {

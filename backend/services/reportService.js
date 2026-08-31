@@ -92,6 +92,8 @@ async function syncAutomatedTags(projectId, reportId, features, testRunId = null
 						data: { status: 'in-progress' }
 					})
 				]);
+				// Push the new results to anyone on this run's execution page.
+				require('./testRunService').emitRunChanged(testRunId, { reload: true });
 			}
 		}
 	} catch (e) {

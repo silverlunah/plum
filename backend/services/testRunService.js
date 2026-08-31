@@ -315,6 +315,7 @@ async function reorderEntries(projectId, runId, orderedEntryIds) {
 
 module.exports = {
 	setSocketIO,
+	emitRunChanged,
 	getAll,
 	getById,
 	create,
