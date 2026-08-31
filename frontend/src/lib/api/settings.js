@@ -83,6 +83,22 @@ export async function runBackupNow() {
 	return res.json();
 }
 
+export async function fetchReportRetention() {
+	const res = await fetch(`${API_BASE}/backup/report-retention`, { headers: authHeaders() });
+	if (!res.ok) return { reportRetentionDays: 0 };
+	return res.json();
+}
+
+export async function saveReportRetention(days) {
+	const res = await fetch(`${API_BASE}/backup/report-retention`, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json', ...authHeaders() },
+		body: JSON.stringify({ days })
+	});
+	if (!res.ok) throw new Error('Failed to save retention');
+	return res.json();
+}
+
 export async function fetchS3Backups() {
 	const res = await fetch(`${API_BASE}/backup/s3-backups`, { headers: authHeaders() });
 	return res.json();

@@ -27,6 +27,9 @@ export const ACTIVITY_PER_PAGE = 30;
 // Retention windows (days) offered in Settings → Activity. 0 = keep forever.
 // Mirrors backend/constants/activity.js ACTIVITY_RETENTION_DAYS.
 export const ACTIVITY_RETENTION_DAYS = [0, 30, 90, 180, 365];
+// Retention windows (days) offered in Settings → Backup for report history.
+// Mirrors backend/constants/activity.js REPORT_RETENTION_DAYS.
+export const REPORT_RETENTION_DAYS = [0, 30, 60, 90];
 
 export const COPY_TIMEOUT_MS = 1400;
 export const TOAST_TIMEOUT_MS = 8000;

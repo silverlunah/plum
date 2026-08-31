@@ -69,11 +69,21 @@ async function start() {
 	attachListenRetry(server, port);
 
 	// Connect socket.io to the runner/cron services (a no-op in node mode).
-	const { cronService, backupCronService, activityRetentionService, runQueueService } =
-		wireRealtimeServices(io, isNodeMode);
+	const {
+		cronService,
+		backupCronService,
+		activityRetentionService,
+		reportRetentionService,
+		runQueueService
+	} = wireRealtimeServices(io, isNodeMode);
 
-	// Start the scheduled test, backup, and activity-log-prune cron jobs.
-	await initCronServices(cronService, backupCronService, activityRetentionService);
+	// Start the scheduled test, backup, and log/report-prune cron jobs.
+	await initCronServices(
+		cronService,
+		backupCronService,
+		activityRetentionService,
+		reportRetentionService
+	);
 
 	// Reconcile the persisted run queue: clear rows left "running" by a crash,
 	// then resume anything still queued.

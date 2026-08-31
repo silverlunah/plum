@@ -124,6 +124,8 @@ model Organization {
   backupIncludeReports Boolean   @default(false)
   // Activity log entries older than this are pruned nightly. 0 keeps them forever.
   activityRetentionDays Int      @default(90)
+  // Reports (and their recordings) older than this are pruned nightly. 0 keeps them forever.
+  reportRetentionDays  Int       @default(0)
   // Whether the primary server runs tests itself. Instance-wide: an owner's
   // toggle applies to every member's run bar and every cron job.
   builtInRunnerEnabled Boolean   @default(true)

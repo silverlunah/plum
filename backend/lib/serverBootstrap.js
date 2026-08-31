@@ -45,6 +45,7 @@ function wireRealtimeServices(io, isNodeMode) {
 			cronService: null,
 			backupCronService: null,
 			activityRetentionService: null,
+			reportRetentionService: null,
 			runQueueService: null
 		};
 
@@ -52,19 +53,32 @@ function wireRealtimeServices(io, isNodeMode) {
 	const cronService = require('../services/cronService');
 	const backupCronService = require('../services/backupCronService');
 	const activityRetentionService = require('../services/activityRetentionService');
+	const reportRetentionService = require('../services/reportRetentionService');
 	const runQueueService = require('../services/runQueueService');
 
 	socketHandler(io);
 	runQueueService.setSocketIO(io);
 	require('../services/testRunService').setSocketIO(io);
 
-	return { cronService, backupCronService, activityRetentionService, runQueueService };
+	return {
+		cronService,
+		backupCronService,
+		activityRetentionService,
+		reportRetentionService,
+		runQueueService
+	};
 }
 
-async function initCronServices(cronService, backupCronService, activityRetentionService) {
+async function initCronServices(
+	cronService,
+	backupCronService,
+	activityRetentionService,
+	reportRetentionService
+) {
 	if (cronService) await cronService.init();
 	if (backupCronService) await backupCronService.init();
 	if (activityRetentionService) await activityRetentionService.init();
+	if (reportRetentionService) await reportRetentionService.init();
 }
 
 // MCP keys are per-project now and resolved live from the DB in jwtAuth — the

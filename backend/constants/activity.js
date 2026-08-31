@@ -51,7 +51,8 @@ const ACTIVITY_ACTION = Object.freeze({
 	NODE_DELETE: 'node.delete',
 
 	BACKUP_CONFIG_UPDATE: 'backup.config_update',
-	ACTIVITY_RETENTION_UPDATE: 'activity.retention_update'
+	ACTIVITY_RETENTION_UPDATE: 'activity.retention_update',
+	REPORT_RETENTION_UPDATE: 'report.retention_update'
 });
 
 const ACTIVITY_SCOPE = Object.freeze({ PROJECT: 'project', ORG: 'org' });
@@ -60,10 +61,12 @@ const ACTIVITY_SOURCE = Object.freeze({ UI: 'ui', MCP: 'mcp', CRON: 'cron', CI: 
 
 // Retention windows offered in the UI. 0 = keep forever.
 const ACTIVITY_RETENTION_DAYS = Object.freeze([0, 30, 90, 180, 365]);
+const REPORT_RETENTION_DAYS = Object.freeze([0, 30, 60, 90]);
 
 module.exports = {
 	ACTIVITY_ACTION,
 	ACTIVITY_SCOPE,
 	ACTIVITY_SOURCE,
-	ACTIVITY_RETENTION_DAYS
+	ACTIVITY_RETENTION_DAYS,
+	REPORT_RETENTION_DAYS
 };
