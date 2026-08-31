@@ -192,7 +192,7 @@
 
 				{#if run.currentRun}
 					<div class="run-info">
-						{#if run.currentRun.runTitle}
+						{#if run.currentRun.runTitle && run.currentRun.runTitle !== run.currentRun.tag}
 							<span class="run-title-label">{run.currentRun.runTitle}</span>
 							<span class="run-sep">·</span>
 						{/if}
