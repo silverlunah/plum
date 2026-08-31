@@ -704,10 +704,13 @@
 
 			<div class="execute-list">
 				{#each run.entries as entry (entry.id)}
-					{@const resultLocked = !entry.case.isAutomated && entry.assignedTo?.id !== currentUserId}
+					{@const claimed = entry.assignedTo?.id === currentUserId}
+					{@const resultLocked = !entry.case.isAutomated && !claimed}
 					{@const resultLockHint = entry.assignedTo
 						? resultLockedHint(entry.assignedTo.name)
 						: RESULT_UNASSIGNED_HINT}
+					{@const showResultButtons =
+						!isLocked && run.status === 'in-progress' && (!entry.case.isAutomated || claimed)}
 					<div class="execute-row" class:expanded={executingEntryId === entry.id}>
 						<div class="execute-row-main">
 							<div class="exec-info">
@@ -738,17 +741,12 @@
 								</div>
 							</div>
 							<div class="exec-actions">
-								{#if entry.case.isAutomated}
-									<div class="exec-assignee-row">
-										<AutomatedBadge />
-									</div>
-									<div class="exec-assignee-divider"></div>
-								{:else if entry.assignedTo || !isLocked}
+								{#if entry.assignedTo || !isLocked}
 									<div class="exec-assignee-row">
 										{#if entry.assignedTo}
 											<span class="exec-assignee-name">{entry.assignedTo.name}</span>
 										{/if}
-										{#if !isLocked && entry.assignedTo?.id === currentUserId}
+										{#if !isLocked && claimed}
 											<button
 												class="exec-assign-me"
 												on:click={() => handleAssignEntry(entry.id, null)}
@@ -768,7 +766,7 @@
 									</div>
 									<div class="exec-assignee-divider"></div>
 								{/if}
-								{#if isLocked || run.status !== 'in-progress'}
+								{#if !showResultButtons}
 									<ResultChip status={entry.status} />
 								{:else if entry.status === 'pending' || entry.status === 'in-progress'}
 									<div
