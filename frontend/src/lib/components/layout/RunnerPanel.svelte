@@ -117,10 +117,10 @@
 
 		fetchRunners()
 			.then((r) => {
-				availableRunners = r;
+				availableRunners = r ?? [];
 				// Drop any saved selection pointing at runners that no longer exist,
 				// so a deleted runner can't linger in the selection and break runs.
-				const validIds = new Set([BUILTIN_RUNNER_ID, ...r.map((x) => x.id)]);
+				const validIds = new Set([BUILTIN_RUNNER_ID, ...availableRunners.map((x) => x.id)]);
 				runnerConfig.update((c) => {
 					const pruned = c.selectedRunners.filter((id) => validIds.has(id));
 					return { ...c, selectedRunners: pruned.length > 0 ? pruned : [BUILTIN_RUNNER_ID] };
