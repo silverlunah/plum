@@ -72,6 +72,7 @@
 		RESET_TO_PENDING_TITLE,
 		RESET_LABEL,
 		resultLockedHint,
+		RESULT_UNASSIGNED_HINT,
 		FAILED_TO_LOAD_DATA,
 		FAILED_TO_ADD_CASE,
 		RUN_UPDATED_TOAST,
@@ -703,8 +704,10 @@
 
 			<div class="execute-list">
 				{#each run.entries as entry (entry.id)}
-					{@const resultLocked =
-						!entry.case.isAutomated && entry.assignedTo && entry.assignedTo.id !== currentUserId}
+					{@const resultLocked = !entry.case.isAutomated && entry.assignedTo?.id !== currentUserId}
+					{@const resultLockHint = entry.assignedTo
+						? resultLockedHint(entry.assignedTo.name)
+						: RESULT_UNASSIGNED_HINT}
 					<div class="execute-row" class:expanded={executingEntryId === entry.id}>
 						<div class="execute-row-main">
 							<div class="exec-info">
@@ -771,7 +774,7 @@
 									<div
 										class="exec-btns"
 										class:locked={resultLocked}
-										title={resultLocked ? resultLockedHint(entry.assignedTo.name) : null}
+										title={resultLocked ? resultLockHint : null}
 									>
 										<button
 											class="exec-btn in-progress"
@@ -810,9 +813,7 @@
 										<button
 											class="exec-reset"
 											disabled={resultLocked}
-											title={resultLocked
-												? resultLockedHint(entry.assignedTo.name)
-												: RESET_TO_PENDING_TITLE}
+											title={resultLocked ? resultLockHint : RESET_TO_PENDING_TITLE}
 											on:click={() => handleMarkEntry(entry, 'pending')}>{RESET_LABEL}</button
 										>
 									</div>

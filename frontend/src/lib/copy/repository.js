@@ -150,6 +150,7 @@ export const ASSIGN_TO_ME_LABEL = 'Assign to me';
 export const UNASSIGN_LABEL = 'Unassign';
 export const resultLockedHint = (name) =>
 	`Assigned to ${name} — use "Assign to me" to record a result yourself.`;
+export const RESULT_UNASSIGNED_HINT = 'Use "Assign to me" before recording a result.';
 export const IN_PROGRESS_LABEL = 'In Progress';
 export const PASS_LABEL = 'Pass';
 export const FAIL_LABEL = 'Fail';
