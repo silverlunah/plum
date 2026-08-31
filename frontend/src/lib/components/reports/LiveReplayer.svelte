@@ -119,8 +119,18 @@
 		left: 0;
 	}
 
+	/* Kept visually in step with the replay player — see RecordingPlayer's .player-mount. */
 	.live-mount :global(.rr-player) {
 		border-radius: 0 !important;
 		box-shadow: none !important;
+		background: transparent !important;
+	}
+	.live-mount :global(iframe) {
+		box-sizing: border-box;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+	}
+	.live-mount :global(.replayer-wrapper) {
+		background: var(--bg-elevated);
 	}
 </style>
