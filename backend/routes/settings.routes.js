@@ -25,8 +25,16 @@ router.get('/project', scopedAdmin, async (req, res, next) => {
 
 router.post('/project', scopedAdmin, async (req, res, next) => {
 	try {
-		const { name, logoUrl, timezone, baseUrl, maxRetries, defaultHome, manualRepositoryOnly } =
-			req.body;
+		const {
+			name,
+			logoUrl,
+			timezone,
+			baseUrl,
+			maxRetries,
+			defaultHome,
+			manualRepositoryOnly,
+			testsPath
+		} = req.body;
 		const project = await settingsService.updateProject(req.projectId, {
 			name,
 			logoUrl,
@@ -34,7 +42,8 @@ router.post('/project', scopedAdmin, async (req, res, next) => {
 			baseUrl,
 			maxRetries,
 			defaultHome,
-			manualRepositoryOnly
+			manualRepositoryOnly,
+			testsPath
 		});
 		res.json(project);
 	} catch (e) {

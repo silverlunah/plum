@@ -190,6 +190,10 @@ model Project {
   // Scheduled, the run bar) is hidden project-wide and this is a manual test
   // repository only. Forces defaultHome to "repository" in effect.
   manualRepositoryOnly Boolean   @default(false)
+  // Where this project's Cucumber tests live, relative to projects/<slug>/.
+  // Default "tests"; set deeper (e.g. "apps/web/e2e") when the repo nests them.
+  // Always sanitised to a subpath — never absolute, never escapes the folder.
+  testsPath            String    @default("tests")
 
   members  ProjectMember[]
   suites   TestSuite[]
