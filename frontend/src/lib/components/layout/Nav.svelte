@@ -9,7 +9,7 @@
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import { fetchProjects } from '$lib/api/projects';
-	import { activeProjectId, projects, setProjects } from '$lib/stores/project';
+	import { activeProjectId, activeProject, projects, setProjects } from '$lib/stores/project';
 
 	let menuOpen = false;
 	let projectMenuOpen = false;
@@ -23,8 +23,6 @@
 		} catch {}
 	});
 
-	$: activeProject = projectList.find((p) => p.id === $activeProjectId) ?? projectList[0];
-
 	function switchProject(id) {
 		projectMenuOpen = false;
 		if (id === $activeProjectId) return;
@@ -33,12 +31,23 @@
 		window.location.reload();
 	}
 
-	const links = [
+	const AUTOMATION_LINKS = [
 		{ href: '/', label: 'Automated Tests' },
 		{ href: '/reports', label: 'Reports' },
-		{ href: '/scheduled-tests', label: 'Scheduled' },
-		{ href: '/test-repository', label: 'Test Repository', sep: true }
+		{ href: '/scheduled-tests', label: 'Scheduled' }
 	];
+	const REPO_LINK = { href: '/test-repository', label: 'Test Repository' };
+
+	// Manual-only hides the automation surface entirely; a "repository" default
+	// just moves Test Repository to the front, unstyled like the rest.
+	$: manualOnly = $activeProject?.manualRepositoryOnly ?? false;
+	$: repoFirst = manualOnly || $activeProject?.defaultHome === 'repository';
+	$: homeHref = repoFirst ? REPO_LINK.href : '/';
+	$: links = manualOnly
+		? [REPO_LINK]
+		: repoFirst
+			? [REPO_LINK, ...AUTOMATION_LINKS]
+			: [...AUTOMATION_LINKS, { ...REPO_LINK, sep: true }];
 
 	function closeMenu() {
 		menuOpen = false;
@@ -47,7 +56,7 @@
 
 <nav class="nav">
 	<div class="inner">
-		<a href="/" class="brand" on:click={closeMenu}>
+		<a href={homeHref} class="brand" on:click={closeMenu}>
 			<span class="brand-serif">Pl</span><span class="brand-sans">um</span>
 		</a>
 
@@ -70,7 +79,7 @@
 		</div>
 
 		<div class="actions">
-			{#if projectList.length > 0 && activeProject}
+			{#if projectList.length > 0 && $activeProject}
 				<div class="project-switcher">
 					<button
 						class="project-trigger"
@@ -78,12 +87,12 @@
 						aria-haspopup="listbox"
 						aria-expanded={projectMenuOpen}
 					>
-						{#if activeProject.logoUrl}
-							<img src={activeProject.logoUrl} alt="" class="project-logo" />
+						{#if $activeProject.logoUrl}
+							<img src={$activeProject.logoUrl} alt="" class="project-logo" />
 						{:else}
-							<span class="project-logo project-logo-fallback">{activeProject.name[0]}</span>
+							<span class="project-logo project-logo-fallback">{$activeProject.name[0]}</span>
 						{/if}
-						<span class="project-name">{activeProject.name}</span>
+						<span class="project-name">{$activeProject.name}</span>
 						<svg
 							class="chevron"
 							width="12"

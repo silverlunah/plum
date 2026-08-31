@@ -13,11 +13,22 @@
 	import RunnerPanel from '$lib/components/layout/RunnerPanel.svelte';
 	import NotificationStack from '$lib/components/ui/NotificationStack.svelte';
 	import { auth } from '$lib/stores/auth';
+	import { automationHidden } from '$lib/stores/project';
 	import { checkNeedsSetup } from '$lib/api/auth';
 
 	const PUBLIC_ROUTES = ['/login', '/setup'];
+	// Routes that only make sense with automated testing on — sent to the
+	// repository when the active project is manual-only.
+	const AUTOMATION_ROUTES = ['/', '/reports', '/scheduled-tests', '/live'];
 
 	let ready = false;
+
+	$: onAutomationRoute = AUTOMATION_ROUTES.some(
+		(r) => $page.url.pathname === r || (r !== '/' && $page.url.pathname.startsWith(r + '/'))
+	);
+	$: if (ready && $automationHidden && onAutomationRoute) {
+		goto('/test-repository', { replaceState: true });
+	}
 
 	onMount(async () => {
 		const pathname = $page.url.pathname;
@@ -51,7 +62,9 @@
 		<PageShell>
 			<slot />
 		</PageShell>
-		<RunnerPanel />
+		{#if !$automationHidden}
+			<RunnerPanel />
+		{/if}
 		<NotificationStack />
 	{/if}
 {:else}

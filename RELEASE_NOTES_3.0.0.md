@@ -36,6 +36,11 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
   / **Authentication**, with links to the Plum, Playwright, and Cucumber docs.
   "Learn more" links to Playwright and Cucumber also appear under the Automated
   Tests heading.
+- **Project homepage & mode** (Settings → Project). Choose whether members land
+  on Automated Tests or the Test Repository, and reorder the nav to match. A new
+  "Use as manual repository only" switch hides Automated Tests, Reports,
+  Scheduled and the run bar project-wide, turning Plum into a pure manual test
+  repository. Presentational only — no runs, schedules, or reports are deleted.
 
 ---
 

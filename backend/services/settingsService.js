@@ -19,7 +19,9 @@ const projectPublicSelect = {
 	logoUrl: true,
 	timezone: true,
 	baseUrl: true,
-	maxRetries: true
+	maxRetries: true,
+	defaultHome: true,
+	manualRepositoryOnly: true
 };
 
 // The single organisation. Raw accessor includes backupS3SecretKey — only for
@@ -33,7 +35,10 @@ const getProject = async (projectId) => {
 	return prisma.project.findUnique({ where: { id: projectId }, select: projectPublicSelect });
 };
 
-const updateProject = async (projectId, { name, logoUrl, timezone, baseUrl, maxRetries }) => {
+const updateProject = async (
+	projectId,
+	{ name, logoUrl, timezone, baseUrl, maxRetries, defaultHome, manualRepositoryOnly }
+) => {
 	const project = await prisma.project.update({
 		where: { id: projectId },
 		data: {
@@ -41,7 +46,13 @@ const updateProject = async (projectId, { name, logoUrl, timezone, baseUrl, maxR
 			...(logoUrl !== undefined && { logoUrl }),
 			...(baseUrl !== undefined && { baseUrl }),
 			...(timezone !== undefined && { timezone }),
-			...(maxRetries !== undefined && { maxRetries: Number(maxRetries) || 0 })
+			...(maxRetries !== undefined && { maxRetries: Number(maxRetries) || 0 }),
+			...(defaultHome !== undefined && {
+				defaultHome: defaultHome === 'repository' ? 'repository' : 'automated'
+			}),
+			...(manualRepositoryOnly !== undefined && {
+				manualRepositoryOnly: Boolean(manualRepositoryOnly)
+			})
 		},
 		select: projectPublicSelect
 	});
