@@ -22,10 +22,6 @@
 
 ## Quick Start
 
-### Writing tests (no server)
-
-`plum init` scaffolds the current folder — `tests/`, `.env`, `tsconfig.json`, VS Code settings — and installs the Playwright/Cucumber toolchain. Nothing else is required to write and run tests on your machine.
-
 ```bash
 npm install -g plum-e2e
 
@@ -51,6 +47,10 @@ plum server start
 `plum server start` creates the `projects/` folder (the bind-mount target) and the Docker config in the current directory. Open **http://localhost:3002**, complete first-run setup, and create your organisation, first project, and owner account. The server scaffolds each project's `projects/<slug>/tests/` folder itself when you add the project in **Settings → Project** — you don't run `plum init` or `plum project init` for that (`plum project init "<name>"` only re-creates a folder the server lost).
 
 The stack's containers use `restart: unless-stopped`, so the server comes back after a reboot once Docker itself starts. To bring runner nodes back too, register them with `plum node start <name> --boot` (or answer the prompt).
+
+### Writing tests (no server)
+
+`plum init` scaffolds the current folder — `tests/`, `.env`, `tsconfig.json`, VS Code settings — and installs the Playwright/Cucumber toolchain. Nothing else is required to write and run tests on your machine.
 
 ### For contributors
 
