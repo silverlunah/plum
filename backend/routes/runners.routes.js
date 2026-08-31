@@ -6,15 +6,11 @@
 const express = require('express');
 const router = express.Router();
 const runnerService = require('../services/runnerService');
-const { jwtAuth } = require('../middleware/jwtAuth');
-const { requireOwner } = require('../middleware/requireOwner');
-const { runnerOrAdmin } = require('../middleware/runnerOrAdmin');
+const { nodeControlAuth } = require('../middleware/nodeControlAuth');
 
-// List/create are hit by headless CLI tools (manage-nodes.mjs, node
-// self-registration) with no session to present — same as before the
-// runner-management routes were locked down. The response never includes
-// runner tokens (toPublicRunner strips them), so listing isn't a secret leak.
-router.get('/', async (req, res) => {
+// An open POST /runners let anyone register a rogue node, which then received
+// the test tree and env secrets on dispatch — every route is now gated.
+router.get('/', nodeControlAuth, async (req, res) => {
 	try {
 		const runners = await runnerService.getAll();
 		res.json({ runners });
@@ -23,19 +19,7 @@ router.get('/', async (req, res) => {
 	}
 });
 
-router.post('/probe', jwtAuth, requireOwner, async (req, res) => {
-	try {
-		const { url, token } = req.body;
-		if (!url || !token)
-			return res.status(400).json({ ok: false, error: 'url and token are required' });
-		const result = await runnerService.probe({ url, token });
-		res.json(result);
-	} catch (e) {
-		res.status(500).json({ ok: false, error: e.message });
-	}
-});
-
-router.post('/', async (req, res) => {
+router.post('/', nodeControlAuth, async (req, res) => {
 	try {
 		const { name, url, token, browser } = req.body;
 		if (!name || !url || !token)
@@ -47,17 +31,7 @@ router.post('/', async (req, res) => {
 	}
 });
 
-router.put('/:id', jwtAuth, requireOwner, async (req, res) => {
-	try {
-		const { name, url, token, browser } = req.body;
-		const runner = await runnerService.update(req.params.id, { name, url, token, browser });
-		res.json({ runner });
-	} catch (e) {
-		res.status(500).json({ error: 'Failed to update runner' });
-	}
-});
-
-router.delete('/:id', runnerOrAdmin, async (req, res) => {
+router.delete('/:id', nodeControlAuth, async (req, res) => {
 	try {
 		await runnerService.stop(req.params.id);
 		await runnerService.remove(req.params.id);
@@ -67,7 +41,7 @@ router.delete('/:id', runnerOrAdmin, async (req, res) => {
 	}
 });
 
-router.post('/:id/ping', runnerOrAdmin, async (req, res) => {
+router.post('/:id/ping', nodeControlAuth, async (req, res) => {
 	try {
 		const result = await runnerService.ping(req.params.id);
 		res.json(result);
@@ -76,7 +50,7 @@ router.post('/:id/ping', runnerOrAdmin, async (req, res) => {
 	}
 });
 
-router.post('/:id/stop', runnerOrAdmin, async (req, res) => {
+router.post('/:id/stop', nodeControlAuth, async (req, res) => {
 	try {
 		const result = await runnerService.stop(req.params.id);
 		res.json(result);
@@ -85,7 +59,7 @@ router.post('/:id/stop', runnerOrAdmin, async (req, res) => {
 	}
 });
 
-router.post('/:id/restart', runnerOrAdmin, async (req, res) => {
+router.post('/:id/restart', nodeControlAuth, async (req, res) => {
 	try {
 		const result = await runnerService.restart(req.params.id);
 		res.json(result);

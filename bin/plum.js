@@ -467,7 +467,19 @@ async function serverStart() {
 
 	clack.log.info(`UI:  ${pc.cyan(cfg.uiUrl)}`);
 	clack.log.info(`API: ${pc.cyan(cfg.apiUrl)}`);
+	printNodeSecretHint();
 	clack.outro(pc.green('Plum is running. Use "plum server stop" to shut down.'));
+}
+
+// A node on another machine needs this to register; one here reads it itself.
+function printNodeSecretHint() {
+	const secret = readNodeSecretFromPrimary();
+	if (secret) {
+		clack.log.info(
+			`Runner nodes: \`plum manage-nodes\` here, or \`plum node start\` elsewhere with\n` +
+				`  PLUM_NODE_SECRET=${pc.dim(secret)}`
+		);
+	}
 }
 
 async function serverRestart() {
@@ -492,6 +504,7 @@ async function serverRestart() {
 	}
 	clack.log.info(`UI:  ${pc.cyan(cfg.uiUrl)}`);
 	clack.log.info(`API: ${pc.cyan(cfg.apiUrl)}`);
+	printNodeSecretHint();
 	clack.outro(pc.green('Server restarted.'));
 }
 
@@ -708,6 +721,13 @@ async function configureNode({ force, name: nameArg }) {
 	let browser = getFlag(args, '--browser') ?? saved.browser ?? 'chromium';
 	let token = getFlag(args, '--token') ?? process.env.NODE_TOKEN ?? saved.token ?? generateToken();
 	let url = getFlag(args, '--url') ?? saved.url ?? '';
+	// Read from a co-located server; a remote node needs it passed in.
+	let nodeSecret =
+		getFlag(args, '--node-secret') ??
+		process.env.PLUM_NODE_SECRET ??
+		saved.nodeSecret ??
+		readNodeSecretFromPrimary() ??
+		'';
 
 	if (interactive) {
 		const modeVal = await clack.select({
@@ -753,6 +773,15 @@ async function configureNode({ force, name: nameArg }) {
 				'Public URL or IP the Plum server uses to reach this node',
 				url && !url.includes('host.docker.internal') ? url : 'https://node-1.example.com'
 			);
+			if (!nodeSecret) {
+				const s = await clack.text({
+					message:
+						'Node registration secret — run `plum server` on the primary and copy PLUM_NODE_SECRET',
+					placeholder: 'a1b2c3…'
+				});
+				if (clack.isCancel(s)) cancelAndExit();
+				nodeSecret = (s || '').trim();
+			}
 		} else {
 			// Local primary runs in Docker — it reaches a host node via
 			// host.docker.internal, not localhost.
@@ -775,16 +804,17 @@ async function configureNode({ force, name: nameArg }) {
 		mode,
 		url,
 		token,
+		nodeSecret,
 		primary,
 		browser,
 		port,
 		pid: saved.pid ?? null
 	});
 	globalRegistryLib().registerInstall('node', nodeHome(name));
-	return { primary, port, browser, token, name, url, mode };
+	return { primary, port, browser, token, nodeSecret, name, url, mode };
 }
 
-async function registerNode({ primary, name, url, token, browser, port }) {
+async function registerNode({ primary, name, url, token, nodeSecret, browser, port }) {
 	const { registerWithPrimary, loadNodeByName, saveNodeByName } = nodeRegisterLib();
 	let registeredId = null;
 
@@ -792,7 +822,14 @@ async function registerNode({ primary, name, url, token, browser, port }) {
 		const s = clack.spinner();
 		s.start(`Registering "${name}" with primary at ${primary}...`);
 		try {
-			const { id, reused } = await registerWithPrimary({ primary, name, url, token, browser });
+			const { id, reused } = await registerWithPrimary({
+				primary,
+				name,
+				url,
+				token,
+				nodeSecret,
+				browser
+			});
 			registeredId = id;
 			s.stop(
 				pc.green(reused ? `✓ Updated "${name}" on primary` : `✓ Registered "${name}" on primary`)
@@ -810,6 +847,7 @@ async function registerNode({ primary, name, url, token, browser, port }) {
 		name,
 		url,
 		token,
+		nodeSecret,
 		primary,
 		browser,
 		port
@@ -957,10 +995,12 @@ async function nodeDelete({ name: nameArg }) {
 	if (cfg.port) await killPort(Number(cfg.port));
 
 	if (cfg.id && cfg.primary) {
+		const secret =
+			process.env.PLUM_NODE_SECRET || cfg.nodeSecret || readNodeSecretFromPrimary() || '';
 		try {
 			const res = await fetch(`${cfg.primary.replace(/\/$/, '')}/runners/${cfg.id}`, {
 				method: 'DELETE',
-				headers: { Authorization: `Bearer ${cfg.token}` },
+				headers: secret ? { Authorization: `Bearer ${secret}` } : {},
 				signal: AbortSignal.timeout(10000)
 			});
 			clack.log[res.ok ? 'success' : 'warn'](
@@ -984,27 +1024,20 @@ async function nodeReconfig({ name }) {
 	clack.outro(pc.dim(`Saved. Run \`plum node restart ${cfg.name}\` to apply.`));
 }
 
-// stop/restart/delete on the /runners API want a registered runner's token
-// (runnerOrAdmin). On the primary host those tokens sit in the backend's DB —
-// pull one straight from the running container so the menu can authenticate
-// without a node's .plum-node.json in the current folder. Best-effort: on a
-// node-only box (no server install / no Docker) this no-ops and the menu falls
-// back to a local .plum-node.json.
-function readRunnerTokenFromPrimary() {
+// Reads PLUM_NODE_SECRET from the primary's container (env override, else the
+// generated reports/.plum-node-secret) so a co-located node and the menu need no
+// setup. null on a node-only box — the caller then needs --node-secret.
+function readNodeSecretFromPrimary() {
 	const { getInstalls } = globalRegistryLib();
-	const script =
-		"require('./services/prisma').runner.findFirst({select:{token:true}})" +
-		".then(r=>{process.stdout.write(r&&r.token||'');process.exit(0)}).catch(()=>process.exit(1))";
 	for (const dir of getInstalls('server')) {
 		try {
-			const token = execSync(`docker compose exec -T backend node -e "${script}"`, {
-				cwd: dir,
-				stdio: ['ignore', 'pipe', 'ignore'],
-				timeout: 15000
-			})
+			const secret = execSync(
+				'docker compose exec -T backend sh -c "printenv PLUM_NODE_SECRET || cat reports/.plum-node-secret"',
+				{ cwd: dir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 }
+			)
 				.toString()
 				.trim();
-			if (token) return token;
+			if (secret) return secret;
 		} catch {}
 	}
 	return null;
@@ -1014,9 +1047,9 @@ async function openManageNodesMenu(primaryUrl) {
 	const manageScript = path.join(plumRoot, 'backend', 'scripts', 'manage-nodes.mjs');
 	const apiUrl = primaryUrl || 'http://localhost:3001';
 	const env = { ...process.env, PLUM_API_URL: apiUrl };
-	if (!env.PLUM_RUNNER_TOKEN) {
-		const token = readRunnerTokenFromPrimary();
-		if (token) env.PLUM_RUNNER_TOKEN = token;
+	if (!env.PLUM_NODE_SECRET) {
+		const secret = readNodeSecretFromPrimary();
+		if (secret) env.PLUM_NODE_SECRET = secret;
 	}
 	const menu = spawn(process.execPath, [manageScript], { stdio: 'inherit', env });
 	await new Promise((resolve) => menu.on('exit', resolve));
@@ -1425,7 +1458,7 @@ switch (command) {
 					'  delete <name>    stop it, delete its config, unregister it from the primary',
 					'  reconfig [name]  re-enter settings and re-register, without starting',
 					'',
-					'  Options for start: --mode <local|production> --primary <url> --url <url> --port <n> --token <s> --browser <chromium|firefox>',
+					'  Options for start: --mode <local|production> --primary <url> --url <url> --port <n> --token <s> --node-secret <s> --browser <chromium|firefox>',
 					''
 				].join('\n')
 			);
@@ -1563,6 +1596,9 @@ switch (command) {
 		);
 		console.log('    --port <n>         Local HTTP port the node listens on (default: 9001)');
 		console.log('    --token <secret>   Auth token (auto-generated + saved if omitted)');
+		console.log(
+			'    --node-secret <s> Primary’s PLUM_NODE_SECRET (co-located: read automatically)'
+		);
 		console.log('    --browser <name>   chromium | firefox (default: chromium)');
 		console.log('  node list            List this machine’s nodes and their status');
 		console.log('  node restart [name]  Stop, refresh deps, and restart a node');
