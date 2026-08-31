@@ -18,8 +18,16 @@ function ensureSecret(envKey, fileName, { defaultValue = null, bytes = 48 } = {}
 
 	const file = path.join(REPORTS_DIR, fileName);
 	try {
-		const saved = fs.readFileSync(file, 'utf8').trim();
-		if (saved) {
+		// The real secret is one line. Take the last non-blank line so a stray
+		// license header (see license-config.json) prepended to the file doesn't
+		// silently corrupt the value and log everyone out.
+		const saved = fs
+			.readFileSync(file, 'utf8')
+			.split(/\r?\n/)
+			.map((l) => l.trim())
+			.filter(Boolean)
+			.pop();
+		if (saved && /^[A-Za-z0-9+/=_-]{16,}$/.test(saved)) {
 			process.env[envKey] = saved;
 			return saved;
 		}
