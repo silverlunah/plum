@@ -8,8 +8,12 @@ const path = require('path');
 const { Server } = require('socket.io');
 const { PLUM_MODE_NODE, DEFAULT_PORT } = require('./constants/env');
 
-// Resolve the JWT secret before anything that signs or verifies a token loads.
-if (process.env.PLUM_MODE !== PLUM_MODE_NODE) require('./lib/appSecret').ensureJwtSecret();
+// Resolve the JWT + node-control secrets before anything that uses them loads.
+if (process.env.PLUM_MODE !== PLUM_MODE_NODE) {
+	const appSecret = require('./lib/appSecret');
+	appSecret.ensureJwtSecret();
+	appSecret.ensureNodeSecret();
+}
 
 const app = require('./app');
 const {

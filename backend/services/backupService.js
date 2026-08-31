@@ -76,7 +76,12 @@ const exportAll = async (includeReports = false) => {
 				}
 			: null,
 		users: users.map(({ updatedAt: _, ...u }) => u),
-		runners: runners.map(({ createdAt: _, cronJobs: __, reports: ___, ...r }) => r),
+		// A backup file travels (S3, laptops); the node token is a live secret, so
+		// drop it — nodes re-register their token on the next `plum node start`.
+		runners: runners.map(({ createdAt: _, cronJobs: __, reports: ___, token: ____, ...r }) => ({
+			...r,
+			token: ''
+		})),
 		testSuites: testSuites.map(({ cases, ...suite }) => ({
 			...suite,
 			cases: cases.map(({ steps, runEntries: _, history: __, ...tc }) => ({
@@ -127,7 +132,8 @@ const importAll = async (
 					update: {
 						name: runner.name,
 						url: runner.url,
-						token: runner.token,
+						// Backups no longer carry the token — keep whatever the live row has.
+						...(runner.token && { token: runner.token }),
 						browser: runner.browser
 					}
 				});

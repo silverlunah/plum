@@ -8,32 +8,41 @@ const path = require('path');
 const crypto = require('crypto');
 
 const DEFAULT_JWT_SECRET = 'plum-dev-secret-change-in-production';
-const SECRET_FILE = path.join(process.cwd(), 'reports', '.plum-jwt-secret');
+const REPORTS_DIR = path.join(process.cwd(), 'reports');
 
-// An operator-set JWT_SECRET wins (needed for multi-replica). Otherwise persist
-// a random one — a restart mustn't log everyone out, and no instance may run on
-// the public default (with which anyone could forge an owner token).
-function ensureJwtSecret() {
-	const fromEnv = process.env.JWT_SECRET;
-	if (fromEnv && fromEnv !== DEFAULT_JWT_SECRET) return fromEnv;
+// Env value wins; otherwise a random secret persisted under the reports volume
+// so it survives a restart. `envKey` equal to `defaultValue` counts as unset.
+function ensureSecret(envKey, fileName, { defaultValue = null, bytes = 48 } = {}) {
+	const fromEnv = process.env[envKey];
+	if (fromEnv && fromEnv !== defaultValue) return fromEnv;
 
+	const file = path.join(REPORTS_DIR, fileName);
 	try {
-		const saved = fs.readFileSync(SECRET_FILE, 'utf8').trim();
+		const saved = fs.readFileSync(file, 'utf8').trim();
 		if (saved) {
-			process.env.JWT_SECRET = saved;
+			process.env[envKey] = saved;
 			return saved;
 		}
 	} catch {}
 
-	const generated = crypto.randomBytes(48).toString('hex');
+	const generated = crypto.randomBytes(bytes).toString('hex');
 	try {
-		fs.mkdirSync(path.dirname(SECRET_FILE), { recursive: true });
-		fs.writeFileSync(SECRET_FILE, generated, { mode: 0o600 });
+		fs.mkdirSync(REPORTS_DIR, { recursive: true });
+		fs.writeFileSync(file, generated, { mode: 0o600 });
 	} catch (e) {
-		console.warn('⚠️  Could not persist JWT secret — sessions reset on restart:', e.message);
+		console.warn(`⚠️  Could not persist ${envKey} — it will change on restart:`, e.message);
 	}
-	process.env.JWT_SECRET = generated;
+	process.env[envKey] = generated;
 	return generated;
 }
 
-module.exports = { ensureJwtSecret, DEFAULT_JWT_SECRET };
+// A generated default would let anyone forge tokens; a per-restart one would log
+// everyone out. Set JWT_SECRET yourself for a multi-replica backend.
+const ensureJwtSecret = () =>
+	ensureSecret('JWT_SECRET', '.plum-jwt-secret', { defaultValue: DEFAULT_JWT_SECRET });
+
+// Bearer credential for the /runners API — `plum node` / manage-nodes use it
+// where there is no browser session.
+const ensureNodeSecret = () => ensureSecret('PLUM_NODE_SECRET', '.plum-node-secret', { bytes: 32 });
+
+module.exports = { ensureJwtSecret, ensureNodeSecret, DEFAULT_JWT_SECRET };

@@ -16,28 +16,10 @@ export async function fetchRunners() {
 	return runners;
 }
 
-export async function createRunner(data) {
-	const res = await fetch(`${API_BASE}/runners`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json', ...authHeaders() },
-		body: JSON.stringify(data)
-	});
-	return res.json();
-}
-
 export async function deleteRunner(id) {
 	const res = await fetch(`${API_BASE}/runners/${id}`, {
 		method: 'DELETE',
 		headers: authHeaders()
-	});
-	return res.json();
-}
-
-export async function updateRunner(id, data) {
-	const res = await fetch(`${API_BASE}/runners/${id}`, {
-		method: 'PUT',
-		headers: { 'Content-Type': 'application/json', ...authHeaders() },
-		body: JSON.stringify(data)
 	});
 	return res.json();
 }
@@ -62,15 +44,6 @@ export async function restartRunner(id) {
 	const res = await fetch(`${API_BASE}/runners/${id}/restart`, {
 		method: 'POST',
 		headers: authHeaders()
-	});
-	return res.json();
-}
-
-export async function probeRunner(url, token) {
-	const res = await fetch(`${API_BASE}/runners/probe`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json', ...authHeaders() },
-		body: JSON.stringify({ url, token })
 	});
 	return res.json();
 }
