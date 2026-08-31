@@ -3,11 +3,11 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
+import { apiHeaders } from '$lib/api/headers';
 import { API_BASE } from '$lib/constants';
-import { auth } from '$lib/stores/auth';
 
 function authHeaders() {
-	return { Authorization: `Bearer ${auth.getToken()}` };
+	return apiHeaders();
 }
 
 export async function fetchProject() {
@@ -46,6 +46,7 @@ export async function fetchBackupConfig() {
 		return {
 			backupEnabled: false,
 			backupCron: '0 2 * * *',
+			timezone: 'UTC',
 			backupS3Endpoint: '',
 			backupS3Region: '',
 			backupS3Bucket: '',
@@ -79,6 +80,22 @@ export async function testBackupS3(config) {
 
 export async function runBackupNow() {
 	const res = await fetch(`${API_BASE}/backup/run-now`, { method: 'POST', headers: authHeaders() });
+	return res.json();
+}
+
+export async function fetchReportRetention() {
+	const res = await fetch(`${API_BASE}/backup/report-retention`, { headers: authHeaders() });
+	if (!res.ok) return { reportRetentionDays: 0 };
+	return res.json();
+}
+
+export async function saveReportRetention(days) {
+	const res = await fetch(`${API_BASE}/backup/report-retention`, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json', ...authHeaders() },
+		body: JSON.stringify({ days })
+	});
+	if (!res.ok) throw new Error('Failed to save retention');
 	return res.json();
 }
 
@@ -123,5 +140,14 @@ export async function generateMcpKey() {
 		headers: authHeaders()
 	});
 	if (!res.ok) throw new Error('Failed to generate key');
+	return res.json();
+}
+
+export async function revokeMcpKey() {
+	const res = await fetch(`${API_BASE}/settings/mcp`, {
+		method: 'DELETE',
+		headers: authHeaders()
+	});
+	if (!res.ok) throw new Error('Failed to revoke key');
 	return res.json();
 }

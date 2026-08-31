@@ -7,6 +7,7 @@ const path = require('path');
 const express = require('express');
 const router = express.Router();
 const { jwtAuth } = require('../middleware/jwtAuth');
+const { requireProjectAccess } = require('../middleware/requireProjectAccess');
 const { createMcpServer } = require('../mcp/server');
 
 // Use an absolute path to bypass the SDK's wildcard export mapping, same as mcp/server.js.
@@ -26,7 +27,16 @@ const { StreamableHTTPServerTransport } = require(path.join(sdkCjs, 'server', 's
 // no need to keep a session alive between calls.
 async function handleMcp(req, res, next) {
 	try {
-		const server = createMcpServer({ userId: req.user.userId });
+		const server = createMcpServer({
+			userId: req.user.userId,
+			userName: req.user.name ?? null,
+			projectId: req.projectId,
+			role: req.user.role,
+			// 'instance' = PLUM_MCP_KEY (org-wide); 'scoped' = a per-project key.
+			apiKeyKind: req.user.apiKey ?? 'scoped',
+			// Anything through this endpoint is "via MCP", whatever the auth scheme.
+			viaMcp: true
+		});
 		const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 		res.on('close', () => {
 			transport.close();
@@ -39,8 +49,8 @@ async function handleMcp(req, res, next) {
 	}
 }
 
-router.post('/', jwtAuth, handleMcp);
-router.get('/', jwtAuth, handleMcp);
-router.delete('/', jwtAuth, handleMcp);
+router.post('/', jwtAuth, requireProjectAccess, handleMcp);
+router.get('/', jwtAuth, requireProjectAccess, handleMcp);
+router.delete('/', jwtAuth, requireProjectAccess, handleMcp);
 
 module.exports = router;

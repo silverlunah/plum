@@ -11,7 +11,6 @@ export const HEADING = 'Settings';
 export const NAME_LABEL = 'Name';
 export const NETWORK_ERROR = 'Network error';
 
-const CHECKING_LABEL = 'Checking…';
 const COPIED_LABEL = 'Copied!';
 
 // ── Nav / section labels ──
@@ -21,18 +20,27 @@ export const REPOSITORY_NAV_LABEL = 'Repository';
 export const REPOSITORY_HEADING = 'Test Repository';
 export const TEST_CASES_NAV_LABEL = 'Test Cases';
 export const TEST_CASES_HEADING = 'Test Cases';
-export const TEST_CASES_DESC = 'Bring test cases in from a Plum export file.';
+export const TEST_CASES_DESC = 'Import, export and configure this project’s test repository.';
+export const TC_IO_CARD_TITLE = 'Import & Export';
+export const TC_EXPORT_CARD_TITLE = 'Export';
+export const TC_EXPORT_DESC =
+	'Download every suite and case in this project as a JSON or CSV file.';
 export const TC_IMPORT_CARD_TITLE = 'Import';
 export const TC_IMPORT_DESC =
-	'Upload a JSON file exported from Test Repository. Suites and cases are added as new records.';
+	'Upload a JSON file exported from Test Repository. Matching IDs are updated in place, new IDs are added, and a case that lines up with an automation script is marked automated.';
 export const TC_IMPORT_HINT =
-	'A case is skipped when its ID already exists here. Cases with a different prefix or no ID are imported with a fresh ID.';
+	'Suites and cases are matched by ID. A different prefix or missing ID gets a fresh ID. Only entries with no title are skipped.';
 export const TC_IMPORT_FAILED_FALLBACK = 'Could not read that file.';
+export const TC_IMPORTING_TOAST = 'Importing test cases…';
+export const TC_EXPORTING_TOAST = 'Preparing export…';
+export const TC_EXPORTED_TOAST = 'Export downloaded.';
 export const tcImportLabel = (importing) => (importing ? 'Importing…' : 'Import');
-export const tcImportSummary = ({ importedCases, importedSuites, skippedCases, skippedSuites }) => {
-	const imported = `Imported ${importedCases} ${importedCases === 1 ? 'case' : 'cases'} in ${importedSuites} ${importedSuites === 1 ? 'suite' : 'suites'}`;
-	const skipped = skippedCases + skippedSuites;
-	return skipped > 0 ? `${imported} · skipped ${skippedCases} already here` : imported + '.';
+export const tcImportSummary = ({ importedCases, updatedCases, skippedCases }) => {
+	const parts = [];
+	if (importedCases) parts.push(`${importedCases} added`);
+	if (updatedCases) parts.push(`${updatedCases} updated`);
+	if (skippedCases) parts.push(`${skippedCases} skipped (no title)`);
+	return parts.length ? `Test cases: ${parts.join(' · ')}.` : 'Nothing to import.';
 };
 export const INTEGRATIONS_LABEL = 'Integrations';
 export const MCP_NAV_LABEL = 'MCP';
@@ -49,21 +57,15 @@ export const REPOSITORY_DESC = 'Configure ID prefixes for test suites and cases.
 export const INTEGRATIONS_DESC =
 	'Connect Discord and Slack to receive run notifications with pass/fail results and report links.';
 export const MCP_DESC =
-	'Generate an API key for any MCP-compatible AI client — Claude, Cursor, Windsurf, and others.';
+	'Your personal API key for this project. An MCP client using it acts as you, with your role, scoped to this project — anything it creates or runs is tagged “(MCP)”.';
 export const ACCOUNT_DESC = 'Manage your profile, credentials and session.';
 export const USERS_DESC = 'Add and manage who can access Plum.';
 export const BACKUP_DESC =
 	'Export your test cases, schedules, users, and project settings. Automate uploads to any S3-compatible storage — Cloudflare R2, Backblaze B2, AWS S3, or MinIO.';
 
 // ── Runner requests / toasts ──
-export const RUNNER_FIELDS_REQUIRED_ERROR = 'Name, URL and token are required.';
-export const ADD_RUNNER_FAILED = 'Failed to add runner.';
 export const REMOVE_RUNNER_FAILED = 'Failed to remove runner.';
-export const UPDATE_RUNNER_FAILED = 'Failed to update runner.';
 
-export const cannotReachRunnerError = (error) =>
-	`Cannot reach this runner — ${error ?? 'check the URL and token'}.`;
-export const runnerAddedToast = (name) => `Runner "${name}" added.`;
 export const runnerRemovedToast = (name) => `Runner "${name}" removed.`;
 export const runnerStoppedToast = (name) => `Runner "${name}" stopped.`;
 export const runnerStopFailedToast = (name, error) =>
@@ -73,22 +75,22 @@ export const runnerRestartingToast = (name) => `Runner "${name}" restarting…`;
 export const runnerRestartFailedToast = (name, error) =>
 	`Could not restart "${name}": ${error ?? 'unknown error'}`;
 export const runnerRestartFailedGenericToast = (name) => `Could not restart "${name}".`;
-export const runnerUpdatedToast = (name) => `Runner "${name}" updated.`;
 
 // ── Project ──
 export const PROJECT_NAME_LABEL = 'Project Name';
 export const PROJECT_NAME_PLACEHOLDER = 'My Test Suite';
-export const LOGO_URL_LABEL = 'Logo URL';
+export const LOGO_URL_LABEL = 'Logo URL (optional)';
 export const LOGO_URL_HINT = 'Direct link to an image (PNG, SVG, JPG)';
 export const LOGO_URL_PLACEHOLDER = 'https://example.com/logo.png';
 export const PREVIEW_LABEL = 'Preview';
 export const LOGO_PREVIEW_ALT = 'Project logo preview';
 export const TIMEZONE_LABEL = 'Timezone';
-export const TIMEZONE_HINT = 'Used to schedule cron jobs and backups';
+export const TIMEZONE_HINT = 'Used to schedule this project’s cron test runs';
 export const RETRY_FAILED_TESTS_LABEL = 'Retry failed tests';
 export const RETRY_FAILED_TESTS_HINT =
 	'Automatically re-run failed scenarios up to this many times before finalizing the report. 0 disables retries.';
 export const DARK_MODE_LABEL = 'Dark mode';
+export const DOCUMENTATION_LABEL = 'Documentation';
 export const DARK_MODE_DESC = 'Switch between light and dark appearance';
 export const PROJECT_SAVED_TOAST = 'Project settings saved.';
 export const PROJECT_SAVE_FAILED = 'Failed to save project settings.';
@@ -98,30 +100,42 @@ export const saveProjectLabel = (saving) => (saving ? SAVING_LABEL : 'Save Proje
 // ── Runners ──
 export const BUILTIN_RUNNER_TOGGLE_LABEL = 'Built-in runner';
 export const BUILTIN_RUNNER_TOGGLE_DESC =
-	'Use this server to run tests locally. Disable to route all runs to external nodes.';
-export const RUNNER_URL_LABEL = 'URL';
-export const RUNNER_URL_HINT_PREFIX = 'Use';
-export const RUNNER_URL_HINT_SUFFIX = 'for local nodes';
-export const RUNNER_URL_PLACEHOLDER = 'http://host.docker.internal:3002';
-export const TOKEN_LABEL = 'Token';
-export const TOKEN_PLACEHOLDER = 'secret-token';
-export const KEEP_TOKEN_PLACEHOLDER = 'Leave blank to keep current token';
-export const BROWSER_LABEL = 'Browser';
-export const RUNNER_NAME_PLACEHOLDER = 'staging-node';
+	'Use this server to run tests locally. Disable to route all runs to external nodes. Applies to everyone on this instance.';
+export const BUILTIN_RUNNER_TOGGLE_FAILED = 'Could not update the built-in runner setting.';
 export const RUNNER_UNREACHABLE_LABEL = 'unreachable';
 export const RUNNER_PINGING_LABEL = 'pinging…';
 export const REMOVE_LABEL = 'Remove';
-export const ADD_RUNNER_FORM_TITLE = 'Add runner';
-export const OPEN_ADD_RUNNER_LABEL = '+ Add Runner';
+
+export const NODE_SECRET_LABEL = 'Registration secret';
+export const NODE_SECRET_DESC =
+	'A node on another machine needs this to register. `plum server` also prints it. A node on the server box reads it on its own.';
+export const NODE_SECRET_REVEAL_TITLE = 'Show';
+export const NODE_SECRET_HIDE_TITLE = 'Hide';
+export const NODE_SECRET_COPY_TITLE = 'Copy';
+export const NODE_SECRET_COPIED_TITLE = 'Copied';
+export const REGENERATE_NODE_SECRET_LABEL = 'Regenerate';
+export const REGENERATE_NODE_SECRET_MODAL_TITLE = 'Regenerate the registration secret?';
+export const REGENERATE_NODE_SECRET_WARNING =
+	'The current secret stops working immediately. Online nodes are updated automatically; any offline node must be re-run with the new secret (or reads it from the server box).';
+export const nodeSecretAppliedToast = (n) =>
+	n === 0
+		? 'New secret generated.'
+		: `New secret generated and pushed to ${n} node${n === 1 ? '' : 's'}.`;
+export const nodeSecretFailedNodes = (names) =>
+	`Couldn’t reach: ${names.join(', ')} — update the secret there manually.`;
+export const REGENERATE_NODE_SECRET_FAILED = 'Failed to regenerate the secret.';
+
+export const REGISTER_NODE_NOTE_TITLE = 'Adding a node';
+export const REGISTER_NODE_NOTE_PREFIX = 'Register nodes from the node machine — run';
+export const REGISTER_NODE_NOTE_MIDDLE = 'to start one and self-register it, or';
+export const REGISTER_NODE_NOTE_SUFFIX =
+	'to manage nodes already set up on that machine. Nodes need the primary’s PLUM_NODE_SECRET, printed by "plum server".';
 
 const RESTART_LABEL = 'Restart';
 const RESTARTING_LABEL = 'Restarting…';
 const STOP_LABEL = 'Stop';
 const STOPPING_LABEL = 'Stopping…';
-const ADD_RUNNER_LABEL = 'Add Runner';
 
-export const editRunnerSubmitLabel = (saving) => (saving ? CHECKING_LABEL : SAVE_LABEL);
-export const addRunnerSubmitLabel = (saving) => (saving ? CHECKING_LABEL : ADD_RUNNER_LABEL);
 export const restartRunnerLabel = (restarting) => (restarting ? RESTARTING_LABEL : RESTART_LABEL);
 export const stopRunnerLabel = (stopping) => (stopping ? STOPPING_LABEL : STOP_LABEL);
 
@@ -177,16 +191,19 @@ export const saveIntegrationsLabel = (saving) => (saving ? SAVING_LABEL : 'Save 
 export const copyCiSnippetLabel = (copied) => (copied ? COPIED_LABEL : COPY_WORKFLOW_STEP_LABEL);
 
 // ── MCP ──
-export const API_KEY_CARD_TITLE = 'API Key';
-export const NO_KEY_GENERATED_MESSAGE = 'No key generated yet.';
+export const API_KEY_CARD_TITLE = 'Your API Key';
+export const NO_KEY_GENERATED_MESSAGE = 'You have no MCP key for this project yet.';
 export const HIDE_KEY_TITLE = 'Hide key';
 export const SHOW_KEY_TITLE = 'Show key';
 export const COPY_KEY_TITLE = 'Copy key';
-export const MCP_REGEN_NOTE = 'Regenerating invalidates the existing key immediately.';
+export const MCP_REGEN_NOTE = 'Regenerating invalidates your existing key immediately.';
+export const REVOKE_KEY_LABEL = 'Revoke Key';
 export const CONFIG_SNIPPET_CARD_TITLE = 'Config Snippet';
 export const CONFIG_SNIPPET_DESC_PREFIX = "Add this to your MCP client's config file (e.g.";
 export const CONFIG_SNIPPET_DESC_SUFFIX = ', Cursor MCP settings, etc.).';
 export const MCP_KEY_GENERATED_TOAST = 'MCP key generated.';
+export const MCP_KEY_REVOKED_TOAST = 'MCP key revoked.';
+export const MCP_KEY_REVOKE_FAILED = 'Could not revoke the key.';
 export const MCP_KEY_GENERATE_FAILED = 'Failed to generate MCP key.';
 
 const COPY_CONFIG_LABEL = 'Copy Config';
@@ -216,15 +233,20 @@ export const REMOVE_USER_LABEL = 'Remove';
 export const REMOVE_USER_BODY_PREFIX = 'Remove';
 export const REMOVE_USER_BODY_SUFFIX = '? They will lose access immediately.';
 export const ADD_USER_CARD_TITLE = 'Add User';
+export const ALL_USERS_CARD_TITLE = 'All Users';
 export const USER_NAME_PLACEHOLDER = 'Jane Smith';
 export const USER_EMAIL_PLACEHOLDER = 'jane@example.com';
 export const PASSWORD_LABEL = 'Password';
 export const ROLE_LABEL = 'Role';
 export const USER_ROLE_OPTION = 'User';
 export const ADMIN_ROLE_OPTION = 'Admin';
+export const OWNER_ROLE_OPTION = 'Owner';
 export const REMOVE_USER_ICON_TITLE = 'Remove user';
 export const YOU_CHIP_LABEL = 'you';
 export const USER_FORM_REQUIRED_ERROR = 'Name, email and password are required.';
+export const USER_PROJECTS_LABEL = 'Assigned projects';
+export const USER_NO_PROJECTS = 'Not assigned to any project.';
+export const USER_ALL_PROJECTS = 'Every project (owner).';
 
 export const addUserLabel = (saving) => (saving ? 'Adding…' : 'Add User');
 export const userAddedToast = (name) => `User "${name}" added.`;
@@ -302,13 +324,26 @@ export const CRON_HINT_PREFIX = '5-field cron — e.g.';
 export const CRON_HINT_SUFFIX = '= daily at 2 AM.';
 export const CRONTAB_LINK_LABEL = 'Test at crontab.guru ↗';
 export const CRON_PLACEHOLDER = '0 2 * * *';
+export const BACKUP_TIMEZONE_LABEL = 'Schedule Timezone';
+export const BACKUP_TIMEZONE_HINT =
+	'The cron above fires on this timezone. Backup is instance-wide.';
 export const BACKUP_LAST_RUN_PREFIX = 'Last backup:';
+export const BACKUP_EXPORTING_TOAST = 'Preparing backup…';
 export const BACKUP_DOWNLOADED_TOAST = 'Backup downloaded.';
 export const EXPORT_FAILED_TOAST = 'Export failed.';
+export const BACKUP_IMPORTING_TOAST = 'Importing backup…';
 export const IMPORT_SUCCESS_TOAST = 'Import successful. Cron jobs have been re-scheduled.';
 export const IMPORT_FAILED_FALLBACK = 'Import failed. Check the file format.';
+export const BACKUP_UPLOADING_TOAST = 'Uploading backup to S3…';
 export const BACKUP_UPLOAD_SUCCESS_TOAST = 'Backup uploaded to S3 successfully.';
 export const BACKUP_UPLOAD_FAILED_FALLBACK = 'Backup failed. Check your S3 configuration.';
+
+export const REPORT_RETENTION_CARD_TITLE = 'Report Retention';
+export const REPORT_RETENTION_DESC =
+	'How long test reports and their session recordings are kept. A clean-up job runs every night at 3:23 AM (server time) and deletes anything older.';
+export const REPORT_RETENTION_SAVED_TOAST = 'Report retention updated.';
+export const REPORT_RETENTION_SAVE_FAILED = 'Failed to update report retention.';
+export const reportRetentionOptionLabel = (days) => (days === 0 ? 'Keep forever' : `${days} days`);
 
 const UPLOAD_TO_S3_NOW_LABEL = 'Upload to S3 Now';
 const UPLOADING_LABEL = 'Uploading…';
@@ -329,3 +364,152 @@ export const saveScheduleLabel = (saving) => (saving ? SAVING_LABEL : SAVE_SCHED
 export const restoreLabel = (restoring) => (restoring ? 'Restoring…' : 'Restore');
 export const refreshingLabel = (loading) => (loading ? 'Loading…' : REFRESH_LABEL);
 export const backupSizeLabel = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
+
+// ── Activity logs ──
+export const ACTIVITY_LABEL = 'Activity logs';
+export const ACTIVITY_DESC = 'Who changed what, and when.';
+export const ACTIVITY_SCOPE_PROJECT_LABEL = 'This project';
+export const ACTIVITY_SCOPE_ORG_LABEL = 'Organization';
+export const ACTIVITY_FILTER_ALL_ACTIONS = 'All events';
+export const ACTIVITY_FILTER_ALL_ACTORS = 'Anyone';
+export const ACTIVITY_SEARCH_PLACEHOLDER = 'Search by name or item…';
+export const ACTIVITY_EMPTY_TITLE = 'Nothing logged yet';
+export const ACTIVITY_EMPTY_BODY = 'Changes to this project show up here as people make them.';
+export const ACTIVITY_ORG_EMPTY_BODY =
+	'Account-wide changes — users, projects, nodes, backup — show up here.';
+export const ACTIVITY_LOAD_MORE_LABEL = 'Load more';
+export const ACTIVITY_RETENTION_CARD_TITLE = 'Retention';
+export const ACTIVITY_RETENTION_DESC =
+	'How long entries are kept. A clean-up job runs every night at 3:17 AM (server time) and deletes anything older.';
+export const ACTIVITY_RETENTION_SAVED_TOAST = 'Retention updated.';
+export const ACTIVITY_RETENTION_SAVE_FAILED = 'Failed to update retention.';
+export const activityRetentionOptionLabel = (days) =>
+	days === 0 ? 'Keep forever' : `${days} days`;
+export const activityCountLabel = (n) => `${n} ${n === 1 ? 'event' : 'events'}`;
+
+// action → { verb shown between actor and target, tone for the status dot }.
+// Dynamic detail (a result, a from/to) is folded in by activityDescription below.
+const ACTIVITY_ACTION_META = {
+	'test_suite.create': { verb: 'created test suite', tone: 'create' },
+	'test_suite.update': { verb: 'edited test suite', tone: 'update' },
+	'test_suite.delete': { verb: 'deleted test suite', tone: 'delete' },
+	'test_case.create': { verb: 'created test case', tone: 'create' },
+	'test_case.update': { verb: 'edited test case', tone: 'update' },
+	'test_case.delete': { verb: 'deleted test case', tone: 'delete' },
+	'test_case.steps_update': { verb: 'updated the steps of', tone: 'update' },
+	'test_run.create': { verb: 'created test run', tone: 'create' },
+	'test_run.update': { verb: 'updated test run', tone: 'update' },
+	'test_run.delete': { verb: 'deleted test run', tone: 'delete' },
+	'test_run.entry_assign': { verb: 'changed the assignee on', tone: 'neutral' },
+	'test_run.entry_result': { verb: 'recorded a result on', tone: 'update' },
+	'schedule.create': { verb: 'created schedule', tone: 'create' },
+	'schedule.update': { verb: 'edited schedule', tone: 'update' },
+	'schedule.delete': { verb: 'deleted schedule', tone: 'delete' },
+	'schedule.toggle': { verb: 'toggled schedule', tone: 'neutral' },
+	'integrations.update': { verb: 'updated integrations for', tone: 'update' },
+	'project.settings_update': { verb: 'updated settings for', tone: 'update' },
+	'project.prefixes_update': { verb: 'changed ID prefixes for', tone: 'update' },
+	'member.add': { verb: 'added', tone: 'create' },
+	'member.remove': { verb: 'removed', tone: 'delete' },
+	'mcp_key.generate': { verb: 'generated an', tone: 'neutral' },
+	'mcp_key.revoke': { verb: 'revoked an', tone: 'delete' },
+	'project.create': { verb: 'created project', tone: 'create' },
+	'project.delete': { verb: 'deleted project', tone: 'delete' },
+	'user.create': { verb: 'added user', tone: 'create' },
+	'user.update': { verb: 'edited user', tone: 'update' },
+	'user.role_change': { verb: 'changed the role of', tone: 'update' },
+	'user.delete': { verb: 'deleted user', tone: 'delete' },
+	'node.create': { verb: 'registered node', tone: 'create' },
+	'node.update': { verb: 'updated node', tone: 'update' },
+	'node.delete': { verb: 'removed node', tone: 'delete' },
+	'backup.config_update': { verb: 'updated the', tone: 'update' },
+	'activity.retention_update': { verb: 'changed', tone: 'update' },
+	'report.retention_update': { verb: 'changed', tone: 'update' }
+};
+
+export function activityTone(action) {
+	return ACTIVITY_ACTION_META[action]?.tone ?? 'neutral';
+}
+
+// { verb, target, detail } — the row renders "<actor> <verb> <target>" with an
+// optional trailing "(<detail>)".
+export function activityDescription(entry) {
+	const meta = ACTIVITY_ACTION_META[entry.action];
+	const verb = meta?.verb ?? entry.action.replace(/[._]/g, ' ');
+	const m = entry.metadata ?? {};
+	let detail = '';
+	let suffix = '';
+
+	if (entry.action === 'test_run.entry_result') detail = m.result ?? '';
+	else if (entry.action === 'test_run.update' && m.changed?.includes('status'))
+		detail = `${m.from} → ${m.to}`;
+	else if (entry.action === 'test_run.entry_assign')
+		detail = m.assignedTo ? `now ${m.assignedTo}` : 'unassigned';
+	else if (entry.action === 'schedule.toggle') detail = m.enabled ? 'enabled' : 'disabled';
+	else if (entry.action === 'user.role_change' || entry.action === 'user.update')
+		detail = m.from && m.to ? `${m.from} → ${m.to}` : '';
+	else if (entry.action === 'member.add' || entry.action === 'member.remove')
+		suffix = m.project ? ` ${entry.action === 'member.add' ? 'to' : 'from'} ${m.project}` : '';
+	else if (entry.action === 'project.prefixes_update' && m.testCasePrefix)
+		detail = `${m.testCasePrefix} · ${m.testSuitePrefix}`;
+	else if (
+		entry.action === 'activity.retention_update' ||
+		entry.action === 'report.retention_update'
+	)
+		detail = m.days === 0 ? 'keep forever' : `${m.days} days`;
+
+	return { verb, target: entry.targetLabel + suffix, detail };
+}
+
+// ── Update banner (owner) ──
+export const updateBannerText = (latest) =>
+	`Plum ${latest} is available. Run "plum update" on the server to upgrade.`;
+export const UPDATE_NPM_LINK_LABEL = 'Release notes';
+
+// ── Projects & access (Project tab) ──
+export const MANAGE_PROJECTS_LINK_LABEL = 'Manage projects & access →';
+export const CURRENT_PROJECT_LABEL = 'Current project';
+export const NEW_PROJECT_LABEL = 'New project';
+export const NEW_PROJECT_BASE_URL_LABEL = 'Base URL (optional)';
+export const CREATE_PROJECT_LABEL = 'Create';
+
+export const OTHER_PROJECTS_LABEL = 'Other projects';
+export const DELETE_PROJECT_LABEL = 'Delete';
+export const projectRowMeta = (slug, n) => `${slug} · ${n} member${n === 1 ? '' : 's'}`;
+export const DELETE_PROJECT_MODAL_TITLE = 'Delete project';
+export const deleteProjectWarning = (name) =>
+	`Deleting “${name}” permanently removes every test case, run, report, schedule and its test folder. Users keep their accounts and their names stay on past runs, but the project itself cannot be recovered.`;
+export const DELETE_CONTINUE_LABEL = 'I understand — continue';
+export const deleteProjectConfirmPrompt = (slug) =>
+	`Type the project folder name (${slug}) to permanently delete:`;
+export const CONFIRM_DELETE_PROJECT_LABEL = 'Delete this project';
+
+export const PROJECT_MEMBERS_LABEL = 'Members of this project';
+export const PROJECT_MEMBERS_HINT =
+	'The owner is on every project. Add admins and users, then remove them any time — removing someone only revokes access, their test cases and their name on past runs stay.';
+export const ROLE_PERMISSIONS_LINK = 'What can each role do?';
+export const MANAGE_USERS_LINK = 'Add or edit users →';
+export const MEMBER_SEARCH_PLACEHOLDER = 'Search people to add…';
+export const NO_MEMBERS_YET = 'No one else is assigned yet — search above to add someone.';
+export const REMOVE_MEMBER_TITLE = 'Remove from this project';
+export const OWNER_MEMBER_TAG = 'Every project';
+
+// Role capability matrix shown in the "What can each role do?" modal.
+export const ROLE_PERMISSIONS_MODAL_TITLE = 'Role permissions';
+export const ROLE_COLUMNS = ['Owner', 'Admin', 'User'];
+export const ROLE_PERMISSION_ROWS = [
+	{
+		label: 'See a project’s tests, reports and runs',
+		cells: ['all projects', 'assigned', 'assigned']
+	},
+	{
+		label: 'Run tests and manage the test repository',
+		cells: ['all projects', 'assigned', 'assigned']
+	},
+	{
+		label: 'Project settings (name, logo, integrations, MCP, members)',
+		cells: ['all projects', 'assigned', '—']
+	},
+	{ label: 'Create and delete projects', cells: ['✓', '—', '—'] },
+	{ label: 'Manage users, runners and backups', cells: ['✓', '—', '—'] }
+];

@@ -21,8 +21,10 @@
 		makeRunEntry,
 		mergeRRwebBatch
 	} from '$lib/stores/runner';
+	import { activeProjectId } from '$lib/stores/project';
+	import { auth } from '$lib/stores/auth';
 	import { reportUrl } from '$lib/api/reports';
-	import { fetchRunners } from '$lib/api/runners';
+	import { fetchRunners, fetchBuiltInEnabled } from '$lib/api/runners';
 	import { fetchRuns, fetchRun } from '$lib/api/repository';
 	import { fetchIntegrations } from '$lib/api/settings';
 	import { fetchActiveRuns } from '$lib/api/activeRuns';
@@ -33,7 +35,8 @@
 		WORKERS_MIN,
 		WORKERS_MAX,
 		RUN_PICKER_LIMIT,
-		REDIRECT_DELAY_MS
+		REDIRECT_DELAY_MS,
+		TRIGGER_TYPES
 	} from '$lib/constants';
 	import { BUILTIN_RUNNER_LABEL, CLEAR_LABEL, DISCORD_LABEL, SLACK_LABEL } from '$lib/copy/common';
 	import {
@@ -64,10 +67,11 @@
 		startedByLabel,
 		collapseOrExpandLabel,
 		queuePositionLabel,
+		lockedRunTitle,
 		statusLabel as computeStatusLabel,
 		runnerSummary as computeRunnerSummary
 	} from '$lib/copy/runners';
-	import { triggerLabel, triggerVariant } from '$lib/utils/format';
+	import { triggerLabel, triggerVariant, mcpName } from '$lib/utils/format';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 
@@ -95,7 +99,7 @@
 		};
 	}
 
-	let _unsubConfig, _unsubExpanded, _unsubBuiltIn, _socket;
+	let _unsubConfig, _unsubExpanded, _unsubBuiltIn, _unsubActiveProject, _socket;
 	let lastFinished = null; // { reportId, verdict } — most recent completed run, for the bar's View Report shortcut
 
 	onMount(() => {
@@ -107,17 +111,16 @@
 			const exp = localStorage.getItem('plum:panelExpanded');
 			if (exp !== null) panelExpanded.set(exp === 'true');
 		} catch {}
-		try {
-			const bi = localStorage.getItem('plum:builtInEnabled');
-			if (bi !== null) builtInEnabled.set(bi !== 'false');
-		} catch {}
+		fetchBuiltInEnabled()
+			.then(({ builtInRunnerEnabled }) => builtInEnabled.set(builtInRunnerEnabled))
+			.catch(() => {});
 
 		fetchRunners()
 			.then((r) => {
-				availableRunners = r;
+				availableRunners = r ?? [];
 				// Drop any saved selection pointing at runners that no longer exist,
 				// so a deleted runner can't linger in the selection and break runs.
-				const validIds = new Set([BUILTIN_RUNNER_ID, ...r.map((x) => x.id)]);
+				const validIds = new Set([BUILTIN_RUNNER_ID, ...availableRunners.map((x) => x.id)]);
 				runnerConfig.update((c) => {
 					const pruned = c.selectedRunners.filter((id) => validIds.has(id));
 					return { ...c, selectedRunners: pruned.length > 0 ? pruned : [BUILTIN_RUNNER_ID] };
@@ -133,12 +136,13 @@
 		// loaded/refreshed) — live socket events alone only reach tabs connected at
 		// the moment an event fires.
 		fetchActiveRuns()
-			.then((runs) => {
+			.then(({ runs }) => {
 				if (runs.length === 0) return;
 				backgroundRuns.update((r) => {
 					const next = { ...r };
-					for (const { runId, kind, label, meta, status } of runs) {
-						if (!next[runId]) next[runId] = makeRunEntry({ kind, label, meta, status });
+					for (const { runId, projectId, projectName, kind, label, meta, status } of runs) {
+						if (!next[runId])
+							next[runId] = makeRunEntry({ projectId, projectName, kind, label, meta, status });
 					}
 					return next;
 				});
@@ -157,9 +161,6 @@
 			} catch {}
 		});
 		_unsubBuiltIn = builtInEnabled.subscribe((v) => {
-			try {
-				localStorage.setItem('plum:builtInEnabled', String(v));
-			} catch {}
 			runnerConfig.update((c) => {
 				if (!v && c.selectedRunners.includes(BUILTIN_RUNNER_ID)) {
 					const others = c.selectedRunners.filter((r) => r !== BUILTIN_RUNNER_ID);
@@ -171,44 +172,66 @@
 			});
 		});
 
-		const s = io(API_BASE, { transports: ['websocket'] });
+		const s = io(API_BASE, {
+			transports: ['websocket'],
+			auth: { token: auth.getToken() }
+		});
 		_socket = s;
 		socket.set(s);
 
+		// Join the active project's room — scopes which run streams this tab gets.
+		const joinActiveProject = () =>
+			s.emit(SOCKET_EVENTS.JOIN_PROJECT, { projectId: $activeProjectId });
+		s.on('connect', joinActiveProject);
+		_unsubActiveProject = activeProjectId.subscribe(() => s.connected && joinActiveProject());
+
 		s.on(SOCKET_EVENTS.REPORT_READY, () => reportsVersion.update((v) => v + 1));
 
-		function updateBgRun(runId, updater) {
+		function updateBgRun(runId, updater, { streamOnly = false } = {}) {
 			backgroundRuns.update((r) => {
-				if (!r[runId]) return r;
-				return { ...r, [runId]: updater(r[runId]) };
+				const run = r[runId];
+				if (!run) return r;
+				// Server already room-scopes streams; this also covers a project switch
+				// mid-run under the same tab.
+				if (streamOnly && !canOpenRun(run)) return r;
+				return { ...r, [runId]: updater(run) };
 			});
 		}
 
-		function upsertBgRun(runId, { kind, label, meta }, status) {
+		function upsertBgRun(runId, { projectId, projectName, kind, label, meta }, status) {
+			// Keep only label + project for a run the viewer can't open — drop the
+			// tag / who-started-it that the socket broadcast still carries.
+			const safeMeta = canOpenRun({ projectId }) ? meta : undefined;
 			backgroundRuns.update((r) => ({
 				...r,
-				[runId]: r[runId] ? { ...r[runId], status } : makeRunEntry({ kind, label, meta, status })
+				[runId]: r[runId]
+					? { ...r[runId], status }
+					: makeRunEntry({ projectId, projectName, kind, label, meta: safeMeta, status })
 			}));
 			panelExpanded.set(true);
 		}
 
-		s.on(SOCKET_EVENTS.BG_RUN_QUEUED, ({ runId, kind, label, meta }) => {
-			upsertBgRun(runId, { kind, label, meta }, 'queued');
+		s.on(SOCKET_EVENTS.BG_RUN_QUEUED, ({ runId, projectId, projectName, kind, label, meta }) => {
+			upsertBgRun(runId, { projectId, projectName, kind, label, meta }, 'queued');
 		});
 
-		s.on(SOCKET_EVENTS.BG_RUN_START, ({ runId, kind, label, meta }) => {
-			upsertBgRun(runId, { kind, label, meta }, 'running');
+		s.on(SOCKET_EVENTS.BG_RUN_START, ({ runId, projectId, projectName, kind, label, meta }) => {
+			upsertBgRun(runId, { projectId, projectName, kind, label, meta }, 'running');
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_LOG, ({ runId, log }) => {
-			updateBgRun(runId, (run) => ({ ...run, output: run.output + log }));
+			updateBgRun(runId, (run) => ({ ...run, output: run.output + log }), { streamOnly: true });
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_LANES_INIT, ({ runId, lanes }) => {
-			updateBgRun(runId, (run) => ({
-				...run,
-				lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '' }))
-			}));
+			updateBgRun(
+				runId,
+				(run) => ({
+					...run,
+					lanes: lanes.map((l) => ({ ...l, status: 'running', logs: '' }))
+				}),
+				{ streamOnly: true }
+			);
 		});
 
 		// Upsert the lane — a tab that connected mid-run (or after a refresh)
@@ -232,18 +255,24 @@
 		}
 
 		s.on(SOCKET_EVENTS.BG_RUN_LANE_LOG, ({ runId, laneId, log }) => {
-			updateBgRun(runId, (run) => patchLane(run, laneId, (l) => ({ logs: (l.logs || '') + log })));
+			updateBgRun(runId, (run) => patchLane(run, laneId, (l) => ({ logs: (l.logs || '') + log })), {
+				streamOnly: true
+			});
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_LANE_STATUS, ({ runId, laneId, status }) => {
-			updateBgRun(runId, (run) => patchLane(run, laneId, () => ({ status })));
+			updateBgRun(runId, (run) => patchLane(run, laneId, () => ({ status })), { streamOnly: true });
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, ({ runId, ...batch }) => {
-			updateBgRun(runId, (run) => ({
-				...run,
-				rrwebByLane: mergeRRwebBatch(run.rrwebByLane, batch)
-			}));
+			updateBgRun(
+				runId,
+				(run) => ({
+					...run,
+					rrwebByLane: mergeRRwebBatch(run.rrwebByLane, batch)
+				}),
+				{ streamOnly: true }
+			);
 		});
 
 		s.on(SOCKET_EVENTS.BG_RUN_DONE, ({ runId, code, reportId }) => {
@@ -274,6 +303,7 @@
 		_unsubConfig?.();
 		_unsubExpanded?.();
 		_unsubBuiltIn?.();
+		_unsubActiveProject?.();
 		_socket?.disconnect();
 	});
 
@@ -282,6 +312,10 @@
 	$: activeRunEntries = Object.entries($backgroundRuns).filter(
 		([, r]) => r.status === 'queued' || r.status === 'running'
 	);
+	// A run is openable only when it belongs to the project the viewer is currently
+	// in. Runs from other projects still show in the bar for awareness, but you
+	// have to switch to that project to open one — even if you're a member.
+	$: canOpenRun = (run) => run.projectId == null || run.projectId === $activeProjectId;
 	$: runningCount = activeRunEntries.filter(([, r]) => r.status === 'running').length;
 	$: queuedCount = activeRunEntries.filter(([, r]) => r.status === 'queued').length;
 	$: anyRunning = activeRunEntries.length > 0;
@@ -741,6 +775,7 @@
 	{#if $panelExpanded}
 		<div class="body" transition:slide={{ duration: 200 }}>
 			{#each activeRunEntries as [runId, run], i (runId)}
+				{@const openable = canOpenRun(run)}
 				<div
 					class="run-card"
 					class:active-run={run.status === 'running'}
@@ -752,10 +787,23 @@
 						class:pulse-accent={run.status === 'running'}
 						class:queued-dot={run.status === 'queued'}
 					></span>
-					<a href="/live/{runId}" class="run-card-main" on:click={() => panelExpanded.set(false)}>
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<svelte:element
+						this={openable ? 'a' : 'div'}
+						href={openable ? `/live/${runId}` : undefined}
+						role={openable ? undefined : 'presentation'}
+						class="run-card-main"
+						class:locked={!openable}
+						title={openable ? undefined : lockedRunTitle(run.projectName)}
+						on:click={openable ? () => panelExpanded.set(false) : undefined}
+					>
 						<div class="run-card-info">
 							<span class="run-card-label">{run.label || MANUAL_RUN_LABEL}</span>
 							<span class="run-card-meta">
+								{#if run.projectName}
+									<span class="run-card-project">{run.projectName}</span>
+									<span class="meta-dot">·</span>
+								{/if}
 								{run.status === 'queued'
 									? queuePositionLabel(
 											activeRunEntries.slice(0, i).filter(([, r]) => r.status === 'queued').length +
@@ -763,41 +811,48 @@
 										)
 									: runKindLabel(run.kind)}
 								{#if run.currentRun?.startedBy}
-									<span class="meta-dot">·</span> {startedByLabel(run.currentRun.startedBy)}
+									<span class="meta-dot">·</span>
+									{startedByLabel(
+										mcpName(run.currentRun.startedBy, run.kind === TRIGGER_TYPES.MCP)
+									)}
 								{/if}
 							</span>
 						</div>
 						<Badge variant={run.status === 'queued' ? 'tag' : triggerVariant(run.kind)}>
 							{run.status === 'queued' ? QUEUED_LABEL : triggerLabel(run.kind)}
 						</Badge>
-						<svg
-							width="13"
-							height="13"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							class="run-card-arrow"
-						>
-							<line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-						</svg>
-					</a>
-					<button
-						class="run-card-cancel"
-						title={CANCEL_RUN_LABEL}
-						aria-label={CANCEL_RUN_LABEL}
-						on:click={() => cancelRun(runId)}
-					>
-						<svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-							<path
-								d="M1 1l12 12M13 1L1 13"
+						{#if openable}
+							<svg
+								width="13"
+								height="13"
+								viewBox="0 0 24 24"
+								fill="none"
 								stroke="currentColor"
-								stroke-width="1.6"
+								stroke-width="2"
 								stroke-linecap="round"
-							/>
-						</svg>
-					</button>
+								class="run-card-arrow"
+							>
+								<line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+							</svg>
+						{/if}
+					</svelte:element>
+					{#if openable}
+						<button
+							class="run-card-cancel"
+							title={CANCEL_RUN_LABEL}
+							aria-label={CANCEL_RUN_LABEL}
+							on:click={() => cancelRun(runId)}
+						>
+							<svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+								<path
+									d="M1 1l12 12M13 1L1 13"
+									stroke="currentColor"
+									stroke-width="1.6"
+									stroke-linecap="round"
+								/>
+							</svg>
+						</button>
+					{/if}
 				</div>
 			{/each}
 
@@ -815,8 +870,8 @@
 						class="empty-icon"
 					>
 						<circle cx="12" cy="12" r="10" />
-						<line x1="10" y1="15" x2="10" y2="12" />
-						<line x1="10" y1="9" x2="10.01" y2="9" />
+						<line x1="12" y1="16" x2="12" y2="12" />
+						<line x1="12" y1="8" x2="12.01" y2="8" />
 					</svg>
 					{NO_TESTS_RUNNING}
 				</div>
@@ -1346,6 +1401,14 @@
 		min-width: 0;
 		text-decoration: none;
 		color: inherit;
+	}
+	.run-card-main.locked {
+		cursor: default;
+	}
+
+	.run-card-project {
+		font-weight: 600;
+		color: var(--text);
 	}
 
 	.run-card-cancel {

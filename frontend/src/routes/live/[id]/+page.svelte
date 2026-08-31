@@ -9,6 +9,7 @@
 	import { page } from '$app/stores';
 	import { fly } from 'svelte/transition';
 	import { backgroundRuns, cancelRun } from '$lib/stores/runner';
+	import { activeProjectId } from '$lib/stores/project';
 	import { fetchActiveRuns } from '$lib/api/activeRuns';
 	import { reportUrl } from '$lib/api/reports';
 	import { REDIRECT_DELAY_MS } from '$lib/constants';
@@ -34,6 +35,8 @@
 		QUEUED_BODY,
 		RUN_NOT_FOUND_HEADING,
 		RUN_NOT_FOUND_BODY,
+		RUN_FORBIDDEN_HEADING,
+		RUN_FORBIDDEN_BODY,
 		RUN_SKIPPED_HEADING,
 		VIEW_PAST_REPORTS_LINK,
 		queuePositionLine,
@@ -44,6 +47,7 @@
 	} from '$lib/copy/reports';
 	import BackLink from '$lib/components/ui/BackLink.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
+	import TagList from '$lib/components/ui/TagList.svelte';
 
 	let terminalEl;
 	let laneTerminalEl;
@@ -55,19 +59,27 @@
 	let hydrated = false;
 	let queuePosition = 0;
 	let posInterval = null;
+	let listedProjectId = null; // the run's project as seen in the active-runs list
 
 	$: runId = $page.params.id;
 	$: run = $backgroundRuns[runId] ?? null;
 	$: status = run?.status ?? null;
 	$: lanes = run?.lanes ?? [];
 	$: isMulti = lanes.length > 1;
+	// A run is viewable only from within its own project — the bottom bar won't
+	// link here otherwise, but a pasted URL can. (Socket events still reach the
+	// client; server-side room isolation is a separate change.)
+	$: runProjectId = run?.projectId ?? listedProjectId;
+	$: forbidden =
+		runProjectId != null && $activeProjectId != null && runProjectId !== $activeProjectId;
 
 	async function refreshQueuePosition() {
 		try {
-			const runs = await fetchActiveRuns();
+			const { runs } = await fetchActiveRuns();
 			hydrated = true;
 			const mine = runs.find((r) => r.runId === runId);
 			queuePosition = mine?.position ?? 0;
+			if (mine?.projectId != null) listedProjectId = mine.projectId;
 		} catch {
 			hydrated = true;
 		}
@@ -125,7 +137,14 @@
 
 <svelte:head><title>{LIVE_PAGE_TITLE}</title></svelte:head>
 
-{#if !run}
+{#if forbidden}
+	<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
+	<div class="notice-state">
+		<h2>{RUN_FORBIDDEN_HEADING}</h2>
+		<p>{RUN_FORBIDDEN_BODY}</p>
+		<a href="/reports" class="notice-link">{VIEW_PAST_REPORTS_LINK}</a>
+	</div>
+{:else if !run}
 	<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
 	<div class="notice-state">
 		{#if hydrated}
@@ -177,7 +196,13 @@
 							<span class="run-title-label">{run.currentRun.runTitle}</span>
 							<span class="run-sep">·</span>
 						{/if}
-						<span class="run-tag-label">{run.currentRun.tag || ALL_TESTS_LABEL}</span>
+						<span class="run-tag-label">
+							{#if run.currentRun.tag}
+								<TagList value={run.currentRun.tag} />
+							{:else}
+								{ALL_TESTS_LABEL}
+							{/if}
+						</span>
 						<span class="run-sep">·</span>
 						<span class="run-detail">{workersCountLabel(run.currentRun.workers)}</span>
 						<span class="run-sep">·</span>
@@ -500,6 +525,7 @@
 		font-size: 0.8125rem;
 		font-weight: 500;
 		color: var(--text);
+		min-width: 0;
 	}
 	.run-sep {
 		color: var(--text-muted);

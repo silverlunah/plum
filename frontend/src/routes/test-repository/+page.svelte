@@ -8,15 +8,8 @@
 	import { fly } from 'svelte/transition';
 	import { fetchSuites, createSuite, deleteSuite, searchRepository } from '$lib/api/repository';
 	import { fetchRuns, createRun, duplicateRun, deleteRun } from '$lib/api/repository';
-	import { downloadTestCaseExport } from '$lib/api/repository';
 	import { auth } from '$lib/stores/auth';
-	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
-	import { exportFailedToast, exportedToast } from '$lib/copy/common';
-	import {
-		IMPORT_TEST_CASES_LINK,
-		IMPORT_TEST_CASES_HREF,
-		EXPORT_TEST_CASES_WHAT
-	} from '$lib/copy/repository';
+	import { MANAGE_TEST_CASES_LINK, IMPORT_TEST_CASES_HREF } from '$lib/copy/repository';
 	import { runsVersion } from '$lib/stores/runner';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import { REPO_PAGE_SIZE } from '$lib/constants';
@@ -25,6 +18,7 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import { notify } from '$lib/stores/notifications';
 	import Button from '$lib/components/ui/Button.svelte';
+	import { mcpName } from '$lib/utils/format';
 	import {
 		CLEAR_SEARCH_LABEL,
 		CANCEL_LABEL,
@@ -43,6 +37,7 @@
 		PAGE_TITLE,
 		HEADING,
 		HEADER_DESC,
+		repoSummary,
 		NEW_SUITE_LABEL,
 		NEW_RUN_LABEL,
 		SUITES_TAB_LABEL,
@@ -111,6 +106,7 @@
 
 	let suites = [];
 	let suitesTotal = 0;
+	let totalCases = 0;
 	let suitesPage = 1;
 	let suitesSort = readSort('plum:repo:suites:sort', { by: 'createdAt', order: 'desc' });
 
@@ -181,19 +177,6 @@
 
 	const PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
 
-	let exporting = false;
-	async function handleExport(format) {
-		exporting = true;
-		try {
-			await downloadTestCaseExport('all', null, format);
-			notify('success', exportedToast(EXPORT_TEST_CASES_WHAT));
-		} catch {
-			notify('error', exportFailedToast(EXPORT_TEST_CASES_WHAT.toLowerCase()));
-		} finally {
-			exporting = false;
-		}
-	}
-
 	async function loadSuites(page = 1) {
 		const isPrioritySort = suitesSort.by === 'priority';
 		const result = await fetchSuites({
@@ -203,6 +186,7 @@
 		});
 		suites = isPrioritySort ? sortByPriority(result.suites, suitesSort.order) : result.suites;
 		suitesTotal = result.total;
+		totalCases = result.totalCases ?? 0;
 		suitesPage = page;
 	}
 
@@ -443,13 +427,15 @@
 	<div class="header-text">
 		<h1>{HEADING}</h1>
 		<p class="header-desc">{HEADER_DESC}</p>
+		{#if tab === 'suites' && !q}
+			<p class="header-stat">{repoSummary(suitesTotal, totalCases)}</p>
+		{/if}
 	</div>
 	<div class="header-actions">
 		{#if tab === 'suites'}
-			{#if $auth.user?.role === 'admin'}
-				<a class="import-link" href={IMPORT_TEST_CASES_HREF}>{IMPORT_TEST_CASES_LINK}</a>
+			{#if $auth.user?.role === 'owner' || $auth.user?.role === 'admin'}
+				<a class="import-link" href={IMPORT_TEST_CASES_HREF}>{MANAGE_TEST_CASES_LINK}</a>
 			{/if}
-			<ExportMenu busy={exporting} on:select={(e) => handleExport(e.detail)} />
 			<Button on:click={() => (suiteModalOpen = true)}>{NEW_SUITE_LABEL}</Button>
 		{:else}
 			<Button on:click={() => (runModalOpen = true)}>{NEW_RUN_LABEL}</Button>
@@ -627,7 +613,9 @@
 										>
 										{caseCount(suite._count.cases)}
 									</span>
-									<span class="meta-item">{createdByLabel(suite.createdBy.name)}</span>
+									<span class="meta-item"
+										>{createdByLabel(mcpName(suite.createdBy.name, suite.viaMcp))}</span
+									>
 								</div>
 							</div>
 						{/each}
@@ -769,7 +757,9 @@
 								>
 								{caseCount(suite._count.cases)}
 							</span>
-							<span class="meta-item">{createdByLabel(suite.createdBy.name)}</span>
+							<span class="meta-item"
+								>{createdByLabel(mcpName(suite.createdBy.name, suite.viaMcp))}</span
+							>
 						</div>
 					</div>
 				{/each}
@@ -888,6 +878,12 @@
 	.header-desc {
 		font-size: 0.875rem;
 		color: var(--text-muted);
+	}
+	.header-stat {
+		margin-top: 0.3rem;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--text);
 	}
 
 	.header-actions {

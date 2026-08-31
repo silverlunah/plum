@@ -4,7 +4,7 @@
  -->
 
 <script>
-	/** @type {'pass' | 'fail' | 'tag' | 'schedule' | 'neutral' | 'node' | 'mcp' | 'external'} */
+	/** @type {'pass' | 'fail' | 'flaky' | 'tag' | 'schedule' | 'neutral' | 'node' | 'mcp' | 'external'} */
 	export let variant = 'neutral';
 </script>
 
@@ -31,6 +31,11 @@
 	.fail {
 		background: var(--fail-soft);
 		color: var(--fail);
+	}
+
+	.flaky {
+		background: var(--warn-soft);
+		color: var(--warn);
 	}
 
 	.tag {

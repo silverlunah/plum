@@ -10,37 +10,31 @@ const backupService = require('./backupService');
 let scheduledJob = null;
 
 const runBackup = async () => {
-	let project;
+	let org;
 	try {
-		project = await prisma.project.findUnique({ where: { id: 1 } });
+		org = await prisma.organization.findFirst({ orderBy: { id: 'asc' } });
 	} catch (err) {
-		console.error('❌ Backup: could not read project config:', err.message);
+		console.error('❌ Backup: could not read organisation config:', err.message);
 		return;
 	}
 
-	if (!project?.backupEnabled) return;
+	if (!org?.backupEnabled) return;
 
 	try {
-		const data = await backupService.exportAll(project.backupIncludeReports);
-		const key = await backupService.uploadToS3(data, project);
+		const data = await backupService.exportAll(org.backupIncludeReports);
+		const key = await backupService.uploadToS3(data, org);
 
-		await prisma.project.update({
-			where: { id: 1 },
-			data: {
-				backupLastRunAt: new Date(),
-				backupLastStatus: `success:${key}`
-			}
+		await prisma.organization.update({
+			where: { id: org.id },
+			data: { backupLastRunAt: new Date(), backupLastStatus: `success:${key}` }
 		});
 		console.log(`✅ Backup uploaded: ${key}`);
 	} catch (err) {
 		console.error('❌ Backup failed:', err.message);
 		try {
-			await prisma.project.update({
-				where: { id: 1 },
-				data: {
-					backupLastRunAt: new Date(),
-					backupLastStatus: `error:${err.message}`
-				}
+			await prisma.organization.update({
+				where: { id: org.id },
+				data: { backupLastRunAt: new Date(), backupLastStatus: `error:${err.message}` }
 			});
 		} catch {}
 	}
@@ -58,8 +52,8 @@ const schedule = (cronExpr, enabled, timezone) => {
 
 const init = async () => {
 	try {
-		const project = await prisma.project.findUnique({ where: { id: 1 } });
-		schedule(project?.backupCron, project?.backupEnabled, project?.timezone);
+		const org = await prisma.organization.findFirst({ orderBy: { id: 'asc' } });
+		schedule(org?.backupCron, org?.backupEnabled, org?.timezone);
 	} catch (err) {
 		console.error('Failed to initialize backup cron:', err.message);
 	}

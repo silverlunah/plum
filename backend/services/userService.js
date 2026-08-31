@@ -6,23 +6,66 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('./prisma');
+const activityService = require('./activityService');
+const projectPaths = require('../lib/projectPaths');
+const { slugify } = require('../lib/slugify');
+const { ROLE } = require('../constants/roles');
+const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'plum-dev-secret-change-in-production';
+const { DEFAULT_JWT_SECRET } = require('../lib/appSecret');
 const SALT_ROUNDS = 10;
+const TOKEN_TTL = '30d';
+
+// Read at call time — server.js resolves the real secret into the env at boot.
+const jwtSecret = () => process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
 
 const userSelect = { id: true, name: true, email: true, role: true, createdAt: true };
 
 async function needsSetup() {
-	const count = await prisma.user.count();
+	const count = await prisma.organization.count();
 	return count === 0;
 }
 
 async function createUser({ name, email, password, role = 'user' }) {
+	if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
+		const err = new Error('A user with that email already exists.');
+		err.status = 409;
+		throw err;
+	}
 	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
-	return prisma.user.create({
+	const user = await prisma.user.create({
 		data: { name, email, password: hashed, role },
 		select: userSelect
 	});
+	await activityService.record(ACTIVITY_ACTION.USER_CREATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'user', id: user.id, label: user.name },
+		metadata: { role: user.role }
+	});
+	return user;
+}
+
+// First boot: the organisation, its first project, and the owner — all or
+// nothing. The owner reaches every project implicitly, so no ProjectMember row.
+async function bootstrap({ organizationName, projectName, name, email, password }) {
+	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
+	const slug = slugify(projectName);
+	const result = await prisma.$transaction(async (tx) => {
+		const org = await tx.organization.create({
+			data: { name: organizationName, termsAcceptedAt: new Date() }
+		});
+		const project = await tx.project.create({
+			data: { orgId: org.id, name: projectName, slug }
+		});
+		const user = await tx.user.create({
+			data: { name, email, password: hashed, role: ROLE.OWNER },
+			select: userSelect
+		});
+		return { org, project, user };
+	});
+	await projectPaths.refresh();
+	projectPaths.scaffoldProject(slug);
+	return result;
 }
 
 async function login({ email, password }) {
@@ -32,24 +75,62 @@ async function login({ email, password }) {
 	if (!match) return null;
 	const token = jwt.sign(
 		{ userId: user.id, email: user.email, name: user.name, role: user.role },
-		JWT_SECRET
+		jwtSecret(),
+		{ expiresIn: TOKEN_TTL }
 	);
 	return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
 }
 
 function verifyToken(token) {
-	return jwt.verify(token, JWT_SECRET);
+	return jwt.verify(token, jwtSecret());
 }
 
+// Each user with the projects they can reach — the owner reaches every project
+// implicitly, everyone else only their explicit memberships.
 async function getAll() {
-	return prisma.user.findMany({ select: userSelect, orderBy: { createdAt: 'asc' } });
+	const projectSelect = { id: true, name: true, slug: true };
+	const [users, allProjects] = await Promise.all([
+		prisma.user.findMany({
+			select: {
+				...userSelect,
+				projectMemberships: { select: { project: { select: projectSelect } } }
+			},
+			orderBy: { createdAt: 'asc' }
+		}),
+		prisma.project.findMany({ select: projectSelect, orderBy: { id: 'asc' } })
+	]);
+	return users.map(({ projectMemberships, ...u }) => ({
+		...u,
+		projects: u.role === ROLE.OWNER ? allProjects : projectMemberships.map((m) => m.project)
+	}));
 }
 
-async function getMembers() {
+// The whole pool an owner/admin can add to a project — everyone but the owner,
+// who is already on every project.
+async function getAssignablePool() {
 	return prisma.user.findMany({
-		select: { id: true, name: true },
+		where: { role: { not: ROLE.OWNER } },
+		select: { id: true, name: true, email: true, role: true },
 		orderBy: { name: 'asc' }
 	});
+}
+
+// Who can be assigned work within one project: its explicit members plus every
+// owner (owners reach every project). Used by the test-run assignee picker.
+async function getProjectMembers(projectId) {
+	const [owners, memberships] = await Promise.all([
+		prisma.user.findMany({
+			where: { role: ROLE.OWNER },
+			select: { id: true, name: true, email: true, role: true }
+		}),
+		prisma.projectMember.findMany({
+			where: { projectId },
+			select: { user: { select: { id: true, name: true, email: true, role: true } } }
+		})
+	]);
+	const byId = new Map();
+	for (const u of [...owners, ...memberships.map((m) => m.user)]) byId.set(u.id, u);
+	return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 async function getById(id) {
@@ -82,19 +163,71 @@ async function updatePassword(id, { currentPassword, newPassword }) {
 	return { ok: true };
 }
 
+// Refuses to demote the last owner — the instance must always have one.
+async function updateUser(id, { name, email, role }) {
+	const user = await prisma.user.findUnique({ where: { id } });
+	if (!user) return { ok: false, error: 'User not found' };
+	if (role !== undefined && !['owner', 'admin', 'user'].includes(role)) {
+		return { ok: false, error: 'role must be owner, admin or user' };
+	}
+	if (email) {
+		const conflict = await prisma.user.findFirst({ where: { email, NOT: { id } } });
+		if (conflict) return { ok: false, error: 'Email already in use' };
+	}
+	if (user.role === ROLE.OWNER && role !== undefined && role !== ROLE.OWNER) {
+		const owners = await prisma.user.count({ where: { role: ROLE.OWNER } });
+		if (owners <= 1) return { ok: false, error: 'The instance must keep an owner' };
+	}
+	const updated = await prisma.user.update({
+		where: { id },
+		data: {
+			...(name !== undefined && { name }),
+			...(email !== undefined && { email }),
+			...(role !== undefined && { role })
+		},
+		select: userSelect
+	});
+
+	if (role !== undefined && role !== user.role) {
+		await activityService.record(ACTIVITY_ACTION.USER_ROLE_CHANGE, {
+			scope: ACTIVITY_SCOPE.ORG,
+			target: { type: 'user', id, label: updated.name },
+			metadata: { from: user.role, to: role }
+		});
+	}
+	if (name !== undefined || email !== undefined) {
+		await activityService.record(ACTIVITY_ACTION.USER_UPDATE, {
+			scope: ACTIVITY_SCOPE.ORG,
+			target: { type: 'user', id, label: updated.name }
+		});
+	}
+	return { ok: true, user: updated };
+}
+
 async function deleteUser(id) {
-	return prisma.user.delete({ where: { id } });
+	const user = await prisma.user.findUnique({ where: { id }, select: { name: true } });
+	const result = await prisma.user.delete({ where: { id } });
+	if (user) {
+		await activityService.record(ACTIVITY_ACTION.USER_DELETE, {
+			scope: ACTIVITY_SCOPE.ORG,
+			target: { type: 'user', id, label: user.name }
+		});
+	}
+	return result;
 }
 
 module.exports = {
 	needsSetup,
 	createUser,
+	bootstrap,
 	login,
 	verifyToken,
 	getAll,
-	getMembers,
+	getAssignablePool,
+	getProjectMembers,
 	getById,
 	updateProfile,
 	updatePassword,
+	updateUser,
 	deleteUser
 };

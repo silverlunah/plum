@@ -33,6 +33,9 @@
 	--code-attr: #fbbf24;
 	--code-string: #86efac;
 	--code-comment: #9ca3af;
+	/* Selected row in the always-dark inspector DOM tree — a fixed bright cyan,
+	   since the theme accent (deep purple in light mode) is near-invisible on it. */
+	--inspect-highlight: #22d3ee;
 
 	--font-display: 'Playfair Display', Georgia, serif;
 	--font-body: 'DM Sans', system-ui, -apple-system, sans-serif;

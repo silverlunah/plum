@@ -12,32 +12,15 @@ function authHeaders() {
 
 export async function fetchRunners() {
 	const res = await fetch(`${API_BASE}/runners`, { headers: authHeaders() });
+	if (!res.ok) return [];
 	const { runners } = await res.json();
-	return runners;
-}
-
-export async function createRunner(data) {
-	const res = await fetch(`${API_BASE}/runners`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json', ...authHeaders() },
-		body: JSON.stringify(data)
-	});
-	return res.json();
+	return runners ?? [];
 }
 
 export async function deleteRunner(id) {
 	const res = await fetch(`${API_BASE}/runners/${id}`, {
 		method: 'DELETE',
 		headers: authHeaders()
-	});
-	return res.json();
-}
-
-export async function updateRunner(id, data) {
-	const res = await fetch(`${API_BASE}/runners/${id}`, {
-		method: 'PUT',
-		headers: { 'Content-Type': 'application/json', ...authHeaders() },
-		body: JSON.stringify(data)
 	});
 	return res.json();
 }
@@ -66,11 +49,33 @@ export async function restartRunner(id) {
 	return res.json();
 }
 
-export async function probeRunner(url, token) {
-	const res = await fetch(`${API_BASE}/runners/probe`, {
-		method: 'POST',
+export async function fetchBuiltInEnabled() {
+	const res = await fetch(`${API_BASE}/runners/built-in`, { headers: authHeaders() });
+	if (!res.ok) return { builtInRunnerEnabled: true };
+	return res.json();
+}
+
+export async function setBuiltInEnabled(enabled) {
+	const res = await fetch(`${API_BASE}/runners/built-in`, {
+		method: 'PUT',
 		headers: { 'Content-Type': 'application/json', ...authHeaders() },
-		body: JSON.stringify({ url, token })
+		body: JSON.stringify({ enabled })
 	});
+	if (!res.ok) throw new Error('Failed to update built-in runner setting');
+	return res.json();
+}
+
+export async function fetchNodeSecret() {
+	const res = await fetch(`${API_BASE}/runners/node-secret`, { headers: authHeaders() });
+	if (!res.ok) return { nodeSecret: null };
+	return res.json();
+}
+
+export async function regenerateNodeSecret() {
+	const res = await fetch(`${API_BASE}/runners/node-secret/regenerate`, {
+		method: 'POST',
+		headers: authHeaders()
+	});
+	if (!res.ok) throw new Error('Failed to regenerate the node secret');
 	return res.json();
 }

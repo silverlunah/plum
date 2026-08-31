@@ -19,6 +19,7 @@ const { SOCKET_EVENTS } = require('../constants/socketEvents');
 const { JOB_STATUS, REPORT_STATUS } = require('../constants/jobStatus');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { getTestSuites } = require('./testService');
+const { resolveTestsRoot, loadProjectEnv } = require('../lib/testsRoot');
 const { readCucumberReportFile } = require('../lib/reportFilename');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
@@ -110,6 +111,7 @@ function makeSyntheticFailReport(laneName, testIds, reason) {
 // reports/cucumber_report.json is never contended.
 function spawnBuiltInAttempt({
 	runId,
+	projectId,
 	laneId,
 	tag,
 	workers,
@@ -125,12 +127,16 @@ function spawnBuiltInAttempt({
 
 		const env = {
 			...process.env,
+			...loadProjectEnv(projectId),
+			IS_HEADLESS: 'true', // server runs have no display — never headed
 			TAG: tag,
 			TRIGGER: TRIGGER_REMOTE,
 			BROWSER: browser,
 			REPORT_RUNNERS: String(workers),
 			PLUM_MODE: PLUM_MODE_NODE,
-			PLUM_SS_DIR: ssDir
+			PLUM_SS_DIR: ssDir,
+			TESTS_ROOT: resolveTestsRoot(projectId),
+			PLUM_PROJECT_ID: String(projectId)
 		};
 		if (Number(workers) > 1) env.PARALLEL = String(workers);
 		if (testRunId) env.TEST_RUN_ID = testRunId;
@@ -161,7 +167,7 @@ function spawnBuiltInAttempt({
 
 async function runBuiltIn(run, io, emit) {
 	const startedAt = Date.now();
-	const { maxRetries } = await settingsService.getProject();
+	const { maxRetries } = await settingsService.getProject(run.projectId);
 	const laneId = BUILT_IN_RUNNER_ID;
 
 	let logBuffer = '';
@@ -179,6 +185,7 @@ async function runBuiltIn(run, io, emit) {
 		spawnAttempt: async (tagOverride) => {
 			const { code, raw } = await spawnBuiltInAttempt({
 				runId: run.id,
+				projectId: run.projectId,
 				laneId,
 				tag: tagOverride ?? run.tag,
 				workers: run.workers,
@@ -202,9 +209,11 @@ async function runBuiltIn(run, io, emit) {
 	if (cancelled) return { code: CANCEL_CODE, reportId: null };
 
 	const report = await reportService.saveReport({
+		projectId: run.projectId,
 		rawCucumberJson: rawJson,
 		tags: run.tag,
 		triggerType: run.triggerType,
+		startedBy: run.startedBy ?? null,
 		workerCount: run.workers,
 		browser: run.browser,
 		testRunId: run.testRunId ?? null,
@@ -224,7 +233,7 @@ async function runBuiltIn(run, io, emit) {
 
 async function runDistributed(run, io, emit, laneInfos, chunks) {
 	const startedAt = Date.now();
-	const { maxRetries } = await settingsService.getProject();
+	const { maxRetries } = await settingsService.getProject(run.projectId);
 
 	emit(SOCKET_EVENTS.BG_RUN_LANES_INIT, {
 		lanes: laneInfos.map((l, i) => ({ id: l.id, name: l.name, testCount: chunks[i].length }))
@@ -254,12 +263,14 @@ async function runDistributed(run, io, emit, laneInfos, chunks) {
 	if (isCancelled(run.id)) return { code: CANCEL_CODE, reportId: null };
 
 	const saved = await reportService.saveCombinedReport({
+		projectId: run.projectId,
 		reports: collectedReports,
 		runners: laneInfos,
 		workers: run.workers,
 		overallCode,
 		tag: run.tag,
 		triggerType: run.triggerType,
+		startedBy: run.startedBy ?? null,
 		browser: run.browser,
 		testRunId: run.testRunId ?? null,
 		laneLogs,
@@ -285,6 +296,7 @@ function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
 			? (currentTag) =>
 					spawnBuiltInAttempt({
 						runId: run.id,
+						projectId: run.projectId,
 						laneId,
 						tag: currentTag,
 						workers: run.workers,
@@ -304,6 +316,7 @@ function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
 						runnerService.dispatchAndPoll(
 							laneId,
 							{
+								projectId: run.projectId,
 								tags: currentTag,
 								browser: run.browser,
 								workers: run.workers,
@@ -352,6 +365,7 @@ async function maybeNotify(run, report) {
 	if (!report || (!run.notifyDiscord && !run.notifySlack)) return;
 	try {
 		await notificationService.send({
+			projectId: run.projectId,
 			jobName: run.label,
 			status: report.status,
 			content: report.content,
@@ -371,7 +385,13 @@ async function maybeNotify(run, report) {
 // can re-dispatch a persisted row after a server restart.
 async function execute(run, io) {
 	handles(run.id); // register before any await so an early cancel is seen
-	const emit = (event, extra) => io && io.emit(event, { runId: run.id, ...extra });
+
+	// Log / rrweb streams (app output, DOM recordings) go only to this run's
+	// project room, never the global broadcast.
+	const roomIo = io
+		? { emit: (event, payload) => io.to(`project:${run.projectId}`).emit(event, payload) }
+		: null;
+	const emit = (event, extra) => roomIo && roomIo.emit(event, { runId: run.id, ...extra });
 
 	// Drop runner ids that no longer exist — a stale selection or a runner
 	// deleted while this job sat in the queue must not wedge it.
@@ -383,20 +403,27 @@ async function execute(run, io) {
 		return { code: 0, reportId: null, note: 'Target runner no longer exists — run skipped.' };
 	}
 
-	emit(SOCKET_EVENTS.BG_RUN_START, {
-		kind: run.kind,
-		label: run.label,
-		meta: {
-			tag: run.tag,
-			workers: run.workers,
-			browser: run.browser,
-			startedBy: run.startedBy ?? null
-		}
-	});
+	// Coarse start signal stays global for the cross-project run bar; the client
+	// redacts it for projects the viewer can't open.
+	if (io) {
+		io.emit(SOCKET_EVENTS.BG_RUN_START, {
+			runId: run.id,
+			projectId: run.projectId,
+			projectName: run.projectName ?? '',
+			kind: run.kind,
+			label: run.label,
+			meta: {
+				tag: run.tag,
+				workers: run.workers,
+				browser: run.browser,
+				startedBy: run.startedBy ?? null
+			}
+		});
+	}
 
 	try {
 		const isSingleBuiltIn = validated.length === 1 && validated[0] === BUILT_IN_RUNNER_ID;
-		if (isSingleBuiltIn) return await runBuiltIn(run, io, emit);
+		if (isSingleBuiltIn) return await runBuiltIn(run, roomIo, emit);
 
 		const allIds = getTestIdsForTag(run.tag);
 		const chunks = chunkTests(allIds, validated.length);
@@ -414,7 +441,7 @@ async function execute(run, io) {
 				return { id, name: r?.name ?? id, dbId: r?.id ?? null };
 			})
 		);
-		return await runDistributed(run, io, emit, laneInfos, chunks);
+		return await runDistributed(run, roomIo, emit, laneInfos, chunks);
 	} finally {
 		inflight.delete(run.id);
 	}

@@ -4,7 +4,7 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-import { execSync, spawn } from 'child_process';
+import { execSync, execFileSync, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -38,6 +38,8 @@ function createEnvFile() {
 	}
 
 	const envContent = `BASE_URL=https://www.saucedemo.com/v1/
+# IS_HEADLESS only affects local \`plum run-test\`. Set it false to watch the
+# browser while debugging. Server and node runs always force headless (no display).
 IS_HEADLESS=false
 `;
 
@@ -127,6 +129,24 @@ const serverConfigLib = () => require(path.join(backendLib, 'serverConfig.js'));
 const nodeRegisterLib = () => require(path.join(backendLib, 'nodeRegister.js'));
 const runnerProcessLib = () => require(path.join(backendLib, 'runnerProcess.js'));
 const globalRegistryLib = () => require(path.join(backendLib, 'globalRegistry.js'));
+const bootServiceLib = () => require(path.join(backendLib, 'bootService.js'));
+
+// A real secret is one hex/base64 line — drop a stray license header (the
+// add-license bug used to prepend one to persisted secrets / node configs).
+function cleanSecret(v) {
+	if (!v) return null;
+	const last = String(v)
+		.split(/\r?\n/)
+		.map((l) =>
+			l
+				.trim()
+				.replace(/^\/\*|\*\/$/g, '')
+				.trim()
+		)
+		.filter(Boolean)
+		.pop();
+	return last && /^[A-Za-z0-9+/=_-]{16,}$/.test(last) ? last : null;
+}
 
 /* -----------------------------------------------------
  *                 Interactive prompts
@@ -218,14 +238,12 @@ async function configureServer({ force }) {
 	const cfg = loadServerConfig(cwd);
 
 	const overrides = {
-		headless: getFlag(args, '--headless'),
 		mode: getFlag(args, '--mode'),
 		backendPort: getFlag(args, '--backend-port'),
 		frontendPort: getFlag(args, '--frontend-port'),
 		apiUrl: getFlag(args, '--api-url'),
 		uiUrl: getFlag(args, '--ui-url')
 	};
-	if (overrides.headless !== undefined) cfg.headless = overrides.headless === 'true';
 	if (overrides.mode !== undefined) cfg.mode = overrides.mode;
 	if (overrides.backendPort !== undefined) cfg.backendPort = overrides.backendPort;
 	if (overrides.frontendPort !== undefined) cfg.frontendPort = overrides.frontendPort;
@@ -233,7 +251,6 @@ async function configureServer({ force }) {
 	if (overrides.uiUrl !== undefined) cfg.uiUrl = overrides.uiUrl;
 
 	const hasFlags = anyFlags(args, [
-		'--headless',
 		'--mode',
 		'--backend-port',
 		'--frontend-port',
@@ -291,13 +308,6 @@ async function configureServer({ force }) {
 			cfg.apiUrl = `http://localhost:${cfg.backendPort}`;
 			cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
 		}
-
-		const headless = await clack.confirm({
-			message: 'Run browsers headless?',
-			initialValue: cfg.headless
-		});
-		if (clack.isCancel(headless)) cancelAndExit();
-		cfg.headless = headless;
 	} else {
 		if (!cfg.mode) cfg.mode = 'local';
 		if (!cfg.apiUrl) cfg.apiUrl = `http://localhost:${cfg.backendPort}`;
@@ -309,21 +319,35 @@ async function configureServer({ force }) {
 	return cfg;
 }
 
+// Copies the scaffold (test dirs + .gitignore, .vscode, README, .env.example)
+// into projects/<slug>/tests/. `overwrite: false` makes it a safe fill-in — an
+// operator's edited files and extra tests are left untouched, missing ones added.
+function scaffoldProjectDir(testsDir) {
+	fse.copySync(scaffoldTestsPath, testsDir, { overwrite: false, errorOnExist: false });
+	const env = path.join(testsDir, '.env');
+	if (!fs.existsSync(env)) fs.copyFileSync(path.join(testsDir, '.env.example'), env);
+}
+
 function applyServerConfig(cfg) {
 	const { writeEnvFile, buildOverrideYaml } = serverConfigLib();
 	const cwd = process.cwd();
-	writeEnvFile(cwd, cfg);
+	// The whole ./projects tree is bind-mounted; the backend fills in each
+	// projects/<slug>/tests/ folder itself, so the dir just has to exist.
+	fs.mkdirSync(path.join(cwd, 'projects'), { recursive: true });
+	writeEnvFile(cwd);
 	copyEnvFile();
 	mergeUserPlugins();
-	const testsAbs = path.resolve(cwd, 'tests').replace(/\\/g, '/');
-	const reportsAbs = path.resolve(cwd, 'reports').replace(/\\/g, '/');
+	const testsDir = path.join(cwd, 'tests');
+	const testsAbs = fs.existsSync(testsDir) ? testsDir.replace(/\\/g, '/') : null;
 	fs.writeFileSync(
 		overrideFilePath,
 		buildOverrideYaml({
 			testsAbs,
-			reportsAbs,
+			reportsAbs: path.resolve(cwd, 'reports').replace(/\\/g, '/'),
+			projectsAbs: path.join(cwd, 'projects').replace(/\\/g, '/'),
 			backendPort: cfg.backendPort,
-			apiUrl: cfg.apiUrl
+			apiUrl: cfg.apiUrl,
+			plumVersion: readPlumVersion()
 		}),
 		'utf8'
 	);
@@ -385,51 +409,13 @@ async function runFirstUserSetup(apiBase, uiUrl) {
 	let needsSetup = false;
 	try {
 		const res = await fetchWithTimeout(`${apiBase}/auth/needs-setup`);
-		const data = await res.json();
-		needsSetup = data.needsSetup;
+		needsSetup = (await res.json()).needsSetup;
 	} catch {}
 
-	if (!needsSetup) return;
-
-	if (!interactiveAllowed()) {
+	if (needsSetup) {
 		clack.log.info(
-			`No users found. Open ${pc.cyan(`${uiUrl}/setup`)} to create your first account.`
+			`Open ${pc.cyan(`${uiUrl}/setup`)} to create your organization, first project, and admin account.`
 		);
-		return;
-	}
-
-	clack.log.info('No users found — create your first account to get started.');
-
-	const name = await clack.text({ message: 'Your name', placeholder: 'Jane Smith' });
-	if (clack.isCancel(name)) {
-		clack.log.warn('Skipped. Create a user at /setup in the UI.');
-		return;
-	}
-	const email = await clack.text({ message: 'Email address', placeholder: 'jane@example.com' });
-	if (clack.isCancel(email)) {
-		clack.log.warn('Skipped. Create a user at /setup in the UI.');
-		return;
-	}
-	const password = await clack.password({ message: 'Password (min 8 characters)' });
-	if (clack.isCancel(password)) {
-		clack.log.warn('Skipped. Create a user at /setup in the UI.');
-		return;
-	}
-
-	try {
-		const res = await fetchWithTimeout(`${apiBase}/auth/setup`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ name, email, password })
-		});
-		if (res.ok) {
-			clack.log.success(`Account created for ${email}. You can now log in.`);
-		} else {
-			const err = await res.json();
-			clack.log.error(`Failed to create account: ${err.error ?? 'unknown error'}`);
-		}
-	} catch (e) {
-		clack.log.error(`Failed to create account: ${e.message}`);
 	}
 }
 
@@ -499,7 +485,19 @@ async function serverStart() {
 
 	clack.log.info(`UI:  ${pc.cyan(cfg.uiUrl)}`);
 	clack.log.info(`API: ${pc.cyan(cfg.apiUrl)}`);
+	printNodeSecretHint();
 	clack.outro(pc.green('Plum is running. Use "plum server stop" to shut down.'));
+}
+
+// A node on another machine needs this to register; one here reads it itself.
+function printNodeSecretHint() {
+	const secret = readNodeSecretFromPrimary();
+	if (secret) {
+		clack.log.info(
+			`Runner nodes: \`plum manage-nodes\` here, or \`plum node start\` elsewhere with\n` +
+				`  PLUM_NODE_SECRET=${pc.dim(secret)}`
+		);
+	}
 }
 
 async function serverRestart() {
@@ -524,6 +522,7 @@ async function serverRestart() {
 	}
 	clack.log.info(`UI:  ${pc.cyan(cfg.uiUrl)}`);
 	clack.log.info(`API: ${pc.cyan(cfg.apiUrl)}`);
+	printNodeSecretHint();
 	clack.outro(pc.green('Server restarted.'));
 }
 
@@ -740,6 +739,14 @@ async function configureNode({ force, name: nameArg }) {
 	let browser = getFlag(args, '--browser') ?? saved.browser ?? 'chromium';
 	let token = getFlag(args, '--token') ?? process.env.NODE_TOKEN ?? saved.token ?? generateToken();
 	let url = getFlag(args, '--url') ?? saved.url ?? '';
+	// Read from a co-located server; a remote node needs it passed in. cleanSecret
+	// drops a stray license header that the old add-license bug prepended.
+	let nodeSecret =
+		cleanSecret(getFlag(args, '--node-secret')) ||
+		cleanSecret(process.env.PLUM_NODE_SECRET) ||
+		cleanSecret(saved.nodeSecret) ||
+		cleanSecret(readNodeSecretFromPrimary()) ||
+		'';
 
 	if (interactive) {
 		const modeVal = await clack.select({
@@ -791,6 +798,16 @@ async function configureNode({ force, name: nameArg }) {
 			url = `http://host.docker.internal:${port}`;
 			clack.log.info(`This node will register with the server as ${pc.cyan(url)}`);
 		}
+
+		// Couldn't read it from a co-located server — ask, whatever the mode.
+		if (!nodeSecret) {
+			const s = await clack.text({
+				message: 'PLUM_NODE_SECRET — Settings → Runners → Registration secret (or `plum server`)',
+				placeholder: 'a1b2c3…'
+			});
+			if (clack.isCancel(s)) cancelAndExit();
+			nodeSecret = cleanSecret(s) || '';
+		}
 	}
 
 	// Flag path with no --url: fall back to the LAN-IP guess (interactive already set it).
@@ -807,16 +824,17 @@ async function configureNode({ force, name: nameArg }) {
 		mode,
 		url,
 		token,
+		nodeSecret,
 		primary,
 		browser,
 		port,
 		pid: saved.pid ?? null
 	});
 	globalRegistryLib().registerInstall('node', nodeHome(name));
-	return { primary, port, browser, token, name, url, mode };
+	return { primary, port, browser, token, nodeSecret, name, url, mode };
 }
 
-async function registerNode({ primary, name, url, token, browser, port }) {
+async function registerNode({ primary, name, url, token, nodeSecret, browser, port }) {
 	const { registerWithPrimary, loadNodeByName, saveNodeByName } = nodeRegisterLib();
 	let registeredId = null;
 
@@ -824,7 +842,14 @@ async function registerNode({ primary, name, url, token, browser, port }) {
 		const s = clack.spinner();
 		s.start(`Registering "${name}" with primary at ${primary}...`);
 		try {
-			const { id, reused } = await registerWithPrimary({ primary, name, url, token, browser });
+			const { id, reused } = await registerWithPrimary({
+				primary,
+				name,
+				url,
+				token,
+				nodeSecret,
+				browser
+			});
 			registeredId = id;
 			s.stop(
 				pc.green(reused ? `✓ Updated "${name}" on primary` : `✓ Registered "${name}" on primary`)
@@ -842,6 +867,7 @@ async function registerNode({ primary, name, url, token, browser, port }) {
 		name,
 		url,
 		token,
+		nodeSecret,
 		primary,
 		browser,
 		port
@@ -897,11 +923,45 @@ async function bringNodeUp(cfg) {
 	}
 }
 
+// undefined = leave the boot entry alone (the boot service itself re-runs
+// `node start` with no flag — it must not re-prompt or reinstall).
+async function resolveBootChoice(args) {
+	if (anyFlags(args, ['--boot'])) return true;
+	if (anyFlags(args, ['--no-boot'])) return false;
+	if (!interactiveAllowed()) return undefined;
+	const v = await clack.confirm({
+		message: 'Start this node automatically when the machine boots?',
+		initialValue: false
+	});
+	if (clack.isCancel(v)) return undefined;
+	return v;
+}
+
+async function applyBootChoice(name, choice) {
+	if (choice === undefined) return;
+	const { installNodeBoot, removeNodeBoot } = bootServiceLib();
+	if (choice) {
+		const res = installNodeBoot(name);
+		if (res.ok) {
+			clack.log.success(`"${name}" will start on boot.`);
+			if (res.hint) clack.log.info(res.hint);
+		} else {
+			clack.log.warn(`Couldn't set up start-on-boot: ${res.reason}`);
+		}
+	} else {
+		removeNodeBoot(name);
+		clack.log.info(`"${name}" will not start on boot.`);
+	}
+}
+
 async function nodeStart({ reconfig, name }) {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node  ')));
 	migrateLegacyNodes();
 	const cfg = await configureNode({ force: reconfig, name });
 	await bringNodeUp(cfg);
+	if (!process.exitCode) {
+		await applyBootChoice(cfg.name, await resolveBootChoice(process.argv.slice(3)));
+	}
 }
 
 async function nodeRestart({ name: nameArg }) {
@@ -965,11 +1025,13 @@ async function nodeList() {
 		clack.log.info('No nodes on this machine — add one with `plum node start <name>`.');
 		return;
 	}
+	const { nodeBootStatus } = bootServiceLib();
 	for (const n of names) {
 		const c = loadNodeByName(n);
 		const running = c.id && statusOf(String(c.id)) === 'running';
+		const boot = nodeBootStatus(n) === 'enabled' ? pc.dim(' ⏻ boot') : '';
 		console.log(
-			`${running ? pc.green('●') : pc.dim('○')} ${n.padEnd(16)} ${pc.dim((c.url || '') + '  :' + (c.port || '?'))}`
+			`${running ? pc.green('●') : pc.dim('○')} ${n.padEnd(16)} ${pc.dim((c.url || '') + '  :' + (c.port || '?'))}${boot}`
 		);
 	}
 }
@@ -989,10 +1051,12 @@ async function nodeDelete({ name: nameArg }) {
 	if (cfg.port) await killPort(Number(cfg.port));
 
 	if (cfg.id && cfg.primary) {
+		const secret =
+			process.env.PLUM_NODE_SECRET || cfg.nodeSecret || readNodeSecretFromPrimary() || '';
 		try {
 			const res = await fetch(`${cfg.primary.replace(/\/$/, '')}/runners/${cfg.id}`, {
 				method: 'DELETE',
-				headers: { Authorization: `Bearer ${cfg.token}` },
+				headers: secret ? { Authorization: `Bearer ${secret}` } : {},
 				signal: AbortSignal.timeout(10000)
 			});
 			clack.log[res.ok ? 'success' : 'warn'](
@@ -1003,6 +1067,7 @@ async function nodeDelete({ name: nameArg }) {
 		}
 	}
 
+	bootServiceLib().removeNodeBoot(target);
 	deleteNodeByName(target);
 	unregisterInstall('node', nodeHome(target));
 	clack.outro(pc.green(`Deleted "${target}" — process, local config, and primary registration.`));
@@ -1016,40 +1081,31 @@ async function nodeReconfig({ name }) {
 	clack.outro(pc.dim(`Saved. Run \`plum node restart ${cfg.name}\` to apply.`));
 }
 
-// stop/restart/delete on the /runners API want a registered runner's token
-// (runnerOrAdmin). On the primary host those tokens sit in the backend's DB —
-// pull one straight from the running container so the menu can authenticate
-// without a node's .plum-node.json in the current folder. Best-effort: on a
-// node-only box (no server install / no Docker) this no-ops and the menu falls
-// back to a local .plum-node.json.
-function readRunnerTokenFromPrimary() {
+// Reads PLUM_NODE_SECRET from the primary's container (env override, else the
+// generated reports/.plum-node-secret) so a co-located node and the menu need no
+// setup. null on a node-only box — the caller then needs --node-secret.
+function readNodeSecretFromPrimary() {
 	const { getInstalls } = globalRegistryLib();
-	const script =
-		"require('./services/prisma').runner.findFirst({select:{token:true}})" +
-		".then(r=>{process.stdout.write(r&&r.token||'');process.exit(0)}).catch(()=>process.exit(1))";
 	for (const dir of getInstalls('server')) {
 		try {
-			const token = execSync(`docker compose exec -T backend node -e "${script}"`, {
-				cwd: dir,
-				stdio: ['ignore', 'pipe', 'ignore'],
-				timeout: 15000
-			})
+			const secret = execSync(
+				'docker compose exec -T backend sh -c "printenv PLUM_NODE_SECRET || cat reports/.plum-node-secret"',
+				{ cwd: dir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 }
+			)
 				.toString()
 				.trim();
-			if (token) return token;
+			if (secret) return secret;
 		} catch {}
 	}
 	return null;
 }
 
-async function openManageNodesMenu(primaryUrl) {
+async function openManageNodesMenu(primaryUrl, nodeSecret) {
 	const manageScript = path.join(plumRoot, 'backend', 'scripts', 'manage-nodes.mjs');
 	const apiUrl = primaryUrl || 'http://localhost:3001';
 	const env = { ...process.env, PLUM_API_URL: apiUrl };
-	if (!env.PLUM_RUNNER_TOKEN) {
-		const token = readRunnerTokenFromPrimary();
-		if (token) env.PLUM_RUNNER_TOKEN = token;
-	}
+	const resolved = nodeSecret || env.PLUM_NODE_SECRET || readNodeSecretFromPrimary();
+	if (resolved) env.PLUM_NODE_SECRET = resolved;
 	const menu = spawn(process.execPath, [manageScript], { stdio: 'inherit', env });
 	await new Promise((resolve) => menu.on('exit', resolve));
 }
@@ -1457,7 +1513,7 @@ switch (command) {
 					'  delete <name>    stop it, delete its config, unregister it from the primary',
 					'  reconfig [name]  re-enter settings and re-register, without starting',
 					'',
-					'  Options for start: --mode <local|production> --primary <url> --url <url> --port <n> --token <s> --browser <chromium|firefox>',
+					'  Options for start: --mode <local|production> --primary <url> --url <url> --port <n> --token <s> --node-secret <s> --browser <chromium|firefox> --boot | --no-boot',
 					''
 				].join('\n')
 			);
@@ -1506,13 +1562,42 @@ switch (command) {
 			process.env.PLUM_API_URL ??
 			firstNode?.primary ??
 			'http://localhost:3001';
-		await openManageNodesMenu(primaryUrl);
+		await openManageNodesMenu(primaryUrl, getFlag(process.argv.slice(3), '--node-secret'));
+		break;
+	}
+
+	case 'project': {
+		const { slugify } = require(path.join(plumRoot, 'backend', 'lib', 'slugify'));
+		const name = process.argv.slice(4).join(' ').trim();
+		if (process.argv[3] !== 'init' || !name) {
+			console.log('Usage: plum project init "<project name>"');
+			console.log('  Use the exact name from Settings → Projects. The server normally');
+			console.log('  creates this folder for you — run this only to re-create it.');
+			break;
+		}
+		const slug = slugify(name);
+		if (!slug) {
+			console.error('✗ Project name needs at least one letter or number (a–z, 0–9).');
+			process.exit(1);
+		}
+		const testsDir = path.join(process.cwd(), 'projects', slug, 'tests');
+		const exists = fs.existsSync(path.join(testsDir, 'features'));
+		scaffoldProjectDir(testsDir);
+		console.log(
+			exists
+				? `projects/${slug}/tests/ already exists — filled in any missing files.`
+				: `✓ Scaffolded projects/${slug}/tests/`
+		);
+		console.log('');
+		console.log('Next:');
+		console.log(`  1. Set the app URL:  nano projects/${slug}/tests/.env   # BASE_URL=...`);
+		console.log(`  2. Merge new tests straight into projects/${slug}/tests/ — no restart.`);
 		break;
 	}
 
 	case 'create-step': {
 		const createStepScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-step.mjs');
-		execSync(`node "${createStepScript}"`, {
+		execFileSync(process.execPath, [createStepScript], {
 			cwd: process.cwd(),
 			stdio: 'inherit',
 			env: {
@@ -1525,7 +1610,7 @@ switch (command) {
 
 	case 'create-test': {
 		const createTestScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-test.mjs');
-		execSync(`node "${createTestScript}"`, {
+		execFileSync(process.execPath, [createTestScript], {
 			cwd: process.cwd(),
 			stdio: 'inherit',
 			env: {
@@ -1542,7 +1627,6 @@ switch (command) {
 		console.log('  --version, -v        Print the installed Plum version');
 		console.log('  init                 Set up a new Plum project');
 		console.log('  server start         Start the full UI stack (interactive)');
-		console.log('    --headless <bool>  Run browsers headless (true/false)');
 		console.log('    --mode <m>         local | production (default: local)');
 		console.log('    --backend-port <n> Host port for the backend/API (default: 3001)');
 		console.log('    --frontend-port <n> Host port for the UI (default: 3002)');
@@ -1567,7 +1651,11 @@ switch (command) {
 		);
 		console.log('    --port <n>         Local HTTP port the node listens on (default: 9001)');
 		console.log('    --token <secret>   Auth token (auto-generated + saved if omitted)');
+		console.log(
+			'    --node-secret <s> Primary’s PLUM_NODE_SECRET (co-located: read automatically)'
+		);
 		console.log('    --browser <name>   chromium | firefox (default: chromium)');
+		console.log('    --boot | --no-boot Start (or stop starting) this node when the machine boots');
 		console.log('  node list            List this machine’s nodes and their status');
 		console.log('  node restart [name]  Stop, refresh deps, and restart a node');
 		console.log('  node stop [name]     Stop a node');
@@ -1580,6 +1668,9 @@ switch (command) {
 		console.log('  manage-nodes         Open the node management menu');
 		console.log(
 			'    --primary <url>    Primary server URL (default: saved config or localhost:3001)'
+		);
+		console.log(
+			'    --node-secret <s> PLUM_NODE_SECRET (auto-read on the server host; else prompts)'
 		);
 		console.log('  run-test             Run tests locally without Docker');
 		console.log('    @tag               Run only tests matching a tag');

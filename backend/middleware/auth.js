@@ -5,13 +5,12 @@
 
 const { AUTH_SCHEME } = require('../lib/authHeader');
 
-/**
- * Bearer-token auth guard for node-mode API routes.
- * Passes through when NODE_TOKEN is not configured (open/dev environments).
- */
+// Fails closed: these routes run arbitrary test code, so no NODE_TOKEN = no access.
 function authGuard(req, res, next) {
 	const nodeToken = process.env.NODE_TOKEN;
-	if (!nodeToken) return next();
+	if (!nodeToken) {
+		return res.status(503).json({ error: 'Node runner is not configured (missing NODE_TOKEN)' });
+	}
 	const auth = req.headers.authorization;
 	if (!auth || auth !== `${AUTH_SCHEME.BEARER} ${nodeToken}`) {
 		return res.status(401).json({ error: 'Unauthorized' });

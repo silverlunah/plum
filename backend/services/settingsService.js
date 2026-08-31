@@ -5,67 +5,83 @@
 
 const crypto = require('crypto');
 const prisma = require('./prisma');
+const activityService = require('./activityService');
+const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 
-// Raw accessor — includes secret fields (backupS3SecretKey, mcpKey). Only for
-// internal use by this file's own functions and other trusted internal
-// callers (e.g. backup.routes.js needs the real S3 secret for a connection
-// test). Never expose this return value directly over HTTP.
-const getProjectRaw = async () => {
-	let project = await prisma.project.findUnique({ where: { id: 1 } });
-	if (!project) {
-		project = await prisma.project.create({ data: { id: 1 } });
-	}
-	return project;
+const getProjectRaw = async (projectId) => {
+	return prisma.project.findUnique({ where: { id: projectId } });
 };
 
-// Public accessor — strips secret fields. This is what routes should use.
-const getProject = async () => {
-	const { backupS3SecretKey, mcpKey, ...safe } = await getProjectRaw();
-	return safe;
+// Non-secret columns only — the raw row also carries the webhook URLs.
+const projectPublicSelect = {
+	id: true,
+	name: true,
+	logoUrl: true,
+	timezone: true,
+	baseUrl: true,
+	maxRetries: true
 };
 
-const updateProject = async ({ name, logoUrl, timezone, maxRetries }) => {
-	const data = {
-		name: name ?? '',
-		logoUrl: logoUrl ?? '',
-		...(timezone !== undefined && { timezone }),
-		...(maxRetries !== undefined && { maxRetries: Number(maxRetries) || 0 })
-	};
-	const project = await prisma.project.upsert({
-		where: { id: 1 },
-		create: { id: 1, ...data },
-		update: data
+// The single organisation. Raw accessor includes backupS3SecretKey — only for
+// internal callers (e.g. backup.routes.js needs the real secret for a
+// connection test). Never expose it directly over HTTP.
+const getOrgRaw = async () => {
+	return prisma.organization.findFirst({ orderBy: { id: 'asc' } });
+};
+
+const getProject = async (projectId) => {
+	return prisma.project.findUnique({ where: { id: projectId }, select: projectPublicSelect });
+};
+
+const updateProject = async (projectId, { name, logoUrl, timezone, baseUrl, maxRetries }) => {
+	const project = await prisma.project.update({
+		where: { id: projectId },
+		data: {
+			...(name !== undefined && { name }),
+			...(logoUrl !== undefined && { logoUrl }),
+			...(baseUrl !== undefined && { baseUrl }),
+			...(timezone !== undefined && { timezone }),
+			...(maxRetries !== undefined && { maxRetries: Number(maxRetries) || 0 })
+		},
+		select: projectPublicSelect
 	});
 
 	if (timezone !== undefined) {
-		// Cron jobs read the timezone at schedule time, so a change here must
-		// re-schedule everything for the new offset to take effect immediately.
+		// Cron jobs read the timezone at schedule time. reload() re-schedules every
+		// project's jobs — coarse, but there's no per-project reload.
 		await require('./cronService').reload();
-		await require('./backupCronService').reload();
 	}
 
-	const { backupS3SecretKey, mcpKey, ...safe } = project;
-	return safe;
+	await activityService.record(ACTIVITY_ACTION.PROJECT_SETTINGS_UPDATE, {
+		projectId,
+		target: { type: 'project', id: projectId, label: project.name }
+	});
+	return project;
 };
 
-const getTestPrefixes = async () => {
-	const project = await getProjectRaw();
+const getTestPrefixes = async (projectId) => {
+	const project = await getProjectRaw(projectId);
 	return { testCasePrefix: project.testCasePrefix, testSuitePrefix: project.testSuitePrefix };
 };
 
-const updateTestPrefixes = async ({ testCasePrefix, testSuitePrefix }) => {
-	return prisma.project.upsert({
-		where: { id: 1 },
-		create: { id: 1 },
-		update: {
+const updateTestPrefixes = async (projectId, { testCasePrefix, testSuitePrefix }) => {
+	const project = await prisma.project.update({
+		where: { id: projectId },
+		data: {
 			...(testCasePrefix !== undefined && { testCasePrefix }),
 			...(testSuitePrefix !== undefined && { testSuitePrefix })
 		}
 	});
+	await activityService.record(ACTIVITY_ACTION.PROJECT_PREFIXES_UPDATE, {
+		projectId,
+		target: { type: 'project', id: projectId, label: project.name },
+		metadata: { testCasePrefix: project.testCasePrefix, testSuitePrefix: project.testSuitePrefix }
+	});
+	return project;
 };
 
-const getWebhooks = async () => {
-	const project = await getProjectRaw();
+const getWebhooks = async (projectId) => {
+	const project = await getProjectRaw(projectId);
 	return {
 		discordWebhookUrl: project.discordWebhookUrl ?? '',
 		slackWebhookUrl: project.slackWebhookUrl ?? '',
@@ -73,36 +89,50 @@ const getWebhooks = async () => {
 	};
 };
 
-const updateWebhooks = async ({ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl }) => {
-	return prisma.project.upsert({
-		where: { id: 1 },
-		create: { id: 1 },
-		update: {
+const updateWebhooks = async (
+	projectId,
+	{ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl }
+) => {
+	const project = await prisma.project.update({
+		where: { id: projectId },
+		data: {
 			discordWebhookUrl: discordWebhookUrl ?? '',
 			slackWebhookUrl: slackWebhookUrl ?? '',
 			notifyPublicUrl: notifyPublicUrl ?? ''
 		}
 	});
+	await activityService.record(ACTIVITY_ACTION.INTEGRATIONS_UPDATE, {
+		projectId,
+		target: { type: 'project', id: projectId, label: project.name },
+		metadata: {
+			discord: (discordWebhookUrl ?? '').length > 0,
+			slack: (slackWebhookUrl ?? '').length > 0,
+			ci: (notifyPublicUrl ?? '').length > 0
+		}
+	});
+	return project;
 };
 
 const getBackupConfig = async () => {
-	const project = await getProjectRaw();
+	const org = await getOrgRaw();
 	return {
-		backupEnabled: project.backupEnabled,
-		backupCron: project.backupCron,
-		backupS3Endpoint: project.backupS3Endpoint,
-		backupS3Region: project.backupS3Region,
-		backupS3Bucket: project.backupS3Bucket,
-		backupS3AccessKey: project.backupS3AccessKey,
-		backupS3SecretKeySet: project.backupS3SecretKey.length > 0,
-		backupS3Prefix: project.backupS3Prefix,
-		backupLastRunAt: project.backupLastRunAt,
-		backupLastStatus: project.backupLastStatus,
-		backupIncludeReports: project.backupIncludeReports
+		timezone: org.timezone,
+		backupEnabled: org.backupEnabled,
+		backupCron: org.backupCron,
+		backupS3Endpoint: org.backupS3Endpoint,
+		backupS3Region: org.backupS3Region,
+		backupS3Bucket: org.backupS3Bucket,
+		backupS3AccessKey: org.backupS3AccessKey,
+		backupS3SecretKeySet: org.backupS3SecretKey.length > 0,
+		backupS3Prefix: org.backupS3Prefix,
+		backupLastRunAt: org.backupLastRunAt,
+		backupLastStatus: org.backupLastStatus,
+		backupIncludeReports: org.backupIncludeReports
 	};
 };
 
 const updateBackupConfig = async ({
+	timezone,
 	backupEnabled,
 	backupCron,
 	backupS3Endpoint,
@@ -113,43 +143,125 @@ const updateBackupConfig = async ({
 	backupS3Prefix,
 	backupIncludeReports
 }) => {
-	const update = {
-		...(backupEnabled !== undefined && { backupEnabled }),
-		...(backupCron !== undefined && { backupCron }),
-		...(backupS3Endpoint !== undefined && { backupS3Endpoint }),
-		...(backupS3Region !== undefined && { backupS3Region }),
-		...(backupS3Bucket !== undefined && { backupS3Bucket }),
-		...(backupS3AccessKey !== undefined && { backupS3AccessKey }),
-		...(backupS3SecretKey && { backupS3SecretKey }),
-		...(backupS3Prefix !== undefined && { backupS3Prefix }),
-		...(backupIncludeReports !== undefined && { backupIncludeReports })
-	};
-	return prisma.project.upsert({
-		where: { id: 1 },
-		create: { id: 1, ...update },
-		update
+	const org = await getOrgRaw();
+	const updated = await prisma.organization.update({
+		where: { id: org.id },
+		data: {
+			...(timezone !== undefined && { timezone }),
+			...(backupEnabled !== undefined && { backupEnabled }),
+			...(backupCron !== undefined && { backupCron }),
+			...(backupS3Endpoint !== undefined && { backupS3Endpoint }),
+			...(backupS3Region !== undefined && { backupS3Region }),
+			...(backupS3Bucket !== undefined && { backupS3Bucket }),
+			...(backupS3AccessKey !== undefined && { backupS3AccessKey }),
+			...(backupS3SecretKey && { backupS3SecretKey }),
+			...(backupS3Prefix !== undefined && { backupS3Prefix }),
+			...(backupIncludeReports !== undefined && { backupIncludeReports })
+		}
 	});
+	await activityService.record(ACTIVITY_ACTION.BACKUP_CONFIG_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'backup', label: 'Backup configuration' },
+		metadata: { enabled: updated.backupEnabled, cron: updated.backupCron }
+	});
+	return updated;
 };
 
-const getMcpConfig = async () => {
-	const project = await getProjectRaw();
-	return { mcpKeySet: project.mcpKey.length > 0, mcpKey: project.mcpKey };
+// This member's own MCP key for this project. The full key is shown so it can be
+// copied; there's one per (project, user).
+const getMcpConfig = async (projectId, userId) => {
+	const row = await prisma.mcpKey.findUnique({
+		where: { projectId_userId: { projectId, userId } },
+		select: { key: true, createdAt: true }
+	});
+	return { mcpKeySet: !!row, mcpKey: row?.key ?? '', createdAt: row?.createdAt ?? null };
 };
 
-const generateMcpKey = async () => {
+const generateMcpKey = async (projectId, userId) => {
 	const key = crypto.randomBytes(32).toString('hex');
-	await prisma.project.upsert({
-		where: { id: 1 },
-		create: { id: 1, mcpKey: key },
-		update: { mcpKey: key }
+	await prisma.mcpKey.upsert({
+		where: { projectId_userId: { projectId, userId } },
+		create: { projectId, userId, key },
+		update: { key, createdAt: new Date() }
 	});
-	process.env.PLUM_MCP_KEY = key;
+	await activityService.record(ACTIVITY_ACTION.MCP_KEY_GENERATE, {
+		projectId,
+		target: { type: 'mcp_key', id: userId, label: 'MCP key' }
+	});
 	return { mcpKey: key };
+};
+
+const getActivityRetention = async () => {
+	const org = await getOrgRaw();
+	return { activityRetentionDays: org.activityRetentionDays };
+};
+
+const getReportRetention = async () => {
+	const org = await getOrgRaw();
+	return { reportRetentionDays: org.reportRetentionDays };
+};
+
+const updateReportRetention = async (days) => {
+	const org = await getOrgRaw();
+	const updated = await prisma.organization.update({
+		where: { id: org.id },
+		data: { reportRetentionDays: Math.max(0, Number(days) || 0) }
+	});
+	await activityService.record(ACTIVITY_ACTION.REPORT_RETENTION_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'report', label: 'Report retention' },
+		metadata: { days: updated.reportRetentionDays }
+	});
+	return { reportRetentionDays: updated.reportRetentionDays };
+};
+
+const getBuiltInRunnerEnabled = async () => {
+	const org = await getOrgRaw();
+	return { builtInRunnerEnabled: org.builtInRunnerEnabled };
+};
+
+const updateBuiltInRunnerEnabled = async (enabled) => {
+	const org = await getOrgRaw();
+	const updated = await prisma.organization.update({
+		where: { id: org.id },
+		data: { builtInRunnerEnabled: Boolean(enabled) }
+	});
+	await activityService.record(ACTIVITY_ACTION.NODE_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'node', label: 'Built-in runner' },
+		metadata: { enabled: updated.builtInRunnerEnabled }
+	});
+	return { builtInRunnerEnabled: updated.builtInRunnerEnabled };
+};
+
+const updateActivityRetention = async (days) => {
+	const org = await getOrgRaw();
+	const updated = await prisma.organization.update({
+		where: { id: org.id },
+		data: { activityRetentionDays: Math.max(0, Number(days) || 0) }
+	});
+	await activityService.record(ACTIVITY_ACTION.ACTIVITY_RETENTION_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'activity', label: 'Activity log retention' },
+		metadata: { days: updated.activityRetentionDays }
+	});
+	return { activityRetentionDays: updated.activityRetentionDays };
+};
+
+const revokeMcpKey = async (projectId, userId) => {
+	const { count } = await prisma.mcpKey.deleteMany({ where: { projectId, userId } });
+	if (count > 0) {
+		await activityService.record(ACTIVITY_ACTION.MCP_KEY_REVOKE, {
+			projectId,
+			target: { type: 'mcp_key', id: userId, label: 'MCP key' }
+		});
+	}
 };
 
 module.exports = {
 	getProject,
 	getProjectRaw,
+	getOrgRaw,
 	updateProject,
 	getTestPrefixes,
 	updateTestPrefixes,
@@ -158,5 +270,12 @@ module.exports = {
 	getBackupConfig,
 	updateBackupConfig,
 	getMcpConfig,
-	generateMcpKey
+	generateMcpKey,
+	revokeMcpKey,
+	getActivityRetention,
+	updateActivityRetention,
+	getReportRetention,
+	updateReportRetention,
+	getBuiltInRunnerEnabled,
+	updateBuiltInRunnerEnabled
 };

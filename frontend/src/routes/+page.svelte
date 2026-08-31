@@ -4,10 +4,12 @@
  -->
 
 <script>
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
 	import { slide } from 'svelte/transition';
 	import { fetchSuites } from '$lib/api/tests';
 	import { runnerConfig, triggerRun } from '$lib/stores/runner';
+	import { activeProjectId } from '$lib/stores/project';
 	import { COPY_TIMEOUT_MS } from '$lib/constants';
 	import { stagger } from '$lib/utils/format';
 	import { copyText } from '$lib/utils/clipboard';
@@ -18,6 +20,7 @@
 		HEADING,
 		SEARCH_PLACEHOLDER,
 		NO_SUITES_MESSAGE,
+		REPO_MANAGED_NOTE,
 		RUN_SUITE_LABEL,
 		OUTLINE_BADGE,
 		HIDE_LABEL,
@@ -74,9 +77,12 @@
 		}
 	}
 
-	// Loads once on mount — this page is static and only reflects new suites/tests
-	// on a manual browser refresh, not via a live auto-refresh.
-	onMount(loadSuites);
+	// Reactive, not onMount: after login the switcher sets the active project
+	// just after this mounts, and a fetch on the stale id would 403.
+	$: if (browser) {
+		$activeProjectId;
+		loadSuites();
+	}
 
 	function suiteIds(suite) {
 		return Array.isArray(suite.suiteId) ? suite.suiteId : [suite.suiteId];
@@ -398,6 +404,7 @@
 			</div>
 		{/each}
 	</div>
+	<p class="repo-note">{REPO_MANAGED_NOTE}</p>
 {/if}
 
 <style>
@@ -405,6 +412,15 @@
 		margin-bottom: 1.75rem;
 		padding-bottom: 1.5rem;
 		border-bottom: 1px solid var(--border);
+	}
+
+	.repo-note {
+		margin-top: 1.5rem;
+		padding-top: 1.25rem;
+		border-top: 1px solid var(--border);
+		font-size: 0.8125rem;
+		line-height: 1.5;
+		color: var(--text-muted);
 	}
 
 	.header-top {

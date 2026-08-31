@@ -18,7 +18,6 @@ const CONFIG_FILENAME = '.plum-server.json';
 
 function defaults() {
 	return {
-		headless: false,
 		// 'local' derives localhost URLs; 'production' takes operator-supplied ones.
 		mode: 'local',
 		backendPort: '3001',
@@ -35,51 +34,34 @@ function configPath(dir) {
 	return path.join(dir, CONFIG_FILENAME);
 }
 
-/** Seeds headless from an existing .env so the first-run prompt reflects it. */
-function readEnvSeed(dir) {
-	try {
-		const txt = fs.readFileSync(path.join(dir, '.env'), 'utf8');
-		const seed = {};
-		const headless = txt.match(/^IS_HEADLESS=(.*)$/m);
-		if (headless) seed.headless = headless[1].trim() === 'true';
-		return seed;
-	} catch {
-		return {};
-	}
-}
-
 function loadServerConfig(dir) {
-	const base = { ...defaults(), ...readEnvSeed(dir) };
 	try {
-		return { ...base, ...JSON.parse(fs.readFileSync(configPath(dir), 'utf8')) };
+		return { ...defaults(), ...JSON.parse(fs.readFileSync(configPath(dir), 'utf8')) };
 	} catch {
-		return base;
+		return defaults();
 	}
 }
 
 function saveServerConfig(dir, cfg) {
-	const { headless, mode, backendPort, frontendPort, apiUrl, uiUrl } = cfg;
+	const { mode, backendPort, frontendPort, apiUrl, uiUrl } = cfg;
 	fs.writeFileSync(
 		configPath(dir),
-		JSON.stringify({ headless, mode, backendPort, frontendPort, apiUrl, uiUrl }, null, 2) + '\n',
+		JSON.stringify({ mode, backendPort, frontendPort, apiUrl, uiUrl }, null, 2) + '\n',
 		'utf8'
 	);
 }
 
-/** Updates IS_HEADLESS in the root .env, preserving all other entries. */
-function writeEnvFile(dir, { headless }) {
+// Ensures IS_HEADLESS=false in the root .env (for local `plum run-test`), keeping
+// every other entry. Server and node runs force headless regardless of this.
+function writeEnvFile(dir) {
 	const envPath = path.join(dir, '.env');
 	let content = '';
 	try {
 		content = fs.readFileSync(envPath, 'utf8');
 	} catch {}
-	const line = `IS_HEADLESS=${headless ? 'true' : 'false'}`;
-	if (/^IS_HEADLESS=/m.test(content)) {
-		content = content.replace(/^IS_HEADLESS=.*/m, line);
-	} else {
-		content = content.endsWith('\n') ? content + line + '\n' : content + '\n' + line + '\n';
-	}
-	fs.writeFileSync(envPath, content, 'utf8');
+	if (/^IS_HEADLESS=/m.test(content)) return;
+	content = content && !content.endsWith('\n') ? content + '\n' : content;
+	fs.writeFileSync(envPath, content + 'IS_HEADLESS=false\n', 'utf8');
 }
 
 /**
@@ -92,14 +74,29 @@ function writeEnvFile(dir, { headless }) {
  * to already be taken. This override only adds volumes and tells the
  * frontend where to reach the backend via VITE_API_URL.
  */
-function buildOverrideYaml({ testsAbs, reportsAbs, backendPort, apiUrl }) {
+// The whole ./projects tree is mounted at /app/projects — the backend owns every
+// projects/<slug>/tests/ folder (creating them on project creation), so there's
+// nothing per-project to wire here. The legacy single `tests/` mount is added
+// only when that folder exists (a single-project install predating
+// multi-project) — a fresh install has none.
+function buildOverrideYaml({
+	testsAbs,
+	reportsAbs,
+	projectsAbs,
+	backendPort,
+	apiUrl,
+	plumVersion
+}) {
 	return (
 		[
 			'services:',
 			'  backend:',
+			'    environment:',
+			`      PLUM_VERSION: "${plumVersion || ''}"`,
 			'    volumes:',
 			`      - "${reportsAbs}:/app/reports"`,
-			`      - "${testsAbs}:/app/tests"`,
+			`      - "${projectsAbs}:/app/projects"`,
+			...(testsAbs ? [`      - "${testsAbs}:/app/tests"`] : []),
 			'  frontend:',
 			'    environment:',
 			`      VITE_API_URL: "${apiUrl || `http://localhost:${backendPort}`}"`

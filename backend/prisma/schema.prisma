@@ -23,7 +23,9 @@ model Runner {
 
 model CronJob {
   id             Int      @id @default(autoincrement())
-  taskName       String   @unique
+  projectId      Int
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskName       String
   cronExpression String
   tags           String
   workers        Int      @default(1)
@@ -37,19 +39,29 @@ model CronJob {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   reports        Report[]
+
+  @@unique([projectId, taskName])
+  @@index([projectId])
 }
 
 model Report {
   id          Int               @id @default(autoincrement())
+  projectId   Int
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   status      String
   tags        String
   triggerType String            @default("manual-trigger")
+  viaMcp      Boolean           @default(false)
+  startedBy   String?
   // runnerCount = distinct runner machines/lanes in this run (built-in counts as one).
   // workerCount = Cucumber --parallel workers within each runner. Two independent
   // axes of parallelism — kept as separate columns since one DB column used to mean
   // one or the other depending on which code path wrote it.
   runnerCount Int               @default(1)
   workerCount Int               @default(1)
+  // Scenarios that failed at least once but passed on a retry. Kept as a column
+  // so the report list can flag a flaky-but-passing run without loading content.
+  flakyCount  Int               @default(0)
   browser     String            @default("chromium")
   runnerName  String?
   runnerId    String?
@@ -70,6 +82,7 @@ model Report {
   @@index([testRunId])
   @@index([runnerId])
   @@index([cronJobId])
+  @@index([projectId])
 }
 
 // One row per (report, scenario, worker, browser tab) — a scenario that opens
@@ -95,18 +108,12 @@ model Recording {
   @@index([reportId, scenarioId])
 }
 
-model Project {
+model Organization {
   id                   Int       @id @default(autoincrement())
   name                 String    @default("")
-  logoUrl              String    @default("")
+  // DB backup is instance-level (one database), so its schedule, timezone and
+  // S3 target live here, not on any single Project.
   timezone             String    @default("UTC")
-  testCasePrefix       String    @default("TC")
-  testSuitePrefix      String    @default("TS")
-  caseSeqNext          Int       @default(0)
-  suiteSeqNext         Int       @default(0)
-  discordWebhookUrl    String    @default("")
-  slackWebhookUrl      String    @default("")
-  notifyPublicUrl      String    @default("")
   backupEnabled        Boolean   @default(false)
   backupCron           String    @default("0 2 * * *")
   backupS3Endpoint     String    @default("")
@@ -118,8 +125,103 @@ model Project {
   backupLastRunAt      DateTime?
   backupLastStatus     String    @default("")
   backupIncludeReports Boolean   @default(false)
-  mcpKey               String    @default("")
-  maxRetries           Int       @default(0)
+  // Activity log entries older than this are pruned nightly. 0 keeps them forever.
+  activityRetentionDays Int      @default(90)
+  // Reports (and their recordings) older than this are pruned nightly. 0 keeps them forever.
+  reportRetentionDays  Int       @default(0)
+  // Whether the primary server runs tests itself. Instance-wide: an owner's
+  // toggle applies to every member's run bar and every cron job.
+  builtInRunnerEnabled Boolean   @default(true)
+  // When the operator accepted the first-run notice. Null only on instances
+  // created before the notice existed.
+  termsAcceptedAt      DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  projects             Project[]
+}
+
+// Append-only audit trail. `scope` splits project-level events (visible to that
+// project's admins) from org-level ones (owner only). The actor's name is
+// denormalised into `actorLabel` — with a "(MCP)" suffix when the action came
+// through an MCP key — so a row still reads correctly after the user is renamed
+// or deleted.
+model ActivityLog {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  scope       String   @default("project")
+  projectId   Int?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actorId     String?
+  actor       User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorLabel  String
+  action      String
+  targetType  String   @default("")
+  targetId    String   @default("")
+  targetLabel String   @default("")
+  metadata    Json?
+  source      String   @default("ui")
+
+  @@index([scope, createdAt])
+  @@index([projectId, createdAt])
+  @@index([actorId])
+}
+
+model Project {
+  id                Int          @id @default(autoincrement())
+  orgId             Int
+  org               Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  slug              String       @unique
+  name              String       @default("")
+  baseUrl           String       @default("")
+  logoUrl           String       @default("")
+  timezone          String       @default("UTC")
+  testCasePrefix    String       @default("TC")
+  testSuitePrefix   String       @default("TS")
+  caseSeqNext       Int          @default(0)
+  suiteSeqNext      Int          @default(0)
+  discordWebhookUrl String       @default("")
+  slackWebhookUrl   String       @default("")
+  notifyPublicUrl   String       @default("")
+  maxRetries        Int          @default(0)
+
+  members  ProjectMember[]
+  suites   TestSuite[]
+  cases    TestCase[]
+  runs     TestRun[]
+  reports  Report[]
+  cronJobs CronJob[]
+  runQueue RunQueue[]
+  mcpKeys  McpKey[]
+  activity ActivityLog[]
+}
+
+// One per (project, member). Each person mints their own key for a project they
+// belong to; MCP requests then act as that user with that user's role, scoped to
+// the project. Regenerating replaces the row; leaving the project deletes it.
+model McpKey {
+  id        String   @id @default(cuid())
+  projectId Int
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key       String   @unique
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId Int
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("member")
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+  @@index([userId])
 }
 
 model User {
@@ -131,32 +233,42 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  suites          TestSuite[]
-  cases           TestCase[]
-  runs            TestRun[]
-  executedEntries TestRunEntry[]    @relation("entryExecutor")
-  assignedEntries TestRunEntry[]    @relation("entryAssignee")
-  caseHistories   TestCaseHistory[]
+  suites             TestSuite[]
+  cases              TestCase[]
+  runs               TestRun[]
+  executedEntries    TestRunEntry[]    @relation("entryExecutor")
+  assignedEntries    TestRunEntry[]    @relation("entryAssignee")
+  caseHistories      TestCaseHistory[]
+  projectMemberships ProjectMember[]
+  mcpKeys            McpKey[]
+  activity           ActivityLog[]
 }
 
 model TestSuite {
   id          String     @id @default(cuid())
-  displayId   String     @unique
+  projectId   Int
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  displayId   String
   name        String
   description String     @default("")
   priority    String     @default("Medium")
   createdById String
   createdBy   User       @relation(fields: [createdById], references: [id])
+  viaMcp      Boolean    @default(false)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   cases       TestCase[]
 
+  @@unique([projectId, displayId])
   @@index([createdAt])
+  @@index([projectId])
 }
 
 model TestCase {
   id          String            @id @default(cuid())
-  displayId   String            @unique
+  projectId   Int
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  displayId   String
   title       String
   description String            @default("")
   priority    String            @default("Medium")
@@ -165,13 +277,16 @@ model TestCase {
   suite       TestSuite         @relation(fields: [suiteId], references: [id], onDelete: Cascade)
   createdById String
   createdBy   User              @relation(fields: [createdById], references: [id])
+  viaMcp      Boolean           @default(false)
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   steps       TestStep[]
   runEntries  TestRunEntry[]
   history     TestCaseHistory[]
 
+  @@unique([projectId, displayId])
   @@index([suiteId])
+  @@index([projectId])
 }
 
 model TestStep {
@@ -187,6 +302,8 @@ model TestStep {
 
 model TestRun {
   id          String            @id @default(cuid())
+  projectId   Int
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   title       String
   status      String            @default("backlog")
   createdById String
@@ -198,6 +315,7 @@ model TestRun {
   reports     Report[]
 
   @@index([createdAt])
+  @@index([projectId])
 }
 
 model TestRunEntry {
@@ -225,6 +343,8 @@ model TestRunEntry {
 // reconciled to `done` on boot and queued rows resume.
 model RunQueue {
   id            String    @id
+  projectId     Int
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   kind          String
   triggerType   String    @default("manual-trigger")
   label         String    @default("")
@@ -247,6 +367,7 @@ model RunQueue {
   finishedAt    DateTime?
 
   @@index([status, queuedAt])
+  @@index([projectId])
 }
 
 model TestCaseHistory {

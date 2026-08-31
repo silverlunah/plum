@@ -12,7 +12,9 @@
  * Usage:  node scripts/manage-nodes.mjs
  *    or:  npm run manage-nodes     (from the backend directory)
  *
- * Env:    PLUM_API_URL   primary server API base (default http://localhost:3001)
+ * Env:    PLUM_API_URL       primary server API base (default http://localhost:3001)
+ *         PLUM_NODE_SECRET   authorises the /runners API (the primary generates
+ *                            one; `plum manage-nodes` reads it from the container)
  */
 
 import { execFileSync } from 'node:child_process';
@@ -22,9 +24,11 @@ import * as clack from '@clack/prompts';
 import pc from 'picocolors';
 import runnerProcess from '../lib/runnerProcess.js';
 import nodeRegister from '../lib/nodeRegister.js';
+import bootService from '../lib/bootService.js';
 
 const { isLocalUrl, parsePort, pruneDead, statusOf, findPidOnPort } = runnerProcess;
 const { generateToken, loadNodeByName } = nodeRegister;
+const { installNodeBoot, removeNodeBoot, nodeBootStatus } = bootService;
 
 const API_URL = process.env.PLUM_API_URL || 'http://localhost:3001';
 
@@ -38,21 +42,37 @@ function plumNode(...args) {
 
 const cancelled = (v) => clack.isCancel(v);
 
-// The mutating /runners routes accept any registered runner's own token in
-// place of an admin session (runnerOrAdmin.js). Use one: handed in by `plum`
-// (which reads it from the primary's DB on the server host), or any node's own
-// stored token.
-function resolveRunnerToken() {
-	if (process.env.PLUM_RUNNER_TOKEN) return process.env.PLUM_RUNNER_TOKEN;
+// A real secret is one hex/base64 line; strip a stray license header (the
+// `add-license` bug used to prepend one to persisted secrets and node configs).
+function cleanSecret(v) {
+	if (!v) return null;
+	const last = String(v)
+		.split(/\r?\n/)
+		.map((l) =>
+			l
+				.trim()
+				.replace(/^\/\*|\*\/$/g, '')
+				.trim()
+		)
+		.filter(Boolean)
+		.pop();
+	return last && /^[A-Za-z0-9+/=_-]{16,}$/.test(last) ? last : null;
+}
+
+// env (set by `plum` from the primary's container), else a secret a node saved
+// when it registered.
+function resolveNodeSecret() {
+	const fromEnv = cleanSecret(process.env.PLUM_NODE_SECRET);
+	if (fromEnv) return fromEnv;
 	for (const name of nodeRegister.listNodeNames()) {
-		const token = loadNodeByName(name).token;
-		if (token) return token;
+		const saved = cleanSecret(loadNodeByName(name).nodeSecret);
+		if (saved) return saved;
 	}
 	return null;
 }
-const RUNNER_TOKEN = resolveRunnerToken();
+let NODE_SECRET = resolveNodeSecret();
 function authHeaders() {
-	return RUNNER_TOKEN ? { Authorization: `Bearer ${RUNNER_TOKEN}` } : {};
+	return NODE_SECRET ? { Authorization: `Bearer ${NODE_SECRET}` } : {};
 }
 
 async function fetchRunners() {
@@ -149,9 +169,11 @@ async function runAction(r) {
 
 	const options = [];
 	if (isLocalNode) {
+		const bootOn = nodeBootStatus(r.name) === 'enabled';
 		options.push(
 			{ value: 'restart', label: pc.yellow(r.online ? 'Restart' : 'Start') },
 			{ value: 'stop', label: pc.red('Stop') },
+			{ value: 'boot', label: bootOn ? 'Start on boot: on' : 'Start on boot: off' },
 			{ value: 'log', label: 'Show log path' },
 			{ value: 'ping', label: 'Ping' }
 		);
@@ -221,6 +243,19 @@ async function runAction(r) {
 				s.stop(pc.green(`Deleted "${r.name}"`));
 			} catch (e) {
 				s.stop(pc.red(`Could not delete "${r.name}": ${e.message}`));
+			}
+		}
+	} else if (action === 'boot') {
+		if (nodeBootStatus(r.name) === 'enabled') {
+			removeNodeBoot(r.name);
+			clack.log.info(`"${r.name}" will not start on boot.`);
+		} else {
+			const res = installNodeBoot(r.name);
+			if (res.ok) {
+				clack.log.success(`"${r.name}" will start on boot.`);
+				if (res.hint) clack.log.info(res.hint);
+			} else {
+				clack.log.warn(`Couldn't set up start-on-boot: ${res.reason}`);
 			}
 		}
 	} else if (action === 'log') {
@@ -334,11 +369,16 @@ async function addNode() {
 async function main() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Manage Nodes  ')));
 
-	if (!RUNNER_TOKEN) {
-		clack.log.warn(
-			'No node token available — stop / restart / delete will be rejected.\n' +
-				'Run `plum manage-nodes` on the primary host, or from a folder where you started a node.'
-		);
+	if (!NODE_SECRET) {
+		clack.log.warn('No PLUM_NODE_SECRET found for this machine.');
+		const entered = await clack.text({
+			message: 'Paste it — Settings → Runners → Registration secret (or `plum server` prints it)',
+			placeholder: 'leave blank to continue read-only'
+		});
+		if (!cancelled(entered)) NODE_SECRET = cleanSecret(entered);
+		if (!NODE_SECRET) {
+			clack.log.info('Continuing read-only — register / restart / delete will be rejected.');
+		}
 	}
 
 	for (;;) {

@@ -41,7 +41,13 @@ if (!process.env.DATABASE_URL) {
 			parseInt(process.env.REPORT_RUNNERS || process.env.PARALLEL || '1', 10) || 1
 		);
 
+		const prisma = require('../../services/prisma');
+		const projectId =
+			Number(process.env.PLUM_PROJECT_ID) ||
+			(await prisma.project.findFirst({ orderBy: { id: 'asc' }, select: { id: true } }))?.id;
+
 		const saved = await reportService.saveReport({
+			projectId,
 			rawCucumberJson: raw,
 			tags: rawTag,
 			triggerType,

@@ -6,15 +6,16 @@
 const express = require('express');
 const router = express.Router();
 const runnerService = require('../services/runnerService');
+const settingsService = require('../services/settingsService');
+const appSecret = require('../lib/appSecret');
 const { jwtAuth } = require('../middleware/jwtAuth');
-const { requireAdmin } = require('../middleware/requireAdmin');
-const { runnerOrAdmin } = require('../middleware/runnerOrAdmin');
+const { requireOwner } = require('../middleware/requireOwner');
+const { nodeControlAuth, nodeReadAuth } = require('../middleware/nodeControlAuth');
 
-// List/create are hit by headless CLI tools (manage-nodes.mjs, node
-// self-registration) with no session to present — same as before the
-// runner-management routes were locked down. The response never includes
-// runner tokens (toPublicRunner strips them), so listing isn't a secret leak.
-router.get('/', async (req, res) => {
+// An open POST /runners let anyone register a rogue node, which then received
+// the test tree and env secrets on dispatch — mutation is owner/secret-gated.
+// Listing is open to any member so they can target a node for a run.
+router.get('/', nodeReadAuth, async (req, res) => {
 	try {
 		const runners = await runnerService.getAll();
 		res.json({ runners });
@@ -23,19 +24,40 @@ router.get('/', async (req, res) => {
 	}
 });
 
-router.post('/probe', jwtAuth, requireAdmin, async (req, res) => {
+// Instance-wide "run on the primary" switch — every member reads it, the owner sets it.
+router.get('/built-in', jwtAuth, async (req, res) => {
 	try {
-		const { url, token } = req.body;
-		if (!url || !token)
-			return res.status(400).json({ ok: false, error: 'url and token are required' });
-		const result = await runnerService.probe({ url, token });
-		res.json(result);
+		res.json(await settingsService.getBuiltInRunnerEnabled());
 	} catch (e) {
-		res.status(500).json({ ok: false, error: e.message });
+		res.status(500).json({ error: 'Failed to fetch built-in runner setting' });
 	}
 });
 
-router.post('/', async (req, res) => {
+router.put('/built-in', jwtAuth, requireOwner, async (req, res) => {
+	try {
+		res.json(await settingsService.updateBuiltInRunnerEnabled(req.body.enabled));
+	} catch (e) {
+		res.status(500).json({ error: 'Failed to update built-in runner setting' });
+	}
+});
+
+// The node-registration secret, shown so an owner can set up a remote node
+// without shelling into the container. Owner-gated, like the MCP key.
+router.get('/node-secret', jwtAuth, requireOwner, (req, res) => {
+	res.json({ nodeSecret: process.env.PLUM_NODE_SECRET ?? null });
+});
+
+router.post('/node-secret/regenerate', jwtAuth, requireOwner, async (req, res) => {
+	try {
+		const nodeSecret = appSecret.regenerateNodeSecret();
+		const push = await runnerService.pushNodeSecret(nodeSecret);
+		res.json({ nodeSecret, ...push });
+	} catch (e) {
+		res.status(500).json({ error: 'Failed to regenerate the node secret' });
+	}
+});
+
+router.post('/', nodeControlAuth, async (req, res) => {
 	try {
 		const { name, url, token, browser } = req.body;
 		if (!name || !url || !token)
@@ -47,17 +69,7 @@ router.post('/', async (req, res) => {
 	}
 });
 
-router.put('/:id', jwtAuth, requireAdmin, async (req, res) => {
-	try {
-		const { name, url, token, browser } = req.body;
-		const runner = await runnerService.update(req.params.id, { name, url, token, browser });
-		res.json({ runner });
-	} catch (e) {
-		res.status(500).json({ error: 'Failed to update runner' });
-	}
-});
-
-router.delete('/:id', runnerOrAdmin, async (req, res) => {
+router.delete('/:id', nodeControlAuth, async (req, res) => {
 	try {
 		await runnerService.stop(req.params.id);
 		await runnerService.remove(req.params.id);
@@ -67,7 +79,7 @@ router.delete('/:id', runnerOrAdmin, async (req, res) => {
 	}
 });
 
-router.post('/:id/ping', runnerOrAdmin, async (req, res) => {
+router.post('/:id/ping', nodeControlAuth, async (req, res) => {
 	try {
 		const result = await runnerService.ping(req.params.id);
 		res.json(result);
@@ -76,7 +88,7 @@ router.post('/:id/ping', runnerOrAdmin, async (req, res) => {
 	}
 });
 
-router.post('/:id/stop', runnerOrAdmin, async (req, res) => {
+router.post('/:id/stop', nodeControlAuth, async (req, res) => {
 	try {
 		const result = await runnerService.stop(req.params.id);
 		res.json(result);
@@ -85,7 +97,7 @@ router.post('/:id/stop', runnerOrAdmin, async (req, res) => {
 	}
 });
 
-router.post('/:id/restart', runnerOrAdmin, async (req, res) => {
+router.post('/:id/restart', nodeControlAuth, async (req, res) => {
 	try {
 		const result = await runnerService.restart(req.params.id);
 		res.json(result);

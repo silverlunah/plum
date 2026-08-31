@@ -64,10 +64,10 @@ function shapeCase(c, { result = null, notes = null, testedBy = null, testedAt =
 	};
 }
 
-async function buildTestCaseExport(scope, { suiteId, runId } = {}) {
+async function buildTestCaseExport(projectId, scope, { suiteId, runId } = {}) {
 	if (scope === 'run') {
-		const run = await prisma.testRun.findUnique({
-			where: { id: runId },
+		const run = await prisma.testRun.findFirst({
+			where: { id: runId, projectId },
 			select: {
 				id: true,
 				title: true,
@@ -138,7 +138,7 @@ async function buildTestCaseExport(scope, { suiteId, runId } = {}) {
 		};
 	}
 
-	const where = scope === 'suite' ? { id: suiteId } : {};
+	const where = scope === 'suite' ? { id: suiteId, projectId } : { projectId };
 	const suites = await prisma.testSuite.findMany({
 		where,
 		orderBy: { createdAt: 'asc' },
@@ -236,14 +236,15 @@ function testCaseCsvRows(data) {
 
 // ── Reports ─────────────────────────────────────────────────────────────────
 
-async function buildReportExport(id) {
+async function buildReportExport(projectId, id) {
 	const reportService = require('./reportService');
-	const detail = await reportService.getReportDetail(id);
+	const detail = await reportService.getReportDetail(projectId, id);
 	if (!detail) return null;
 
 	let passed = 0;
 	let failed = 0;
 	let skipped = 0;
+	let flaky = 0;
 	let steps = 0;
 	let scenarioCount = 0;
 
@@ -256,11 +257,13 @@ async function buildReportExport(id) {
 			if (sc.status === 'failed') failed += 1;
 			else if (sc.status === 'skipped') skipped += 1;
 			else passed += 1;
+			if (sc.flaky) flaky += 1;
 			steps += sc.steps.length;
 			return {
 				name: sc.name,
 				tags: sc.tags,
 				result: resultLabel(sc.status),
+				flaky: !!sc.flaky,
 				durationMs: sc.duration,
 				attempts: sc.attempts,
 				steps: sc.steps.map((st) => ({
@@ -287,7 +290,7 @@ async function buildReportExport(id) {
 			runAt: iso(detail.createdAt),
 			durationMs: detail.duration ?? 0,
 			testRun: detail.testRun?.title ?? null,
-			totals: { scenarios: scenarioCount, passed, failed, skipped, steps }
+			totals: { scenarios: scenarioCount, passed, failed, skipped, flaky, steps }
 		},
 		features
 	};
@@ -316,7 +319,9 @@ function reportCsvRows(data) {
 				const first = i === 0;
 				rows.push([
 					featureShown ? BLANK : feature.name,
-					...(first ? [sc.name, sc.tags.join(' '), sc.result] : [BLANK, BLANK, BLANK]),
+					...(first
+						? [sc.name, sc.tags.join(' '), sc.flaky ? 'Flaky' : sc.result]
+						: [BLANK, BLANK, BLANK]),
 					st ? i + 1 : BLANK,
 					st?.keyword ?? BLANK,
 					st?.text ?? BLANK,

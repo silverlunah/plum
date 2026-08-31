@@ -40,32 +40,51 @@ function attachListenRetry(server, port) {
 }
 
 function wireRealtimeServices(io, isNodeMode) {
-	if (isNodeMode) return { cronService: null, backupCronService: null, runQueueService: null };
+	if (isNodeMode)
+		return {
+			cronService: null,
+			backupCronService: null,
+			activityRetentionService: null,
+			reportRetentionService: null,
+			runQueueService: null
+		};
 
 	const socketHandler = require('../websockets/socketHandler.js');
 	const cronService = require('../services/cronService');
 	const backupCronService = require('../services/backupCronService');
+	const activityRetentionService = require('../services/activityRetentionService');
+	const reportRetentionService = require('../services/reportRetentionService');
 	const runQueueService = require('../services/runQueueService');
 
 	socketHandler(io);
 	runQueueService.setSocketIO(io);
+	require('../services/testRunService').setSocketIO(io);
 
-	return { cronService, backupCronService, runQueueService };
+	return {
+		cronService,
+		backupCronService,
+		activityRetentionService,
+		reportRetentionService,
+		runQueueService
+	};
 }
 
-async function initCronServices(cronService, backupCronService) {
+async function initCronServices(
+	cronService,
+	backupCronService,
+	activityRetentionService,
+	reportRetentionService
+) {
 	if (cronService) await cronService.init();
 	if (backupCronService) await backupCronService.init();
+	if (activityRetentionService) await activityRetentionService.init();
+	if (reportRetentionService) await reportRetentionService.init();
 }
 
-async function bootstrapMcpKey(isNodeMode) {
-	if (isNodeMode || process.env.PLUM_MCP_KEY) return;
-	try {
-		const settingsService = require('../services/settingsService');
-		const { mcpKey } = await settingsService.getMcpConfig();
-		if (mcpKey) process.env.PLUM_MCP_KEY = mcpKey;
-	} catch {}
-}
+// MCP keys are per-project now and resolved live from the DB in jwtAuth — the
+// only global key is an optional PLUM_MCP_KEY env override (CI). Kept exported
+// so server.js's call site doesn't change.
+async function bootstrapMcpKey() {}
 
 function logServerReady(port, isNodeMode) {
 	console.log(`Backend running on port ${port}${isNodeMode ? ' (node mode)' : ''}`);
@@ -124,6 +143,9 @@ function handleNodeModeStartup(port) {
 }
 
 async function handleFullModeStartup(io, testsDir) {
+	await require('./projectPaths')
+		.reconcile()
+		.catch((e) => console.warn('⚠️  project folder reconcile failed:', e.message));
 	syncAutomatedFlags();
 	cleanupLegacyScreenshots();
 
@@ -145,11 +167,15 @@ function cleanupLegacyScreenshots() {
 	});
 }
 
-function syncAutomatedFlags() {
-	// Sync automated flags from feature files on every startup
-	require('../services/reportService')
-		.syncAutomatedFromFeatures()
-		.catch(() => {});
+async function syncAutomatedFlags(projectId) {
+	const reportService = require('../services/reportService');
+	if (projectId != null) return reportService.syncAutomatedFromFeatures(projectId).catch(() => {});
+	// startup: every project
+	try {
+		const prisma = require('../services/prisma');
+		const projects = await prisma.project.findMany({ select: { id: true } });
+		for (const p of projects) await reportService.syncAutomatedFromFeatures(p.id).catch(() => {});
+	} catch {}
 }
 
 async function loadChokidar() {
@@ -163,11 +189,18 @@ async function loadChokidar() {
 }
 
 function watchTestFiles(chokidar, testsDir) {
-	const featuresDir = path.join(testsDir, 'features');
-	if (!fs.existsSync(featuresDir)) return;
+	// Legacy single-project dir + every per-project folder
+	// (projects/<slug>/tests/features). Any change re-syncs all projects — there
+	// are only a handful, and mapping the changed path back to a project id isn't
+	// worth the slug lookup.
+	const projectsDir = process.env.PROJECTS_DIR || path.join(path.dirname(testsDir), 'projects');
+	const targets = [
+		path.join(testsDir, 'features'),
+		path.join(projectsDir, '*', 'tests', 'features')
+	];
 
 	let debounce = null;
-	chokidar.watch(featuresDir, WATCH_OPTS).on('all', (event, filePath) => {
+	chokidar.watch(targets, WATCH_OPTS).on('all', (event, filePath) => {
 		clearTimeout(debounce);
 		debounce = setTimeout(() => {
 			console.log(`📝 Tests changed (${event}: ${path.basename(filePath)})`);

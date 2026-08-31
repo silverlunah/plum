@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const prisma = require('./prisma');
-const { isScheduledTrigger, normaliseTrigger } = require('../constants/triggers');
+const { isScheduledTrigger, normaliseTrigger, TRIGGER_TYPE } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { REPORT_STATUS } = require('../constants/jobStatus');
 
@@ -24,7 +24,7 @@ const WORKER_META_MIME_TYPE = 'application/x-plum-worker+json';
 // Auto-sync: mark test cases as automated and record history from Cucumber tags
 // ---------------------------------------------------------------------------
 
-async function syncAutomatedTags(reportId, features, testRunId = null) {
+async function syncAutomatedTags(projectId, reportId, features, testRunId = null) {
 	try {
 		const tagSet = new Set();
 		for (const feature of features) {
@@ -37,7 +37,7 @@ async function syncAutomatedTags(reportId, features, testRunId = null) {
 		if (tagSet.size === 0) return;
 
 		const matchingCases = await prisma.testCase.findMany({
-			where: { displayId: { in: [...tagSet] } },
+			where: { projectId, displayId: { in: [...tagSet] } },
 			select: { id: true, displayId: true }
 		});
 		if (matchingCases.length === 0) return;
@@ -92,6 +92,8 @@ async function syncAutomatedTags(reportId, features, testRunId = null) {
 						data: { status: 'in-progress' }
 					})
 				]);
+				// Push the new results to anyone on this run's execution page.
+				require('./testRunService').emitRunChanged(testRunId, { reload: true });
 			}
 		}
 	} catch (e) {
@@ -103,9 +105,9 @@ async function syncAutomatedTags(reportId, features, testRunId = null) {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-async function resolveCronJobId(triggerType) {
+async function resolveCronJobId(projectId, triggerType) {
 	if (!isScheduledTrigger(triggerType)) return null;
-	const job = await prisma.cronJob.findUnique({ where: { taskName: triggerType } });
+	const job = await prisma.cronJob.findFirst({ where: { projectId, taskName: triggerType } });
 	return job?.id ?? null;
 }
 
@@ -283,6 +285,8 @@ function processCucumberJson(raw, attempts = {}) {
 				return (rank[s.status] ?? 0) > (rank[acc] ?? 0) ? s.status : acc;
 			}, 'passed');
 
+			const scenarioAttempts = attempts[scenarioIdTag(scenario)] ?? 1;
+
 			return {
 				id: scenarioUniqueId(scenario),
 				name: scenario.name,
@@ -290,7 +294,10 @@ function processCucumberJson(raw, attempts = {}) {
 				tags: (scenario.tags ?? []).map((t) => t.name),
 				status: worstStatus,
 				duration: steps.reduce((s, st) => s + st.duration, 0),
-				attempts: attempts[scenarioIdTag(scenario)] ?? 1,
+				attempts: scenarioAttempts,
+				// Failed at least once, then passed — flaky. A scenario that never
+				// passed is just failed, not flaky.
+				flaky: worstStatus === 'passed' && scenarioAttempts > 1,
 				workerId: extractWorkerId(scenario),
 				runnerName: scenario.__plumRunnerName ?? null,
 				steps
@@ -306,7 +313,13 @@ function processCucumberJson(raw, attempts = {}) {
 	});
 
 	const hasFailures = features.some((f) => f.status === 'failed');
-	return { features, recordings, status: hasFailures ? REPORT_STATUS.FAIL : REPORT_STATUS.PASS };
+	const flakyCount = features.reduce((n, f) => n + f.scenarios.filter((s) => s.flaky).length, 0);
+	return {
+		features,
+		recordings,
+		status: hasFailures ? REPORT_STATUS.FAIL : REPORT_STATUS.PASS,
+		flakyCount
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -318,8 +331,11 @@ const reportListSelect = {
 	status: true,
 	tags: true,
 	triggerType: true,
+	viaMcp: true,
+	startedBy: true,
 	runnerCount: true,
 	workerCount: true,
+	flakyCount: true,
 	browser: true,
 	runnerName: true,
 	createdAt: true,
@@ -328,18 +344,20 @@ const reportListSelect = {
 
 const TREND_SIZE = 12;
 
-const getReports = async ({ page = 1, limit = 15 } = {}) => {
+const getReports = async (projectId, { page = 1, limit = 15 } = {}) => {
 	const skip = (page - 1) * limit;
 	const [reports, total, passCount, trend] = await Promise.all([
 		prisma.report.findMany({
+			where: { projectId },
 			orderBy: { createdAt: 'desc' },
 			skip,
 			take: limit,
 			select: reportListSelect
 		}),
-		prisma.report.count(),
-		prisma.report.count({ where: { status: REPORT_STATUS.PASS } }),
+		prisma.report.count({ where: { projectId } }),
+		prisma.report.count({ where: { projectId, status: REPORT_STATUS.PASS } }),
 		prisma.report.findMany({
+			where: { projectId },
 			orderBy: { createdAt: 'desc' },
 			take: TREND_SIZE,
 			select: { id: true, status: true, tags: true, createdAt: true }
@@ -348,24 +366,28 @@ const getReports = async ({ page = 1, limit = 15 } = {}) => {
 	return { reports, total, passCount, failCount: total - passCount, trend };
 };
 
-const getLatestReportId = async () => {
+const getLatestReportId = async (projectId) => {
 	const report = await prisma.report.findFirst({
+		where: { projectId },
 		orderBy: { createdAt: 'desc' },
 		select: { id: true }
 	});
 	return report?.id ?? null;
 };
 
-const getReportDetail = async (id) => {
-	const report = await prisma.report.findUnique({
-		where: { id },
+const getReportDetail = async (projectId, id) => {
+	const report = await prisma.report.findFirst({
+		where: { id, projectId },
 		select: {
 			id: true,
 			status: true,
 			tags: true,
 			triggerType: true,
+			viaMcp: true,
+			startedBy: true,
 			runnerCount: true,
 			workerCount: true,
+			flakyCount: true,
 			browser: true,
 			runnerName: true,
 			createdAt: true,
@@ -385,7 +407,12 @@ const getReportDetail = async (id) => {
  * (can be large) so the replay UI can work out tab timing/order before
  * fetching any actual event data.
  */
-const getRecordings = async (reportId) => {
+const getRecordings = async (projectId, reportId) => {
+	const owned = await prisma.report.findFirst({
+		where: { id: reportId, projectId },
+		select: { id: true }
+	});
+	if (!owned) return [];
 	const recordings = await prisma.recording.findMany({
 		where: { reportId },
 		select: {
@@ -412,9 +439,9 @@ const getRecordings = async (reportId) => {
  * Decompresses one recording's rrweb event array, fetched lazily by the
  * replay UI only once a tab is actually selected for playback.
  */
-const getRecordingEvents = async (recordingId) => {
-	const recording = await prisma.recording.findUnique({
-		where: { id: recordingId },
+const getRecordingEvents = async (projectId, recordingId) => {
+	const recording = await prisma.recording.findFirst({
+		where: { id: recordingId, report: { projectId } },
 		select: { events: true }
 	});
 	if (!recording) return null;
@@ -441,9 +468,11 @@ const getRecordingEvents = async (recordingId) => {
  * }} opts
  */
 const saveReport = async ({
+	projectId,
 	rawCucumberJson,
 	tags,
 	triggerType,
+	startedBy = null,
 	runnerCount = 1,
 	workerCount = 1,
 	browser,
@@ -459,18 +488,23 @@ const saveReport = async ({
 	const {
 		features,
 		recordings,
-		status: derivedStatus
+		status: derivedStatus,
+		flakyCount
 	} = processCucumberJson(rawCucumberJson, attempts);
 	const status = forceFail ? REPORT_STATUS.FAIL : derivedStatus;
-	const cronJobId = await resolveCronJobId(normTrigger);
+	const cronJobId = await resolveCronJobId(projectId, normTrigger);
 
 	const report = await prisma.report.create({
 		data: {
+			projectId,
 			status,
 			tags: (tags ?? '').replace(/^\(|\)$/g, '') || '@all-tests',
 			triggerType: normTrigger,
+			viaMcp: normTrigger === TRIGGER_TYPE.MCP,
+			startedBy: startedBy || null,
 			runnerCount,
 			workerCount,
+			flakyCount,
 			browser: browser ?? DEFAULT_BROWSER,
 			runnerName: runnerName ?? null,
 			runnerId: runnerId ?? null,
@@ -486,7 +520,7 @@ const saveReport = async ({
 			data: recordings.map((r) => ({ ...r, reportId: report.id }))
 		});
 	}
-	syncAutomatedTags(report.id, features, testRunId ?? null);
+	syncAutomatedTags(projectId, report.id, features, testRunId ?? null);
 	return report;
 };
 
@@ -506,12 +540,14 @@ const saveReport = async ({
  * }} opts
  */
 const saveCombinedReport = async ({
+	projectId,
 	reports,
 	runners,
 	workers = 1,
 	overallCode,
 	tag,
 	triggerType,
+	startedBy = null,
 	browser,
 	testRunId,
 	laneLogs = null,
@@ -563,9 +599,11 @@ const saveCombinedReport = async ({
 	const attempts = attemptsByLane ? Object.assign({}, ...attemptsByLane.filter(Boolean)) : {};
 
 	return saveReport({
+		projectId,
 		rawCucumberJson: combined,
 		tags: tag,
 		triggerType,
+		startedBy,
 		runnerCount: runners.length,
 		workerCount: workers,
 		browser,
@@ -581,9 +619,9 @@ const saveCombinedReport = async ({
 
 // Finds the report a no-retry run just produced (the most recent one created
 // after the run started) and patches in its wall-clock duration.
-const attachDurationToLatestReport = async ({ afterTimestamp, duration }) => {
+const attachDurationToLatestReport = async ({ projectId, afterTimestamp, duration }) => {
 	const report = await prisma.report.findFirst({
-		where: { createdAt: { gte: new Date(afterTimestamp) } },
+		where: { projectId, createdAt: { gte: new Date(afterTimestamp) } },
 		orderBy: { createdAt: 'desc' },
 		select: { id: true, status: true }
 	});
@@ -596,27 +634,41 @@ const attachDurationToLatestReport = async ({ afterTimestamp, duration }) => {
 // Delete operations
 // ---------------------------------------------------------------------------
 
-const deleteReport = async (id) => {
-	await prisma.report.delete({ where: { id } });
+const deleteReport = async (projectId, id) => {
+	await prisma.report.deleteMany({ where: { id, projectId } });
 };
 
-const deleteReports = async (ids) => {
-	await prisma.report.deleteMany({ where: { id: { in: ids } } });
+const deleteReports = async (projectId, ids) => {
+	await prisma.report.deleteMany({ where: { id: { in: ids }, projectId } });
 };
 
-const FEATURES_DIR = path.join(__dirname, '../tests/features');
+// Instance-wide nightly prune. Recordings cascade-delete with their report;
+// TestCaseHistory.reportId is SetNull so the manual-run history it holds survives.
+const pruneOldReports = async (retentionDays) => {
+	const days = Number(retentionDays);
+	if (!Number.isFinite(days) || days <= 0) return { count: 0 };
+	const cutoff = new Date(Date.now() - days * 86_400_000);
+	return prisma.report.deleteMany({ where: { createdAt: { lt: cutoff } } });
+};
 
-async function syncAutomatedFromFeatures() {
+const { featuresDir } = require('../lib/testsRoot');
+
+async function syncAutomatedFromFeatures(projectId) {
 	try {
-		if (!fs.existsSync(FEATURES_DIR)) return;
+		const dir = featuresDir(projectId);
+		if (!fs.existsSync(dir)) return;
 		const tagSet = new Set();
-		for (const file of fs.readdirSync(FEATURES_DIR).filter((f) => f.endsWith('.feature'))) {
-			const content = fs.readFileSync(path.join(FEATURES_DIR, file), 'utf8');
+		for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.feature'))) {
+			const content = fs.readFileSync(path.join(dir, file), 'utf8');
 			for (const m of content.matchAll(/@(\S+)/g)) tagSet.add(m[1]);
 		}
 		if (tagSet.size === 0) return;
 		await prisma.testCase.updateMany({
-			where: { displayId: { in: [...tagSet] }, isAutomated: false },
+			where: {
+				...(projectId ? { projectId } : {}),
+				displayId: { in: [...tagSet] },
+				isAutomated: false
+			},
 			data: { isAutomated: true }
 		});
 	} catch (e) {
@@ -636,6 +688,7 @@ module.exports = {
 	syncAutomatedFromFeatures,
 	deleteReport,
 	deleteReports,
+	pruneOldReports,
 	getFailedIdTags,
 	mergeRawAttempt
 };
