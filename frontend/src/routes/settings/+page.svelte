@@ -53,6 +53,7 @@
 		TEST_CASES_NAV_LABEL,
 		TEST_CASES_HEADING,
 		TEST_CASES_DESC,
+		TC_IO_CARD_TITLE,
 		TC_IMPORT_CARD_TITLE,
 		TC_EXPORT_CARD_TITLE,
 		TC_EXPORT_DESC,
@@ -650,36 +651,41 @@
 				</div>
 
 				<div class="card settings-card">
-					<p class="card-title">{TC_EXPORT_CARD_TITLE}</p>
-					<div class="backup-block">
-						<p class="backup-block-desc">{TC_EXPORT_DESC}</p>
-						<ExportMenu busy={tcExporting} on:select={(e) => handleTcExport(e.detail)} />
-					</div>
-				</div>
-
-				<div class="card settings-card">
-					<p class="card-title">{TC_IMPORT_CARD_TITLE}</p>
-					<div class="backup-block">
-						<p class="backup-block-desc">{TC_IMPORT_DESC}</p>
-						<div class="import-row">
-							<label class="file-label">
-								<input
-									bind:this={tcFileInput}
-									type="file"
-									accept=".json,application/json"
-									class="file-input-hidden"
-									on:change={handleTcFileChange}
-								/>
-								<span class="file-btn">{tcImportFile ? tcImportFile.name : CHOOSE_FILE_LABEL}</span>
-							</label>
-							<Button on:click={handleTcImport} disabled={!tcImportFile || tcImporting}>
-								{tcImportLabel(tcImporting)}
-							</Button>
+					<p class="card-title">{TC_IO_CARD_TITLE}</p>
+					<div class="backup-row">
+						<div class="backup-block">
+							<p class="backup-block-title">{TC_EXPORT_CARD_TITLE}</p>
+							<p class="backup-block-desc">{TC_EXPORT_DESC}</p>
+							<ExportMenu busy={tcExporting} on:select={(e) => handleTcExport(e.detail)} />
 						</div>
-						{#if tcImportResult}
-							<p class="tc-import-result">{tcImportSummary(tcImportResult)}</p>
-						{/if}
-						<p class="backup-block-desc">{TC_IMPORT_HINT}</p>
+
+						<div class="backup-divider"></div>
+
+						<div class="backup-block">
+							<p class="backup-block-title">{TC_IMPORT_CARD_TITLE}</p>
+							<p class="backup-block-desc">{TC_IMPORT_DESC}</p>
+							<div class="import-row">
+								<label class="file-label">
+									<input
+										bind:this={tcFileInput}
+										type="file"
+										accept=".json,application/json"
+										class="file-input-hidden"
+										on:change={handleTcFileChange}
+									/>
+									<span class="file-btn"
+										>{tcImportFile ? tcImportFile.name : CHOOSE_FILE_LABEL}</span
+									>
+								</label>
+								<Button on:click={handleTcImport} disabled={!tcImportFile || tcImporting}>
+									{tcImportLabel(tcImporting)}
+								</Button>
+							</div>
+							{#if tcImportResult}
+								<p class="tc-import-result">{tcImportSummary(tcImportResult)}</p>
+							{/if}
+							<p class="backup-block-desc">{TC_IMPORT_HINT}</p>
+						</div>
 					</div>
 				</div>
 
@@ -1296,11 +1302,28 @@
 		color: var(--fail);
 	}
 
+	.backup-row {
+		display: flex;
+		gap: 2rem;
+	}
+
+	.backup-divider {
+		width: 1px;
+		background: var(--border);
+		flex-shrink: 0;
+	}
+
 	.backup-block {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
 		gap: 0.875rem;
+	}
+
+	.backup-block-title {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--text);
 	}
 
 	.backup-block-desc {
@@ -1412,6 +1435,16 @@
 
 		.field-row {
 			grid-template-columns: 1fr;
+		}
+
+		.backup-row {
+			flex-direction: column;
+			gap: 1.5rem;
+		}
+
+		.backup-divider {
+			width: 100%;
+			height: 1px;
 		}
 	}
 
