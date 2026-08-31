@@ -7,6 +7,7 @@
 	import { onMount } from 'svelte';
 	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import { TIMEZONES } from '$lib/utils/timezones';
+	import { REPORT_RETENTION_DAYS } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import {
@@ -17,7 +18,9 @@
 		testBackupS3,
 		runBackupNow,
 		fetchS3Backups,
-		restoreFromS3
+		restoreFromS3,
+		fetchReportRetention,
+		saveReportRetention
 	} from '$lib/api/settings';
 	import {
 		BACKUP_LABEL,
@@ -85,6 +88,11 @@
 		BACKUP_UPLOADING_TOAST,
 		BACKUP_UPLOAD_SUCCESS_TOAST,
 		BACKUP_UPLOAD_FAILED_FALLBACK,
+		REPORT_RETENTION_CARD_TITLE,
+		REPORT_RETENTION_DESC,
+		REPORT_RETENTION_SAVED_TOAST,
+		REPORT_RETENTION_SAVE_FAILED,
+		reportRetentionOptionLabel,
 		backupFilename,
 		exportLabel,
 		importLabel,
@@ -127,6 +135,9 @@
 	let exporting = false;
 	let fileInput;
 
+	let reportRetentionDays = 0;
+	let savingReportRetention = false;
+
 	let s3Backups = [];
 	let s3BackupsLoaded = false;
 	let loadingS3Backups = false;
@@ -135,6 +146,9 @@
 	let restoreTarget = null;
 
 	onMount(async () => {
+		fetchReportRetention()
+			.then((r) => (reportRetentionDays = r.reportRetentionDays))
+			.catch(() => {});
 		try {
 			const bc = await fetchBackupConfig();
 			backupS3SecretKeySet = bc.backupS3SecretKeySet;
@@ -195,6 +209,20 @@
 
 	function handleFileChange(e) {
 		importFile = e.target.files[0] ?? null;
+	}
+
+	async function onReportRetentionChange(e) {
+		const days = Number(e.target.value);
+		savingReportRetention = true;
+		try {
+			const res = await saveReportRetention(days);
+			reportRetentionDays = res.reportRetentionDays;
+			notify('success', REPORT_RETENTION_SAVED_TOAST);
+		} catch {
+			notify('error', REPORT_RETENTION_SAVE_FAILED);
+		} finally {
+			savingReportRetention = false;
+		}
 	}
 
 	async function saveConfig(setSaving) {
@@ -373,6 +401,22 @@
 	</div>
 
 	<p class="backup-disclaimer">{includeReportsDisclaimer(backupConfig.backupIncludeReports)}</p>
+</div>
+
+<!-- Report retention -->
+<div class="card settings-card">
+	<p class="card-title">{REPORT_RETENTION_CARD_TITLE}</p>
+	<p class="card-subtitle">{REPORT_RETENTION_DESC}</p>
+	<select
+		class="field-input retention-select"
+		value={reportRetentionDays}
+		disabled={savingReportRetention}
+		on:change={onReportRetentionChange}
+	>
+		{#each REPORT_RETENTION_DAYS as days}
+			<option value={days}>{reportRetentionOptionLabel(days)}</option>
+		{/each}
+	</select>
 </div>
 
 <!-- S3 cloud backup -->
@@ -838,6 +882,10 @@
 	.field-input-mono {
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.8125rem;
+	}
+	.retention-select {
+		width: auto;
+		min-width: 180px;
 	}
 	.import-row {
 		display: flex;

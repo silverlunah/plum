@@ -69,6 +69,24 @@ router.post('/config', async (req, res) => {
 	}
 });
 
+router.get('/report-retention', async (req, res) => {
+	try {
+		res.json(await settingsService.getReportRetention());
+	} catch (error) {
+		console.error('Failed to get report retention:', error);
+		res.status(500).json({ error: 'Failed to get report retention' });
+	}
+});
+
+router.put('/report-retention', async (req, res) => {
+	try {
+		res.json(await settingsService.updateReportRetention(req.body?.days));
+	} catch (error) {
+		console.error('Failed to save report retention:', error);
+		res.status(500).json({ error: 'Failed to save report retention' });
+	}
+});
+
 router.post('/test-s3', async (req, res) => {
 	try {
 		// If no secret key provided in the request, fall back to the stored one
