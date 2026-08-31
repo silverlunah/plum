@@ -169,7 +169,13 @@
 	</div>
 	{#if userFormError}<p class="form-error">{userFormError}</p>{/if}
 	<div class="card-footer">
-		<Button on:click={handleCreateUser} disabled={userFormSaving}>
+		<Button
+			on:click={handleCreateUser}
+			disabled={userFormSaving ||
+				!userForm.name.trim() ||
+				!userForm.email.trim() ||
+				!userForm.password}
+		>
 			{addUserLabel(userFormSaving)}
 		</Button>
 	</div>
@@ -268,6 +274,9 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 0.75rem;
+	}
+	.card-footer {
+		padding-top: 0.5rem;
 	}
 	.form-error {
 		font-size: 0.8125rem;
