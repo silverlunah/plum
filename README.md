@@ -48,7 +48,9 @@ mkdir plum && cd plum
 plum server start
 ```
 
-`plum server start` creates the `projects/` folder (the bind-mount target) and the Docker config in the current directory. Open **http://localhost:3002**, complete first-run setup, and create your organisation, first project, and owner account. The server scaffolds each project's `projects/<slug>/tests/` folder itself when you add the project in **Settings → Projects** — you don't run `plum init` or `plum project init` for that (`plum project init "<name>"` only re-creates a folder the server lost).
+`plum server start` creates the `projects/` folder (the bind-mount target) and the Docker config in the current directory. Open **http://localhost:3002**, complete first-run setup, and create your organisation, first project, and owner account. The server scaffolds each project's `projects/<slug>/tests/` folder itself when you add the project in **Settings → Project** — you don't run `plum init` or `plum project init` for that (`plum project init "<name>"` only re-creates a folder the server lost).
+
+The stack's containers use `restart: unless-stopped`, so the server comes back after a reboot once Docker itself starts. To bring runner nodes back too, register them with `plum node start <name> --boot` (or answer the prompt).
 
 ### For contributors
 
@@ -73,7 +75,7 @@ Full documentation is available at:
 | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | [Installation](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/installation-JftwFX9csC)                       | Requirements, global install, first-user setup, plugins                             |
 | [Setting Up the Server](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-the-server-vj0Ab1kJVs)     | Production server setup, reverse proxy (Nginx/Caddy), Docker                        |
-| [Setting Up Nodes](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-nodes-dtmekJGJia)               | Runner nodes, systemd service, managing nodes                                       |
+| [Setting Up Nodes](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-nodes-dtmekJGJia)               | Runner nodes, the registration secret, start-on-boot, managing nodes                |
 | [Running Tests Locally](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/running-tests-locally-GGhFcqaAQ8)     | `plum run-test` flags, parallel runs, debugging tips                                |
 | [Writing Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/writing-tests-XeHJQdtH49)                     | Feature files, step definitions, optional page objects, best practices              |
 | [Projects](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/projects-ilfc8LUyO7)                               | One organisation, many projects — anatomy, on-disk layout, create / switch / delete |
@@ -98,7 +100,7 @@ Full documentation is available at:
 | `plum server stop`            | Stop the server (data preserved)                                                                                                                 |
 | `plum server reconfig`        | Re-enter server settings without starting                                                                                                        |
 | `plum update`                 | Update Plum if a newer version is published, then restart every registered server and node (asks before each); no-ops when already on the latest |
-| `plum node start [name]`      | Register a node with the server and start it on this machine                                                                                     |
+| `plum node start [name]`      | Register a node with the server and start it on this machine (`--boot` / `--no-boot` to (un)set start-on-boot)                                   |
 | `plum node list`              | List this machine's nodes and their status                                                                                                       |
 | `plum node restart [name]`    | Stop, refresh dependencies, and restart a node                                                                                                   |
 | `plum node stop [name]`       | Stop a node                                                                                                                                      |
