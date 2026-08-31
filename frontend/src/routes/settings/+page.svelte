@@ -38,7 +38,7 @@
 	import RunnersSettings from '$lib/components/settings/RunnersSettings.svelte';
 	import UsersSettings from '$lib/components/settings/UsersSettings.svelte';
 	import BackupSettings from '$lib/components/settings/BackupSettings.svelte';
-	import { notify } from '$lib/stores/notifications';
+	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import { EMAIL_LABEL } from '$lib/copy/common';
@@ -59,6 +59,9 @@
 		TC_IMPORT_DESC,
 		TC_IMPORT_HINT,
 		TC_IMPORT_FAILED_FALLBACK,
+		TC_IMPORTING_TOAST,
+		TC_EXPORTING_TOAST,
+		TC_EXPORTED_TOAST,
 		tcImportLabel,
 		tcImportSummary,
 		INTEGRATIONS_LABEL,
@@ -265,14 +268,15 @@
 		if (!tcImportFile) return;
 		tcImporting = true;
 		tcImportResult = null;
+		const settle = notifyProgress(TC_IMPORTING_TOAST);
 		try {
 			const data = JSON.parse(await tcImportFile.text());
 			tcImportResult = await importTestCases(data);
-			notify('success', tcImportSummary(tcImportResult));
+			settle('success', tcImportSummary(tcImportResult));
 			tcImportFile = null;
 			if (tcFileInput) tcFileInput.value = '';
 		} catch (e) {
-			notify('error', e.message || TC_IMPORT_FAILED_FALLBACK);
+			settle('error', e.message || TC_IMPORT_FAILED_FALLBACK);
 		} finally {
 			tcImporting = false;
 		}
@@ -281,10 +285,12 @@
 	let tcExporting = false;
 	async function handleTcExport(format) {
 		tcExporting = true;
+		const settle = notifyProgress(TC_EXPORTING_TOAST);
 		try {
 			await downloadTestCaseExport('all', null, format);
+			settle('success', TC_EXPORTED_TOAST);
 		} catch (e) {
-			notify('error', e.message || TC_IMPORT_FAILED_FALLBACK);
+			settle('error', e.message || TC_IMPORT_FAILED_FALLBACK);
 		} finally {
 			tcExporting = false;
 		}

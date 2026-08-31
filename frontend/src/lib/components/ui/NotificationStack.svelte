@@ -14,18 +14,28 @@
 	{#each $notifications as n (n.id)}
 		<div class="card" animate:flip={{ duration: 180 }} transition:fly={{ y: 12, duration: 200 }}>
 			<div class="row">
-				<span class="dot {n.type}"></span>
+				{#if n.loading}
+					<span class="spinner" aria-hidden="true"></span>
+				{:else}
+					<span class="dot {n.type}"></span>
+				{/if}
 				<span class="msg">{n.message}</span>
-				<button class="link" on:click={() => dismissNotification(n.id)} aria-label={DISMISS_LABEL}>
-					<svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-						<path
-							d="M1 1l12 12M13 1L1 13"
-							stroke="currentColor"
-							stroke-width="1.6"
-							stroke-linecap="round"
-						/>
-					</svg>
-				</button>
+				{#if !n.loading}
+					<button
+						class="link"
+						on:click={() => dismissNotification(n.id)}
+						aria-label={DISMISS_LABEL}
+					>
+						<svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+							<path
+								d="M1 1l12 12M13 1L1 13"
+								stroke="currentColor"
+								stroke-width="1.6"
+								stroke-linecap="round"
+							/>
+						</svg>
+					</button>
+				{/if}
 			</div>
 		</div>
 	{/each}
@@ -72,6 +82,21 @@
 		border-radius: 50%;
 		flex-shrink: 0;
 		background: var(--text-muted);
+	}
+
+	.spinner {
+		width: 12px;
+		height: 12px;
+		flex-shrink: 0;
+		border-radius: 50%;
+		border: 2px solid var(--border);
+		border-top-color: var(--accent);
+		animation: spin 0.7s linear infinite;
+	}
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 	.dot.success {
 		background: var(--pass);
