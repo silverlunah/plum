@@ -528,6 +528,7 @@
 				</button>
 			{/each}
 		</nav>
+		<hr class="sidebar-divider" />
 		<p class="sidebar-section">{NAV_SECTION_LAYOUT}</p>
 		<button
 			class="sidebar-item dark-toggle"
@@ -540,6 +541,7 @@
 				<span class="mini-thumb"></span>
 			</span>
 		</button>
+		<hr class="sidebar-divider" />
 		<p class="sidebar-section">{NAV_SECTION_DOCS}</p>
 		<ExternalNavLink href={DOCS_URL} label={DOCUMENTATION_LABEL}>
 			<img class="docs-favicon" src="/favicon-32x32.png" alt="" width="14" height="14" />
@@ -550,6 +552,7 @@
 		<ExternalNavLink href={CUCUMBER_URL} label={CUCUMBER_LABEL}>
 			<ServiceIcon service="cucumber" size={14} />
 		</ExternalNavLink>
+		<hr class="sidebar-divider" />
 		<p class="sidebar-section">{NAV_SECTION_AUTH}</p>
 		<button class="sidebar-item sign-out" on:click={handleLogout}>{SIGN_OUT_LABEL}</button>
 	</aside>
@@ -1168,8 +1171,14 @@
 		font-weight: 500;
 	}
 
+	.sidebar-divider {
+		border: none;
+		border-top: 1px solid var(--border);
+		margin: 0.5rem 0.25rem;
+	}
+
 	.sidebar-section {
-		margin: 1rem 0 0.35rem;
+		margin: 0.5rem 0 0.35rem;
 		padding: 0 0.75rem;
 		font-size: 0.6875rem;
 		font-weight: 600;
