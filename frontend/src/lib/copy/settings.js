@@ -27,18 +27,20 @@ export const TC_EXPORT_DESC =
 	'Download every suite and case in this project as a JSON or CSV file.';
 export const TC_IMPORT_CARD_TITLE = 'Import';
 export const TC_IMPORT_DESC =
-	'Upload a JSON file exported from Test Repository. Suites and cases are added as new records.';
+	'Upload a JSON file exported from Test Repository. Matching IDs are updated in place, new IDs are added, and a case that lines up with an automation script is marked automated.';
 export const TC_IMPORT_HINT =
-	'A case is skipped when its ID already exists here. Cases with a different prefix or no ID are imported with a fresh ID.';
+	'Suites and cases are matched by ID. A different prefix or missing ID gets a fresh ID. Only entries with no title are skipped.';
 export const TC_IMPORT_FAILED_FALLBACK = 'Could not read that file.';
 export const TC_IMPORTING_TOAST = 'Importing test cases…';
 export const TC_EXPORTING_TOAST = 'Preparing export…';
 export const TC_EXPORTED_TOAST = 'Export downloaded.';
 export const tcImportLabel = (importing) => (importing ? 'Importing…' : 'Import');
-export const tcImportSummary = ({ importedCases, importedSuites, skippedCases, skippedSuites }) => {
-	const imported = `Imported ${importedCases} ${importedCases === 1 ? 'case' : 'cases'} in ${importedSuites} ${importedSuites === 1 ? 'suite' : 'suites'}`;
-	const skipped = skippedCases + skippedSuites;
-	return skipped > 0 ? `${imported} · skipped ${skippedCases} already here` : imported + '.';
+export const tcImportSummary = ({ importedCases, updatedCases, skippedCases }) => {
+	const parts = [];
+	if (importedCases) parts.push(`${importedCases} added`);
+	if (updatedCases) parts.push(`${updatedCases} updated`);
+	if (skippedCases) parts.push(`${skippedCases} skipped (no title)`);
+	return parts.length ? `Test cases: ${parts.join(' · ')}.` : 'Nothing to import.';
 };
 export const INTEGRATIONS_LABEL = 'Integrations';
 export const MCP_NAV_LABEL = 'MCP';
