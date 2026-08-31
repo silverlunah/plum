@@ -18,6 +18,7 @@
 	import { browserLabel } from '$lib/utils/format';
 	import {
 		REPORTS_BACK_LABEL,
+		BACK_LABEL,
 		PASSED_LABEL,
 		FAILED_LABEL,
 		LIVE_PAGE_TITLE,
@@ -135,6 +136,11 @@
 		if (countdownInterval) clearInterval(countdownInterval);
 		goto(reportUrl(run.latestReportId));
 	}
+
+	function goBack() {
+		if (history.length > 1) history.back();
+		else goto('/');
+	}
 </script>
 
 <svelte:head><title>{LIVE_PAGE_TITLE}</title></svelte:head>
@@ -180,9 +186,22 @@
 			class:header-fail={run.verdict === 'fail'}
 		>
 			<div class="header-left">
-				<div class="header-back">
-					<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
-				</div>
+				<button class="header-back-btn" on:click={goBack}>
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<line x1="19" y1="12" x2="5" y2="12" />
+						<polyline points="12 19 5 12 12 5" />
+					</svg>
+					{BACK_LABEL}
+				</button>
 
 				{#if status === 'running'}
 					<span class="live-badge"><span class="live-dot"></span>{LIVE_BADGE_LABEL}</span>
@@ -359,10 +378,8 @@
 			</div>
 
 			<div class="terminal-panel">
-				<div class="terminal-bar">
-					<span class="dot red"></span>
-					<span class="dot yellow"></span>
-					<span class="dot green"></span>
+				<div class="terminal-head">
+					<span class="term-status" class:running={status === 'running'}></span>
 					<span class="terminal-label">
 						{#if isMulti}
 							{activeLane?.name ?? RUNNER_LABEL}
@@ -478,14 +495,22 @@
 		flex-wrap: wrap;
 	}
 
-	.header-back {
-		display: flex;
+	.header-back-btn {
+		display: inline-flex;
 		align-items: center;
-		padding-right: 0.875rem;
+		gap: 0.35rem;
+		padding: 0 0.875rem 0 0;
+		border: none;
 		border-right: 1px solid var(--border);
+		background: transparent;
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition: color var(--duration-fast);
 	}
-	.header-back :global(.back-row) {
-		margin-bottom: 0;
+	.header-back-btn:hover {
+		color: var(--text);
 	}
 
 	.live-badge {
@@ -729,39 +754,35 @@
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
+		background: var(--terminal-bg);
 	}
 
-	.terminal-bar {
+	.terminal-head {
 		display: flex;
 		align-items: center;
-		gap: 6px;
-		padding: 0.6rem 0.875rem;
-		background: rgba(0, 0, 0, 0.35);
+		gap: 0.5rem;
+		padding: 0.75rem 1.25rem;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 		flex-shrink: 0;
 	}
-	.dot {
-		display: block;
-		width: 10px;
-		height: 10px;
+	.term-status {
+		width: 6px;
+		height: 6px;
 		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.25);
+		flex-shrink: 0;
 	}
-	.dot.red {
-		background: #ff5f57;
-	}
-	.dot.yellow {
-		background: #febc2e;
-	}
-	.dot.green {
-		background: #28c840;
+	.term-status.running {
+		background: var(--pass);
+		animation: dotPulse 1.4s ease-in-out infinite;
 	}
 	.terminal-label {
-		margin-left: auto;
 		font-size: 0.68rem;
 		font-family: 'JetBrains Mono', monospace;
 		font-weight: 500;
-		letter-spacing: 0.06em;
+		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: rgba(255, 255, 255, 0.3);
+		color: rgba(255, 255, 255, 0.4);
 	}
 
 	.terminal {

@@ -6,6 +6,7 @@
 import { pluralize } from './common';
 
 export const REPORTS_BACK_LABEL = 'Reports';
+export const BACK_LABEL = 'Back';
 export const PASSED_LABEL = 'Passed';
 export const FAILED_LABEL = 'Failed';
 
