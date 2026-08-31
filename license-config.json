@@ -28,9 +28,11 @@
 	"ignore": [
 		"**/backend/tests/**",
 		"**/backend/_scaffold/**",
+		"**/projects/**",
 		"**/.prettierrc",
 		"**/.husky",
 		"**/*.md",
+		"**/*.feature",
 		"**/prisma/migrations/**",
 		"**/prisma/schema.prisma",
 		"**/.npmignore",

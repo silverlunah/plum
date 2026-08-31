@@ -129,6 +129,7 @@ const serverConfigLib = () => require(path.join(backendLib, 'serverConfig.js'));
 const nodeRegisterLib = () => require(path.join(backendLib, 'nodeRegister.js'));
 const runnerProcessLib = () => require(path.join(backendLib, 'runnerProcess.js'));
 const globalRegistryLib = () => require(path.join(backendLib, 'globalRegistry.js'));
+const bootServiceLib = () => require(path.join(backendLib, 'bootService.js'));
 
 /* -----------------------------------------------------
  *                 Interactive prompts
@@ -903,11 +904,45 @@ async function bringNodeUp(cfg) {
 	}
 }
 
+// undefined = leave the boot entry alone (the boot service itself re-runs
+// `node start` with no flag — it must not re-prompt or reinstall).
+async function resolveBootChoice(args) {
+	if (anyFlags(args, ['--boot'])) return true;
+	if (anyFlags(args, ['--no-boot'])) return false;
+	if (!interactiveAllowed()) return undefined;
+	const v = await clack.confirm({
+		message: 'Start this node automatically when the machine boots?',
+		initialValue: false
+	});
+	if (clack.isCancel(v)) return undefined;
+	return v;
+}
+
+async function applyBootChoice(name, choice) {
+	if (choice === undefined) return;
+	const { installNodeBoot, removeNodeBoot } = bootServiceLib();
+	if (choice) {
+		const res = installNodeBoot(name);
+		if (res.ok) {
+			clack.log.success(`"${name}" will start on boot.`);
+			if (res.hint) clack.log.info(res.hint);
+		} else {
+			clack.log.warn(`Couldn't set up start-on-boot: ${res.reason}`);
+		}
+	} else {
+		removeNodeBoot(name);
+		clack.log.info(`"${name}" will not start on boot.`);
+	}
+}
+
 async function nodeStart({ reconfig, name }) {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node  ')));
 	migrateLegacyNodes();
 	const cfg = await configureNode({ force: reconfig, name });
 	await bringNodeUp(cfg);
+	if (!process.exitCode) {
+		await applyBootChoice(cfg.name, await resolveBootChoice(process.argv.slice(3)));
+	}
 }
 
 async function nodeRestart({ name: nameArg }) {
@@ -971,11 +1006,13 @@ async function nodeList() {
 		clack.log.info('No nodes on this machine — add one with `plum node start <name>`.');
 		return;
 	}
+	const { nodeBootStatus } = bootServiceLib();
 	for (const n of names) {
 		const c = loadNodeByName(n);
 		const running = c.id && statusOf(String(c.id)) === 'running';
+		const boot = nodeBootStatus(n) === 'enabled' ? pc.dim(' ⏻ boot') : '';
 		console.log(
-			`${running ? pc.green('●') : pc.dim('○')} ${n.padEnd(16)} ${pc.dim((c.url || '') + '  :' + (c.port || '?'))}`
+			`${running ? pc.green('●') : pc.dim('○')} ${n.padEnd(16)} ${pc.dim((c.url || '') + '  :' + (c.port || '?'))}${boot}`
 		);
 	}
 }
@@ -1011,6 +1048,7 @@ async function nodeDelete({ name: nameArg }) {
 		}
 	}
 
+	bootServiceLib().removeNodeBoot(target);
 	deleteNodeByName(target);
 	unregisterInstall('node', nodeHome(target));
 	clack.outro(pc.green(`Deleted "${target}" — process, local config, and primary registration.`));
@@ -1458,7 +1496,7 @@ switch (command) {
 					'  delete <name>    stop it, delete its config, unregister it from the primary',
 					'  reconfig [name]  re-enter settings and re-register, without starting',
 					'',
-					'  Options for start: --mode <local|production> --primary <url> --url <url> --port <n> --token <s> --node-secret <s> --browser <chromium|firefox>',
+					'  Options for start: --mode <local|production> --primary <url> --url <url> --port <n> --token <s> --node-secret <s> --browser <chromium|firefox> --boot | --no-boot',
 					''
 				].join('\n')
 			);
@@ -1600,6 +1638,7 @@ switch (command) {
 			'    --node-secret <s> Primary’s PLUM_NODE_SECRET (co-located: read automatically)'
 		);
 		console.log('    --browser <name>   chromium | firefox (default: chromium)');
+		console.log('    --boot | --no-boot Start (or stop starting) this node when the machine boots');
 		console.log('  node list            List this machine’s nodes and their status');
 		console.log('  node restart [name]  Stop, refresh deps, and restart a node');
 		console.log('  node stop [name]     Stop a node');
