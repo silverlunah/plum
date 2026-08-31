@@ -87,6 +87,21 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
 - The run queue serialises by **runner node**, across all projects — two
   projects targeting the same node (or both using the built-in runner) queue
   FIFO; projects on disjoint nodes run in parallel.
+- A run started over many case IDs no longer prints the whole
+  `@TC-001 or @TC-002 or …` expression full-width — the live-run and report
+  headers show the first few and a **"+N more"** toggle.
+
+### Building and executing a test run
+
+- The **Build** tab autosaves. Adding, removing or reordering a case persists
+  immediately — the Save button is gone; **Start Execution** saves then begins.
+- On the **Execute** tab you **claim** a case before recording its result. The
+  Pass / Fail / Blocked / Skip buttons stay inactive until the case is assigned
+  to you (**"Assign to me"**), so every result carries the name of whoever
+  recorded it.
+- An **automated** case shows only its automation verdict plus "Assign to me";
+  claiming it reveals the manual override buttons — for when the automation
+  itself is broken and a human needs to set the result.
 
 ### MCP
 
@@ -105,11 +120,20 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
 - Upgrading wipes the old single per-project key; each integration mints a
   personal one.
 
-### Backup
+### Backup & retention
 
 - Database backup is **instance-level** — one schedule, one timezone, one S3
   target for the whole database, configured on the organisation (Settings →
   Backup). It no longer silently follows the first project's settings.
+- **Report retention** (Settings → Backup, owner): keep test reports and their
+  session recordings for **30 / 60 / 90 days, or forever** (the default). A
+  nightly job at 3:23 AM deletes anything older — recordings go with their
+  report; manual-run history is kept.
+- The Test Repository **Import / Export** is one card, and importing a
+  test-case export now **matches by ID**: an existing suite or case is updated
+  in place instead of skipped, a new one is added keeping its ID, and a case
+  that lines up with a `.feature` tag is marked automated right away.
+  Re-importing the same file no longer clones the whole repository.
 
 ### Security hardening
 
@@ -143,6 +167,10 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
 
 ## Fixes shipped alongside
 
+- Manual **backup import** was broken for every file once projects landed — the
+  importer still keyed suites, cases and cron jobs on their old global
+  uniqueness. It now resolves the target project and re-points each row, so an
+  export → import round-trip works again.
 - Scheduled jobs are keyed by job id, not name, so two projects can each have a
   `nightly` schedule without stopping each other.
 - Project and backup timezones are independent: the project timezone drives that
@@ -170,6 +198,10 @@ list` marks which nodes have it.
   the project's `BASE_URL` for that run — point each pull request at its own
   preview deployment. (Already worked; now documented, and the Settings snippet
   shows it.)
+- Run-page and Settings polish: a run's case rows read as one card, notification
+  toasts spin while an import / export / upload is in flight, the Test
+  Repository header shows the project's total case count, and the Users / Backup
+  / Runners settings panes match the standard header style.
 - The license-header tool no longer touches `projects/` or `*.feature` files —
   it had been prepending a `/* … */` block to scaffolded feature files (breaking
   Gherkin) and to the persisted secret files under a project's `reports/`
