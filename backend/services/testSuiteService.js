@@ -125,14 +125,30 @@ async function getById(projectId, id) {
 	});
 }
 
-async function create(projectId, { name, description, priority, createdById, viaMcp = false }) {
-	const project = await prisma.project.update({
-		where: { id: projectId },
-		data: { suiteSeqNext: { increment: 1 } },
-		select: { suiteSeqNext: true, testSuitePrefix: true }
-	});
-	const num = String(project.suiteSeqNext).padStart(3, '0');
-	const displayId = `${project.testSuitePrefix}-${num}`;
+async function create(
+	projectId,
+	{ name, description, priority, createdById, viaMcp = false, displayId = null }
+) {
+	// Import can carry an existing displayId (e.g. TS-004) to keep it lined up
+	// with the source project; bump the sequence past it so a later auto-issued
+	// id can't collide. Otherwise issue the next one normally.
+	if (displayId) {
+		const n = Number(String(displayId).match(/-(\d+)$/)?.[1]);
+		if (Number.isFinite(n)) {
+			await prisma.project.updateMany({
+				where: { id: projectId, suiteSeqNext: { lte: n } },
+				data: { suiteSeqNext: n + 1 }
+			});
+		}
+	} else {
+		const project = await prisma.project.update({
+			where: { id: projectId },
+			data: { suiteSeqNext: { increment: 1 } },
+			select: { suiteSeqNext: true, testSuitePrefix: true }
+		});
+		const num = String(project.suiteSeqNext).padStart(3, '0');
+		displayId = `${project.testSuitePrefix}-${num}`;
+	}
 
 	const suite = await prisma.testSuite.create({
 		data: {

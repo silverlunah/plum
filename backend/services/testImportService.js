@@ -6,6 +6,7 @@
 const prisma = require('./prisma');
 const testCaseService = require('./testCaseService');
 const testSuiteService = require('./testSuiteService');
+const reportService = require('./reportService');
 
 // "TC-014" → "TC", "MY-TEAM-3" → "MY-TEAM", "loose" → "loose"
 const prefixOf = (displayId) => String(displayId ?? '').replace(/-\d+$/, '');
@@ -22,7 +23,14 @@ async function importTestCases(projectId, payload, userId) {
 		select: { testCasePrefix: true, testSuitePrefix: true }
 	});
 
-	const result = { importedSuites: 0, importedCases: 0, skippedSuites: 0, skippedCases: 0 };
+	const result = {
+		importedSuites: 0,
+		importedCases: 0,
+		updatedSuites: 0,
+		updatedCases: 0,
+		skippedSuites: 0,
+		skippedCases: 0
+	};
 
 	for (const suite of payload.suites) {
 		if (!suite || typeof suite.name !== 'string' || !suite.name.trim()) {
@@ -30,23 +38,30 @@ async function importTestCases(projectId, payload, userId) {
 			continue;
 		}
 
-		let suiteId;
-		const suiteCollides =
-			suite.displayId &&
-			prefixOf(suite.displayId) === project.testSuitePrefix &&
-			(await prisma.testSuite.findUnique({
-				where: { projectId_displayId: { projectId, displayId: suite.displayId } }
-			}));
+		const suiteFields = {
+			name: suite.name.trim(),
+			description: suite.description ?? '',
+			priority: suite.priority ?? 'Medium'
+		};
+		// Keep the source displayId when it belongs to this project's prefix — that
+		// is what lets a re-import land back on the same rows instead of duplicating.
+		const keepSuiteId = suite.displayId && prefixOf(suite.displayId) === project.testSuitePrefix;
+		const existingSuite = keepSuiteId
+			? await prisma.testSuite.findUnique({
+					where: { projectId_displayId: { projectId, displayId: suite.displayId } }
+				})
+			: null;
 
-		if (suiteCollides) {
-			suiteId = suiteCollides.id;
-			result.skippedSuites += 1;
+		let suiteId;
+		if (existingSuite) {
+			await testSuiteService.update(projectId, existingSuite.id, suiteFields);
+			suiteId = existingSuite.id;
+			result.updatedSuites += 1;
 		} else {
 			const created = await testSuiteService.create(projectId, {
-				name: suite.name.trim(),
-				description: suite.description ?? '',
-				priority: suite.priority ?? 'Medium',
-				createdById: userId
+				...suiteFields,
+				createdById: userId,
+				displayId: keepSuiteId ? suite.displayId : null
 			});
 			suiteId = created.id;
 			result.importedSuites += 1;
@@ -58,30 +73,43 @@ async function importTestCases(projectId, payload, userId) {
 				continue;
 			}
 
-			const caseCollides =
-				c.displayId &&
-				prefixOf(c.displayId) === project.testCasePrefix &&
-				(await prisma.testCase.findUnique({
-					where: { projectId_displayId: { projectId, displayId: c.displayId } }
-				}));
-			if (caseCollides) {
-				result.skippedCases += 1;
-				continue;
-			}
-
-			const created = await testCaseService.create(projectId, {
-				suiteId,
+			const caseFields = {
 				title: c.title.trim(),
 				description: c.description ?? '',
-				priority: c.priority ?? 'Medium',
-				createdById: userId
-			});
-			if (created && Array.isArray(c.steps) && c.steps.length > 0) {
-				await testCaseService.upsertSteps(projectId, created.id, c.steps);
+				priority: c.priority ?? 'Medium'
+			};
+			const keepCaseId = c.displayId && prefixOf(c.displayId) === project.testCasePrefix;
+			const existingCase = keepCaseId
+				? await prisma.testCase.findUnique({
+						where: { projectId_displayId: { projectId, displayId: c.displayId } }
+					})
+				: null;
+
+			// Steps are replaced only when the file actually carries some — an older
+			// export without steps shouldn't wipe steps off an existing case.
+			const hasSteps = Array.isArray(c.steps) && c.steps.length > 0;
+
+			if (existingCase) {
+				await testCaseService.update(projectId, existingCase.id, { ...caseFields, suiteId });
+				if (hasSteps) await testCaseService.upsertSteps(projectId, existingCase.id, c.steps);
+				result.updatedCases += 1;
+			} else {
+				const created = await testCaseService.create(projectId, {
+					...caseFields,
+					suiteId,
+					createdById: userId,
+					displayId: keepCaseId ? c.displayId : null
+				});
+				if (created && hasSteps) await testCaseService.upsertSteps(projectId, created.id, c.steps);
+				result.importedCases += 1;
 			}
-			result.importedCases += 1;
 		}
 	}
+
+	// A just-imported case whose ID matches an @tag in a .feature file is
+	// automated even though no run has happened yet — reconcile the flag now so
+	// the badge shows immediately.
+	await reportService.syncAutomatedFromFeatures(projectId);
 
 	return result;
 }
