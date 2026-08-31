@@ -211,6 +211,10 @@
 		} catch {}
 	}
 
+	// Save buttons stay disabled until the form actually differs from what was
+	// loaded (or last saved). Each form keeps a JSON snapshot of its clean state.
+	const snapshot = (o) => JSON.stringify(o);
+
 	let project = {
 		name: '',
 		logoUrl: '',
@@ -220,15 +224,26 @@
 		manualRepositoryOnly: false
 	};
 	let projectSaving = false;
+	let projectPristine = snapshot(project);
+	$: projectDirty = snapshot(project) !== projectPristine;
 
 	let prefixes = { testCasePrefix: 'TC', testSuitePrefix: 'TS' };
 	let prefixesSaving = false;
+	let prefixesPristine = snapshot(prefixes);
+	$: prefixesDirty = snapshot(prefixes) !== prefixesPristine;
 	let migrateForm = { testCasePrefix: '', testSuitePrefix: '' };
 	let migrating = false;
+	$: migrateReady =
+		!!migrateForm.testCasePrefix.trim() &&
+		!!migrateForm.testSuitePrefix.trim() &&
+		(migrateForm.testCasePrefix !== prefixes.testCasePrefix ||
+			migrateForm.testSuitePrefix !== prefixes.testSuitePrefix);
 
 	let profileForm = { name: '', email: '' };
 	let profileSaving = false;
 	let profileError = '';
+	let profilePristine = snapshot(profileForm);
+	$: profileDirty = snapshot(profileForm) !== profilePristine;
 
 	let pwForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
 	let pwSaving = false;
@@ -241,6 +256,8 @@
 
 	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
 	let integrationsSaving = false;
+	let integrationsPristine = snapshot(integrations);
+	$: integrationsDirty = snapshot(integrations) !== integrationsPristine;
 
 	let mcpKey = '';
 	let mcpKeySet = false;
@@ -253,9 +270,11 @@
 	onMount(async () => {
 		try {
 			project = await fetchProject();
+			projectPristine = snapshot(project);
 		} catch {}
 		try {
 			prefixes = await fetchPrefixes();
+			prefixesPristine = snapshot(prefixes);
 			migrateForm = {
 				testCasePrefix: prefixes.testCasePrefix,
 				testSuitePrefix: prefixes.testSuitePrefix
@@ -263,6 +282,7 @@
 		} catch {}
 		try {
 			integrations = await fetchIntegrations();
+			integrationsPristine = snapshot(integrations);
 		} catch {}
 		try {
 			const mcp = await fetchMcpConfig();
@@ -271,6 +291,7 @@
 		} catch {}
 		if ($auth.user) {
 			profileForm = { name: $auth.user.name, email: $auth.user.email };
+			profilePristine = snapshot(profileForm);
 		}
 	});
 
@@ -282,6 +303,7 @@
 		projectSaving = true;
 		try {
 			await saveProject(project);
+			projectPristine = snapshot(project);
 			// Nav reads homepage mode from the projects store — refresh it so the
 			// reorder / hide takes effect without a reload.
 			try {
@@ -336,6 +358,7 @@
 		prefixesSaving = true;
 		try {
 			prefixes = await savePrefixes(prefixes);
+			prefixesPristine = snapshot(prefixes);
 			notify('success', PREFIXES_SAVED_TOAST);
 		} catch {
 			notify('error', PREFIXES_SAVE_FAILED);
@@ -349,6 +372,7 @@
 		try {
 			await migratePrefixes(migrateForm);
 			prefixes = { ...prefixes, ...migrateForm };
+			prefixesPristine = snapshot(prefixes);
 			notify('success', MIGRATION_COMPLETE_TOAST);
 		} catch {
 			notify('error', MIGRATION_FAILED_TOAST);
@@ -367,6 +391,7 @@
 				email: profileForm.email
 			});
 			auth.login($auth.token, { ...$auth.user, ...user });
+			profilePristine = snapshot(profileForm);
 			notify('success', PROFILE_UPDATED_TOAST);
 		} catch (e) {
 			profileError = e.message;
@@ -458,6 +483,7 @@
 		integrationsSaving = true;
 		try {
 			integrations = await saveIntegrations(integrations);
+			integrationsPristine = snapshot(integrations);
 			notify('success', INTEGRATIONS_SAVED_TOAST);
 		} catch {
 			notify('error', INTEGRATIONS_SAVE_FAILED);
@@ -658,7 +684,10 @@
 					</div>
 
 					<div class="card-footer">
-						<Button on:click={handleSaveProject} disabled={projectSaving || !project.name?.trim()}>
+						<Button
+							on:click={handleSaveProject}
+							disabled={projectSaving || !projectDirty || !project.name?.trim()}
+						>
 							{saveProjectLabel(projectSaving)}
 						</Button>
 					</div>
@@ -705,7 +734,10 @@
 					</div>
 
 					<div class="card-footer">
-						<Button on:click={handleSaveProject} disabled={projectSaving || !project.name?.trim()}>
+						<Button
+							on:click={handleSaveProject}
+							disabled={projectSaving || !projectDirty || !project.name?.trim()}
+						>
 							{saveProjectLabel(projectSaving)}
 						</Button>
 					</div>
@@ -809,6 +841,7 @@
 						<Button
 							on:click={handleSavePrefixes}
 							disabled={prefixesSaving ||
+								!prefixesDirty ||
 								!prefixes.testCasePrefix.trim() ||
 								!prefixes.testSuitePrefix.trim()}
 						>
@@ -851,7 +884,11 @@
 						</div>
 					</div>
 					<div class="card-footer">
-						<Button variant="ghost" on:click={handleMigratePrefixes} disabled={migrating}>
+						<Button
+							variant="ghost"
+							on:click={handleMigratePrefixes}
+							disabled={migrating || !migrateReady}
+						>
 							{runMigrationLabel(migrating)}
 						</Button>
 					</div>
@@ -913,7 +950,10 @@
 						/>
 					</div>
 
-					<Button on:click={handleSaveIntegrations} disabled={integrationsSaving}>
+					<Button
+						on:click={handleSaveIntegrations}
+						disabled={integrationsSaving || !integrationsDirty}
+					>
 						{saveIntegrationsLabel(integrationsSaving)}
 					</Button>
 				</div>
@@ -1102,7 +1142,7 @@
 					<div class="card-footer">
 						<Button
 							on:click={handleUpdateProfile}
-							disabled={profileSaving || !profileForm.name || !profileForm.email}
+							disabled={profileSaving || !profileDirty || !profileForm.name || !profileForm.email}
 						>
 							{saveProfileLabel(profileSaving)}
 						</Button>
