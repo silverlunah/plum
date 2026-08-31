@@ -70,6 +70,18 @@ export const ELEMENT_SIZE_LABEL = 'Size';
 export const INSPECTOR_TAB_ELEMENT = 'Element';
 export const INSPECTOR_TAB_DOM = 'DOM';
 export const DOM_TREE_EMPTY = 'Click an element in the replay to locate it in the DOM.';
+export const ELEMENT_LOCATORS_LABEL = 'Locators';
+export const LOCATOR_RECOMMENDED_LABEL = 'recommended';
+export const LOCATOR_NOT_UNIQUE_LABEL = 'matches multiple';
+export const COPY_LOCATOR_TITLE = 'Copy';
+export const LOCATOR_COPIED_TITLE = 'Copied';
+export const INSPECTOR_SEARCH_PLACEHOLDER = 'Search text, CSS selector or XPath…';
+export const inspectorSearchCount = (kind, n) => {
+	const what = { css: 'CSS', xpath: 'XPath', keyword: 'text' }[kind] ?? '';
+	if (n === 0) return `No ${what} matches`.replace('  ', ' ');
+	return `${n} ${what} ${n === 1 ? 'match' : 'matches'}`.replace('  ', ' ');
+};
+export const INSPECTOR_SEARCH_INVALID = 'Invalid selector';
 export const recordingTabLabel = (tabIndex) =>
 	tabIndex === 0 ? 'Main tab' : `Tab/Window ${tabIndex + 1}`;
 
