@@ -162,6 +162,10 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
   `--no-boot`, or the interactive prompt) using systemd (Linux), launchd (macOS)
   or a Scheduled Task (Windows). Toggle it from `plum manage-nodes`; `plum node
 list` marks which nodes have it.
+- **Settings → Runners** shows the node **registration secret**
+  (`PLUM_NODE_SECRET`) — reveal + copy — and a **Regenerate** button that rolls
+  it and pushes the new value to every online node automatically; offline nodes
+  are listed for a manual update.
 - CI triggers: a run started via `POST /trigger` can pass `baseUrl` to override
   the project's `BASE_URL` for that run — point each pull request at its own
   preview deployment. (Already worked; now documented, and the Settings snippet

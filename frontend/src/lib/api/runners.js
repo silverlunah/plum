@@ -64,3 +64,18 @@ export async function setBuiltInEnabled(enabled) {
 	if (!res.ok) throw new Error('Failed to update built-in runner setting');
 	return res.json();
 }
+
+export async function fetchNodeSecret() {
+	const res = await fetch(`${API_BASE}/runners/node-secret`, { headers: authHeaders() });
+	if (!res.ok) return { nodeSecret: null };
+	return res.json();
+}
+
+export async function regenerateNodeSecret() {
+	const res = await fetch(`${API_BASE}/runners/node-secret/regenerate`, {
+		method: 'POST',
+		headers: authHeaders()
+	});
+	if (!res.ok) throw new Error('Failed to regenerate the node secret');
+	return res.json();
+}

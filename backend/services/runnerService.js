@@ -134,6 +134,32 @@ async function callControlEndpoint(id, endpoint, timeoutMs) {
 const stop = (id) => callControlEndpoint(id, 'shutdown', 5000);
 const restart = (id) => callControlEndpoint(id, 'restart', 5000);
 
+// After PLUM_NODE_SECRET is regenerated, hand the new value to every node so its
+// saved config stays valid for the next `plum node` command. Best-effort — an
+// offline node keeps running fine, it just needs a manual update later.
+async function pushNodeSecret(secret) {
+	const runners = await prisma.runner.findMany();
+	const results = await Promise.all(
+		runners.map(async (r) => {
+			try {
+				const res = await fetch(`${r.url}/api/node-secret`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json', ...bearerHeader(r.token) },
+					body: JSON.stringify({ secret }),
+					signal: AbortSignal.timeout(8000)
+				});
+				return { name: r.name, ok: res.ok, error: res.ok ? null : `HTTP ${res.status}` };
+			} catch (e) {
+				return { name: r.name, ok: false, error: e.message };
+			}
+		})
+	);
+	return {
+		applied: results.filter((x) => x.ok).map((x) => x.name),
+		failed: results.filter((x) => !x.ok).map(({ name, error }) => ({ name, error }))
+	};
+}
+
 // ---------------------------------------------------------------------------
 // Remote execution
 // ---------------------------------------------------------------------------
@@ -310,6 +336,7 @@ module.exports = {
 	ping,
 	stop,
 	restart,
+	pushNodeSecret,
 	dispatchAndPoll,
 	cancelRemoteJob
 };
