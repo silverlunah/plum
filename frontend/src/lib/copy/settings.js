@@ -91,6 +91,10 @@ export const RETRY_FAILED_TESTS_HINT =
 	'Automatically re-run failed scenarios up to this many times before finalizing the report. 0 disables retries.';
 export const DARK_MODE_LABEL = 'Dark mode';
 export const DOCUMENTATION_LABEL = 'Plum Documentation';
+export const NAV_SECTION_GENERAL = 'General';
+export const NAV_SECTION_LAYOUT = 'Layout';
+export const NAV_SECTION_DOCS = 'Documentation';
+export const NAV_SECTION_AUTH = 'Authentication';
 export const DARK_MODE_DESC = 'Switch between light and dark appearance';
 export const PROJECT_SAVED_TOAST = 'Project settings saved.';
 export const PROJECT_SAVE_FAILED = 'Failed to save project settings.';

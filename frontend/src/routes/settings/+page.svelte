@@ -29,7 +29,14 @@
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { TIMEZONES } from '$lib/utils/timezones';
-	import { API_BASE, MAX_TEST_RETRIES, COPY_TIMEOUT_MS, DOCS_URL } from '$lib/constants';
+	import {
+		API_BASE,
+		MAX_TEST_RETRIES,
+		COPY_TIMEOUT_MS,
+		DOCS_URL,
+		PLAYWRIGHT_URL,
+		CUCUMBER_URL
+	} from '$lib/constants';
 	import { copyText } from '$lib/utils/clipboard';
 	import Button from '$lib/components/ui/Button.svelte';
 	import ProjectAccess from '$lib/components/settings/ProjectAccess.svelte';
@@ -41,9 +48,9 @@
 	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
-	import LearnMoreLinks from '$lib/components/ui/LearnMoreLinks.svelte';
+	import ExternalNavLink from '$lib/components/ui/ExternalNavLink.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
-	import { EMAIL_LABEL } from '$lib/copy/common';
+	import { EMAIL_LABEL, PLAYWRIGHT_LABEL, CUCUMBER_LABEL } from '$lib/copy/common';
 	import {
 		PAGE_TITLE,
 		HEADING,
@@ -93,6 +100,10 @@
 		RETRY_FAILED_TESTS_HINT,
 		DARK_MODE_LABEL,
 		DOCUMENTATION_LABEL,
+		NAV_SECTION_GENERAL,
+		NAV_SECTION_LAYOUT,
+		NAV_SECTION_DOCS,
+		NAV_SECTION_AUTH,
 		PROJECT_SAVED_TOAST,
 		PROJECT_SAVE_FAILED,
 		saveProjectLabel,
@@ -505,6 +516,7 @@
 <div class="settings-layout">
 	<!-- Left sidebar -->
 	<aside class="settings-sidebar">
+		<p class="sidebar-section">{NAV_SECTION_GENERAL}</p>
 		<nav>
 			{#each navItems as item}
 				<button
@@ -516,7 +528,7 @@
 				</button>
 			{/each}
 		</nav>
-		<hr class="sidebar-divider" />
+		<p class="sidebar-section">{NAV_SECTION_LAYOUT}</p>
 		<button
 			class="sidebar-item dark-toggle"
 			role="switch"
@@ -528,28 +540,17 @@
 				<span class="mini-thumb"></span>
 			</span>
 		</button>
-		<hr class="sidebar-divider" />
-		<a class="sidebar-item docs-link" href={DOCS_URL} target="_blank" rel="noopener noreferrer">
+		<p class="sidebar-section">{NAV_SECTION_DOCS}</p>
+		<ExternalNavLink href={DOCS_URL} label={DOCUMENTATION_LABEL}>
 			<img class="docs-favicon" src="/favicon-32x32.png" alt="" width="14" height="14" />
-			<span>{DOCUMENTATION_LABEL}</span>
-			<svg
-				class="docs-external"
-				width="12"
-				height="12"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-				<polyline points="15 3 21 3 21 9" />
-				<line x1="10" y1="14" x2="21" y2="3" />
-			</svg>
-		</a>
-		<div class="sidebar-learn-more"><LearnMoreLinks /></div>
-		<hr class="sidebar-divider" />
+		</ExternalNavLink>
+		<ExternalNavLink href={PLAYWRIGHT_URL} label={PLAYWRIGHT_LABEL}>
+			<ServiceIcon service="playwright" size={14} />
+		</ExternalNavLink>
+		<ExternalNavLink href={CUCUMBER_URL} label={CUCUMBER_LABEL}>
+			<ServiceIcon service="cucumber" size={14} />
+		</ExternalNavLink>
+		<p class="sidebar-section">{NAV_SECTION_AUTH}</p>
 		<button class="sidebar-item sign-out" on:click={handleLogout}>{SIGN_OUT_LABEL}</button>
 	</aside>
 
@@ -1167,10 +1168,18 @@
 		font-weight: 500;
 	}
 
-	.sidebar-divider {
-		border: none;
-		border-top: 1px solid var(--border);
-		margin: 0.5rem 0.25rem;
+	.sidebar-section {
+		margin: 1rem 0 0.35rem;
+		padding: 0 0.75rem;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-muted);
+	}
+
+	.sidebar-section:first-child {
+		margin-top: 0;
 	}
 
 	.dark-toggle {
@@ -1180,23 +1189,9 @@
 		gap: 0.75rem;
 	}
 
-	.docs-link {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		text-decoration: none;
-	}
 	.docs-favicon {
 		flex-shrink: 0;
 		border-radius: 3px;
-	}
-	.docs-external {
-		flex-shrink: 0;
-		margin-left: auto;
-		opacity: 0.5;
-	}
-	.sidebar-learn-more {
-		padding: 0.3rem 0.75rem 0.1rem;
 	}
 
 	.sidebar-item.sign-out {
