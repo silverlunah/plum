@@ -939,18 +939,26 @@ async function resolveBootChoice(args) {
 
 async function applyBootChoice(name, choice) {
 	if (choice === undefined) return;
-	const { installNodeBoot, removeNodeBoot } = bootServiceLib();
-	if (choice) {
-		const res = installNodeBoot(name);
-		if (res.ok) {
-			clack.log.success(`"${name}" will start on boot.`);
-			if (res.hint) clack.log.info(res.hint);
+	// The node is already running by this point — a boot-persistence failure
+	// (no systemd user session, no launchd, locked-down schtasks) must never
+	// take the whole `node start` down with it.
+	try {
+		const { installNodeBoot, removeNodeBoot } = bootServiceLib();
+		if (choice) {
+			const res = installNodeBoot(name);
+			if (res.ok) {
+				clack.log.success(`"${name}" will start on boot.`);
+				if (res.hint) clack.log.info(res.hint);
+			} else {
+				clack.log.warn(`Couldn't set up start-on-boot: ${res.reason}`);
+				if (res.hint) clack.log.info(res.hint);
+			}
 		} else {
-			clack.log.warn(`Couldn't set up start-on-boot: ${res.reason}`);
+			removeNodeBoot(name);
+			clack.log.info(`"${name}" will not start on boot.`);
 		}
-	} else {
-		removeNodeBoot(name);
-		clack.log.info(`"${name}" will not start on boot.`);
+	} catch (e) {
+		clack.log.warn(`Couldn't update start-on-boot: ${e.message}`);
 	}
 }
 
