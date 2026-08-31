@@ -43,6 +43,26 @@ router.post('/restart', authGuard, (req, res) => {
 	}, 200);
 });
 
+// The primary calls this after PLUM_NODE_SECRET is regenerated, so the copy this
+// machine's `plum node` CLI reads (~/.plum/nodes/<name>/.plum-node.json) stays
+// current. Matched to this process by RUNNER_ID.
+router.post('/node-secret', authGuard, (req, res) => {
+	if (!isNodeMode()) return res.status(403).json({ error: 'Not a node runner' });
+	const { secret } = req.body;
+	const id = process.env.RUNNER_ID;
+	if (!secret || !id) return res.status(400).json({ error: 'secret and RUNNER_ID are required' });
+	const nodeRegister = require('../lib/nodeRegister');
+	let updated = 0;
+	for (const name of nodeRegister.listNodeNames()) {
+		const cfg = nodeRegister.loadNodeByName(name);
+		if (String(cfg.id) === String(id)) {
+			nodeRegister.saveNodeByName(name, { ...cfg, nodeSecret: secret });
+			updated++;
+		}
+	}
+	res.json({ ok: true, updated });
+});
+
 // Start a remote test job
 router.post('/execute', authGuard, (req, res) => {
 	const jobId = nodeExecutionService.startJob(req.body);

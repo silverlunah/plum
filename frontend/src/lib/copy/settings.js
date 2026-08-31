@@ -100,6 +100,25 @@ export const RUNNER_UNREACHABLE_LABEL = 'unreachable';
 export const RUNNER_PINGING_LABEL = 'pinging…';
 export const REMOVE_LABEL = 'Remove';
 
+export const NODE_SECRET_LABEL = 'Registration secret';
+export const NODE_SECRET_DESC =
+	'A node on another machine needs this to register. `plum server` also prints it. A node on the server box reads it on its own.';
+export const NODE_SECRET_REVEAL_TITLE = 'Show';
+export const NODE_SECRET_HIDE_TITLE = 'Hide';
+export const NODE_SECRET_COPY_TITLE = 'Copy';
+export const NODE_SECRET_COPIED_TITLE = 'Copied';
+export const REGENERATE_NODE_SECRET_LABEL = 'Regenerate';
+export const REGENERATE_NODE_SECRET_MODAL_TITLE = 'Regenerate the registration secret?';
+export const REGENERATE_NODE_SECRET_WARNING =
+	'The current secret stops working immediately. Online nodes are updated automatically; any offline node must be re-run with the new secret (or reads it from the server box).';
+export const nodeSecretAppliedToast = (n) =>
+	n === 0
+		? 'New secret generated.'
+		: `New secret generated and pushed to ${n} node${n === 1 ? '' : 's'}.`;
+export const nodeSecretFailedNodes = (names) =>
+	`Couldn’t reach: ${names.join(', ')} — update the secret there manually.`;
+export const REGENERATE_NODE_SECRET_FAILED = 'Failed to regenerate the secret.';
+
 export const REGISTER_NODE_NOTE_TITLE = 'Adding a node';
 export const REGISTER_NODE_NOTE_PREFIX = 'Register nodes from the node machine — run';
 export const REGISTER_NODE_NOTE_MIDDLE = 'to start one and self-register it, or';
