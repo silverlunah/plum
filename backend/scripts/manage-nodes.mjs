@@ -351,10 +351,10 @@ async function addNode() {
 async function main() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Manage Nodes  ')));
 
-	if (!RUNNER_TOKEN) {
+	if (!NODE_SECRET) {
 		clack.log.warn(
-			'No node token available — stop / restart / delete will be rejected.\n' +
-				'Run `plum manage-nodes` on the primary host, or from a folder where you started a node.'
+			'No PLUM_NODE_SECRET available — register / restart / delete against the primary will be rejected.\n' +
+				'Run `plum manage-nodes` on the server host, or set PLUM_NODE_SECRET (Settings → Runners shows it).'
 		);
 	}
 
