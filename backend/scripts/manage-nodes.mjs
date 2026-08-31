@@ -42,17 +42,35 @@ function plumNode(...args) {
 
 const cancelled = (v) => clack.isCancel(v);
 
+// A real secret is one hex/base64 line; strip a stray license header (the
+// `add-license` bug used to prepend one to persisted secrets and node configs).
+function cleanSecret(v) {
+	if (!v) return null;
+	const last = String(v)
+		.split(/\r?\n/)
+		.map((l) =>
+			l
+				.trim()
+				.replace(/^\/\*|\*\/$/g, '')
+				.trim()
+		)
+		.filter(Boolean)
+		.pop();
+	return last && /^[A-Za-z0-9+/=_-]{16,}$/.test(last) ? last : null;
+}
+
 // env (set by `plum` from the primary's container), else a secret a node saved
 // when it registered.
 function resolveNodeSecret() {
-	if (process.env.PLUM_NODE_SECRET) return process.env.PLUM_NODE_SECRET;
+	const fromEnv = cleanSecret(process.env.PLUM_NODE_SECRET);
+	if (fromEnv) return fromEnv;
 	for (const name of nodeRegister.listNodeNames()) {
-		const secret = loadNodeByName(name).nodeSecret;
-		if (secret) return secret;
+		const saved = cleanSecret(loadNodeByName(name).nodeSecret);
+		if (saved) return saved;
 	}
 	return null;
 }
-const NODE_SECRET = resolveNodeSecret();
+let NODE_SECRET = resolveNodeSecret();
 function authHeaders() {
 	return NODE_SECRET ? { Authorization: `Bearer ${NODE_SECRET}` } : {};
 }
@@ -352,10 +370,15 @@ async function main() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Manage Nodes  ')));
 
 	if (!NODE_SECRET) {
-		clack.log.warn(
-			'No PLUM_NODE_SECRET available — register / restart / delete against the primary will be rejected.\n' +
-				'Run `plum manage-nodes` on the server host, or set PLUM_NODE_SECRET (Settings → Runners shows it).'
-		);
+		clack.log.warn('No PLUM_NODE_SECRET found for this machine.');
+		const entered = await clack.text({
+			message: 'Paste it — Settings → Runners → Registration secret (or `plum server` prints it)',
+			placeholder: 'leave blank to continue read-only'
+		});
+		if (!cancelled(entered)) NODE_SECRET = cleanSecret(entered);
+		if (!NODE_SECRET) {
+			clack.log.info('Continuing read-only — register / restart / delete will be rejected.');
+		}
 	}
 
 	for (;;) {
