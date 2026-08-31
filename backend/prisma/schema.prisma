@@ -59,6 +59,9 @@ model Report {
   // one or the other depending on which code path wrote it.
   runnerCount Int               @default(1)
   workerCount Int               @default(1)
+  // Scenarios that failed at least once but passed on a retry. Kept as a column
+  // so the report list can flag a flaky-but-passing run without loading content.
+  flakyCount  Int               @default(0)
   browser     String            @default("chromium")
   runnerName  String?
   runnerId    String?

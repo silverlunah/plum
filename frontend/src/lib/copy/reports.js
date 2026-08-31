@@ -37,10 +37,13 @@ export const DETAIL_PAGE_TITLE = 'Report — Plum';
 export const LOAD_ERROR = 'Could not load report.';
 export const STAT_PASSED = 'passed';
 export const STAT_FAILED = 'failed';
+export const STAT_FLAKY = 'flaky';
 export const STAT_SKIPPED = 'skipped';
 export const STAT_DURATION = 'duration';
 export const RUN_LOGS_LABEL = 'Run Logs';
 export const RETRY_TITLE = 'Failed and was automatically retried before the final result';
+export const FLAKY_LABEL = 'flaky';
+export const FLAKY_TITLE = 'Failed at least once, then passed on a retry';
 export const WATCH_REPLAY_TITLE = 'Watch replay';
 export const REPLAY_LABEL = 'Replay';
 
