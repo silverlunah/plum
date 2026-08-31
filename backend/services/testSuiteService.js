@@ -33,7 +33,7 @@ async function getAll(
 ) {
 	const skip = (page - 1) * limit;
 	const orderBy = suiteOrderBy(sortBy, sortOrder);
-	const [suites, total] = await Promise.all([
+	const [suites, total, totalCases] = await Promise.all([
 		prisma.testSuite.findMany({
 			where: { projectId },
 			select: suiteSelect,
@@ -41,9 +41,10 @@ async function getAll(
 			skip,
 			take: limit
 		}),
-		prisma.testSuite.count({ where: { projectId } })
+		prisma.testSuite.count({ where: { projectId } }),
+		prisma.testCase.count({ where: { suite: { projectId } } })
 	]);
-	return { suites, total };
+	return { suites, total, totalCases };
 }
 
 async function search(projectId, q) {
