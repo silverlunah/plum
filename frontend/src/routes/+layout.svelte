@@ -19,12 +19,12 @@
 	const PUBLIC_ROUTES = ['/login', '/setup'];
 	// Routes that only make sense with automated testing on — sent to the
 	// repository when the active project is manual-only.
-	const AUTOMATION_ROUTES = ['/', '/reports', '/scheduled-tests', '/live'];
+	const AUTOMATION_ROUTES = ['/automated-tests', '/reports', '/scheduled-tests', '/live'];
 
 	let ready = false;
 
 	$: onAutomationRoute = AUTOMATION_ROUTES.some(
-		(r) => $page.url.pathname === r || (r !== '/' && $page.url.pathname.startsWith(r + '/'))
+		(r) => $page.url.pathname === r || $page.url.pathname.startsWith(r + '/')
 	);
 	$: if (ready && $automationHidden && onAutomationRoute) {
 		goto('/test-repository', { replaceState: true });

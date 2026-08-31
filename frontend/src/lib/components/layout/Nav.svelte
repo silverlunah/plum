@@ -32,7 +32,7 @@
 	}
 
 	const AUTOMATION_LINKS = [
-		{ href: '/', label: 'Automated Tests' },
+		{ href: '/automated-tests', label: 'Automated Tests' },
 		{ href: '/reports', label: 'Reports' },
 		{ href: '/scheduled-tests', label: 'Scheduled' }
 	];
@@ -43,7 +43,6 @@
 	// on whichever side the repository sits.
 	$: manualOnly = $activeProject?.manualRepositoryOnly ?? false;
 	$: repoFirst = manualOnly || $activeProject?.defaultHome === 'repository';
-	$: homeHref = repoFirst ? REPO_LINK.href : '/';
 	$: links = manualOnly
 		? [REPO_LINK]
 		: repoFirst
@@ -57,7 +56,7 @@
 
 <nav class="nav">
 	<div class="inner">
-		<a href={homeHref} class="brand" on:click={closeMenu}>
+		<a href="/" class="brand" on:click={closeMenu}>
 			<span class="brand-serif">Pl</span><span class="brand-sans">um</span>
 		</a>
 
@@ -69,9 +68,8 @@
 				<a
 					href={link.href}
 					class="link"
-					class:active={link.href === '/'
-						? $page.url.pathname === '/'
-						: $page.url.pathname.startsWith(link.href)}
+					class:active={$page.url.pathname === link.href ||
+						$page.url.pathname.startsWith(link.href + '/')}
 				>
 					{link.label}
 				</a>
@@ -197,9 +195,8 @@
 				<a
 					href={link.href}
 					class="mobile-link"
-					class:active={link.href === '/'
-						? $page.url.pathname === '/'
-						: $page.url.pathname.startsWith(link.href)}
+					class:active={$page.url.pathname === link.href ||
+						$page.url.pathname.startsWith(link.href + '/')}
 					on:click={closeMenu}
 				>
 					{link.label}
