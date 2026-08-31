@@ -12,7 +12,9 @@
  * Usage:  node scripts/manage-nodes.mjs
  *    or:  npm run manage-nodes     (from the backend directory)
  *
- * Env:    PLUM_API_URL   primary server API base (default http://localhost:3001)
+ * Env:    PLUM_API_URL       primary server API base (default http://localhost:3001)
+ *         PLUM_NODE_SECRET   authorises the /runners API (the primary generates
+ *                            one; `plum manage-nodes` reads it from the container)
  */
 
 import { execFileSync } from 'node:child_process';
@@ -38,21 +40,19 @@ function plumNode(...args) {
 
 const cancelled = (v) => clack.isCancel(v);
 
-// The mutating /runners routes accept any registered runner's own token in
-// place of an admin session (runnerOrAdmin.js). Use one: handed in by `plum`
-// (which reads it from the primary's DB on the server host), or any node's own
-// stored token.
-function resolveRunnerToken() {
-	if (process.env.PLUM_RUNNER_TOKEN) return process.env.PLUM_RUNNER_TOKEN;
+// env (set by `plum` from the primary's container), else a secret a node saved
+// when it registered.
+function resolveNodeSecret() {
+	if (process.env.PLUM_NODE_SECRET) return process.env.PLUM_NODE_SECRET;
 	for (const name of nodeRegister.listNodeNames()) {
-		const token = loadNodeByName(name).token;
-		if (token) return token;
+		const secret = loadNodeByName(name).nodeSecret;
+		if (secret) return secret;
 	}
 	return null;
 }
-const RUNNER_TOKEN = resolveRunnerToken();
+const NODE_SECRET = resolveNodeSecret();
 function authHeaders() {
-	return RUNNER_TOKEN ? { Authorization: `Bearer ${RUNNER_TOKEN}` } : {};
+	return NODE_SECRET ? { Authorization: `Bearer ${NODE_SECRET}` } : {};
 }
 
 async function fetchRunners() {

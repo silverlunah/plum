@@ -78,38 +78,9 @@ async function remove(id) {
 	return result;
 }
 
-// Leaving `token` blank keeps the existing one (same pattern as the S3 backup
-// secret key) instead of clearing a runner's auth on an unrelated edit.
-const update = async (id, { name, url, token, browser }) => {
-	const runner = await prisma.runner.update({
-		where: { id },
-		data: {
-			...(name !== undefined && { name }),
-			...(url !== undefined && { url: normaliseUrl(url) }),
-			...(token && { token }),
-			...(browser !== undefined && { browser })
-		}
-	});
-	await activityService.record(ACTIVITY_ACTION.NODE_UPDATE, {
-		scope: ACTIVITY_SCOPE.ORG,
-		target: { type: 'node', id, label: runner.name }
-	});
-	return toPublicRunner(runner);
-};
-
 // Raw accessor (includes token) — internal use only, for authenticating
 // outbound requests to the runner node (ping/stop/restart/dispatch below).
 const getById = (id) => prisma.runner.findUnique({ where: { id } });
-
-// A runner's own token (generated once at registration) doubles as its
-// credential for calling back into the primary's control routes — no separate
-// secret to configure. Any currently-registered token is accepted, not just
-// the target runner's own, since one CLI session manages the whole fleet.
-async function isValidToken(token) {
-	if (!token) return false;
-	const runner = await prisma.runner.findFirst({ where: { token }, select: { id: true } });
-	return Boolean(runner);
-}
 
 // ---------------------------------------------------------------------------
 // Connectivity
@@ -334,9 +305,7 @@ module.exports = {
 	getAll,
 	create,
 	remove,
-	update,
 	getById,
-	isValidToken,
 	probe,
 	ping,
 	stop,
