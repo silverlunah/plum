@@ -8,7 +8,10 @@
 	import { fly } from 'svelte/transition';
 	import { builtInEnabled } from '$lib/stores/runner';
 	import { notify } from '$lib/stores/notifications';
+	import { copyText } from '$lib/utils/clipboard';
+	import { COPY_TIMEOUT_MS } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
+	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import {
 		fetchRunners,
 		deleteRunner,
@@ -16,7 +19,9 @@
 		stopRunner,
 		restartRunner,
 		fetchBuiltInEnabled,
-		setBuiltInEnabled
+		setBuiltInEnabled,
+		fetchNodeSecret,
+		regenerateNodeSecret
 	} from '$lib/api/runners';
 	import {
 		RUNNERS_LABEL,
@@ -36,6 +41,18 @@
 		RUNNER_UNREACHABLE_LABEL,
 		RUNNER_PINGING_LABEL,
 		REMOVE_LABEL,
+		NODE_SECRET_LABEL,
+		NODE_SECRET_DESC,
+		NODE_SECRET_REVEAL_TITLE,
+		NODE_SECRET_HIDE_TITLE,
+		NODE_SECRET_COPY_TITLE,
+		NODE_SECRET_COPIED_TITLE,
+		REGENERATE_NODE_SECRET_LABEL,
+		REGENERATE_NODE_SECRET_MODAL_TITLE,
+		REGENERATE_NODE_SECRET_WARNING,
+		REGENERATE_NODE_SECRET_FAILED,
+		nodeSecretAppliedToast,
+		nodeSecretFailedNodes,
 		REGISTER_NODE_NOTE_TITLE,
 		REGISTER_NODE_NOTE_PREFIX,
 		REGISTER_NODE_NOTE_MIDDLE,
@@ -49,16 +66,47 @@
 	let stoppingId = null;
 	let restartingId = null;
 
+	let nodeSecret = null;
+	let secretRevealed = false;
+	let secretCopied = false;
+	let regenOpen = false;
+	let regenerating = false;
+
 	onMount(async () => {
 		try {
 			const { builtInRunnerEnabled } = await fetchBuiltInEnabled();
 			builtInEnabled.set(builtInRunnerEnabled);
 		} catch {}
 		try {
+			({ nodeSecret } = await fetchNodeSecret());
+		} catch {}
+		try {
 			runners = await fetchRunners();
 			pingAll();
 		} catch {}
 	});
+
+	async function copySecret() {
+		if (!nodeSecret) return;
+		await copyText(nodeSecret);
+		secretCopied = true;
+		setTimeout(() => (secretCopied = false), COPY_TIMEOUT_MS);
+	}
+
+	async function handleRegenerate() {
+		regenerating = true;
+		try {
+			const { nodeSecret: next, applied, failed } = await regenerateNodeSecret();
+			nodeSecret = next;
+			regenOpen = false;
+			notify('success', nodeSecretAppliedToast(applied.length));
+			if (failed.length > 0) notify('error', nodeSecretFailedNodes(failed.map((f) => f.name)));
+		} catch {
+			notify('error', REGENERATE_NODE_SECRET_FAILED);
+		} finally {
+			regenerating = false;
+		}
+	}
 
 	async function pingAll() {
 		if (runners.length === 0) return;
@@ -227,6 +275,44 @@
 		</div>
 	{/if}
 
+	{#if nodeSecret}
+		<div class="secret-block">
+			<div class="secret-info">
+				<span class="secret-label">{NODE_SECRET_LABEL}</span>
+				<span class="secret-desc">{NODE_SECRET_DESC}</span>
+			</div>
+			<div class="secret-row">
+				<input
+					class="field-input secret-input"
+					type={secretRevealed ? 'text' : 'password'}
+					value={nodeSecret}
+					readonly
+					spellcheck="false"
+					autocomplete="off"
+				/>
+				<button
+					class="secret-icon-btn"
+					title={secretRevealed ? NODE_SECRET_HIDE_TITLE : NODE_SECRET_REVEAL_TITLE}
+					on:click={() => (secretRevealed = !secretRevealed)}
+				>
+					{secretRevealed ? NODE_SECRET_HIDE_TITLE : NODE_SECRET_REVEAL_TITLE}
+				</button>
+				<button
+					class="secret-icon-btn"
+					title={secretCopied ? NODE_SECRET_COPIED_TITLE : NODE_SECRET_COPY_TITLE}
+					on:click={copySecret}
+				>
+					{secretCopied ? NODE_SECRET_COPIED_TITLE : NODE_SECRET_COPY_TITLE}
+				</button>
+			</div>
+			<div>
+				<Button variant="ghost" size="sm" on:click={() => (regenOpen = true)}>
+					{REGENERATE_NODE_SECRET_LABEL}
+				</Button>
+			</div>
+		</div>
+	{/if}
+
 	<div class="register-note">
 		<p class="register-note-title">{REGISTER_NODE_NOTE_TITLE}</p>
 		<p class="register-note-body">
@@ -238,6 +324,16 @@
 		</p>
 	</div>
 </div>
+
+<ConfirmModal
+	bind:open={regenOpen}
+	title={REGENERATE_NODE_SECRET_MODAL_TITLE}
+	confirmLabel={REGENERATE_NODE_SECRET_LABEL}
+	loading={regenerating}
+	on:confirm={handleRegenerate}
+>
+	{REGENERATE_NODE_SECRET_WARNING}
+</ConfirmModal>
 
 <style>
 	.settings-card {
@@ -376,6 +472,56 @@
 	}
 	.ping-badge.pinging {
 		color: var(--text-muted);
+	}
+
+	.secret-block {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.875rem 1rem;
+		background: var(--bg-subtle);
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+	.secret-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+	.secret-label {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--text);
+	}
+	.secret-desc {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		line-height: 1.4;
+	}
+	.secret-row {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+	.secret-input {
+		flex: 1;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.78rem;
+	}
+	.secret-icon-btn {
+		flex-shrink: 0;
+		font-size: 0.72rem;
+		font-weight: 500;
+		padding: 0.35rem 0.6rem;
+		color: var(--text-muted);
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+	}
+	.secret-icon-btn:hover {
+		color: var(--text);
+		border-color: var(--text-muted);
 	}
 
 	.register-note {

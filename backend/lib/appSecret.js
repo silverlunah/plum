@@ -44,6 +44,17 @@ function ensureSecret(envKey, fileName, { defaultValue = null, bytes = 48 } = {}
 	return generated;
 }
 
+// Forces a fresh value, overwriting the persisted file and process.env. Only the
+// node secret is regenerable from the UI — the JWT secret can't be without
+// logging everyone out.
+function regenerateSecret(envKey, fileName, { bytes = 48 } = {}) {
+	const generated = crypto.randomBytes(bytes).toString('hex');
+	fs.mkdirSync(REPORTS_DIR, { recursive: true });
+	fs.writeFileSync(path.join(REPORTS_DIR, fileName), generated, { mode: 0o600 });
+	process.env[envKey] = generated;
+	return generated;
+}
+
 // A generated default would let anyone forge tokens; a per-restart one would log
 // everyone out. Set JWT_SECRET yourself for a multi-replica backend.
 const ensureJwtSecret = () =>
@@ -52,5 +63,7 @@ const ensureJwtSecret = () =>
 // Bearer credential for the /runners API — `plum node` / manage-nodes use it
 // where there is no browser session.
 const ensureNodeSecret = () => ensureSecret('PLUM_NODE_SECRET', '.plum-node-secret', { bytes: 32 });
+const regenerateNodeSecret = () =>
+	regenerateSecret('PLUM_NODE_SECRET', '.plum-node-secret', { bytes: 32 });
 
-module.exports = { ensureJwtSecret, ensureNodeSecret, DEFAULT_JWT_SECRET };
+module.exports = { ensureJwtSecret, ensureNodeSecret, regenerateNodeSecret, DEFAULT_JWT_SECRET };
