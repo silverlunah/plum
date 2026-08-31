@@ -71,10 +71,10 @@
 		SKIP_LABEL,
 		RESET_TO_PENDING_TITLE,
 		RESET_LABEL,
+		resultLockedHint,
 		FAILED_TO_LOAD_DATA,
 		FAILED_TO_ADD_CASE,
 		RUN_UPDATED_TOAST,
-		RUN_SAVED_TOAST,
 		RUN_MARKED_COMPLETE_TOAST,
 		RUN_REOPENED_TOAST,
 		EXPORT_RUN_WHAT,
@@ -95,8 +95,6 @@
 	let suites = [];
 	let members = [];
 	let loading = true;
-	let saving = false;
-	let executing = false;
 	let assigning = null;
 
 	$: currentUserId = $auth?.user?.id ?? null;
@@ -259,6 +257,14 @@
 				suite.name.toLowerCase().includes(search.toLowerCase())
 		);
 
+	// The build list autosaves: every add / remove / reorder persists the run's
+	// case set immediately, so there's no separate Save step.
+	async function persistEntries() {
+		const caseIds = run.entries.map((e) => e.case.id);
+		await updateRun(runId, { caseIds });
+		run = await fetchRun(runId);
+	}
+
 	async function addCase(tc) {
 		if (!run || runCaseIds.has(tc.id)) return;
 		const previous = run;
@@ -273,17 +279,22 @@
 		};
 		run = { ...run, entries: [...run.entries, entry] };
 		try {
-			const caseIds = run.entries.map((e) => e.case.id);
-			await updateRun(runId, { caseIds });
-			run = await fetchRun(runId);
+			await persistEntries();
 		} catch (e) {
 			run = previous;
 			notify('error', FAILED_TO_ADD_CASE);
 		}
 	}
 
-	function removeEntry(entryId) {
+	async function removeEntry(entryId) {
+		const previous = run;
 		run = { ...run, entries: run.entries.filter((e) => e.id !== entryId) };
+		try {
+			await persistEntries();
+		} catch (e) {
+			run = previous;
+			notify('error', e.message);
+		}
 	}
 
 	async function handleUpdateRun() {
@@ -300,25 +311,15 @@
 		}
 	}
 
-	async function handleSaveRun() {
-		saving = true;
+	async function handleStartExecution() {
 		try {
-			const caseIds = run.entries.map((e) => e.case.id);
-			const updated = await updateRun(runId, { caseIds });
-			run = await fetchRun(runId);
-			notify('success', RUN_SAVED_TOAST);
+			await persistEntries();
+			await updateRun(runId, { status: 'in-progress' });
+			run = { ...run, status: 'in-progress' };
+			mode = 'execute';
 		} catch (e) {
 			notify('error', e.message);
-		} finally {
-			saving = false;
 		}
-	}
-
-	async function handleStartExecution() {
-		await handleSaveRun();
-		await updateRun(runId, { status: 'in-progress' });
-		run = { ...run, status: 'in-progress' };
-		mode = 'execute';
 	}
 
 	async function handleMarkEntry(entry, status) {
@@ -397,9 +398,10 @@
 		dragOverEntryId = entryId;
 	}
 
-	function onDrop(e, targetEntryId) {
+	async function onDrop(e, targetEntryId) {
 		e.preventDefault();
 		if (!dragEntryId || dragEntryId === targetEntryId) return;
+		const previous = run;
 		const entries = [...run.entries];
 		const fromIdx = entries.findIndex((e) => e.id === dragEntryId);
 		const toIdx = entries.findIndex((e) => e.id === targetEntryId);
@@ -408,6 +410,12 @@
 		run = { ...run, entries };
 		dragEntryId = null;
 		dragOverEntryId = null;
+		try {
+			await persistEntries();
+		} catch (err) {
+			run = previous;
+			notify('error', err.message);
+		}
 	}
 
 	$: completedCount = run?.entries.filter((e) => e.status !== 'pending').length ?? 0;
@@ -474,9 +482,6 @@
 				<ExportMenu busy={exporting} on:select={(e) => handleExportRun(e.detail)} />
 				<Button variant="ghost" on:click={handleReopenRun}>{REOPEN_LABEL}</Button>
 			{:else if mode === 'build'}
-				<Button variant="ghost" on:click={handleSaveRun} disabled={saving}>
-					{saving ? SAVING_LABEL : SAVE_LABEL}
-				</Button>
 				{#if run.entries.length > 0}
 					<Button on:click={handleStartExecution}>{START_EXECUTION_LABEL}</Button>
 				{/if}
@@ -698,6 +703,8 @@
 
 			<div class="execute-list">
 				{#each run.entries as entry (entry.id)}
+					{@const resultLocked =
+						!entry.case.isAutomated && entry.assignedTo && entry.assignedTo.id !== currentUserId}
 					<div class="execute-row" class:expanded={executingEntryId === entry.id}>
 						<div class="execute-row-main">
 							<div class="exec-info">
@@ -761,27 +768,40 @@
 								{#if isLocked || run.status !== 'in-progress'}
 									<ResultChip status={entry.status} />
 								{:else if entry.status === 'pending' || entry.status === 'in-progress'}
-									<div class="exec-btns">
+									<div
+										class="exec-btns"
+										class:locked={resultLocked}
+										title={resultLocked ? resultLockedHint(entry.assignedTo.name) : null}
+									>
 										<button
 											class="exec-btn in-progress"
 											class:active={entry.status === 'in-progress'}
+											disabled={resultLocked}
 											on:click={() =>
 												handleMarkEntry(
 													entry,
 													entry.status === 'in-progress' ? 'pending' : 'in-progress'
 												)}>{IN_PROGRESS_LABEL}</button
 										>
-										<button class="exec-btn pass" on:click={() => handleMarkEntry(entry, 'pass')}
-											>{PASS_LABEL}</button
+										<button
+											class="exec-btn pass"
+											disabled={resultLocked}
+											on:click={() => handleMarkEntry(entry, 'pass')}>{PASS_LABEL}</button
 										>
-										<button class="exec-btn fail" on:click={() => handleMarkEntry(entry, 'fail')}
-											>{FAIL_LABEL}</button
+										<button
+											class="exec-btn fail"
+											disabled={resultLocked}
+											on:click={() => handleMarkEntry(entry, 'fail')}>{FAIL_LABEL}</button
 										>
-										<button class="exec-btn warn" on:click={() => handleMarkEntry(entry, 'blocked')}
-											>{BLOCKED_LABEL}</button
+										<button
+											class="exec-btn warn"
+											disabled={resultLocked}
+											on:click={() => handleMarkEntry(entry, 'blocked')}>{BLOCKED_LABEL}</button
 										>
-										<button class="exec-btn muted" on:click={() => handleMarkEntry(entry, 'skip')}
-											>{SKIP_LABEL}</button
+										<button
+											class="exec-btn muted"
+											disabled={resultLocked}
+											on:click={() => handleMarkEntry(entry, 'skip')}>{SKIP_LABEL}</button
 										>
 									</div>
 								{:else}
@@ -789,8 +809,11 @@
 										<ResultChip status={entry.status} />
 										<button
 											class="exec-reset"
-											on:click={() => handleMarkEntry(entry, 'pending')}
-											title={RESET_TO_PENDING_TITLE}>{RESET_LABEL}</button
+											disabled={resultLocked}
+											title={resultLocked
+												? resultLockedHint(entry.assignedTo.name)
+												: RESET_TO_PENDING_TITLE}
+											on:click={() => handleMarkEntry(entry, 'pending')}>{RESET_LABEL}</button
 										>
 									</div>
 								{/if}
@@ -1370,6 +1393,10 @@
 		flex-wrap: wrap;
 	}
 
+	.exec-btns.locked {
+		opacity: 0.45;
+	}
+
 	.exec-btn {
 		height: 26px;
 		padding: 0 0.6rem;
@@ -1415,6 +1442,19 @@
 		background: var(--bg-subtle);
 		border-color: var(--text-muted);
 		color: var(--text-muted);
+	}
+
+	.exec-btn:disabled {
+		cursor: not-allowed;
+	}
+	.exec-btn:disabled:hover {
+		background: var(--bg);
+		border-color: var(--border);
+		color: var(--text-muted);
+	}
+	.exec-reset:disabled {
+		cursor: not-allowed;
+		opacity: 0.45;
 	}
 
 	.exec-reset {
