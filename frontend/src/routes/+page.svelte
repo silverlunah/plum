@@ -14,6 +14,7 @@
 	import { stagger } from '$lib/utils/format';
 	import { copyText } from '$lib/utils/clipboard';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import LearnMoreLinks from '$lib/components/ui/LearnMoreLinks.svelte';
 	import { CLEAR_SEARCH_LABEL, SORT_BY_LABEL } from '$lib/copy/common';
 	import {
 		PAGE_TITLE,
@@ -188,6 +189,7 @@
 					{suiteSummary(suites.length, totalTests)}
 				{/if}
 			</p>
+			<div class="header-learn-more"><LearnMoreLinks /></div>
 		</div>
 	</div>
 
@@ -420,6 +422,10 @@
 		font-size: 0.8125rem;
 		line-height: 1.5;
 		color: var(--text-muted);
+	}
+
+	.header-learn-more {
+		margin-top: 0.6rem;
 	}
 
 	.header-top {

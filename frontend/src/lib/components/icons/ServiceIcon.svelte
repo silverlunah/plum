@@ -4,16 +4,19 @@
  -->
 
 <script>
-	// One of: chromium/chrome, firefox, discord, slack. Anything else renders nothing.
+	// One of: chromium/chrome, firefox, discord, slack, playwright, cucumber.
+	// Anything else renders nothing.
 	export let service = '';
 	export let size = 14;
 
 	const FILES = {
-		chromium: 'chrome',
-		chrome: 'chrome',
-		firefox: 'firefox',
-		discord: 'discord',
-		slack: 'slack'
+		chromium: 'chrome.png',
+		chrome: 'chrome.png',
+		firefox: 'firefox.png',
+		discord: 'discord.png',
+		slack: 'slack.png',
+		playwright: 'playwright.svg',
+		cucumber: 'cucumber.svg'
 	};
 	$: file = FILES[String(service).toLowerCase()] ?? null;
 </script>
@@ -21,8 +24,8 @@
 {#if file}
 	<img
 		class="service-icon"
-		src="/external-services-icons/{file}.png"
-		alt={file}
+		src="/services-icons/{file}"
+		alt={service}
 		width={size}
 		height={size}
 		style="width:{size}px;height:{size}px"
