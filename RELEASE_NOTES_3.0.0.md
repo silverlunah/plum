@@ -122,6 +122,16 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
 - `POST /auth/login` is rate-limited. `GET /settings/project` no longer returns
   the project's webhook URLs. `PLUM_ALLOWED_ORIGINS` can pin the browser origin
   (CORS is otherwise open — safe, because auth is a header token, not a cookie).
+- Registering a runner node and controlling the fleet (`POST /runners`, ping /
+  stop / restart / delete, and the node list) now require **`PLUM_NODE_SECRET`**
+  or the owner's session. `POST /runners` used to be open — anyone could register
+  a rogue node, which then received the test tree and env secrets on dispatch —
+  and any one node's token was accepted as a fleet-wide credential. The server
+  generates and persists `PLUM_NODE_SECRET` on first boot and `plum server`
+  prints it.
+- Manual and scheduled backups no longer include node tokens (they were a live
+  shared secret sitting in a file that gets copied to S3 and laptops); nodes
+  re-register their token on the next `plum node start`.
 
 ---
 
@@ -163,7 +173,11 @@ After upgrading:
   again.
 - **Runner nodes** must be (re)started with `plum node start` / `plum node
 restart` so the node process and its registration share a token; a node
-  started by hand with no `NODE_TOKEN` will now refuse jobs.
+  started by hand with no `NODE_TOKEN` will now refuse jobs. Registration also
+  needs `PLUM_NODE_SECRET` — a node on the server machine (and `plum
+  manage-nodes`) reads it from the running container automatically; a node on
+  another machine takes it from `plum server`'s output via `--node-secret` or
+  the interactive prompt.
 - Regenerate a personal MCP key in Settings → MCP.
 
 ### Breaking
@@ -179,6 +193,8 @@ restart` so the node process and its registration share a token; a node
   single per-project key (which authenticated as the owner) is **wiped** on
   upgrade. The account-admin MCP tools require `PLUM_MCP_KEY`, not a project key.
 - Node runners require `NODE_TOKEN`; `plum node start` sets it, a hand-rolled
-  node process must too.
+  node process must too. Registering one with the primary additionally requires
+  `PLUM_NODE_SECRET` (from `plum server`), and the "Add Runner" form is gone from
+  Settings → Runners — nodes register themselves via `plum node start`.
 - Backup config set on a non-default project before the upgrade is not carried
   over — only the default project's (now the organisation's) config is kept.

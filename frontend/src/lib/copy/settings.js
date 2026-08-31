@@ -11,7 +11,6 @@ export const HEADING = 'Settings';
 export const NAME_LABEL = 'Name';
 export const NETWORK_ERROR = 'Network error';
 
-const CHECKING_LABEL = 'Checking…';
 const COPIED_LABEL = 'Copied!';
 
 // ── Nav / section labels ──
@@ -59,14 +58,8 @@ export const BACKUP_DESC =
 	'Export your test cases, schedules, users, and project settings. Automate uploads to any S3-compatible storage — Cloudflare R2, Backblaze B2, AWS S3, or MinIO.';
 
 // ── Runner requests / toasts ──
-export const RUNNER_FIELDS_REQUIRED_ERROR = 'Name, URL and token are required.';
-export const ADD_RUNNER_FAILED = 'Failed to add runner.';
 export const REMOVE_RUNNER_FAILED = 'Failed to remove runner.';
-export const UPDATE_RUNNER_FAILED = 'Failed to update runner.';
 
-export const cannotReachRunnerError = (error) =>
-	`Cannot reach this runner — ${error ?? 'check the URL and token'}.`;
-export const runnerAddedToast = (name) => `Runner "${name}" added.`;
 export const runnerRemovedToast = (name) => `Runner "${name}" removed.`;
 export const runnerStoppedToast = (name) => `Runner "${name}" stopped.`;
 export const runnerStopFailedToast = (name, error) =>
@@ -76,7 +69,6 @@ export const runnerRestartingToast = (name) => `Runner "${name}" restarting…`;
 export const runnerRestartFailedToast = (name, error) =>
 	`Could not restart "${name}": ${error ?? 'unknown error'}`;
 export const runnerRestartFailedGenericToast = (name) => `Could not restart "${name}".`;
-export const runnerUpdatedToast = (name) => `Runner "${name}" updated.`;
 
 // ── Project ──
 export const PROJECT_NAME_LABEL = 'Project Name';
@@ -102,29 +94,21 @@ export const saveProjectLabel = (saving) => (saving ? SAVING_LABEL : 'Save Proje
 export const BUILTIN_RUNNER_TOGGLE_LABEL = 'Built-in runner';
 export const BUILTIN_RUNNER_TOGGLE_DESC =
 	'Use this server to run tests locally. Disable to route all runs to external nodes.';
-export const RUNNER_URL_LABEL = 'URL';
-export const RUNNER_URL_HINT_PREFIX = 'Use';
-export const RUNNER_URL_HINT_SUFFIX = 'for local nodes';
-export const RUNNER_URL_PLACEHOLDER = 'http://host.docker.internal:3002';
-export const TOKEN_LABEL = 'Token';
-export const TOKEN_PLACEHOLDER = 'secret-token';
-export const KEEP_TOKEN_PLACEHOLDER = 'Leave blank to keep current token';
-export const BROWSER_LABEL = 'Browser';
-export const RUNNER_NAME_PLACEHOLDER = 'staging-node';
 export const RUNNER_UNREACHABLE_LABEL = 'unreachable';
 export const RUNNER_PINGING_LABEL = 'pinging…';
 export const REMOVE_LABEL = 'Remove';
-export const ADD_RUNNER_FORM_TITLE = 'Add runner';
-export const OPEN_ADD_RUNNER_LABEL = '+ Add Runner';
+
+export const REGISTER_NODE_NOTE_TITLE = 'Adding a node';
+export const REGISTER_NODE_NOTE_PREFIX = 'Register nodes from the node machine — run';
+export const REGISTER_NODE_NOTE_MIDDLE = 'to start one and self-register it, or';
+export const REGISTER_NODE_NOTE_SUFFIX =
+	'to manage nodes already set up on that machine. Nodes need the primary’s PLUM_NODE_SECRET, printed by "plum server".';
 
 const RESTART_LABEL = 'Restart';
 const RESTARTING_LABEL = 'Restarting…';
 const STOP_LABEL = 'Stop';
 const STOPPING_LABEL = 'Stopping…';
-const ADD_RUNNER_LABEL = 'Add Runner';
 
-export const editRunnerSubmitLabel = (saving) => (saving ? CHECKING_LABEL : SAVE_LABEL);
-export const addRunnerSubmitLabel = (saving) => (saving ? CHECKING_LABEL : ADD_RUNNER_LABEL);
 export const restartRunnerLabel = (restarting) => (restarting ? RESTARTING_LABEL : RESTART_LABEL);
 export const stopRunnerLabel = (stopping) => (stopping ? STOPPING_LABEL : STOP_LABEL);
 
