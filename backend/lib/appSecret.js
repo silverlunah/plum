@@ -8,7 +8,9 @@ const path = require('path');
 const crypto = require('crypto');
 
 const DEFAULT_JWT_SECRET = 'plum-dev-secret-change-in-production';
-const REPORTS_DIR = path.join(process.cwd(), 'reports');
+// Anchored to backend/, not cwd — a process started from the repo root must not
+// scatter a second reports/ (and its secrets) there.
+const REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
 
 // Env value wins; otherwise a random secret persisted under the reports volume
 // so it survives a restart. `envKey` equal to `defaultValue` counts as unset.

@@ -630,27 +630,25 @@ function createMcpServer({ userId, userName, projectId, role, viaMcp, apiKeyKind
 		'create_project',
 		'Create a project. Its slug (folder + API identity) is derived from the name and never changes.',
 		{
-			name: z.string().min(1),
-			baseUrl: z.string().optional().describe('Default base URL for this project’s runs')
+			name: z.string().min(1)
 		},
-		async ({ name, baseUrl }) => {
+		async ({ name }) => {
 			assertAccountAdmin();
-			return asJson(await projectService.create({ name, baseUrl }));
+			return asJson(await projectService.create({ name }));
 		}
 	);
 
 	server.tool(
 		'update_project',
-		'Change a project’s name, logo, timezone, base URL or retry count. The slug never changes.',
+		'Change a project’s name, logo, timezone or retry count. The slug never changes.',
 		{
 			projectId: z.number().int().describe('Numeric project id'),
 			name: z.string().min(1).optional(),
 			logoUrl: z.string().optional(),
 			timezone: z.string().optional().describe('IANA name, e.g. "Asia/Manila"'),
-			baseUrl: z.string().optional(),
 			maxRetries: z.number().int().min(0).optional()
 		},
-		async ({ projectId: id, name, logoUrl, timezone, baseUrl, maxRetries }) => {
+		async ({ projectId: id, name, logoUrl, timezone, maxRetries }) => {
 			if (role !== 'owner' && role !== 'admin') {
 				throw new Error('Updating project settings needs an admin or owner key.');
 			}
@@ -659,7 +657,7 @@ function createMcpServer({ userId, userName, projectId, role, viaMcp, apiKeyKind
 				throw new Error(`This key is scoped to project ${projectId}.`);
 			}
 			return asJson(
-				await settingsService.updateProject(id, { name, logoUrl, timezone, baseUrl, maxRetries })
+				await settingsService.updateProject(id, { name, logoUrl, timezone, maxRetries })
 			);
 		}
 	);

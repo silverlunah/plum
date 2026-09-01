@@ -100,6 +100,9 @@
 		TIMEZONE_HINT,
 		RETRY_FAILED_TESTS_LABEL,
 		RETRY_FAILED_TESTS_HINT,
+		TESTS_PATH_LABEL,
+		TESTS_PATH_HINT,
+		TESTS_PATH_PLACEHOLDER,
 		HOMEPAGE_CARD_TITLE,
 		HOMEPAGE_CARD_HINT,
 		DEFAULT_HOME_LABEL,
@@ -222,7 +225,8 @@
 		timezone: 'UTC',
 		maxRetries: 0,
 		defaultHome: 'automated',
-		manualRepositoryOnly: false
+		manualRepositoryOnly: false,
+		testsPath: 'tests'
 	};
 	let projectSaving = false;
 	let projectPristine = snapshot(project);
@@ -683,6 +687,20 @@
 							min="0"
 							max={MAX_TEST_RETRIES}
 							bind:value={project.maxRetries}
+						/>
+					</div>
+
+					<div class="field">
+						<label class="field-label" for="project-tests-path">
+							<span>{TESTS_PATH_LABEL}</span>
+							<span class="field-hint">{TESTS_PATH_HINT}</span>
+						</label>
+						<input
+							id="project-tests-path"
+							type="text"
+							class="field-input mono"
+							bind:value={project.testsPath}
+							placeholder={TESTS_PATH_PLACEHOLDER}
 						/>
 					</div>
 

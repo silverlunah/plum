@@ -9,12 +9,11 @@ const runExecutorService = require('./runExecutorService');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { SOCKET_EVENTS } = require('../constants/socketEvents');
-const { JOB_STATUS } = require('../constants/jobStatus');
+const { JOB_STATUS, CANCEL_CODE } = require('../constants/jobStatus');
 
 const QUEUED = 'queued';
 const RUNNING = 'running';
 const DONE = 'done';
-const CANCEL_CODE = 130;
 const PRUNE_MS = 60 * 60 * 1000;
 
 let _io = null;

@@ -18,4 +18,7 @@ const REPORT_STATUS = Object.freeze({
 	FAIL: 'FAIL'
 });
 
-module.exports = { JOB_STATUS, REPORT_STATUS };
+/** Exit code a run reports when it was cancelled (SIGINT convention: 128 + 2). */
+const CANCEL_CODE = 130;
+
+module.exports = { JOB_STATUS, REPORT_STATUS, CANCEL_CODE };
