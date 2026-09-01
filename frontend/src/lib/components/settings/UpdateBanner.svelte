@@ -6,7 +6,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { checkUpdate } from '$lib/api/server';
-	import { updateBannerText, UPDATE_NPM_LINK_LABEL } from '$lib/copy/settings';
+	import { updateBannerText, UPDATE_RELEASE_NOTES_LABEL } from '$lib/copy/settings';
 
 	let info = null;
 
@@ -37,8 +37,8 @@
 		<span class="text">
 			<code>{info.current}</code> → <code>{info.latest}</code> · {updateBannerText(info.latest)}
 		</span>
-		<a class="link" href={info.npmUrl} target="_blank" rel="noreferrer noopener">
-			{UPDATE_NPM_LINK_LABEL}
+		<a class="link" href={info.releaseNotesUrl} target="_blank" rel="noreferrer noopener">
+			{UPDATE_RELEASE_NOTES_LABEL}
 		</a>
 	</div>
 {/if}

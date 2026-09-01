@@ -485,7 +485,7 @@ export function activityDescription(entry) {
 // ── Update banner (owner) ──
 export const updateBannerText = (latest) =>
 	`Plum ${latest} is available. Run "plum update" on the server to upgrade.`;
-export const UPDATE_NPM_LINK_LABEL = 'Release notes';
+export const UPDATE_RELEASE_NOTES_LABEL = 'Release notes';
 
 // ── Projects & access (Project tab) ──
 export const MANAGE_PROJECTS_LINK_LABEL = 'Manage projects & access →';
