@@ -963,14 +963,14 @@
 	@media (max-width: 1024px) {
 		.recording-player {
 			flex-direction: column;
-			overflow-y: auto;
+			overflow: hidden;
 		}
 
 		.player-stage {
 			order: -1;
-			flex: none;
+			flex: 1 1 auto;
 			width: 100%;
-			min-height: 48vh;
+			min-height: 44vh;
 			align-items: center;
 			margin-right: 0 !important;
 		}
