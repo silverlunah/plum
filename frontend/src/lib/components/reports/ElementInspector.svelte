@@ -334,6 +334,20 @@
 		user-select: none;
 	}
 
+	/* Compact: the panel drops out of its right-edge overlay and becomes a
+	   full-width block stacked under the player (see RecordingPlayer). */
+	@media (max-width: 1024px) {
+		.inspector-root {
+			position: relative;
+			width: 100% !important;
+			height: 46vh;
+			flex-shrink: 0;
+		}
+		.resize-handle {
+			display: none;
+		}
+	}
+
 	.inspector-panel {
 		position: absolute;
 		inset: 0;

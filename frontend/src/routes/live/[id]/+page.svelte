@@ -808,4 +808,33 @@
 		background: rgba(255, 255, 255, 0.1);
 		border-radius: 2px;
 	}
+
+	@media (max-width: 900px) {
+		.live-fullscreen {
+			margin-top: -1.25rem;
+			margin-bottom: -4.5rem;
+			padding-bottom: 4.5rem;
+		}
+
+		.run-header {
+			flex-wrap: wrap;
+			gap: 0.6rem;
+			padding: 0.6rem 1rem;
+		}
+
+		.run-view {
+			grid-template-columns: 1fr;
+			grid-template-rows: minmax(44vh, 1fr) minmax(28vh, auto);
+			overflow-y: auto;
+		}
+
+		.stream-panel {
+			border-right: none;
+			border-bottom: 1px solid var(--border);
+		}
+
+		.lane-tabs {
+			overflow-x: auto;
+		}
+	}
 </style>
