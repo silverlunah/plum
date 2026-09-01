@@ -491,7 +491,6 @@ export const UPDATE_NPM_LINK_LABEL = 'Release notes';
 export const MANAGE_PROJECTS_LINK_LABEL = 'Manage projects & access →';
 export const CURRENT_PROJECT_LABEL = 'Current project';
 export const NEW_PROJECT_LABEL = 'New project';
-export const NEW_PROJECT_BASE_URL_LABEL = 'Base URL (optional)';
 export const CREATE_PROJECT_LABEL = 'Create';
 
 export const OTHER_PROJECTS_LABEL = 'Other projects';

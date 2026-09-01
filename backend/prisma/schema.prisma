@@ -172,7 +172,6 @@ model Project {
   org               Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   slug              String       @unique
   name              String       @default("")
-  baseUrl           String       @default("")
   logoUrl           String       @default("")
   timezone          String       @default("UTC")
   testCasePrefix    String       @default("TC")
