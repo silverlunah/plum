@@ -34,7 +34,7 @@ plum run-test                   # runs ./tests locally — no Docker, no databas
 plum create-test                # scaffold a new .feature + Page + Steps
 ```
 
-`plum init` creates a self-contained `tests/` folder — feature files, steps, page objects, `.env`, `tsconfig.json`, `.vscode/`, `plum.plugins.json` — the same layout a project has on the server. Open the `tests/` folder in your editor.
+`plum init` creates a self-contained `tests/` folder — feature files, steps, page objects, `.env`, `tsconfig.json`, `.vscode/`, `package.json` — the same layout a project has on the server. Open the `tests/` folder in your editor.
 
 ### Running the server (web UI: Test Repository, reports, schedules, MCP)
 
@@ -54,7 +54,7 @@ The stack's containers use `restart: unless-stopped`, so the server comes back a
 
 ### Writing tests (no server)
 
-`plum init` scaffolds a self-contained `tests/` folder — feature files, step definitions, page objects, `tests/.env`, `tests/tsconfig.json`, `tests/.vscode/`, `tests/plum.plugins.json` — and installs the Playwright/Cucumber toolchain. Open the `tests/` folder in your editor; it's the same layout a project folder has on the server, so a local project drops straight into `projects/<slug>/tests/`. Nothing else is required to write and run tests on your machine.
+`plum init` scaffolds a self-contained `tests/` folder — feature files, step definitions, page objects, `tests/.env`, `tests/tsconfig.json`, `tests/.vscode/`, `tests/package.json` — and installs the Playwright/Cucumber toolchain. Open the `tests/` folder in your editor; it's the same layout a project folder has on the server, so a local project drops straight into `projects/<slug>/tests/`. Nothing else is required to write and run tests on your machine.
 
 ### For contributors
 

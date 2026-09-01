@@ -64,6 +64,18 @@ holding just that, and Node's resolution handles the mix (local first, then up).
 Estimate effect: Phase 1b drops from ~3d to ~1d, and the risk "nodes have no
 per-project deps" mostly evaporates — nodes keep using `NODE_PATH`.
 
+## Two caveats from Phase 1b
+
+- **`PROJECTS_DIR` outside the backend tree breaks upward resolution.** It is an env
+  override (`lib/projectPaths.js`) that nothing sets in practice — Docker mounts to
+  `/app/projects`, inside `/app` — but an operator who points it elsewhere would get
+  "Cannot find module '@playwright/test'". Either document it as must-be-inside, or
+  fall back to `NODE_PATH` when it is not.
+- **Dispatched node runs do not get project dependencies.** `ensureProjectDeps` works
+  from `projectId` → `resolveTestsRoot`, which on a node is not the temp dir the
+  uploaded tests land in. Phase 3 owns this: the node needs to install from the
+  `package.json` that arrives with the payload.
+
 ## Hazards
 
 1. **Migration default must not reach existing rows.** _Deferred, not solved._ The
@@ -103,9 +115,16 @@ per-project deps" mostly evaporates — nodes keep using `NODE_PATH`.
       what a run executes from and what `testsPath` can relocate. `reconcile()` uses a
       per-framework sentinel file (`features` / `playwright.config.ts`) so it is
       idempotent for both. `plum project init` takes `--framework`.
-- [ ] **1b. Per-project dependencies** — RESCOPED, see finding below. Per-project
-      `node_modules` turned out to be unnecessary; only `plum.plugins.json` still
-      needs replacing.
+- [x] **1b. Per-project dependencies** — done, rescoped per the finding below.
+      Each scaffold ships a `package.json`; `lib/projectDeps.js` runs `npm install` in
+      the tests folder **only when it declares dependencies**, keyed on a hash marker
+      inside `node_modules` so an unchanged manifest never reinstalls. Called from the
+      built-in runner before a spawn. `plum.plugins.json` and its three functions
+      (scaffold / install-into-backend / merge-into-backend) are gone.
+      Verified: no deps = no install; a declared dep lands in the project's own
+      `node_modules`; unchanged deps skip; changed deps reinstall; and
+      `@playwright/test` still resolves from the backend while the project's own
+      dependency resolves locally.
 - [ ] **2. Reporter packages** — `@plum-e2e/playwright-reporter`,
       `@plum-e2e/cucumber-formatter`. File mode (`PLUM_REPORT_FILE`) + authenticated
       HTTP mode (`PLUM_API_URL` + `PLUM_TOKEN`). No-op when neither is set.
@@ -125,12 +144,6 @@ per-project deps" mostly evaporates — nodes keep using `NODE_PATH`.
       mode whose ingestion and report UI are unfinished.
 
 ## Decisions still needed
-
-**Release gate.** Playwright is already the offered default for new projects, but its
-ingestion (Phase 4) and report UI (Phase 5) do not exist. This branch must not ship to
-users before those land, or a new project defaults into a mode that cannot display its
-own results. The DB column default stays `cucumber`, so only projects created through
-the UI/CLI are affected.
 
 **Two browser projects = double runs.** The Playwright scaffold defines both chromium
 and firefox, which is idiomatic — but `--list` shows every spec twice, once per

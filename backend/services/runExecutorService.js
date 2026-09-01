@@ -20,6 +20,7 @@ const { JOB_STATUS, REPORT_STATUS, CANCEL_CODE } = require('../constants/jobStat
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { getTestSuites } = require('./testService');
 const { resolveTestsRoot, loadProjectEnv } = require('../lib/testsRoot');
+const { ensureProjectDeps } = require('../lib/projectDeps');
 const { readCucumberReportFile } = require('../lib/reportFilename');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
@@ -121,6 +122,8 @@ function spawnBuiltInAttempt({
 	io
 }) {
 	return new Promise((resolve) => {
+		ensureProjectDeps(projectId, { onLog });
+
 		const ssDir = path.join(os.tmpdir(), `plum-ss-${runId}-${laneId}-${Date.now()}`);
 		fs.mkdirSync(ssDir, { recursive: true });
 

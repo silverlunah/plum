@@ -29,8 +29,6 @@ const overrideFilePath = path.join(plumRoot, 'docker-compose.override.yml');
 const backendEnvPath = path.join(plumRoot, 'backend', '.env');
 const testsEnvPath = path.join(userTestsPath, '.env');
 const legacyRootEnvPath = path.join(process.cwd(), '.env');
-const userPluginsInTests = path.join(userTestsPath, 'plum.plugins.json');
-const legacyRootPluginsPath = path.join(process.cwd(), 'plum.plugins.json');
 
 const preferring = (primary, fallback) =>
 	fs.existsSync(primary) || !fs.existsSync(fallback) ? primary : fallback;
@@ -44,46 +42,6 @@ function resolveLocalTestsRoot(explicit) {
 		? [path.resolve(process.cwd(), override)]
 		: [userTestsPath, process.cwd()];
 	return candidates.find((dir) => fs.existsSync(path.join(dir, 'features'))) ?? null;
-}
-
-// Scaffold tests/plum.plugins.json if it doesn't exist yet
-function scaffoldPluginsFile() {
-	if (fs.existsSync(userPluginsInTests)) {
-		clack.log.warn('tests/plum.plugins.json already exists — skipping.');
-		return;
-	}
-	const content = {
-		'//': 'Add npm packages your tests depend on. Plum installs them automatically before each run.',
-		'// example':
-			'To add a package: put its name and version under "dependencies", e.g. "@faker-js/faker": "^9.0.0"',
-		dependencies: {}
-	};
-	fs.writeFileSync(userPluginsInTests, JSON.stringify(content, null, 2) + '\n', 'utf8');
-	clack.log.success('tests/plum.plugins.json created.');
-}
-
-// Install user plugins listed in plum.plugins.json into the backend
-function installPlugins() {
-	const pluginsPath = preferring(userPluginsInTests, legacyRootPluginsPath);
-	if (!fs.existsSync(pluginsPath)) return;
-
-	let plugins;
-	try {
-		plugins = JSON.parse(fs.readFileSync(pluginsPath, 'utf8'));
-	} catch {
-		console.log('⚠️  Could not parse plum.plugins.json. Skipping plugin install.\n');
-		return;
-	}
-
-	const deps = plugins.dependencies ?? {};
-	const packages = Object.entries(deps).map(([name, version]) => `${name}@${version}`);
-	if (packages.length === 0) return;
-
-	console.log(`📦 Installing plugins: ${packages.join(', ')}\n`);
-	execSync(`npm install ${packages.join(' ')}`, {
-		cwd: path.join(plumRoot, 'backend'),
-		stdio: 'inherit'
-	});
 }
 
 // Sync an .env into backend/.env so the local toolchain (which runs from
@@ -194,24 +152,6 @@ async function promptPort(message, initial, onFree) {
 /* -----------------------------------------------------
  *                 Server flow
  * ------------------------------------------------------ */
-
-function mergeUserPlugins() {
-	const userPluginsPath = path.join(process.cwd(), 'plum.plugins.json');
-	if (!fs.existsSync(userPluginsPath)) return;
-	try {
-		const userPlugins = JSON.parse(fs.readFileSync(userPluginsPath, 'utf8'));
-		const backendPkgPath = path.join(plumRoot, 'backend', 'package.json');
-		const backendPkg = JSON.parse(fs.readFileSync(backendPkgPath, 'utf8'));
-		const pluginDeps = userPlugins.dependencies ?? {};
-		if (Object.keys(pluginDeps).length > 0) {
-			backendPkg.dependencies = { ...backendPkg.dependencies, ...pluginDeps };
-			fs.writeFileSync(backendPkgPath, JSON.stringify(backendPkg, null, '\t') + '\n', 'utf8');
-			clack.log.info(`Merged plugins into backend: ${Object.keys(pluginDeps).join(', ')}`);
-		}
-	} catch {
-		clack.log.warn('Could not read plum.plugins.json. Skipping plugin merge.');
-	}
-}
 
 async function configureServer({ force }) {
 	const { loadServerConfig, saveServerConfig } = serverConfigLib();
@@ -351,7 +291,6 @@ function applyServerConfig(cfg) {
 	fs.mkdirSync(path.join(cwd, 'projects'), { recursive: true });
 	writeEnvFile(cwd);
 	copyEnvFile(legacyRootEnvPath);
-	mergeUserPlugins();
 	const testsDir = path.join(cwd, 'tests');
 	const testsAbs = fs.existsSync(testsDir) ? testsDir.replace(/\\/g, '/') : null;
 	fs.writeFileSync(
@@ -1172,8 +1111,6 @@ switch (command) {
 				clack.log.warn('tests/.env already exists — skipping.');
 			}
 		}
-		scaffoldPluginsFile();
-
 		// .vscode/settings.json ships in the scaffold at tests/.vscode/ — open the
 		// tests/ folder in your editor. Just install the Cucumber extension here.
 		{
@@ -1280,7 +1217,7 @@ switch (command) {
 					'| File | Purpose |',
 					'| --- | --- |',
 					'| `.env` | Set `BASE_URL` (your app) and `IS_HEADLESS` (`true`/`false`) |',
-					'| `plum.plugins.json` | Add extra npm packages your tests need |',
+					'| `package.json` | Add extra npm packages your tests need |',
 					'',
 					'---',
 					'',
@@ -1292,7 +1229,7 @@ switch (command) {
 					'pages/             — Page Object Models (optional)',
 					'utils/             — Browser setup, hooks, shared helpers',
 					'.env               — BASE_URL and IS_HEADLESS',
-					'plum.plugins.json  — extra npm packages your tests need',
+					'package.json       — extra npm packages your tests need',
 					'```',
 					'',
 					'This whole folder is your test project — open it in your editor, and',
@@ -1358,7 +1295,7 @@ switch (command) {
 			[
 				`Your test project  ${pc.dim('→')}  ${pc.cyan('tests/')}  ${pc.dim('(open this folder in your editor)')}`,
 				`App URL            ${pc.dim('→')}  ${pc.cyan('tests/.env')}  ${pc.dim('— set BASE_URL')}`,
-				`Extra packages     ${pc.dim('→')}  ${pc.cyan('tests/plum.plugins.json')}`,
+				`Extra packages     ${pc.dim('→')}  ${pc.cyan('tests/package.json')}`,
 				'',
 				`${pc.bold('Run tests locally')}`,
 				`  ${pc.cyan('plum run-test')}            run all tests`,
@@ -1482,9 +1419,6 @@ switch (command) {
 			cwd: path.join(plumRoot, 'backend'),
 			stdio: 'inherit'
 		});
-
-		// Install user-defined plugins from plum.plugins.json
-		installPlugins();
 
 		console.log('Running `npx playwright install chromium firefox`...');
 
