@@ -1421,6 +1421,7 @@
 	@media (max-width: 640px) {
 		.page-header {
 			flex-direction: column;
+			align-items: stretch;
 			gap: 0.75rem;
 		}
 
@@ -1430,6 +1431,17 @@
 
 		.run-meta {
 			display: none;
+		}
+
+		.tabs {
+			overflow-x: auto;
+			scrollbar-width: none;
+		}
+		.tabs::-webkit-scrollbar {
+			display: none;
+		}
+		.tab {
+			flex-shrink: 0;
 		}
 	}
 </style>

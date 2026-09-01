@@ -106,4 +106,12 @@
 		color: var(--text);
 		font-weight: 500;
 	}
+
+	@media (max-width: 1024px) {
+		.steps-rail {
+			width: auto;
+			max-height: 32vh;
+			border-top: 1px solid var(--border);
+		}
+	}
 </style>
