@@ -63,6 +63,10 @@ model Report {
   // so the report list can flag a flaky-but-passing run without loading content.
   flakyCount  Int               @default(0)
   browser     String            @default("chromium")
+  // Which runner produced `content`. Denormalised from the project so the report
+  // renderer knows which shape it is reading without a join, and so old reports
+  // stay readable if a project is ever recreated under the other framework.
+  framework   String            @default("cucumber")
   runnerName  String?
   runnerId    String?
   runner      Runner?           @relation(fields: [runnerId], references: [id], onDelete: SetNull)
@@ -109,35 +113,35 @@ model Recording {
 }
 
 model Organization {
-  id                   Int       @id @default(autoincrement())
-  name                 String    @default("")
+  id                    Int       @id @default(autoincrement())
+  name                  String    @default("")
   // DB backup is instance-level (one database), so its schedule, timezone and
   // S3 target live here, not on any single Project.
-  timezone             String    @default("UTC")
-  backupEnabled        Boolean   @default(false)
-  backupCron           String    @default("0 2 * * *")
-  backupS3Endpoint     String    @default("")
-  backupS3Region       String    @default("")
-  backupS3Bucket       String    @default("")
-  backupS3AccessKey    String    @default("")
-  backupS3SecretKey    String    @default("")
-  backupS3Prefix       String    @default("")
-  backupLastRunAt      DateTime?
-  backupLastStatus     String    @default("")
-  backupIncludeReports Boolean   @default(false)
+  timezone              String    @default("UTC")
+  backupEnabled         Boolean   @default(false)
+  backupCron            String    @default("0 2 * * *")
+  backupS3Endpoint      String    @default("")
+  backupS3Region        String    @default("")
+  backupS3Bucket        String    @default("")
+  backupS3AccessKey     String    @default("")
+  backupS3SecretKey     String    @default("")
+  backupS3Prefix        String    @default("")
+  backupLastRunAt       DateTime?
+  backupLastStatus      String    @default("")
+  backupIncludeReports  Boolean   @default(false)
   // Activity log entries older than this are pruned nightly. 0 keeps them forever.
-  activityRetentionDays Int      @default(90)
+  activityRetentionDays Int       @default(90)
   // Reports (and their recordings) older than this are pruned nightly. 0 keeps them forever.
-  reportRetentionDays  Int       @default(0)
+  reportRetentionDays   Int       @default(0)
   // Whether the primary server runs tests itself. Instance-wide: an owner's
   // toggle applies to every member's run bar and every cron job.
-  builtInRunnerEnabled Boolean   @default(true)
+  builtInRunnerEnabled  Boolean   @default(true)
   // When the operator accepted the first-run notice. Null only on instances
   // created before the notice existed.
-  termsAcceptedAt      DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  projects             Project[]
+  termsAcceptedAt       DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  projects              Project[]
 }
 
 // Append-only audit trail. `scope` splits project-level events (visible to that
@@ -167,32 +171,37 @@ model ActivityLog {
 }
 
 model Project {
-  id                Int          @id @default(autoincrement())
-  orgId             Int
-  org               Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  slug              String       @unique
-  name              String       @default("")
-  logoUrl           String       @default("")
-  timezone          String       @default("UTC")
-  testCasePrefix    String       @default("TC")
-  testSuitePrefix   String       @default("TS")
-  caseSeqNext       Int          @default(0)
-  suiteSeqNext      Int          @default(0)
-  discordWebhookUrl String       @default("")
-  slackWebhookUrl   String       @default("")
-  notifyPublicUrl   String       @default("")
-  maxRetries        Int          @default(0)
+  id                   Int          @id @default(autoincrement())
+  orgId                Int
+  org                  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  slug                 String       @unique
+  name                 String       @default("")
+  logoUrl              String       @default("")
+  timezone             String       @default("UTC")
+  testCasePrefix       String       @default("TC")
+  testSuitePrefix      String       @default("TS")
+  caseSeqNext          Int          @default(0)
+  suiteSeqNext         Int          @default(0)
+  discordWebhookUrl    String       @default("")
+  slackWebhookUrl      String       @default("")
+  notifyPublicUrl      String       @default("")
+  maxRetries           Int          @default(0)
   // Which page members land on: "automated" (Automated Tests) or "repository"
   // (Test Repository). Purely presentational — reorders the nav, no route changes.
-  defaultHome          String    @default("automated")
+  defaultHome          String       @default("automated")
   // When true, the automated-testing surface (Automated Tests, Reports,
   // Scheduled, the run bar) is hidden project-wide and this is a manual test
   // repository only. Forces defaultHome to "repository" in effect.
-  manualRepositoryOnly Boolean   @default(false)
-  // Where this project's Cucumber tests live, relative to projects/<slug>/.
-  // Default "tests"; set deeper (e.g. "apps/web/e2e") when the repo nests them.
+  manualRepositoryOnly Boolean      @default(false)
+  // Where this project's tests live, relative to projects/<slug>/. Default
+  // "tests"; set deeper (e.g. "apps/web/e2e") when the repo nests them.
   // Always sanitised to a subpath — never absolute, never escapes the folder.
-  testsPath            String    @default("tests")
+  testsPath            String       @default("tests")
+  // "cucumber" or "playwright". Chosen when the project is created and never
+  // changeable afterwards — the scaffold, the runner command and the report
+  // shape all derive from it, so switching would orphan every existing test.
+  // Deliberately absent from every update path; see settingsService.updateProject.
+  framework            String       @default("cucumber")
 
   members  ProjectMember[]
   suites   TestSuite[]

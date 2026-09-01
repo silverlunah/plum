@@ -64,7 +64,7 @@ async function bootstrap({ organizationName, projectName, name, email, password 
 		return { org, project, user };
 	});
 	await projectPaths.refresh();
-	projectPaths.scaffoldProject(slug);
+	projectPaths.scaffoldProject(slug, result.project.framework);
 	return result;
 }
 

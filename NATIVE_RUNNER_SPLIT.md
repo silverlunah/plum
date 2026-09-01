@@ -40,14 +40,16 @@ only test selection plus a report destination. `plum run-test` goes away; users 
 
 ## Hazards
 
-1. **Migration default must not reach existing rows.** Adding `framework` non-null
-   with `@default(PLAYWRIGHT)` converts every existing Cucumber project in place.
-   Three ordered steps: add nullable column → `UPDATE ... SET 'CUCUMBER'` →
-   set NOT NULL + default `'PLAYWRIGHT'`.
-2. **`reconcile()` (`projectPaths.js:70`)** re-scaffolds any project missing
-   `tests/features` on every server start. A Playwright project has none, so it would
-   get Cucumber files written into it forever. Must read `Project.framework`, not
-   sniff the filesystem.
+1. **Migration default must not reach existing rows.** _Deferred, not solved._ The
+   Phase 0 migration adds the column with default `'cucumber'`, so existing rows are
+   correct by construction — verified against a real Postgres: pre-existing Project
+   and Report rows both read `cucumber` afterwards. The hazard moves to **Phase 7**,
+   where flipping the default must be `ALTER COLUMN ... SET DEFAULT` alone. Never
+   fold that into an `ADD COLUMN`.
+2. ~~**`reconcile()`** re-scaffolds any project missing `tests/features`.~~ **Fixed in
+   Phase 0** — it reads `Project.framework` and skips non-Cucumber projects.
+   Verified: deleting a Cucumber project's folder makes `reconcile()` restore it,
+   while a Playwright project is left alone.
 3. **Nodes have no per-project deps.** Dispatched runs borrow the backend's
    `node_modules` today. Per-project installs need an install step + cache in the
    dispatch path (`runnerProcess.js:174`).
@@ -58,15 +60,18 @@ only test selection plus a report destination. `plum run-test` goes away; users 
 
 ## Phases
 
-- [x] **A. Framework prompt in `plum server` config flow** ← current
+- [x] **A. Framework prompt in `plum server` config flow**
       Asked first, before the existing mode/ports/URL questions. Stored in
       `.plum-server.json` as the default framework for projects created on this server.
-- [ ] **0. Projects become npm packages** (blocks everything)
-      Per-project `package.json` + install; framework-aware `scaffoldProject()` and
-      `reconcile()`; retire `plum.plugins.json` and the `NODE_PATH` injection.
-- [ ] **1. `Project.framework`, immutable** — 3-step migration; reject `framework` in
-      every update path; create-flow selector (still defaults `CUCUMBER` until Phase 7);
-      `Report.framework` denormalized.
+- [x] **0. `Project.framework`, immutable** — done. Swapped ahead of the npm-package
+      phase: framework-aware scaffolding cannot exist before the column does.
+      `framework String @default("cucumber")` on Project and Report (a String, not an
+      enum — the schema has no enums and every status-like column is a lowercase
+      String). `reconcile()` now reads the column instead of sniffing for `features/`.
+      Frontend create-form selector still to do.
+- [ ] **1. Projects become npm packages** (blocks the native spawn)
+      Per-project `package.json` + install; split `_scaffold/` into `playwright/` and
+      `cucumber/`; retire `plum.plugins.json` and the `NODE_PATH` injection.
 - [ ] **2. Reporter packages** — `@plum-e2e/playwright-reporter`,
       `@plum-e2e/cucumber-formatter`. File mode (`PLUM_REPORT_FILE`) + authenticated
       HTTP mode (`PLUM_API_URL` + `PLUM_TOKEN`). No-op when neither is set.

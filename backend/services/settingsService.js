@@ -22,7 +22,11 @@ const projectPublicSelect = {
 	maxRetries: true,
 	defaultHome: true,
 	manualRepositoryOnly: true,
-	testsPath: true
+	testsPath: true,
+	// Read-only: surfaced so the UI can label the project, never accepted back.
+	// updateProject() destructures an explicit allowlist, so adding it here
+	// cannot make it writable — but do not add it to that destructure either.
+	framework: true
 };
 
 // The single organisation. Raw accessor includes backupS3SecretKey — only for

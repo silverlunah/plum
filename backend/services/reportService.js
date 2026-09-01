@@ -349,6 +349,7 @@ const reportListSelect = {
 	workerCount: true,
 	flakyCount: true,
 	browser: true,
+	framework: true,
 	runnerName: true,
 	createdAt: true,
 	testRun: { select: { id: true, title: true } }
@@ -506,6 +507,13 @@ const saveReport = async ({
 	const status = forceFail ? REPORT_STATUS.FAIL : derivedStatus;
 	const cronJobId = await resolveCronJobId(projectId, normTrigger);
 	const actor = await resolveMcpActor(startedBy, normTrigger);
+	// Recorded from the project rather than passed in, so no caller can persist a
+	// report whose stored shape disagrees with the parser that produced it. This
+	// is also where the parser choice will branch once Playwright JSON is ingested.
+	const project = await prisma.project.findUnique({
+		where: { id: projectId },
+		select: { framework: true }
+	});
 
 	const report = await prisma.report.create({
 		data: {
@@ -519,6 +527,7 @@ const saveReport = async ({
 			workerCount,
 			flakyCount,
 			browser: browser ?? DEFAULT_BROWSER,
+			framework: project.framework,
 			runnerName: runnerName ?? null,
 			runnerId: runnerId ?? null,
 			cronJobId,
