@@ -35,6 +35,17 @@ const legacyRootPluginsPath = path.join(process.cwd(), 'plum.plugins.json');
 const preferring = (primary, fallback) =>
 	fs.existsSync(primary) || !fs.existsSync(fallback) ? primary : fallback;
 
+// Returns null when no features/ dir is found, so callers fail loudly instead of
+// running whatever a previous `plum run-test` in another project left behind in
+// backend/tests/.
+function resolveLocalTestsRoot(explicit) {
+	const override = explicit ?? process.env.TESTS_ROOT;
+	const candidates = override
+		? [path.resolve(process.cwd(), override)]
+		: [userTestsPath, process.cwd()];
+	return candidates.find((dir) => fs.existsSync(path.join(dir, 'features'))) ?? null;
+}
+
 // Scaffold tests/plum.plugins.json if it doesn't exist yet
 function scaffoldPluginsFile() {
 	if (fs.existsSync(userPluginsInTests)) {
@@ -1381,6 +1392,10 @@ switch (command) {
 					`  ${pc.cyan('plum run-test @tag')}               run tests matching a tag`,
 					`  ${pc.cyan('plum run-test --parallel N')}       run tests across N parallel workers`,
 					`  ${pc.cyan('plum run-test --browser firefox')}  run in a specific browser (chromium/firefox)`,
+					`  ${pc.cyan('plum run-test --tests-root <dir>')} run tests from a folder other than ./tests`,
+					'',
+					'  Tests are discovered in ./tests/ or the current directory (whichever has a',
+					'  features/ folder); pass --tests-root to point elsewhere.',
 					''
 				].join('\n')
 			);
@@ -1390,18 +1405,12 @@ switch (command) {
 		console.log('--------------------------------------\n');
 		console.log('🚀 Running tests locally...');
 
-		// tests/.env is the canonical spot; fall back to a root .env for projects
-		// scaffolded before the layout was unified.
-		copyEnvFile(preferring(testsEnvPath, legacyRootEnvPath));
-
 		const runArgs = process.argv.slice(3);
 		const parallelIdx = runArgs.indexOf('--parallel');
 		const parallelArg = parallelIdx !== -1 ? runArgs[parallelIdx + 1] : null;
 		const browserIdx = runArgs.indexOf('--browser');
 		const browserArg = browserIdx !== -1 ? runArgs[browserIdx + 1] : null;
 		const tagArg = runArgs.find((a) => a.startsWith('@')) ?? null;
-		const userTestsPath = path.resolve(process.cwd(), 'tests');
-		const backendTestsPath = path.join(plumRoot, 'backend', 'tests');
 
 		if (browserArg && !VALID_BROWSERS.includes(browserArg)) {
 			console.error(
@@ -1410,13 +1419,21 @@ switch (command) {
 			process.exit(1);
 		}
 
-		// Copy user tests into backend
-		if (fs.existsSync(userTestsPath)) {
-			console.log('📦 Syncing your tests...\n');
-			fse.copySync(userTestsPath, backendTestsPath);
-		} else {
-			console.log('⚠️  No `tests/` folder found in the user directory.\n');
+		const explicitTestsRoot = getFlag(runArgs, '--tests-root');
+		const testsRoot = resolveLocalTestsRoot(explicitTestsRoot);
+		if (!testsRoot) {
+			console.error(
+				explicitTestsRoot || process.env.TESTS_ROOT
+					? `✗ No features/ folder under ${path.resolve(process.cwd(), explicitTestsRoot ?? process.env.TESTS_ROOT)}`
+					: '✗ No tests found. Expected a features/ folder in ./tests/ or the current directory.\n  Pass --tests-root <dir> if your tests live elsewhere.'
+			);
+			process.exit(1);
 		}
+		console.log(`📂 Tests: ${testsRoot}\n`);
+
+		// tests/.env is the canonical spot; fall back to a root .env for projects
+		// scaffolded before the layout was unified.
+		copyEnvFile(preferring(path.join(testsRoot, '.env'), legacyRootEnvPath));
 
 		// Run npm install
 		console.log('--------------------------------------\n');
@@ -1450,6 +1467,7 @@ switch (command) {
 			stdio: 'inherit',
 			env: {
 				...process.env,
+				TESTS_ROOT: testsRoot,
 				TAG: tagArg ?? '',
 				TRIGGER: 'command-line-trigger',
 				...(parallelArg ? { PARALLEL: parallelArg } : {}),
@@ -1571,7 +1589,7 @@ switch (command) {
 			stdio: 'inherit',
 			env: {
 				...process.env,
-				TESTS_ROOT: userTestsPath
+				TESTS_ROOT: resolveLocalTestsRoot() ?? userTestsPath
 			}
 		});
 		break;
@@ -1584,7 +1602,7 @@ switch (command) {
 			stdio: 'inherit',
 			env: {
 				...process.env,
-				TESTS_ROOT: userTestsPath
+				TESTS_ROOT: resolveLocalTestsRoot() ?? userTestsPath
 			}
 		});
 		break;
