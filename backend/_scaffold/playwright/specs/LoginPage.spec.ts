@@ -1,6 +1,7 @@
 import { test } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { HomepagePage } from '../pages/HomepagePage';
+import { WELCOME_MESSAGE } from '../utils/constants';
 
 // Tags are how Plum selects tests: it runs --grep with the tags you pick in the
 // UI. A tag on describe applies to every test inside it.
@@ -12,6 +13,8 @@ test.describe('Demo Sauce Login', { tag: '@TS-001' }, () => {
 	let homepage: HomepagePage;
 
 	test.beforeEach(async ({ page }) => {
+		// Example of using a shared constant. Runs once per test.
+		console.log(WELCOME_MESSAGE);
 		login = new LoginPage(page);
 		homepage = new HomepagePage(page);
 	});

@@ -121,6 +121,18 @@ function splitRetries(framework, maxRetries) {
 		: { nativeRetries: 0, loopRetries: n };
 }
 
+// Both runners exit 0 when a selection matches nothing, so a run that verified
+// nothing would otherwise look like a clean pass in the log. saveReport marks the
+// report failed; this is what tells the person watching the run bar why.
+function warnIfNothingRan(rawJson, tag, onLog) {
+	const scenarios = rawJson.reduce((n, f) => n + (f.elements ?? []).length, 0);
+	if (scenarios > 0) return;
+	onLog(
+		`[ERROR] No tests matched ${tag ? `"${tag}"` : 'this run'} — nothing was executed, ` +
+			`so this run is marked failed. Check the tag, or that the tests still exist.\n`
+	);
+}
+
 /**
  * A lane's raw report in Plum's feature/scenario shape. Cucumber's JSON already is
  * that shape; Playwright's is an object of suites and stats, adapted here so the
@@ -258,6 +270,7 @@ async function runBuiltIn(run, io, emit) {
 			});
 			const parsed = parseLaneReport(framework, raw);
 			if (parsed.attempts) nativeAttempts = parsed.attempts;
+			warnIfNothingRan(parsed.rawJson, tagOverride ?? run.tag, onLog);
 			return { code, rawJson: parsed.rawJson };
 		},
 		onLog

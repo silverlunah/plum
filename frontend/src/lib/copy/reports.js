@@ -118,6 +118,13 @@ export const runsInProgressHeading = (count) =>
 export const workersCountLabel = (count) => `${count} ${pluralize(count, 'worker')}`;
 export const redirectingIn = (seconds) => `Redirecting in ${seconds}s…`;
 
+// ── A run that matched no tests ──
+export const NO_TESTS_MATCHED_HEADING = 'No tests ran';
+export const noTestsMatchedBody = (tags) =>
+	tags && tags !== '@all-tests'
+		? `Nothing in this project matches ${tags}. The run is marked failed because it verified nothing — check the tag, or that the test still exists.`
+		: 'This project has no tests the runner could find. Check that its tests folder is set correctly in Settings.';
+
 // ── Queued / not-found run ──
 export const QUEUED_HEADING = 'Waiting for a runner';
 export const QUEUED_BODY = 'This run starts as soon as every runner it needs is free.';

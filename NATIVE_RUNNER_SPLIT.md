@@ -147,24 +147,27 @@ per-project deps" mostly evaporates — nodes keep using `NODE_PATH`.
       Dropped from ~4d to ~0.5d. A real package is only needed to POST results from CI
       or a hand-run; revisit then, and note that a config copied into a project does
       not receive later updates the way a versioned package would.
-- [x] **3. Native spawn, wrapper retired** — DONE. `lib/runnerCommand.js`
-      builds the native invocation for both frameworks; scaffold configs set retries to
-      0 so Plum's count is the only one. Verified end to end: `playwright test --grep
-  "@TC-001|@TC-003" --project=chromium --retries=2` selected exactly two tests, ran
-      one browser, recorded 3 attempts on the failure and wrote the report to
-      PLUM_REPORT_FILE. Remaining: swap the four spawn sites, delete the alias.
-- [ ] **3 (original scope)** — per-framework command builder replacing
-      `run-tests.js`. Four spawn sites: `runExecutorService.js:144`,
-      `nodeExecutionService.js:96`, `bin/plum.js:1465`, `backend/package.json:9`.
-      Delete the `plum run-test` command + its docs.
-- [x] **4. Ingestion + discovery** — DONE for the built-in and node paths. — `processPlaywrightJson()` producing the stored
-      `{features, recordings, status, flakyCount}` shape — implemented as
-      `lib/playwrightReport.js` adapting to the _existing_ shape rather than a second
-      pipeline, so the retry merge, tag sync, report page and exporters are untouched.
-      Playwright discovery via `--list` in `lib/playwrightDiscovery.js`.
-      Kept `testService.js`'s parser for Cucumber as planned.
-      NOT done: exportService / testImportService / MCP tools are still
-      Gherkin-shaped and unreviewed for Playwright projects.
+- [x] **3. Native spawn, wrapper retired** — DONE. `lib/runnerCommand.js` builds the
+      native invocation for both frameworks; scaffold configs set retries to 0 so
+      Plum's count is the only one. All four spawn sites swapped. `run-tests.js`,
+      `generate-report.js`, the backend `test` npm script and `plum run-test` are
+      deleted, and the docs show the native commands instead.
+      Nodes build the same command from the `framework` in the dispatch payload, with
+      `NODE_PATH` pointing at the node's own backend (the temp dir sits outside the
+      tree and the upload excludes `node_modules`).
+      Verified on the live stack after deletion: cucumber and playwright, full suite
+      (6 scenarios each) and single tag (1 each), all green.
+      NOT done: native `--shard=k/N`. Nodes still get an explicit `--grep`/`--tags`
+      chunk from `testChunker`, which works for both frameworks. A real multi-node run
+      has never been tested — no second node has been registered.
+- [x] **4. Ingestion + discovery** — DONE for the built-in and node paths.
+      `lib/playwrightReport.js` adapts Playwright's JSON into the _existing_ stored
+      shape rather than adding a second pipeline, so the retry merge, tag sync, report
+      page and exporters are untouched. Discovery via `--list` in
+      `lib/playwrightDiscovery.js`. Kept `testService.js`'s parser for Cucumber as
+      planned, so its Scenario Outline view is unchanged.
+      NOT done: exportService / testImportService / MCP tools are still Gherkin-shaped
+      and unreviewed for Playwright projects.
 - [~] **5. Frontend** — partly done. Framework picker with logos on project create,
   framework badge per project row, read-only framework field in project settings,
   "Powered by" replacing "Learn more", Cucumber links hidden in Playwright

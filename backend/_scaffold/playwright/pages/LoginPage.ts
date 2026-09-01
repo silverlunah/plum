@@ -1,11 +1,9 @@
 import { Page, expect } from '@playwright/test';
-import { SAMPLE_CONSTANT } from '../utils/constants';
 
 export class LoginPage {
 	constructor(private readonly page: Page) {}
 
 	async goToLoginPage() {
-		console.log(SAMPLE_CONSTANT);
 		await this.page.goto(process.env.BASE_URL as string);
 	}
 

@@ -46,7 +46,9 @@
 		caseLabel,
 		UNKNOWN_RUNNER_LABEL,
 		workerLabel,
-		REPORT_EXPORT_MENU_ITEMS
+		REPORT_EXPORT_MENU_ITEMS,
+		NO_TESTS_MATCHED_HEADING,
+		noTestsMatchedBody
 	} from '$lib/copy/reports';
 	import { exportFailedToast, exportedToast, exportingToast } from '$lib/copy/common';
 	import { notify, notifyProgress } from '$lib/stores/notifications';
@@ -58,6 +60,7 @@
 	import TagList from '$lib/components/ui/TagList.svelte';
 	import StepKeyword from '$lib/components/ui/StepKeyword.svelte';
 	import StepStatusIcon from '$lib/components/ui/StepStatusIcon.svelte';
+	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 	import RecordingPlayer from '$lib/components/reports/RecordingPlayer.svelte';
 
@@ -429,6 +432,10 @@
 
 			<pre class="logs-body">{logSections[activeLogTab]?.content ?? ''}</pre>
 		</details>
+	{/if}
+
+	{#if allScenarios.length === 0}
+		<EmptyState title={NO_TESTS_MATCHED_HEADING} description={noTestsMatchedBody(detail?.tags)} />
 	{/if}
 
 	{#each runnerGroups as runnerGroup, ri}
