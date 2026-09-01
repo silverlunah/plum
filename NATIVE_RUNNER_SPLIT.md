@@ -168,14 +168,30 @@ per-project deps" mostly evaporates — nodes keep using `NODE_PATH`.
       planned, so its Scenario Outline view is unchanged.
       NOT done: exportService / testImportService / MCP tools are still Gherkin-shaped
       and unreviewed for Playwright projects.
-- [~] **5. Frontend** — partly done. Framework picker with logos on project create,
-  framework badge per project row, read-only framework field in project settings,
-  "Powered by" replacing "Learn more", Cucumber links hidden in Playwright
-  projects, and Gherkin keywords dropped from Playwright reports.
-  NOT done: the repository page still speaks in Cucumber terms; create-test /
-  create-step generators are Gherkin-only and not gated by framework.
-- [ ] **6. rrweb fixture + live streaming** for Playwright (pairs with the work on
-      `fix-live-rrweb-streaming-and-inspect-hardening`).
+- [x] **5. Frontend** — DONE. Framework picker with logos on project create, badge
+      per project row, read-only framework field in project settings, "Powered by"
+      replacing "Learn more", Cucumber links hidden in Playwright projects, Gherkin
+      keywords dropped from Playwright reports, and framework-neutral wording for the
+      retry and migrate-IDs hints.
+      `plum create-test` / `create-step` now refuse in a Playwright project.
+      A locked run row in the bottom bar shows a lock icon and a muted label — the
+      "switch to <project>" message existed but only as a native title, so clicking a
+      locked row looked like nothing happened.
+      Correction to an earlier note in this file: the repository page had **no**
+      Cucumber vocabulary to fix, and the automated-tests page's outline badge and
+      examples table were already gated by data a Playwright project never produces.
+- [x] **6. rrweb fixture + live streaming** — DONE. `fixtures/plum.ts` overrides the
+      `context` fixture and mirrors the Cucumber `browser.ts`. The converter presents
+      its attachments as a hidden step with Cucumber-style `embeddings`, so
+      `extractRecordings` needed no change: Playwright's JSON inlines an attachment
+      body as base64, the same shape as a Cucumber embedding.
+      A `step` helper reports the step and drops the replay marker, replacing what
+      Cucumber gets free from BeforeStep.
+      Verified: report 53 has 6 recordings for 6 tests, one decoding to 30 events with
+      2 full snapshots and 5 named step markers; live streaming writes the filename
+      and payload shape the poller expects.
+      NOT verified: the live page itself (`/live/<id>`) has never been opened against
+      a running Playwright job — only the files it feeds on have been checked.
 - [ ] **7. Flip the default to Playwright** — last, so new projects never land in a
       mode whose ingestion and report UI are unfinished.
 
