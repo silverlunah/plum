@@ -17,9 +17,10 @@ export default defineConfig({
 		trace: 'retain-on-failure',
 		screenshot: 'only-on-failure'
 	},
-	// Retries and workers are read from here, not from Plum's UI. A retried test
-	// that eventually passes is reported as flaky rather than failed.
-	retries: 1,
+	// Plum passes --retries from the project's max-retries setting, which overrides
+	// this. Playwright's JSON reports every attempt, so Plum reads flakiness
+	// straight out of it. This value only applies to runs you start yourself.
+	retries: 0,
 	workers: process.env.CI ? 2 : undefined,
 	// Plum sets PLUM_REPORT_FILE when it starts a run; the JSON written there is
 	// what shows up in the Plum UI. Run the command yourself and the variable is

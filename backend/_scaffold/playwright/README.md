@@ -13,7 +13,12 @@ and merges new tests straight in.
 and traces are all read from it, by Plum and by you alike:
 
 ```
-npx playwright test                     # everything
-npx playwright test --grep @TC-001      # one test, the way Plum runs it
-npx playwright test --ui                # Playwright's UI mode
+npx playwright test                        # everything, in both browsers
+npx playwright test --project=chromium     # one browser, the way Plum runs it
+npx playwright test --grep @TC-001         # one test, the way Plum runs it
+npx playwright test --ui                   # Playwright's UI mode
 ```
+
+Plum always passes `--project=<browser>` so a run reports one browser, and
+`--retries` from the project's max-retries setting. Everything else — workers,
+timeouts, traces, reporters — comes from `playwright.config.ts`.

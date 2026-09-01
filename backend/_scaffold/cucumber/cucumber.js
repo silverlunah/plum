@@ -12,9 +12,12 @@ module.exports = {
 		// what shows up in the Plum UI. Run the command yourself and it is unset, so
 		// only the progress formatter runs.
 		format: ['progress', ...(reportFile ? [`json:${reportFile}`] : [])],
-		// Retries and parallelism are read from here, not from Plum's UI. A scenario
-		// that fails then passes on a retry is reported as flaky rather than failed.
-		retry: 1,
+		// Left at 0 deliberately. Plum owns the retry count (Settings -> project ->
+		// max retries) and re-runs failures itself, because Cucumber's legacy JSON
+		// formatter reports only the final attempt — a native `retry` here would
+		// retry a second time on top of Plum's and lose the flaky/attempt counts.
+		// Set it for your own local runs if you want; Plum runs are unaffected.
+		retry: 0,
 		parallel: 0
 	}
 };

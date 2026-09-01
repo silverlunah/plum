@@ -37,6 +37,17 @@ only test selection plus a report destination. `plum run-test` goes away; users 
   launched. But it **expands Scenario Outlines** (3 Examples rows → 3 scenarios),
   where `testService.js` yields 1 outline + an examples table.
 - Cucumber has `--retry`, `--retry-tag-filter`, `--parallel`. No `--shard`.
+- **Cucumber's native `--retry` works but its legacy JSON reports only the final
+  attempt.** Measured: `--retry 3` on a always-failing scenario ran 4 attempts, and the
+  JSON held exactly one entry. So Plum cannot read attempts/flakiness from it, and must
+  keep re-running failures itself for Cucumber. Playwright's JSON does report every
+  attempt in `results[]`, so it uses native `--retries`. Both still take their count
+  from the project's max-retries setting; only the mechanism differs.
+- CLI flags override config on both: Playwright `--retries=3` beat `retries: 1`, and
+  Cucumber `--retry 3` beat `retry: 1`.
+- **Shell metacharacters must be quoted.** A tag expression becomes `--grep
+"@a|@b"`; unquoted, the `|` is a shell pipe and the spawn dies with exit 127.
+  `shell: true` is not optional (npm/npx need it on Windows), so the builder quotes.
 
 ## Finding: projects already resolve the shared node_modules
 
@@ -136,7 +147,13 @@ per-project deps" mostly evaporates — nodes keep using `NODE_PATH`.
       Dropped from ~4d to ~0.5d. A real package is only needed to POST results from CI
       or a hand-run; revisit then, and note that a config copied into a project does
       not receive later updates the way a versioned package would.
-- [ ] **3. Native spawn, wrapper retired** — per-framework command builder replacing
+- [~] **3. Native spawn, wrapper retired** — IN PROGRESS. `lib/runnerCommand.js`
+  builds the native invocation for both frameworks; scaffold configs set retries to
+  0 so Plum's count is the only one. Verified end to end: `playwright test --grep
+    "@TC-001|@TC-003" --project=chromium --retries=2` selected exactly two tests, ran
+  one browser, recorded 3 attempts on the failure and wrote the report to
+  PLUM_REPORT_FILE. Remaining: swap the four spawn sites, delete the alias.
+- [ ] **3 (original scope)** — per-framework command builder replacing
       `run-tests.js`. Four spawn sites: `runExecutorService.js:144`,
       `nodeExecutionService.js:96`, `bin/plum.js:1465`, `backend/package.json:9`.
       Delete the `plum run-test` command + its docs.
