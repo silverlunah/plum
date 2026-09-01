@@ -8,16 +8,21 @@
  * docker-compose override are derived from this file, so reconfiguring URLs and
  * ports happens in one place.
  *
- * Uses only Node builtins so it can be imported from the published `bin/plum.js`.
+ * Pulls in nothing outside Node builtins and our own constants, so it can be
+ * imported from the published `bin/plum.js`.
  */
 
 const fs = require('fs');
 const path = require('path');
+const { DEFAULT_FRAMEWORK } = require('../constants/defaults');
 
 const CONFIG_FILENAME = '.plum-server.json';
 
 function defaults() {
 	return {
+		// Default test framework for projects created on this server. A project's
+		// own choice is fixed at creation and never re-read from here.
+		framework: DEFAULT_FRAMEWORK,
 		// 'local' derives localhost URLs; 'production' takes operator-supplied ones.
 		mode: 'local',
 		backendPort: '3001',
@@ -43,10 +48,10 @@ function loadServerConfig(dir) {
 }
 
 function saveServerConfig(dir, cfg) {
-	const { mode, backendPort, frontendPort, apiUrl, uiUrl } = cfg;
+	const { framework, mode, backendPort, frontendPort, apiUrl, uiUrl } = cfg;
 	fs.writeFileSync(
 		configPath(dir),
-		JSON.stringify({ mode, backendPort, frontendPort, apiUrl, uiUrl }, null, 2) + '\n',
+		JSON.stringify({ framework, mode, backendPort, frontendPort, apiUrl, uiUrl }, null, 2) + '\n',
 		'utf8'
 	);
 }

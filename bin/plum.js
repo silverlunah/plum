@@ -101,6 +101,7 @@ function copyEnvFile(src) {
 }
 
 const backendLib = path.join(plumRoot, 'backend', 'lib');
+const defaultsConstants = () => require(path.join(plumRoot, 'backend', 'constants', 'defaults.js'));
 const serverConfigLib = () => require(path.join(backendLib, 'serverConfig.js'));
 const nodeRegisterLib = () => require(path.join(backendLib, 'nodeRegister.js'));
 const runnerProcessLib = () => require(path.join(backendLib, 'runnerProcess.js'));
@@ -141,6 +142,11 @@ function cancelAndExit() {
 }
 
 const VALID_BROWSERS = ['chromium', 'firefox'];
+
+const FRAMEWORK_HINTS = {
+	playwright: 'spec files, native runner — recommended',
+	cucumber: 'Gherkin .feature files and step definitions'
+};
 
 // A bare host:port silently breaks link generation and CORS, so require a scheme.
 async function promptPublicUrl(message, initial) {
@@ -209,17 +215,29 @@ function mergeUserPlugins() {
 
 async function configureServer({ force }) {
 	const { loadServerConfig, saveServerConfig } = serverConfigLib();
+	const { FRAMEWORKS, DEFAULT_FRAMEWORK, frameworkLabel, isFramework } = defaultsConstants();
 	const cwd = process.cwd();
 	const args = process.argv.slice(3);
 	const cfg = loadServerConfig(cwd);
 
 	const overrides = {
+		framework: getFlag(args, '--framework'),
 		mode: getFlag(args, '--mode'),
 		backendPort: getFlag(args, '--backend-port'),
 		frontendPort: getFlag(args, '--frontend-port'),
 		apiUrl: getFlag(args, '--api-url'),
 		uiUrl: getFlag(args, '--ui-url')
 	};
+	if (overrides.framework !== undefined) {
+		const wanted = String(overrides.framework).toLowerCase();
+		if (!isFramework(wanted)) {
+			clack.log.error(
+				`Unknown framework "${overrides.framework}". Use ${FRAMEWORKS.join(' or ')}.`
+			);
+			process.exit(1);
+		}
+		cfg.framework = wanted;
+	}
 	if (overrides.mode !== undefined) cfg.mode = overrides.mode;
 	if (overrides.backendPort !== undefined) cfg.backendPort = overrides.backendPort;
 	if (overrides.frontendPort !== undefined) cfg.frontendPort = overrides.frontendPort;
@@ -227,6 +245,7 @@ async function configureServer({ force }) {
 	if (overrides.uiUrl !== undefined) cfg.uiUrl = overrides.uiUrl;
 
 	const hasFlags = anyFlags(args, [
+		'--framework',
 		'--mode',
 		'--backend-port',
 		'--frontend-port',
@@ -236,6 +255,22 @@ async function configureServer({ force }) {
 	const interactive = force || (interactiveAllowed() && !hasFlags);
 
 	if (interactive) {
+		const framework = await clack.select({
+			message: 'Which test framework should new projects on this server use?',
+			options: FRAMEWORKS.map((id) => ({
+				value: id,
+				label: frameworkLabel(id),
+				hint: FRAMEWORK_HINTS[id]
+			})),
+			initialValue: isFramework(cfg.framework) ? cfg.framework : DEFAULT_FRAMEWORK
+		});
+		if (clack.isCancel(framework)) cancelAndExit();
+		cfg.framework = framework;
+		clack.log.info(
+			`Each project picks its framework when it is created, and cannot change afterwards. ` +
+				`${frameworkLabel(framework)} will be pre-selected.`
+		);
+
 		const mode = await clack.select({
 			message: 'Where are you setting up Plum?',
 			options: [
@@ -285,6 +320,7 @@ async function configureServer({ force }) {
 			cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
 		}
 	} else {
+		if (!isFramework(cfg.framework)) cfg.framework = DEFAULT_FRAMEWORK;
 		if (!cfg.mode) cfg.mode = 'local';
 		if (!cfg.apiUrl) cfg.apiUrl = `http://localhost:${cfg.backendPort}`;
 		if (!cfg.uiUrl) cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
@@ -1614,6 +1650,9 @@ switch (command) {
 		console.log('  --version, -v        Print the installed Plum version');
 		console.log('  init                 Set up a new Plum project');
 		console.log('  server start         Start the full UI stack (interactive)');
+		console.log(
+			'    --framework <f>    playwright | cucumber — default for new projects (default: playwright)'
+		);
 		console.log('    --mode <m>         local | production (default: local)');
 		console.log('    --backend-port <n> Host port for the backend/API (default: 3001)');
 		console.log('    --frontend-port <n> Host port for the UI (default: 3002)');

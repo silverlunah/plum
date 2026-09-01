@@ -9,4 +9,19 @@ const DEFAULT_BROWSER = 'chromium';
 const BROWSER_LABELS = { chromium: 'Chrome', firefox: 'Firefox' };
 const browserLabel = (id) => BROWSER_LABELS[id] ?? id ?? 'Chrome';
 
-module.exports = { DEFAULT_BROWSER, browserLabel };
+const FRAMEWORKS = ['playwright', 'cucumber'];
+const DEFAULT_FRAMEWORK = 'playwright';
+
+const FRAMEWORK_LABELS = { playwright: 'Playwright', cucumber: 'Cucumber' };
+const frameworkLabel = (id) => FRAMEWORK_LABELS[id] ?? id ?? 'Playwright';
+
+const isFramework = (id) => FRAMEWORKS.includes(id);
+
+module.exports = {
+	DEFAULT_BROWSER,
+	browserLabel,
+	FRAMEWORKS,
+	DEFAULT_FRAMEWORK,
+	frameworkLabel,
+	isFramework
+};
