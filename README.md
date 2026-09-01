@@ -48,6 +48,8 @@ plum server start
 
 `plum server start` creates the `projects/` folder (the bind-mount target) and the Docker config in the current directory. Open **http://localhost:3002**, complete first-run setup, and create your organisation, first project, and owner account. The server scaffolds each project's `projects/<slug>/tests/` folder itself when you add the project in **Settings → Project** — you don't run `plum init` or `plum project init` for that (`plum project init "<name>"` only re-creates a folder the server lost).
 
+If a project's repo keeps its Cucumber tests deeper than a top-level `tests/` (e.g. `apps/web/e2e/`), set that subpath in **Settings → Project → Tests folder**. It's always relative to `projects/<slug>/`; a project with a custom path manages that folder itself and is never scaffolded.
+
 The stack's containers use `restart: unless-stopped`, so the server comes back after a reboot once Docker itself starts. To bring runner nodes back too, register them with `plum node start <name> --boot` (or answer the prompt).
 
 ### Writing tests (no server)

@@ -26,7 +26,7 @@ async function uniqueSlug(base) {
 	return slug;
 }
 
-// Projects the user can act in, with their own name/slug/baseUrl.
+// Projects the user can act in, with their display + homepage metadata.
 async function listForUser(user) {
 	const ids = await accessibleProjectIds(user);
 	return prisma.project.findMany({
@@ -35,7 +35,6 @@ async function listForUser(user) {
 			id: true,
 			name: true,
 			slug: true,
-			baseUrl: true,
 			logoUrl: true,
 			defaultHome: true,
 			manualRepositoryOnly: true
@@ -53,7 +52,6 @@ async function listAll() {
 				id: true,
 				name: true,
 				slug: true,
-				baseUrl: true,
 				_count: { select: { members: true } }
 			},
 			orderBy: { id: 'asc' }
@@ -68,12 +66,12 @@ async function listAll() {
 
 // `slug` is derived from the name once, here, and never changes afterwards —
 // it's the project's folder and API identity. Renames don't touch it.
-async function create({ name, baseUrl }) {
+async function create({ name }) {
 	const org = await prisma.organization.findFirst({ orderBy: { id: 'asc' } });
 	const slug = await uniqueSlug(slugify(name));
 	const project = await prisma.project.create({
-		data: { orgId: org.id, name, slug, baseUrl: baseUrl ?? '' },
-		select: { id: true, name: true, slug: true, baseUrl: true }
+		data: { orgId: org.id, name, slug },
+		select: { id: true, name: true, slug: true }
 	});
 	await projectPaths.refresh();
 	projectPaths.scaffoldProject(slug);

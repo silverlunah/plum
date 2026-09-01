@@ -19,7 +19,8 @@ export async function fetchProject() {
 			timezone: 'UTC',
 			maxRetries: 0,
 			defaultHome: 'automated',
-			manualRepositoryOnly: false
+			manualRepositoryOnly: false,
+			testsPath: 'tests'
 		};
 	return res.json();
 }
@@ -30,12 +31,21 @@ export async function saveProject({
 	timezone,
 	maxRetries,
 	defaultHome,
-	manualRepositoryOnly
+	manualRepositoryOnly,
+	testsPath
 }) {
 	const res = await fetch(`${API_BASE}/settings/project`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', ...authHeaders() },
-		body: JSON.stringify({ name, logoUrl, timezone, maxRetries, defaultHome, manualRepositoryOnly })
+		body: JSON.stringify({
+			name,
+			logoUrl,
+			timezone,
+			maxRetries,
+			defaultHome,
+			manualRepositoryOnly,
+			testsPath
+		})
 	});
 	return res.json();
 }
