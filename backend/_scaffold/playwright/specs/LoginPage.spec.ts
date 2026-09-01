@@ -45,18 +45,19 @@ test.describe('Demo Sauce Login', { tag: '@TS-001' }, () => {
 	});
 
 	// ── Parameterised ────────────────────────────────────────────────────────
-	// The equivalent of a Scenario Outline: one test per row. The row's values go
-	// in the title so each case is identifiable in the report.
+	// The equivalent of a Scenario Outline: one test per row. Each row carries its
+	// own tag rather than sharing one, because these are separate tests here — a
+	// shared tag would make the id ambiguous and collapse three results into one.
 	const credentials = [
-		{ username: 'standard_user', password: 'secret_sauce', outcome: 'success' },
-		{ username: 'locked_out_user', password: 'secret_sauce', outcome: 'failure' },
-		{ username: 'invalid_user', password: 'wrong_pass', outcome: 'failure' }
+		{ tag: '@TC-003', username: 'standard_user', password: 'secret_sauce', outcome: 'success' },
+		{ tag: '@TC-004', username: 'locked_out_user', password: 'secret_sauce', outcome: 'failure' },
+		{ tag: '@TC-005', username: 'invalid_user', password: 'wrong_pass', outcome: 'failure' }
 	];
 
-	for (const { username, password, outcome } of credentials) {
+	for (const { tag, username, password, outcome } of credentials) {
 		test(
 			`User login attempts with different credentials: ${username} expects ${outcome}`,
-			{ tag: '@TC-003' },
+			{ tag },
 			async () => {
 				await openLoginPage();
 				await test.step(`I enter "${username}" in username field`, () =>
@@ -72,7 +73,7 @@ test.describe('Demo Sauce Login', { tag: '@TS-001' }, () => {
 
 	// ── Structured data ──────────────────────────────────────────────────────
 	// The equivalent of a data table: pass rows straight into a page object.
-	test('User can log in using a data table', { tag: '@TC-004' }, async () => {
+	test('User can log in using a data table', { tag: '@TC-006' }, async () => {
 		const fields = [
 			{ field: 'username', value: 'standard_user' },
 			{ field: 'password', value: 'secret_sauce' }

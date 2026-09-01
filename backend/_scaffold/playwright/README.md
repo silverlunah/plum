@@ -15,6 +15,10 @@ The example suite covers the four shapes you are likely to need: a basic test, a
 negative test, a parameterised one (the equivalent of a Scenario Outline, one test
 per row) and one driven by structured data (the equivalent of a data table).
 
+Give every test its own tag, including each row of a parameterised set. Tags are
+ids: two tests sharing one cannot be told apart in a report or matched to separate
+cases in the repository.
+
 `playwright.config.ts` is yours. Browser, retries, workers, timeouts, reporters
 and traces are all read from it, by Plum and by you alike:
 
