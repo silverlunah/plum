@@ -40,6 +40,8 @@ function toFeatures(pwJson) {
 			const last = results[results.length - 1];
 
 			const steps = buildSteps(last, spec.title);
+			const recordingStep = buildRecordingStep(results);
+			if (recordingStep) steps.push(recordingStep);
 			const idTag = tags.find((t) => /^@tc-?\d+/i.test(t) || /^@test[\w-]*/i.test(t));
 			if (idTag && results.length > 0) attempts[idTag] = results.length;
 
@@ -76,6 +78,35 @@ function toFeatures(pwJson) {
 	}
 
 	return { features: [...byFile.values()], attempts };
+}
+
+const PLUM_MIME_TYPES = new Set([
+	'application/x-plum-rrweb+json',
+	'application/x-plum-worker+json'
+]);
+
+/**
+ * Plum's own attachments, re-shaped as a hidden step carrying Cucumber-style
+ * `embeddings`. Cucumber puts them on its hidden After-hook step, and
+ * reportService.extractRecordings reads exactly that — so presenting them the same
+ * way means replay works for Playwright with no change to the report pipeline.
+ *
+ * Every attempt's attachments are included: a test that failed then passed on a
+ * retry has a recording per attempt, and the replay UI groups by worker and tab.
+ */
+function buildRecordingStep(results) {
+	const embeddings = results
+		.flatMap((r) => r.attachments ?? [])
+		.filter((a) => PLUM_MIME_TYPES.has(a.contentType) && a.body)
+		.map((a) => ({ mime_type: a.contentType, data: a.body }));
+	if (embeddings.length === 0) return null;
+	return {
+		keyword: '',
+		name: 'After',
+		hidden: true,
+		embeddings,
+		result: { status: 'passed', duration: 0 }
+	};
 }
 
 // Playwright statuses are per-result: passed | failed | timedOut | skipped |

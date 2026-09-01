@@ -1,4 +1,6 @@
-import { test } from '@playwright/test';
+// `test` comes from Plum's fixture, not straight from @playwright/test — that is
+// what records the session for report replay. `expect` is re-exported from it.
+import { test, type Step } from '../fixtures/plum';
 import { LoginPage } from '../pages/LoginPage';
 import { HomepagePage } from '../pages/HomepagePage';
 import { WELCOME_MESSAGE } from '../utils/constants';
@@ -22,29 +24,36 @@ test.describe('Demo Sauce Login', { tag: '@TS-001' }, () => {
 	// The equivalent of a Background. It is called inside each test rather than in
 	// beforeEach because Playwright's JSON report omits hook steps entirely, and
 	// Cucumber's own report inlines Background steps into every scenario.
-	const openLoginPage = () =>
-		test.step('I am in Demo Sauce Login page', () => login.goToLoginPage());
+	// Takes `step` as an argument because it is a per-test fixture and this helper
+	// lives at describe scope.
+	const openLoginPage = (step: Step) =>
+		step('I am in Demo Sauce Login page', () => login.goToLoginPage());
 
 	// ── Basic test ───────────────────────────────────────────────────────────
-	test('User can log in with valid credentials', { tag: '@TC-001' }, async () => {
-		await openLoginPage();
-		await test.step('I enter "standard_user" in username field', () =>
-			login.iEnterUsername('standard_user'));
-		await test.step('I enter "secret_sauce" in password field', () =>
-			login.iEnterPassword('secret_sauce'));
-		await test.step('I click on the login button', () => login.iClickOnTheLoginButton());
-		await test.step('I should be navigated to the products page', () =>
-			homepage.iShouldBeNavigatedToTheProductsPage());
+	test('User can log in with valid credentials', { tag: '@TC-001' }, async ({ step }) => {
+		await openLoginPage(step);
+		await step('I enter "standard_user" in username field', () =>
+			login.iEnterUsername('standard_user')
+		);
+		await step('I enter "secret_sauce" in password field', () =>
+			login.iEnterPassword('secret_sauce')
+		);
+		await step('I click on the login button', () => login.iClickOnTheLoginButton());
+		await step('I should be navigated to the products page', () =>
+			homepage.iShouldBeNavigatedToTheProductsPage()
+		);
 	});
 
-	test('User cannot log in with invalid credentials', { tag: '@TC-002' }, async () => {
-		await openLoginPage();
-		await test.step('I enter "invalid_user" in username field', () =>
-			login.iEnterUsername('invalid_user'));
-		await test.step('I enter "invalid_password" in password field', () =>
-			login.iEnterPassword('invalid_password'));
-		await test.step('I click on the login button', () => login.iClickOnTheLoginButton());
-		await test.step('the login should fail', () => login.verifyLoginFailed());
+	test('User cannot log in with invalid credentials', { tag: '@TC-002' }, async ({ step }) => {
+		await openLoginPage(step);
+		await step('I enter "invalid_user" in username field', () =>
+			login.iEnterUsername('invalid_user')
+		);
+		await step('I enter "invalid_password" in password field', () =>
+			login.iEnterPassword('invalid_password')
+		);
+		await step('I click on the login button', () => login.iClickOnTheLoginButton());
+		await step('the login should fail', () => login.verifyLoginFailed());
 	});
 
 	// ── Parameterised ────────────────────────────────────────────────────────
@@ -61,30 +70,30 @@ test.describe('Demo Sauce Login', { tag: '@TS-001' }, () => {
 		test(
 			`User login attempts with different credentials: ${username} expects ${outcome}`,
 			{ tag },
-			async () => {
-				await openLoginPage();
-				await test.step(`I enter "${username}" in username field`, () =>
-					login.iEnterUsername(username));
-				await test.step(`I enter "${password}" in password field`, () =>
-					login.iEnterPassword(password));
-				await test.step('I click on the login button', () => login.iClickOnTheLoginButton());
-				await test.step(`the login outcome should be "${outcome}"`, () =>
-					login.verifyLoginOutcome(outcome));
+			async ({ step }) => {
+				await openLoginPage(step);
+				await step(`I enter "${username}" in username field`, () => login.iEnterUsername(username));
+				await step(`I enter "${password}" in password field`, () => login.iEnterPassword(password));
+				await step('I click on the login button', () => login.iClickOnTheLoginButton());
+				await step(`the login outcome should be "${outcome}"`, () =>
+					login.verifyLoginOutcome(outcome)
+				);
 			}
 		);
 	}
 
 	// ── Structured data ──────────────────────────────────────────────────────
 	// The equivalent of a data table: pass rows straight into a page object.
-	test('User can log in using a data table', { tag: '@TC-006' }, async () => {
+	test('User can log in using a data table', { tag: '@TC-006' }, async ({ step }) => {
 		const fields = [
 			{ field: 'username', value: 'standard_user' },
 			{ field: 'password', value: 'secret_sauce' }
 		];
 
-		await openLoginPage();
-		await test.step('I fill in the login form', () => login.fillLoginForm(fields));
-		await test.step('I should be navigated to the products page', () =>
-			homepage.iShouldBeNavigatedToTheProductsPage());
+		await openLoginPage(step);
+		await step('I fill in the login form', () => login.fillLoginForm(fields));
+		await step('I should be navigated to the products page', () =>
+			homepage.iShouldBeNavigatedToTheProductsPage()
+		);
 	});
 });

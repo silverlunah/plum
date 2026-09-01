@@ -86,7 +86,14 @@ function scaffoldProject(slug, framework) {
 // by hand would fail on any pre-existing type error.
 const REQUIRED_FILES = {
 	[FRAMEWORK.CUCUMBER]: ['cucumber.js', 'package.json', 'tsconfig.json'],
-	[FRAMEWORK.PLAYWRIGHT]: ['playwright.config.ts', 'package.json', 'tsconfig.json']
+	// fixtures/plum.ts is what records the session for report replay, so a project
+	// without it produces reports that silently have no video.
+	[FRAMEWORK.PLAYWRIGHT]: [
+		'playwright.config.ts',
+		'package.json',
+		'tsconfig.json',
+		'fixtures/plum.ts'
+	]
 };
 
 // Never overwrites: a project that has edited its own cucumber.js keeps it.
@@ -99,6 +106,7 @@ function ensureRunnerConfig(slug, framework, testsPath = DEFAULT_TESTS_PATH) {
 		const target = path.join(dest, file);
 		if (fs.existsSync(target)) continue;
 		try {
+			fs.mkdirSync(path.dirname(target), { recursive: true });
 			fs.copyFileSync(path.join(src, file), target);
 			added.push(file);
 		} catch {
