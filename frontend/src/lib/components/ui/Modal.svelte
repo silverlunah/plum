@@ -139,7 +139,6 @@
 		gap: 1rem;
 	}
 
-	/* Mobile: dock to the bottom as a sheet rather than a centred card. */
 	@media (max-width: 640px) {
 		.backdrop {
 			align-items: flex-end;
