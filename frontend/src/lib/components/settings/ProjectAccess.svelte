@@ -23,7 +23,6 @@
 	import {
 		NEW_PROJECT_LABEL,
 		NAME_LABEL,
-		NEW_PROJECT_BASE_URL_LABEL,
 		CREATE_PROJECT_LABEL,
 		OTHER_PROJECTS_LABEL,
 		DELETE_PROJECT_LABEL,
@@ -108,7 +107,6 @@
 	// ── Other projects (owner) ──
 	let allProjects = [];
 	let newName = '';
-	let newBaseUrl = '';
 	let creating = false;
 	let createError = '';
 
@@ -146,11 +144,10 @@
 		creating = true;
 		createError = '';
 		try {
-			await createProject({ name: newName.trim(), baseUrl: newBaseUrl.trim() });
+			await createProject({ name: newName.trim() });
 			setProjects(await fetchProjects());
 			await loadAllProjects();
 			newName = '';
-			newBaseUrl = '';
 		} catch (e) {
 			createError = e.message;
 		} finally {
@@ -192,11 +189,6 @@
 			<h4>{NEW_PROJECT_LABEL}</h4>
 			<div class="new-row">
 				<input class="field-input" bind:value={newName} placeholder={NAME_LABEL} />
-				<input
-					class="field-input"
-					bind:value={newBaseUrl}
-					placeholder={NEW_PROJECT_BASE_URL_LABEL}
-				/>
 				<Button on:click={handleCreate} disabled={creating || !newName.trim()}>
 					{CREATE_PROJECT_LABEL}
 				</Button>

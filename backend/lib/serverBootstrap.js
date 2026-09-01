@@ -10,6 +10,9 @@ const { SOCKET_EVENTS } = require('../constants/socketEvents');
 
 const WATCH_OPTS = { usePolling: true, interval: 800, ignoreInitial: true };
 
+// Anchored to backend/, not cwd — see lib/appSecret.js.
+const REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
+
 function ensureTestsDir(testsDir, isNodeMode) {
 	if (fs.existsSync(testsDir)) {
 		console.log('📂 Loading tests from:', testsDir);
@@ -160,7 +163,7 @@ async function handleFullModeStartup(io, testsDir) {
 // recordings), so any leftover files on disk are dead weight. Safe to run
 // every startup: a second pass on an already-gone directory is a no-op.
 function cleanupLegacyScreenshots() {
-	const screenshotsDir = path.join(process.cwd(), 'reports', 'screenshots');
+	const screenshotsDir = path.join(REPORTS_DIR, 'screenshots');
 	if (!fs.existsSync(screenshotsDir)) return;
 	fs.rm(screenshotsDir, { recursive: true, force: true }, (err) => {
 		if (!err) console.log('🧹 Removed legacy screenshots directory');
@@ -189,32 +192,34 @@ async function loadChokidar() {
 }
 
 function watchTestFiles(chokidar, testsDir) {
-	// Legacy single-project dir + every per-project folder
-	// (projects/<slug>/tests/features). Any change re-syncs all projects — there
-	// are only a handful, and mapping the changed path back to a project id isn't
-	// worth the slug lookup.
+	// chokidar v4+ has no globs and a custom testsPath puts features at any depth,
+	// so watch the whole projects/ tree and react only to `.feature` changes —
+	// skipping the node_modules/.git a checked-out repo brings.
 	const projectsDir = process.env.PROJECTS_DIR || path.join(path.dirname(testsDir), 'projects');
-	const targets = [
-		path.join(testsDir, 'features'),
-		path.join(projectsDir, '*', 'tests', 'features')
-	];
+	const targets = [path.join(testsDir, 'features'), projectsDir].filter(fs.existsSync);
+	if (targets.length === 0) return;
 
 	let debounce = null;
-	chokidar.watch(targets, WATCH_OPTS).on('all', (event, filePath) => {
-		clearTimeout(debounce);
-		debounce = setTimeout(() => {
-			console.log(`📝 Tests changed (${event}: ${path.basename(filePath)})`);
-			syncAutomatedFlags();
-		}, 300);
-	});
+	chokidar
+		.watch(targets, {
+			...WATCH_OPTS,
+			ignored: (p) => /(^|[/\\])(node_modules|\.git)([/\\]|$)/.test(p)
+		})
+		.on('all', (event, filePath) => {
+			if (!filePath.endsWith('.feature')) return;
+			clearTimeout(debounce);
+			debounce = setTimeout(() => {
+				console.log(`📝 Tests changed (${event}: ${path.basename(filePath)})`);
+				syncAutomatedFlags();
+			}, 300);
+		});
 	console.log('👀 Watching for test file changes...');
 }
 
 function watchReports(chokidar, io) {
-	const reportsDir = path.resolve(process.cwd(), 'reports');
-	fs.mkdirSync(reportsDir, { recursive: true });
+	fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
-	chokidar.watch(reportsDir, { ...WATCH_OPTS, interval: 1200 }).on('add', (filePath) => {
+	chokidar.watch(REPORTS_DIR, { ...WATCH_OPTS, interval: 1200 }).on('add', (filePath) => {
 		const name = path.basename(filePath);
 		if ((name.startsWith('PASS_') || name.startsWith('FAIL_')) && name.endsWith('.json')) {
 			console.log(`📊 New report: ${name} — notifying clients`);

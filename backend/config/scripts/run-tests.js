@@ -18,7 +18,7 @@ const browser = process.env.BROWSER || DEFAULT_BROWSER;
 
 const reportFile =
 	process.env.CUCUMBER_REPORT_FILE ||
-	path.resolve(process.cwd(), 'reports', 'cucumber_report.json');
+	path.resolve(__dirname, '..', '..', 'reports', 'cucumber_report.json');
 
 // Wipe any previous report so a crashed/empty run can never return stale results.
 try {

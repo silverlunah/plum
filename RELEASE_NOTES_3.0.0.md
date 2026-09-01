@@ -6,6 +6,33 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
 
 ---
 
+## 3.0.4
+
+- **Custom tests folder per project** (Settings → Project → _Tests folder_). A
+  relative subpath inside the project folder — default `tests`, set it deeper
+  (e.g. `apps/web/e2e`) when a repo nests its Cucumber features. The path is
+  always sanitised to stay inside `projects/<slug>/`. A project with a custom
+  path owns that folder and is never scaffolded.
+- Run outputs and instance secrets no longer land in a stray `reports/` folder
+  at the repo root when a Plum process is started from there — they're always
+  written under `backend/reports/` (`/app/reports` in the container).
+- The test-file watcher now follows features at any depth (fixing a dead glob
+  after the chokidar 5 upgrade) and skips `node_modules` / `.git`.
+- Removed the project **Base URL** field — it was set at project creation but
+  never read at run time. The per-project target is `BASE_URL` in the tests
+  folder's `.env`; CI and MCP still pass their own per-run override.
+
+## 3.0.3 (hotfix)
+
+- Dead runner nodes no longer show a green dot in the run bar's picker — nodes
+  are pinged and shown grey / green / red, and an offline node can't be
+  selected (but a selected one that goes offline can still be removed).
+- The runner checkboxes update immediately on de/select instead of desyncing
+  until the dropdown is reopened.
+- A run dispatched to a node that then dies can be cancelled instantly, and is
+  given up on after ~45s of the node being unreachable — a liveness check, not
+  a run-duration timeout.
+
 ## 3.0.2 (hotfix)
 
 - The live-run stream shows its own "Waiting for the browser to open a page…"

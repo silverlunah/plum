@@ -90,6 +90,11 @@ export const RETRY_FAILED_TESTS_LABEL = 'Retry failed tests';
 export const RETRY_FAILED_TESTS_HINT =
 	'Automatically re-run failed scenarios up to this many times before finalizing the report. 0 disables retries.';
 
+export const TESTS_PATH_LABEL = 'Tests folder';
+export const TESTS_PATH_HINT =
+	'Where this project’s Cucumber features live, relative to the project folder. Leave as “tests” unless your repo nests them deeper (e.g. apps/web/e2e).';
+export const TESTS_PATH_PLACEHOLDER = 'tests';
+
 export const HOMEPAGE_CARD_TITLE = 'Homepage & mode';
 export const HOMEPAGE_CARD_HINT = 'Applies to everyone on this project.';
 export const DEFAULT_HOME_LABEL = 'Default homepage';
@@ -486,7 +491,6 @@ export const UPDATE_NPM_LINK_LABEL = 'Release notes';
 export const MANAGE_PROJECTS_LINK_LABEL = 'Manage projects & access →';
 export const CURRENT_PROJECT_LABEL = 'Current project';
 export const NEW_PROJECT_LABEL = 'New project';
-export const NEW_PROJECT_BASE_URL_LABEL = 'Base URL (optional)';
 export const CREATE_PROJECT_LABEL = 'Create';
 
 export const OTHER_PROJECTS_LABEL = 'Other projects';

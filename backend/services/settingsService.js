@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const prisma = require('./prisma');
 const activityService = require('./activityService');
 const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
+const { sanitizeTestsPath } = require('../lib/sanitizeTestsPath');
 
 const getProjectRaw = async (projectId) => {
 	return prisma.project.findUnique({ where: { id: projectId } });
@@ -18,10 +19,10 @@ const projectPublicSelect = {
 	name: true,
 	logoUrl: true,
 	timezone: true,
-	baseUrl: true,
 	maxRetries: true,
 	defaultHome: true,
-	manualRepositoryOnly: true
+	manualRepositoryOnly: true,
+	testsPath: true
 };
 
 // The single organisation. Raw accessor includes backupS3SecretKey — only for
@@ -37,14 +38,13 @@ const getProject = async (projectId) => {
 
 const updateProject = async (
 	projectId,
-	{ name, logoUrl, timezone, baseUrl, maxRetries, defaultHome, manualRepositoryOnly }
+	{ name, logoUrl, timezone, maxRetries, defaultHome, manualRepositoryOnly, testsPath }
 ) => {
 	const project = await prisma.project.update({
 		where: { id: projectId },
 		data: {
 			...(name !== undefined && { name }),
 			...(logoUrl !== undefined && { logoUrl }),
-			...(baseUrl !== undefined && { baseUrl }),
 			...(timezone !== undefined && { timezone }),
 			...(maxRetries !== undefined && { maxRetries: Number(maxRetries) || 0 }),
 			...(defaultHome !== undefined && {
@@ -52,7 +52,8 @@ const updateProject = async (
 			}),
 			...(manualRepositoryOnly !== undefined && {
 				manualRepositoryOnly: Boolean(manualRepositoryOnly)
-			})
+			}),
+			...(testsPath !== undefined && { testsPath: sanitizeTestsPath(testsPath) })
 		},
 		select: projectPublicSelect
 	});
@@ -61,6 +62,15 @@ const updateProject = async (
 		// Cron jobs read the timezone at schedule time. reload() re-schedules every
 		// project's jobs — coarse, but there's no per-project reload.
 		await require('./cronService').reload();
+	}
+
+	if (testsPath !== undefined) {
+		// The path helpers read a cached map; refresh it, then re-derive which
+		// cases are automated now that the feature files resolve elsewhere.
+		await require('../lib/projectPaths').refresh();
+		require('./reportService')
+			.syncAutomatedFromFeatures(projectId)
+			.catch(() => {});
 	}
 
 	await activityService.record(ACTIVITY_ACTION.PROJECT_SETTINGS_UPDATE, {
