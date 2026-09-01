@@ -91,12 +91,15 @@ function stepStatus(status) {
  * test.step() calls become steps. A test without them has no step breakdown at
  * all, so it becomes a single step carrying the test's own outcome and error —
  * otherwise the report would show a scenario with nothing in it.
+ *
+ * `keyword` is deliberately empty: Given/When/Then is Gherkin vocabulary and a
+ * Playwright step has no equivalent. The report hides the chip when it is blank.
  */
 function buildSteps(result, title) {
 	if (!result) {
 		return [
 			{
-				keyword: 'When',
+				keyword: '',
 				name: title,
 				result: { status: 'failed', duration: 0, error_message: 'Test did not report a result' }
 			}
@@ -111,7 +114,7 @@ function buildSteps(result, title) {
 	if (authored.length === 0) {
 		return [
 			{
-				keyword: 'When',
+				keyword: '',
 				name: title,
 				result: {
 					status: stepStatus(result.status),
@@ -126,7 +129,7 @@ function buildSteps(result, title) {
 		const failed = Boolean(step.error);
 		const isLast = i === authored.length - 1;
 		return {
-			keyword: 'When',
+			keyword: '',
 			name: step.title,
 			result: {
 				status: failed
