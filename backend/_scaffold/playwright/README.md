@@ -8,6 +8,12 @@ and merges new tests straight in.
 2. Add specs under `specs/`, page objects under `pages/`.
 3. Tag tests with `{ tag: '@TC-001' }` — Plum selects tests by tag, passing them
    to `--grep`.
+4. Wrap each action in `test.step()`. Plum shows every step as its own row in the
+   report; a test without them is reported as a single pass or fail.
+
+The example suite covers the four shapes you are likely to need: a basic test, a
+negative test, a parameterised one (the equivalent of a Scenario Outline, one test
+per row) and one driven by structured data (the equivalent of a data table).
 
 `playwright.config.ts` is yours. Browser, retries, workers, timeouts, reporters
 and traces are all read from it, by Plum and by you alike:

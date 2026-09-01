@@ -1,23 +1,43 @@
 import { Page, expect } from '@playwright/test';
+import { SAMPLE_CONSTANT } from '../utils/constants';
 
 export class LoginPage {
 	constructor(private readonly page: Page) {}
 
-	async goto() {
-		await this.page.goto('/');
+	async goToLoginPage() {
+		console.log(SAMPLE_CONSTANT);
+		await this.page.goto(process.env.BASE_URL as string);
 	}
 
-	async login(username: string, password: string) {
+	async iEnterUsername(username: string) {
 		await this.page.fill('#user-name', username);
+	}
+
+	async iEnterPassword(password: string) {
 		await this.page.fill('#password', password);
+	}
+
+	async iClickOnTheLoginButton() {
 		await this.page.click('#login-button');
 	}
 
-	async expectSignedIn() {
-		await expect(this.page.locator('.title')).toBeVisible();
+	async fillLoginForm(fields: { field: string; value: string }[]) {
+		for (const { field, value } of fields) {
+			if (field === 'username') await this.page.fill('#user-name', value);
+			if (field === 'password') await this.page.fill('#password', value);
+		}
+		await this.page.click('#login-button');
 	}
 
-	async expectRejected() {
+	async verifyLoginOutcome(outcome: string) {
+		if (outcome === 'success') {
+			await expect(this.page.locator('.title')).toBeVisible();
+		} else {
+			await expect(this.page.locator('.error-message-container')).toBeVisible();
+		}
+	}
+
+	async verifyLoginFailed() {
 		await expect(this.page.locator('.error-message-container')).toBeVisible();
 	}
 }
