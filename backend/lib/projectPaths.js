@@ -67,6 +67,38 @@ function scaffoldProject(slug, framework) {
 	}
 }
 
+// The files a run cannot start without, as opposed to the example tests. A
+// project that predates project-owned runner configs has none of these, and
+// full scaffolding is skipped for it because its example tests already exist —
+// so these are filled in separately, on every boot, for every project.
+// tsconfig.json is required, not optional: its "ts-node": { transpileOnly }
+// is what lets `npx cucumber-js` run without type-checking the suite. Plum used
+// to inject TS_NODE_TRANSPILE_ONLY into the spawn env instead, so a project run
+// by hand would fail on any pre-existing type error.
+const REQUIRED_FILES = {
+	[FRAMEWORK.CUCUMBER]: ['cucumber.js', 'package.json', 'tsconfig.json'],
+	[FRAMEWORK.PLAYWRIGHT]: ['playwright.config.ts', 'package.json', 'tsconfig.json']
+};
+
+// Never overwrites: a project that has edited its own cucumber.js keeps it.
+function ensureRunnerConfig(slug, framework, testsPath = DEFAULT_TESTS_PATH) {
+	const src = scaffoldDirFor(framework);
+	const dest = path.join(PROJECTS_DIR, slug, testsPath);
+	if (!fs.existsSync(src) || !fs.existsSync(dest)) return [];
+	const added = [];
+	for (const file of REQUIRED_FILES[framework] ?? []) {
+		const target = path.join(dest, file);
+		if (fs.existsSync(target)) continue;
+		try {
+			fs.copyFileSync(path.join(src, file), target);
+			added.push(file);
+		} catch {
+			// the scaffold has no such file for this framework — nothing to fill in
+		}
+	}
+	return added;
+}
+
 // Deletes projects/<slug>/ entirely — the project and its tests are gone.
 function removeProjectDir(slug) {
 	if (slug) fs.rmSync(path.join(PROJECTS_DIR, slug), { recursive: true, force: true });
@@ -89,11 +121,18 @@ async function reconcile() {
 		const legacy = path.join(PROJECTS_DIR, String(id));
 		const target = path.join(PROJECTS_DIR, slug);
 		if (fs.existsSync(legacy) && !fs.existsSync(target)) fs.renameSync(legacy, target);
-		if (sanitizeTestsPath(testsPath) !== DEFAULT_TESTS_PATH) continue;
-		const sentinel = SCAFFOLD_SENTINEL[framework];
-		if (!sentinel) continue;
-		if (!fs.existsSync(path.join(target, DEFAULT_TESTS_PATH, sentinel))) {
-			scaffoldProject(slug, framework);
+		// A relocated testsPath is the project's own folder — never scaffolded, but it
+		// still needs a runner config to be runnable at all.
+		const relative = sanitizeTestsPath(testsPath);
+		if (relative === DEFAULT_TESTS_PATH) {
+			const sentinel = SCAFFOLD_SENTINEL[framework];
+			if (sentinel && !fs.existsSync(path.join(target, relative, sentinel))) {
+				scaffoldProject(slug, framework);
+			}
+		}
+		const added = ensureRunnerConfig(slug, framework, relative);
+		if (added.length > 0) {
+			console.log(`[projects] ${slug}: added ${added.join(', ')}`);
 		}
 	}
 }
@@ -103,6 +142,7 @@ module.exports = {
 	slugFor,
 	testsPathFor,
 	scaffoldProject,
+	ensureRunnerConfig,
 	removeProjectDir,
 	reconcile,
 	PROJECTS_DIR
