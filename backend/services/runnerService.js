@@ -9,6 +9,7 @@ const prisma = require('./prisma');
 const activityService = require('./activityService');
 const { loadTestEnv } = require('../lib/testEnv');
 const { resolveTestsRoot, loadProjectEnv } = require('../lib/testsRoot');
+const { frameworkFor } = require('../lib/projectPaths');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
@@ -168,6 +169,12 @@ async function pushNodeSecret(secret) {
 // Remote execution
 // ---------------------------------------------------------------------------
 
+// Folders that must never go over the wire. node_modules is the important one: a
+// project that declares its own dependencies has one, and uploading it would send
+// hundreds of megabytes per lane per run. A node resolves the toolchain from its
+// own backend instead (see NODE_PATH in nodeExecutionService).
+const UPLOAD_SKIP_DIRS = new Set(['node_modules', 'test-results', 'playwright-report', '.git']);
+
 function collectTestFiles(testsDir) {
 	const files = {};
 
@@ -176,6 +183,7 @@ function collectTestFiles(testsDir) {
 			const fullPath = path.join(dir, entry.name);
 			const relPath = rel ? `${rel}/${entry.name}` : entry.name;
 			if (entry.isDirectory()) {
+				if (UPLOAD_SKIP_DIRS.has(entry.name)) continue;
 				walk(fullPath, relPath);
 			} else {
 				// base64, not utf8 — utf8 mangles non-text fixtures (e.g. upload test images)
@@ -257,6 +265,7 @@ async function dispatchAndPoll(
 				tags,
 				browser,
 				workers,
+				framework: frameworkFor(projectId),
 				tests: collectTestFiles(resolveTestsRoot(projectId)),
 				env: {
 					...loadTestEnv(process.cwd()),

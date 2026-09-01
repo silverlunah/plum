@@ -96,15 +96,9 @@ function getPlaywrightSuites(testsRoot) {
 			return true;
 		});
 		if (specs.length > 0) {
-			const tests = specs.map((spec) => {
-				const tags = (spec.tags ?? []).map(withAt);
-				return {
-					id: tags.length > 1 ? tags : (tags[0] ?? null),
-					testCase: spec.title,
-					type: 'spec',
-					steps: []
-				};
-			});
+			// The suite's own tags are the ones every spec beneath it carries — which
+			// is what a describe-level tag looks like once Playwright has pushed it
+			// down onto each spec.
 			const shared = specs
 				.map((s) => new Set((s.tags ?? []).map(withAt)))
 				.reduce(
@@ -112,6 +106,20 @@ function getPlaywrightSuites(testsRoot) {
 					null
 				);
 			const suiteTags = [...(shared ?? [])];
+
+			// A test's own tags exclude the suite's. Playwright reports a spec's tags
+			// with everything inherited from its describes already merged in, whereas a
+			// .feature file keeps Feature-level tags separate from Scenario ones — so
+			// without this subtraction the suite tag is shown twice on every row.
+			const tests = specs.map((spec) => {
+				const tags = (spec.tags ?? []).map(withAt).filter((t) => !shared?.has(t));
+				return {
+					id: tags.length > 1 ? tags : (tags[0] ?? null),
+					testCase: spec.title,
+					type: 'spec',
+					steps: []
+				};
+			});
 			const suiteName = describeTitle || file;
 			const existing = byName.get(suiteName);
 			if (existing) {
