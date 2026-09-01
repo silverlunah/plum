@@ -5,7 +5,9 @@
 
 const PACKAGE = 'plum-e2e';
 const NPM_URL = `https://registry.npmjs.org/${PACKAGE}/latest`;
-const NPM_PAGE = `https://www.npmjs.com/package/${PACKAGE}`;
+// The version check reads npm (that's where `plum update` pulls from); the
+// changelog the banner links to lives in GitHub Releases.
+const RELEASES_PAGE = 'https://github.com/silverlunah/plum/releases';
 
 // Written into the backend container's env by `plum server start` — the root
 // package.json isn't in the image (only backend/package.json is).
@@ -33,7 +35,7 @@ async function checkUpdate() {
 		current,
 		latest,
 		updateAvailable: isNewer(latest, current),
-		npmUrl: NPM_PAGE,
+		releaseNotesUrl: RELEASES_PAGE,
 		command: 'plum update'
 	};
 }
