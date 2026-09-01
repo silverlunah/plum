@@ -10,15 +10,11 @@ export const BROWSERS = [
 	{ id: 'firefox', label: 'Firefox' }
 ];
 
-// Mirrors backend/constants/defaults.js FRAMEWORKS, including the order the
-// project-create form offers. Labels live in copy/settings.js.
+// Mirrors backend/constants/defaults.js FRAMEWORKS. The first entry is what the
+// project-create form pre-selects, so the offered default is this list's order
+// and nothing else — a separate UI default would drift from the CLI's.
+// Labels live in copy/settings.js.
 export const FRAMEWORKS = ['playwright', 'cucumber'];
-
-// What the project-create form pre-selects. Deliberately still 'cucumber' while
-// the Playwright ingestion and report UI are unfinished — a new project must not
-// land in a mode that cannot yet display its own results. This is NOT the CLI's
-// DEFAULT_FRAMEWORK, which is the value this becomes once that work lands.
-export const DEFAULT_NEW_PROJECT_FRAMEWORK = 'cucumber';
 
 export const TRIGGER_TYPES = Object.freeze({
 	MANUAL: 'manual-trigger',

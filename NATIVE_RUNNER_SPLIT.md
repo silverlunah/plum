@@ -68,13 +68,18 @@ only test selection plus a report destination. `plum run-test` goes away; users 
       `framework String @default("cucumber")` on Project and Report (a String, not an
       enum — the schema has no enums and every status-like column is a lowercase
       String). `reconcile()` now reads the column instead of sniffing for `features/`.
-      Create form has a framework picker; it pre-selects **cucumber** on purpose
-      (`DEFAULT_NEW_PROJECT_FRAMEWORK` in frontend constants) so no new project lands
-      in a mode that cannot display its own results yet. Phase 7 flips that one line
-      and the column default together.
-- [ ] **1. Projects become npm packages** (blocks the native spawn)
-      Per-project `package.json` + install; split `_scaffold/` into `playwright/` and
-      `cucumber/`; retire `plum.plugins.json` and the `NODE_PATH` injection.
+      Create form has a framework picker, pre-selecting `FRAMEWORKS[0]` (playwright)
+      — the same single source of truth the CLI uses, so the offered default cannot
+      drift between UI and CLI.
+- [x] **1a. Split the scaffold** — done. `_scaffold/{cucumber,playwright}/`.
+      Playwright projects get `playwright.config.ts` + `specs/` + `pages/`; the config
+      lives at the root of the tests folder (not the project folder) because that is
+      what a run executes from and what `testsPath` can relocate. `reconcile()` uses a
+      per-framework sentinel file (`features` / `playwright.config.ts`) so it is
+      idempotent for both. `plum project init` takes `--framework`.
+- [ ] **1b. Projects become npm packages** (blocks the native spawn)
+      Per-project `package.json` + install; retire `plum.plugins.json` and the
+      `NODE_PATH` injection.
 - [ ] **2. Reporter packages** — `@plum-e2e/playwright-reporter`,
       `@plum-e2e/cucumber-formatter`. File mode (`PLUM_REPORT_FILE`) + authenticated
       HTTP mode (`PLUM_API_URL` + `PLUM_TOKEN`). No-op when neither is set.
@@ -93,8 +98,20 @@ only test selection plus a report destination. `plum run-test` goes away; users 
 - [ ] **7. Flip the default to Playwright** — last, so new projects never land in a
       mode whose ingestion and report UI are unfinished.
 
-## Open question
+## Decisions still needed
 
-Is Cucumber positioned as "the other supported framework" or "legacy, kept working"?
-Changes the README and create-flow copy, and whether the Cucumber path gets further
-investment after this.
+**Release gate.** Playwright is already the offered default for new projects, but its
+ingestion (Phase 4) and report UI (Phase 5) do not exist. This branch must not ship to
+users before those land, or a new project defaults into a mode that cannot display its
+own results. The DB column default stays `cucumber`, so only projects created through
+the UI/CLI are affected.
+
+**Two browser projects = double runs.** The Playwright scaffold defines both chromium
+and firefox, which is idiomatic — but `--list` shows every spec twice, once per
+project, so a bare `npx playwright test` runs everything in both browsers. Phase 3 has
+to pass `--project=<browser>` for Plum's browser picker, since `Report.browser` is a
+single column. Decide there whether Plum ever allows a multi-browser run.
+
+**Positioning.** Is Cucumber "the other supported framework" or "legacy, kept
+working"? Changes the README and create-flow copy, and whether the Cucumber path gets
+further investment after this.

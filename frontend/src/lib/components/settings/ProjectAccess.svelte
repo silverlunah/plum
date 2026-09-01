@@ -20,7 +20,7 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Paginator from '$lib/components/ui/Paginator.svelte';
 	import { CANCEL_LABEL, SEARCH_PLACEHOLDER } from '$lib/copy/common';
-	import { FRAMEWORKS, DEFAULT_NEW_PROJECT_FRAMEWORK } from '$lib/constants';
+	import { FRAMEWORKS } from '$lib/constants';
 	import {
 		NEW_PROJECT_LABEL,
 		NAME_LABEL,
@@ -111,7 +111,7 @@
 	// ── Other projects (owner) ──
 	let allProjects = [];
 	let newName = '';
-	let newFramework = DEFAULT_NEW_PROJECT_FRAMEWORK;
+	let newFramework = FRAMEWORKS[0];
 	let creating = false;
 	let createError = '';
 
@@ -153,7 +153,7 @@
 			setProjects(await fetchProjects());
 			await loadAllProjects();
 			newName = '';
-			newFramework = DEFAULT_NEW_PROJECT_FRAMEWORK;
+			newFramework = FRAMEWORKS[0];
 		} catch (e) {
 			createError = e.message;
 		} finally {

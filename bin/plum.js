@@ -334,8 +334,11 @@ async function configureServer({ force }) {
 // Copies the scaffold (test dirs + .gitignore, .vscode, README, .env.example)
 // into projects/<slug>/tests/. `overwrite: false` makes it a safe fill-in — an
 // operator's edited files and extra tests are left untouched, missing ones added.
-function scaffoldProjectDir(testsDir) {
-	fse.copySync(scaffoldTestsPath, testsDir, { overwrite: false, errorOnExist: false });
+function scaffoldProjectDir(testsDir, framework) {
+	fse.copySync(path.join(scaffoldTestsPath, framework), testsDir, {
+		overwrite: false,
+		errorOnExist: false
+	});
 	const env = path.join(testsDir, '.env');
 	if (!fs.existsSync(env)) fs.copyFileSync(path.join(testsDir, '.env.example'), env);
 }
@@ -1591,9 +1594,15 @@ switch (command) {
 
 	case 'project': {
 		const { slugify } = require(path.join(plumRoot, 'backend', 'lib', 'slugify'));
-		const name = process.argv.slice(4).join(' ').trim();
+		// Stop at the first flag — the name is the words before it, so
+		// `project init "Shop" --framework playwright` is named "Shop", not
+		// "Shop --framework playwright".
+		const nameWords = process.argv.slice(4);
+		const firstFlag = nameWords.findIndex((a) => a.startsWith('--'));
+		const name = (firstFlag === -1 ? nameWords : nameWords.slice(0, firstFlag)).join(' ').trim();
 		if (process.argv[3] !== 'init' || !name) {
-			console.log('Usage: plum project init "<project name>"');
+			console.log('Usage: plum project init "<project name>" [--framework <f>]');
+			console.log("  --framework <f>    playwright | cucumber (default: this install's)");
 			console.log('  Use the exact name from Settings → Projects. The server normally');
 			console.log('  creates this folder for you — run this only to re-create it.');
 			break;
@@ -1603,13 +1612,23 @@ switch (command) {
 			console.error('✗ Project name needs at least one letter or number (a–z, 0–9).');
 			process.exit(1);
 		}
+		// No DB access from here, so the framework can't be read off the project.
+		// It comes from the flag, falling back to this install's configured default.
+		const { FRAMEWORKS, isFramework } = defaultsConstants();
+		const wantedFramework = getFlag(process.argv.slice(3), '--framework');
+		if (wantedFramework !== undefined && !isFramework(wantedFramework)) {
+			console.error(`✗ Unknown framework "${wantedFramework}". Use ${FRAMEWORKS.join(' or ')}.`);
+			process.exit(1);
+		}
+		const framework =
+			wantedFramework ?? serverConfigLib().loadServerConfig(process.cwd()).framework;
 		const testsDir = path.join(process.cwd(), 'projects', slug, 'tests');
-		const exists = fs.existsSync(path.join(testsDir, 'features'));
-		scaffoldProjectDir(testsDir);
+		const exists = fs.existsSync(testsDir) && fs.readdirSync(testsDir).length > 0;
+		scaffoldProjectDir(testsDir, framework);
 		console.log(
 			exists
-				? `projects/${slug}/tests/ already exists — filled in any missing files.`
-				: `✓ Scaffolded projects/${slug}/tests/`
+				? `projects/${slug}/tests/ already exists — filled in any missing ${framework} files.`
+				: `✓ Scaffolded projects/${slug}/tests/ for ${framework}`
 		);
 		console.log('');
 		console.log('Next:');

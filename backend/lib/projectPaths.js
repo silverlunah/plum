@@ -14,6 +14,16 @@ const BACKEND_DIR = path.resolve(__dirname, '..');
 const PROJECTS_DIR = process.env.PROJECTS_DIR || path.join(BACKEND_DIR, 'projects');
 const SCAFFOLD_DIR = path.join(BACKEND_DIR, '_scaffold');
 
+// The file that only exists once a framework's scaffold has been laid down.
+// Checked instead of "is the folder empty", so an operator who deleted the
+// example tests but kept their own doesn't get the scaffold copied back over.
+const SCAFFOLD_SENTINEL = {
+	[FRAMEWORK.CUCUMBER]: 'features',
+	[FRAMEWORK.PLAYWRIGHT]: 'playwright.config.ts'
+};
+
+const scaffoldDirFor = (framework) => path.join(SCAFFOLD_DIR, framework);
+
 // id → slug / tests subpath, so the sync path helpers in testsRoot.js don't need
 // a DB round trip. Kept fresh by refresh() on startup and after any project
 // create / delete / settings save.
@@ -36,17 +46,19 @@ function testsPathFor(projectId) {
 	return testsPathById.get(Number(projectId)) ?? DEFAULT_TESTS_PATH;
 }
 
-// Copies the scaffold into projects/<slug>/tests/. `force: false` makes it a safe
-// fill-in — an operator's edited files and extra tests are never overwritten.
+// Copies the framework's scaffold into projects/<slug>/tests/. `force: false`
+// makes it a safe fill-in — an operator's edited files and extra tests are never
+// overwritten.
 //
-// Only Cucumber projects have a scaffold today. A Playwright project is left
-// empty rather than being given Gherkin it will never run; once a Playwright
-// scaffold exists this picks it by framework.
+// The runner config (playwright.config.ts / cucumber.js) is laid down at the root
+// of the tests folder, not the project folder, because that folder is what a run
+// executes from and it is the part a project may relocate via testsPath.
 function scaffoldProject(slug, framework) {
-	if (framework !== FRAMEWORK.CUCUMBER) return;
+	const src = scaffoldDirFor(framework);
+	if (!fs.existsSync(src)) return;
 	const dest = path.join(PROJECTS_DIR, slug, 'tests');
 	fs.mkdirSync(dest, { recursive: true });
-	fs.cpSync(SCAFFOLD_DIR, dest, { recursive: true, force: false, errorOnExist: false });
+	fs.cpSync(src, dest, { recursive: true, force: false, errorOnExist: false });
 	const env = path.join(dest, '.env');
 	if (!fs.existsSync(env)) {
 		try {
@@ -64,9 +76,9 @@ function removeProjectDir(slug) {
 // slug, and a default-layout project with no tests/ yet is scaffolded. A project
 // with a custom testsPath owns that folder itself and is never scaffolded.
 //
-// "Has it been scaffolded yet" is answered per framework, not by looking for a
-// features/ dir. Sniffing the filesystem would re-scaffold a Playwright project
-// on every single boot, since it has no features/ and never will.
+// "Has it been scaffolded yet" is answered by the framework's own sentinel file.
+// Looking for features/ regardless of framework would re-scaffold a Playwright
+// project on every single boot, since it has no features/ and never will.
 async function reconcile() {
 	await refresh();
 	const rows = await prisma.project.findMany({
@@ -78,8 +90,9 @@ async function reconcile() {
 		const target = path.join(PROJECTS_DIR, slug);
 		if (fs.existsSync(legacy) && !fs.existsSync(target)) fs.renameSync(legacy, target);
 		if (sanitizeTestsPath(testsPath) !== DEFAULT_TESTS_PATH) continue;
-		if (framework !== FRAMEWORK.CUCUMBER) continue;
-		if (!fs.existsSync(path.join(target, DEFAULT_TESTS_PATH, 'features'))) {
+		const sentinel = SCAFFOLD_SENTINEL[framework];
+		if (!sentinel) continue;
+		if (!fs.existsSync(path.join(target, DEFAULT_TESTS_PATH, sentinel))) {
 			scaffoldProject(slug, framework);
 		}
 	}
