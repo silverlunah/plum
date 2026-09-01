@@ -1723,5 +1723,28 @@
 		.workspace.split {
 			grid-template-columns: 1fr;
 		}
+
+		.step-editor-fields {
+			grid-template-columns: 1fr;
+		}
+
+		.step-editor-row {
+			align-items: stretch;
+		}
+
+		.field-row {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	@media (max-width: 560px) {
+		.steps-table-head {
+			display: none;
+		}
+
+		.steps-table-row {
+			grid-template-columns: 1fr;
+			gap: 0.15rem;
+		}
 	}
 </style>

@@ -933,4 +933,36 @@
 			transform: translate(-50%, -2px) scale(0.98);
 		}
 	}
+
+	@media (max-width: 640px) {
+		h1 {
+			font-size: 1.9rem;
+		}
+
+		.header-top {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.875rem;
+		}
+
+		.search-row {
+			flex-wrap: wrap;
+		}
+
+		.suite-header {
+			flex-wrap: wrap;
+			gap: 0.6rem;
+			padding: 0.75rem 1rem;
+		}
+
+		.test-main {
+			flex-wrap: wrap;
+			padding: 0.7rem 1rem;
+		}
+
+		.test-name {
+			flex-basis: 100%;
+			order: 1;
+		}
+	}
 </style>
