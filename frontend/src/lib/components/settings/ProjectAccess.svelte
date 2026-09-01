@@ -410,6 +410,19 @@
 		font-size: 0.8rem;
 		color: var(--fail);
 	}
+
+	@media (max-width: 560px) {
+		.roles {
+			font-size: 0.72rem;
+		}
+		.roles th,
+		.roles td {
+			padding: 0.35rem 0.4rem;
+		}
+		.roles .cell {
+			white-space: normal;
+		}
+	}
 	.new-row {
 		display: flex;
 		gap: 0.5rem;
