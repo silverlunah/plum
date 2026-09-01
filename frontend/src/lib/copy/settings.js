@@ -88,7 +88,7 @@ export const TIMEZONE_LABEL = 'Timezone';
 export const TIMEZONE_HINT = 'Used to schedule this project’s cron test runs';
 export const RETRY_FAILED_TESTS_LABEL = 'Retry failed tests';
 export const RETRY_FAILED_TESTS_HINT =
-	'Automatically re-run failed scenarios up to this many times before finalizing the report. 0 disables retries.';
+	'Automatically re-run failed tests up to this many times before finalizing the report. 0 disables retries.';
 
 export const TESTS_PATH_LABEL = 'Tests folder';
 export const TESTS_PATH_HINT =
@@ -168,7 +168,7 @@ export const PREFIXES_SAVED_TOAST = 'Prefixes saved.';
 export const PREFIXES_SAVE_FAILED = 'Failed to save prefixes.';
 export const MIGRATE_IDS_HEADING = 'Migrate IDs';
 export const MIGRATE_DESC_PREFIX =
-	'Rename all existing test IDs to use a new prefix. Cucumber tags in code are';
+	'Rename all existing test IDs to use a new prefix. The tags in your test code are';
 export const MIGRATE_DESC_STRONG = 'not';
 export const MIGRATE_DESC_SUFFIX = 'affected — you manage those separately.';
 export const NEW_CASE_PREFIX_LABEL = 'New case prefix';

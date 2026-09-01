@@ -33,6 +33,20 @@ const legacyRootEnvPath = path.join(process.cwd(), '.env');
 const preferring = (primary, fallback) =>
 	fs.existsSync(primary) || !fs.existsSync(fallback) ? primary : fallback;
 
+// Both generators emit Gherkin — a .feature file and step definitions — which a
+// Playwright project has no use for. The folder is the source of truth here: these
+// commands run inside a project directory, with no database to ask.
+function refuseUnlessGherkin(command) {
+	const root = resolveLocalTestsRoot() ?? userTestsPath;
+	if (fs.existsSync(path.join(root, 'playwright.config.ts'))) {
+		console.error(
+			`✗ ${command} generates a .feature file and step definitions, which a Playwright ` +
+				`project does not use.\n  Add a spec under specs/ instead — see tests/README.md.`
+		);
+		process.exit(1);
+	}
+}
+
 // Returns null when no features/ dir is found, so callers fail loudly instead of
 // running whatever another project left behind in backend/tests/.
 function resolveLocalTestsRoot(explicit) {
@@ -1479,6 +1493,7 @@ switch (command) {
 	}
 
 	case 'create-step': {
+		refuseUnlessGherkin('create-step');
 		const createStepScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-step.mjs');
 		execFileSync(process.execPath, [createStepScript], {
 			cwd: process.cwd(),
@@ -1492,6 +1507,7 @@ switch (command) {
 	}
 
 	case 'create-test': {
+		refuseUnlessGherkin('create-test');
 		const createTestScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-test.mjs');
 		execFileSync(process.execPath, [createTestScript], {
 			cwd: process.cwd(),

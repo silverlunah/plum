@@ -863,6 +863,24 @@
 						<div class="run-card-info">
 							<span class="run-card-label">{run.label || MANUAL_RUN_LABEL}</span>
 							<span class="run-card-meta">
+								{#if !openable}
+									<!-- A locked row is otherwise indistinguishable from a clickable
+									     one, so clicking it looked like nothing happened. -->
+									<svg
+										class="run-card-lock"
+										width="11"
+										height="11"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2.5"
+										stroke-linecap="round"
+										aria-hidden="true"
+									>
+										<rect x="3" y="11" width="18" height="11" rx="2" />
+										<path d="M7 11V7a5 5 0 0 1 10 0v4" />
+									</svg>
+								{/if}
 								{#if run.projectName}
 									<span class="run-card-project">{run.projectName}</span>
 									<span class="meta-dot">·</span>
@@ -1503,7 +1521,15 @@
 		color: inherit;
 	}
 	.run-card-main.locked {
-		cursor: default;
+		cursor: not-allowed;
+	}
+	.run-card-main.locked .run-card-label {
+		color: var(--text-muted);
+	}
+	.run-card-lock {
+		color: var(--warn);
+		flex-shrink: 0;
+		vertical-align: -1px;
 	}
 
 	.run-card-project {
