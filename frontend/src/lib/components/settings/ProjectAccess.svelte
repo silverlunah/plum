@@ -20,10 +20,14 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Paginator from '$lib/components/ui/Paginator.svelte';
 	import { CANCEL_LABEL, SEARCH_PLACEHOLDER } from '$lib/copy/common';
+	import { FRAMEWORKS, DEFAULT_NEW_PROJECT_FRAMEWORK } from '$lib/constants';
 	import {
 		NEW_PROJECT_LABEL,
 		NAME_LABEL,
 		CREATE_PROJECT_LABEL,
+		PROJECT_FRAMEWORK_LABEL,
+		FRAMEWORK_PERMANENT_HINT,
+		frameworkLabel,
 		OTHER_PROJECTS_LABEL,
 		DELETE_PROJECT_LABEL,
 		projectRowMeta,
@@ -107,6 +111,7 @@
 	// ── Other projects (owner) ──
 	let allProjects = [];
 	let newName = '';
+	let newFramework = DEFAULT_NEW_PROJECT_FRAMEWORK;
 	let creating = false;
 	let createError = '';
 
@@ -144,10 +149,11 @@
 		creating = true;
 		createError = '';
 		try {
-			await createProject({ name: newName.trim() });
+			await createProject({ name: newName.trim(), framework: newFramework });
 			setProjects(await fetchProjects());
 			await loadAllProjects();
 			newName = '';
+			newFramework = DEFAULT_NEW_PROJECT_FRAMEWORK;
 		} catch (e) {
 			createError = e.message;
 		} finally {
@@ -189,10 +195,20 @@
 			<h4>{NEW_PROJECT_LABEL}</h4>
 			<div class="new-row">
 				<input class="field-input" bind:value={newName} placeholder={NAME_LABEL} />
+				<select
+					class="field-input framework-select"
+					bind:value={newFramework}
+					aria-label={PROJECT_FRAMEWORK_LABEL}
+				>
+					{#each FRAMEWORKS as id}
+						<option value={id}>{frameworkLabel(id)}</option>
+					{/each}
+				</select>
 				<Button on:click={handleCreate} disabled={creating || !newName.trim()}>
 					{CREATE_PROJECT_LABEL}
 				</Button>
 			</div>
+			<p class="hint">{FRAMEWORK_PERMANENT_HINT}</p>
 			{#if createError}<p class="error">{createError}</p>{/if}
 		</section>
 
@@ -209,6 +225,7 @@
 			{#each pagedProjects as p (p.id)}
 				<div class="project-row">
 					<span class="p-name">{p.name}</span>
+					<span class="p-framework">{frameworkLabel(p.framework)}</span>
 					<span class="p-meta">{projectRowMeta(p.slug, p.memberCount ?? 0)}</span>
 					<button class="danger-link" on:click={() => openDelete(p)}>{DELETE_PROJECT_LABEL}</button>
 				</div>
@@ -425,6 +442,13 @@
 		flex: 1;
 		min-width: 160px;
 	}
+	/* Must stay after the rule above — same specificity, so source order is what
+	   stops the framework picker stretching like the name field. */
+	.new-row .framework-select {
+		flex: 0 0 auto;
+		min-width: 0;
+		width: auto;
+	}
 
 	.project-row {
 		display: flex;
@@ -437,6 +461,17 @@
 	.p-name {
 		font-weight: 500;
 		color: var(--text);
+	}
+	.p-framework {
+		flex: none;
+		font-size: 0.68rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--accent);
+		background: var(--accent-soft);
+		padding: 0.1rem 0.4rem;
+		border-radius: var(--radius-pill);
 	}
 	.p-meta {
 		flex: 1;

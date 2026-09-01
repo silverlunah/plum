@@ -496,6 +496,11 @@ export const CREATE_PROJECT_LABEL = 'Create';
 export const OTHER_PROJECTS_LABEL = 'Other projects';
 export const DELETE_PROJECT_LABEL = 'Delete';
 export const projectRowMeta = (slug, n) => `${slug} · ${n} member${n === 1 ? '' : 's'}`;
+export const PROJECT_FRAMEWORK_LABEL = 'Test framework';
+const FRAMEWORK_LABELS = { playwright: 'Playwright', cucumber: 'Cucumber' };
+export const frameworkLabel = (id) => FRAMEWORK_LABELS[id] ?? id ?? '';
+export const FRAMEWORK_PERMANENT_HINT =
+	'Set once, when the project is created. A project cannot switch frameworks afterwards — its tests, run command and reports all depend on the choice.';
 export const DELETE_PROJECT_MODAL_TITLE = 'Delete project';
 export const deleteProjectWarning = (name) =>
 	`Deleting “${name}” permanently removes every test case, run, report, schedule and its test folder. Users keep their accounts and their names stay on past runs, but the project itself cannot be recovered.`;

@@ -68,7 +68,10 @@ only test selection plus a report destination. `plum run-test` goes away; users 
       `framework String @default("cucumber")` on Project and Report (a String, not an
       enum — the schema has no enums and every status-like column is a lowercase
       String). `reconcile()` now reads the column instead of sniffing for `features/`.
-      Frontend create-form selector still to do.
+      Create form has a framework picker; it pre-selects **cucumber** on purpose
+      (`DEFAULT_NEW_PROJECT_FRAMEWORK` in frontend constants) so no new project lands
+      in a mode that cannot display its own results yet. Phase 7 flips that one line
+      and the column default together.
 - [ ] **1. Projects become npm packages** (blocks the native spawn)
       Per-project `package.json` + install; split `_scaffold/` into `playwright/` and
       `cucumber/`; retire `plum.plugins.json` and the `NODE_PATH` injection.

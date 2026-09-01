@@ -54,6 +54,7 @@ async function listAll() {
 				id: true,
 				name: true,
 				slug: true,
+				framework: true,
 				_count: { select: { members: true } }
 			},
 			orderBy: { id: 'asc' }
