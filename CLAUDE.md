@@ -2,7 +2,7 @@
 
 ## Stack
 
-- **Frontend**: SvelteKit 5, port 5173. ESM, no TypeScript.
+- **Frontend**: SvelteKit 5. ESM, no TypeScript. Vite listens on 5173 (in the container, and for `npm run dev`); `plum server` exposes the UI on **3002**.
 - **Backend**: Express + Socket.io, port 3001. CommonJS (`require`/`module.exports`).
 - **Database**: PostgreSQL via Prisma ORM (`backend/services/prisma.js`).
 - **Infrastructure**: Docker Compose (`docker-compose.yml`) for the server stack. Nodes run as a bare `PLUM_MODE=node` Node process (started by `plum node start` / the dev `manage-nodes` script), not via Docker.
