@@ -92,7 +92,7 @@ export const RETRY_FAILED_TESTS_HINT =
 
 export const TESTS_PATH_LABEL = 'Tests folder';
 export const TESTS_PATH_HINT =
-	'Where this project’s Cucumber features live, relative to the project folder. Leave as “tests” unless your repo nests them deeper (e.g. apps/web/e2e).';
+	'This is where your tests live. Default is “tests” unless your repository nests it deeper (e.g. /src/e2e).';
 export const TESTS_PATH_PLACEHOLDER = 'tests';
 
 export const HOMEPAGE_CARD_TITLE = 'Homepage & mode';
