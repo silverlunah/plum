@@ -24,6 +24,7 @@ const { ensureProjectDeps } = require('../lib/projectDeps');
 const { REPORTS_DIR, readReportFile } = require('../lib/reportFilename');
 const { FRAMEWORK } = require('../constants/defaults');
 const { buildRunCommand } = require('../lib/runnerCommand');
+const { toFeatures } = require('../lib/playwrightReport');
 
 // runId → live handles, so cancel() can stop every process and remote job a run owns.
 const inflight = new Map();
@@ -120,6 +121,24 @@ function splitRetries(framework, maxRetries) {
 		: { nativeRetries: 0, loopRetries: n };
 }
 
+/**
+ * A lane's raw report in Plum's feature/scenario shape. Cucumber's JSON already is
+ * that shape; Playwright's is an object of suites and stats, adapted here so the
+ * retry merge, the report page and the tag sync stay framework-agnostic.
+ */
+function parseLaneReport(framework, raw) {
+	if (!raw) return { rawJson: [], attempts: null };
+	let parsed;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return { rawJson: [], attempts: null };
+	}
+	if (framework !== FRAMEWORK.PLAYWRIGHT) return { rawJson: parsed, attempts: null };
+	const { features, attempts } = toFeatures(parsed);
+	return { rawJson: features, attempts };
+}
+
 // Runs the project's own runner CLI from its own tests folder — the same command
 // a developer would type — rather than Plum's npm script. PLUM_MODE=node is kept
 // so anything the project's config still invokes skips its own DB write; this
@@ -204,6 +223,9 @@ async function runBuiltIn(run, io, emit) {
 	const { maxRetries, framework } = await settingsService.getProject(run.projectId);
 	const { nativeRetries, loopRetries } = splitRetries(framework, maxRetries);
 	const laneId = BUILT_IN_RUNNER_ID;
+	// Playwright counts its own attempts inside one process, so they come from the
+	// report rather than from Plum's re-run loop.
+	let nativeAttempts = null;
 
 	let logBuffer = '';
 	const onLog = (text) => {
@@ -234,7 +256,9 @@ async function runBuiltIn(run, io, emit) {
 				onLog,
 				io
 			});
-			return { code, rawJson: raw ? JSON.parse(raw) : [] };
+			const parsed = parseLaneReport(framework, raw);
+			if (parsed.attempts) nativeAttempts = parsed.attempts;
+			return { code, rawJson: parsed.rawJson };
 		},
 		onLog
 	});
@@ -258,7 +282,8 @@ async function runBuiltIn(run, io, emit) {
 		testRunId: run.testRunId ?? null,
 		logs: logBuffer || null,
 		duration: Date.now() - startedAt,
-		attempts
+		// Playwright's own retry counts win: Plum's loop did not run for it.
+		attempts: nativeAttempts ?? attempts
 	});
 
 	io && io.emit(SOCKET_EVENTS.REPORT_READY);
