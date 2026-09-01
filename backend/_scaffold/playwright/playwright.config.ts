@@ -21,7 +21,17 @@ export default defineConfig({
 	// that eventually passes is reported as flaky rather than failed.
 	retries: 1,
 	workers: process.env.CI ? 2 : undefined,
-	reporter: [['list']],
+	// Plum sets PLUM_REPORT_FILE when it starts a run; the JSON written there is
+	// what shows up in the Plum UI. Run the command yourself and the variable is
+	// unset, so this entry disappears and you just get the list reporter.
+	// Add your own reporters here — Plum passes no --reporter flag, which would
+	// replace this whole list rather than adding to it.
+	reporter: [
+		['list'],
+		...(process.env.PLUM_REPORT_FILE
+			? [['json', { outputFile: process.env.PLUM_REPORT_FILE }] as const]
+			: [])
+	],
 	projects: [
 		{ name: 'chromium', use: { ...devices['Desktop Chrome'] } },
 		{ name: 'firefox', use: { ...devices['Desktop Firefox'] } }

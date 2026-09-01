@@ -125,9 +125,17 @@ per-project deps" mostly evaporates — nodes keep using `NODE_PATH`.
       `node_modules`; unchanged deps skip; changed deps reinstall; and
       `@playwright/test` still resolves from the backend while the project's own
       dependency resolves locally.
-- [ ] **2. Reporter packages** — `@plum-e2e/playwright-reporter`,
-      `@plum-e2e/cucumber-formatter`. File mode (`PLUM_REPORT_FILE`) + authenticated
-      HTTP mode (`PLUM_API_URL` + `PLUM_TOKEN`). No-op when neither is set.
+- [x] **2. Plum reporter — done WITHOUT the two packages.** The reporter is a
+      conditional entry in the project's own config, not an npm package: both scaffolds
+      add a JSON reporter only when `PLUM_REPORT_FILE` is set, so a Plum-started run
+      reports and a hand-run does not. Plum still passes no `--reporter` flag (which
+      would replace the config's whole list rather than add to it).
+      Also added the project-owned `cucumber.js` the Cucumber scaffold was missing —
+      `npx cucumber-js` with **no arguments** now works from a project folder, which is
+      the point of the exercise. Verified both frameworks, with and without the env var.
+      Dropped from ~4d to ~0.5d. A real package is only needed to POST results from CI
+      or a hand-run; revisit then, and note that a config copied into a project does
+      not receive later updates the way a versioned package would.
 - [ ] **3. Native spawn, wrapper retired** — per-framework command builder replacing
       `run-tests.js`. Four spawn sites: `runExecutorService.js:144`,
       `nodeExecutionService.js:96`, `bin/plum.js:1465`, `backend/package.json:9`.
