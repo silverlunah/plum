@@ -26,6 +26,10 @@ export const activeProject = derived(
 	([$projects, $id]) => $projects.find((p) => p.id === $id) ?? $projects[0] ?? null
 );
 
+// The active project's test framework. Falls back to cucumber for the moment
+// before the list has loaded, matching the column default.
+export const activeFramework = derived(activeProject, ($p) => $p?.framework ?? 'cucumber');
+
 // Automated Tests / Reports / Scheduled and the run bar are hidden when the
 // active project is set to manual-repository-only.
 export const automationHidden = derived(activeProject, ($p) => $p?.manualRepositoryOnly ?? false);

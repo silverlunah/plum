@@ -21,9 +21,9 @@ const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/tes
 const { getTestSuites } = require('./testService');
 const { resolveTestsRoot, loadProjectEnv } = require('../lib/testsRoot');
 const { ensureProjectDeps } = require('../lib/projectDeps');
-const { readCucumberReportFile } = require('../lib/reportFilename');
-
-const BACKEND_DIR = path.resolve(__dirname, '..');
+const { REPORTS_DIR, readReportFile } = require('../lib/reportFilename');
+const { FRAMEWORK } = require('../constants/defaults');
+const { buildRunCommand } = require('../lib/runnerCommand');
 
 // runId → live handles, so cancel() can stop every process and remote job a run owns.
 const inflight = new Map();
@@ -105,17 +105,37 @@ function makeSyntheticFailReport(projectId, laneName, testIds, reason) {
 // Built-in (local) attempt
 // ---------------------------------------------------------------------------
 
-// Always spawned with PLUM_MODE=node so generate-report.js skips its own DB
-// write — this service persists exactly one report per run itself. The queue
-// serialises every run that targets the built-in runner, so the shared
-// reports/cucumber_report.json is never contended.
+/**
+ * Splits the project's max-retries setting between the runner and Plum's own
+ * re-run loop. Exactly one of them must retry, never both.
+ *
+ * Playwright reports every attempt in its JSON, so it retries natively and Plum's
+ * loop stands down. Cucumber's legacy JSON reports only the final attempt, so
+ * Plum re-runs the failures itself to count them and passes no retry flag.
+ */
+function splitRetries(framework, maxRetries) {
+	const n = Number(maxRetries) || 0;
+	return framework === FRAMEWORK.PLAYWRIGHT
+		? { nativeRetries: n, loopRetries: 0 }
+		: { nativeRetries: 0, loopRetries: n };
+}
+
+// Runs the project's own runner CLI from its own tests folder — the same command
+// a developer would type — rather than Plum's npm script. PLUM_MODE=node is kept
+// so anything the project's config still invokes skips its own DB write; this
+// service persists exactly one report per run.
+//
+// Each lane writes to its own report file, so lanes cannot clobber each other the
+// way the single shared reports/cucumber_report.json could.
 function spawnBuiltInAttempt({
 	runId,
 	projectId,
+	framework,
 	laneId,
 	tag,
 	workers,
 	browser,
+	retries,
 	testRunId,
 	baseUrl,
 	onLog,
@@ -126,10 +146,22 @@ function spawnBuiltInAttempt({
 
 		const ssDir = path.join(os.tmpdir(), `plum-ss-${runId}-${laneId}-${Date.now()}`);
 		fs.mkdirSync(ssDir, { recursive: true });
+		const reportFile = path.join(REPORTS_DIR, `run-${runId}-${laneId}-${Date.now()}.json`);
+
+		const cmd = buildRunCommand({
+			framework,
+			testsRoot: resolveTestsRoot(projectId),
+			reportFile,
+			tag,
+			browser,
+			workers,
+			retries
+		});
 
 		const env = {
 			...process.env,
 			...loadProjectEnv(projectId),
+			...cmd.env,
 			IS_HEADLESS: 'true', // server runs have no display — never headed
 			TAG: tag,
 			TRIGGER: TRIGGER_REMOTE,
@@ -140,11 +172,11 @@ function spawnBuiltInAttempt({
 			TESTS_ROOT: resolveTestsRoot(projectId),
 			PLUM_PROJECT_ID: String(projectId)
 		};
-		if (Number(workers) > 1) env.PARALLEL = String(workers);
 		if (testRunId) env.TEST_RUN_ID = testRunId;
 		if (baseUrl) env.BASE_URL = baseUrl;
 
-		const proc = spawn('npm', ['run', 'test'], { env, shell: true, cwd: BACKEND_DIR });
+		onLog(`> ${cmd.bin} ${cmd.args.join(' ')}\n`);
+		const proc = spawn('npx', [cmd.bin, ...cmd.args], { env, shell: true, cwd: cmd.cwd });
 		handles(runId).procs.add(proc);
 
 		const ssPoller = startRRwebPoller(ssDir, (batch) => {
@@ -158,7 +190,7 @@ function spawnBuiltInAttempt({
 			ssPoller.stop();
 			fs.rm(ssDir, { recursive: true, force: true }, () => {});
 			handles(runId).procs.delete(proc);
-			resolve({ code, raw: readCucumberReportFile() });
+			resolve({ code, raw: readReportFile(reportFile) });
 		});
 	});
 }
@@ -169,7 +201,8 @@ function spawnBuiltInAttempt({
 
 async function runBuiltIn(run, io, emit) {
 	const startedAt = Date.now();
-	const { maxRetries } = await settingsService.getProject(run.projectId);
+	const { maxRetries, framework } = await settingsService.getProject(run.projectId);
+	const { nativeRetries, loopRetries } = splitRetries(framework, maxRetries);
 	const laneId = BUILT_IN_RUNNER_ID;
 
 	let logBuffer = '';
@@ -185,15 +218,17 @@ async function runBuiltIn(run, io, emit) {
 	});
 
 	const { code, rawJson, attempts } = await runWithRetries({
-		maxRetries,
+		maxRetries: loopRetries,
 		spawnAttempt: async (tagOverride) => {
 			const { code, raw } = await spawnBuiltInAttempt({
 				runId: run.id,
 				projectId: run.projectId,
+				framework,
 				laneId,
 				tag: tagOverride ?? run.tag,
 				workers: run.workers,
 				browser: run.browser,
+				retries: nativeRetries,
 				testRunId: run.testRunId,
 				baseUrl: run.baseUrl,
 				onLog,
@@ -237,7 +272,8 @@ async function runBuiltIn(run, io, emit) {
 
 async function runDistributed(run, io, emit, laneInfos, chunks) {
 	const startedAt = Date.now();
-	const { maxRetries } = await settingsService.getProject(run.projectId);
+	const { maxRetries, framework } = await settingsService.getProject(run.projectId);
+	const retrySplit = splitRetries(framework, maxRetries);
 
 	emit(SOCKET_EVENTS.BG_RUN_LANES_INIT, {
 		lanes: laneInfos.map((l, i) => ({ id: l.id, name: l.name, testCount: chunks[i].length }))
@@ -250,7 +286,9 @@ async function runDistributed(run, io, emit, laneInfos, chunks) {
 	for (const l of laneInfos) laneLogs[l.id] = '';
 
 	const laneResults = await Promise.all(
-		laneInfos.map((lane, i) => runLane(run, io, emit, lane, chunks[i], maxRetries, laneLogs))
+		laneInfos.map((lane, i) =>
+			runLane(run, io, emit, lane, chunks[i], retrySplit, framework, laneLogs)
+		)
 	);
 
 	let overallCode = 0;
@@ -287,7 +325,7 @@ async function runDistributed(run, io, emit, laneInfos, chunks) {
 	return { code: saved.status === REPORT_STATUS.PASS ? 0 : 1, reportId: saved.id };
 }
 
-function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
+function runLane(run, io, emit, lane, chunkIds, retrySplit, framework, laneLogs) {
 	const laneId = lane.id;
 	const chunkTag = buildTagExpression(chunkIds);
 	const onLog = (log) => {
@@ -301,10 +339,12 @@ function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
 					spawnBuiltInAttempt({
 						runId: run.id,
 						projectId: run.projectId,
+						framework,
 						laneId,
 						tag: currentTag,
 						workers: run.workers,
 						browser: run.browser,
+						retries: retrySplit.nativeRetries,
 						testRunId: run.testRunId,
 						baseUrl: run.baseUrl,
 						onLog,
@@ -359,7 +399,9 @@ function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
 					});
 
 	return runWithRetries({
-		maxRetries,
+		// Zero for Playwright, whose own process already retried; the project's
+		// max-retries for Cucumber, which cannot report its attempts.
+		maxRetries: retrySplit.loopRetries,
 		spawnAttempt: (t) => attempt(t ?? chunkTag),
 		onLog
 	}).then(({ code, rawJson, attempts }) => ({

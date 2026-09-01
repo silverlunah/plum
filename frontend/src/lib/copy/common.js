@@ -24,6 +24,7 @@ export const DISCORD_LABEL = 'Discord';
 export const SLACK_LABEL = 'Slack';
 
 export const LEARN_MORE_LABEL = 'Learn more:';
+export const POWERED_BY_LABEL = 'Powered by';
 export const PLAYWRIGHT_LABEL = 'Playwright';
 export const CUCUMBER_LABEL = 'Cucumber';
 

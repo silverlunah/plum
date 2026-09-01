@@ -29,13 +29,15 @@ const scaffoldDirFor = (framework) => path.join(SCAFFOLD_DIR, framework);
 // create / delete / settings save.
 let slugById = new Map();
 let testsPathById = new Map();
+let frameworkById = new Map();
 
 async function refresh() {
 	const rows = await prisma.project.findMany({
-		select: { id: true, slug: true, name: true, testsPath: true }
+		select: { id: true, slug: true, name: true, testsPath: true, framework: true }
 	});
 	slugById = new Map(rows.map((r) => [r.id, r.slug || slugify(r.name)]));
 	testsPathById = new Map(rows.map((r) => [r.id, sanitizeTestsPath(r.testsPath)]));
+	frameworkById = new Map(rows.map((r) => [r.id, r.framework]));
 }
 
 function slugFor(projectId) {
@@ -44,6 +46,13 @@ function slugFor(projectId) {
 
 function testsPathFor(projectId) {
 	return testsPathById.get(Number(projectId)) ?? DEFAULT_TESTS_PATH;
+}
+
+// Cached alongside slug and testsPath so the sync path/discovery helpers don't
+// need a DB round trip. Falls back to Cucumber: a project this cache has not seen
+// predates the column, and every project that predates it is a Cucumber one.
+function frameworkFor(projectId) {
+	return frameworkById.get(Number(projectId)) ?? FRAMEWORK.CUCUMBER;
 }
 
 // Copies the framework's scaffold into projects/<slug>/tests/. `force: false`
@@ -141,6 +150,7 @@ module.exports = {
 	refresh,
 	slugFor,
 	testsPathFor,
+	frameworkFor,
 	scaffoldProject,
 	ensureRunnerConfig,
 	removeProjectDir,

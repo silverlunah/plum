@@ -325,11 +325,16 @@ function processCucumberJson(raw, attempts = {}) {
 	});
 
 	const hasFailures = features.some((f) => f.status === 'failed');
+	// A run that executed nothing is not a pass. Cucumber and Playwright both exit
+	// 0 when a tag or grep matches no tests, so without this a typo in a tag — or
+	// pointing a run at a project whose tests the runner cannot see — reports green
+	// having verified nothing.
+	const ranNothing = features.every((f) => (f.scenarios ?? []).length === 0);
 	const flakyCount = features.reduce((n, f) => n + f.scenarios.filter((s) => s.flaky).length, 0);
 	return {
 		features,
 		recordings,
-		status: hasFailures ? REPORT_STATUS.FAIL : REPORT_STATUS.PASS,
+		status: hasFailures || ranNothing ? REPORT_STATUS.FAIL : REPORT_STATUS.PASS,
 		flakyCount
 	};
 }
@@ -402,6 +407,7 @@ const getReportDetail = async (projectId, id) => {
 			workerCount: true,
 			flakyCount: true,
 			browser: true,
+			framework: true,
 			runnerName: true,
 			createdAt: true,
 			content: true,

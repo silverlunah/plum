@@ -497,6 +497,8 @@ export const OTHER_PROJECTS_LABEL = 'Other projects';
 export const DELETE_PROJECT_LABEL = 'Delete';
 export const projectRowMeta = (slug, n) => `${slug} · ${n} member${n === 1 ? '' : 's'}`;
 export const PROJECT_FRAMEWORK_LABEL = 'Test framework';
+export const PROJECT_FRAMEWORK_FIXED_HINT =
+	'Fixed when this project was created. The tests, the run command and the report format all depend on it, so it cannot be changed — create a new project to use the other framework.';
 const FRAMEWORK_LABELS = { playwright: 'Playwright', cucumber: 'Cucumber' };
 export const frameworkLabel = (id) => FRAMEWORK_LABELS[id] ?? id ?? '';
 export const FRAMEWORK_PERMANENT_HINT =

@@ -27,7 +27,7 @@
 	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
 	import { updateProfile, changePassword } from '$lib/api/auth';
 	import { fetchProjects } from '$lib/api/projects';
-	import { setProjects, activeProject } from '$lib/stores/project';
+	import { setProjects, activeProject, activeFramework } from '$lib/stores/project';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { TIMEZONES } from '$lib/utils/timezones';
@@ -91,6 +91,9 @@
 		ACCOUNT_DESC,
 		PROJECT_NAME_LABEL,
 		PROJECT_NAME_PLACEHOLDER,
+		PROJECT_FRAMEWORK_LABEL,
+		PROJECT_FRAMEWORK_FIXED_HINT,
+		frameworkLabel,
 		LOGO_URL_LABEL,
 		LOGO_URL_HINT,
 		LOGO_URL_PLACEHOLDER,
@@ -604,9 +607,11 @@
 		<ExternalNavLink href={PLAYWRIGHT_URL} label={PLAYWRIGHT_LABEL}>
 			<ServiceIcon service="playwright" size={14} />
 		</ExternalNavLink>
-		<ExternalNavLink href={CUCUMBER_URL} label={CUCUMBER_LABEL}>
-			<ServiceIcon service="cucumber" size={14} />
-		</ExternalNavLink>
+		{#if $activeFramework === 'cucumber'}
+			<ExternalNavLink href={CUCUMBER_URL} label={CUCUMBER_LABEL}>
+				<ServiceIcon service="cucumber" size={14} />
+			</ExternalNavLink>
+		{/if}
 		<hr class="sidebar-divider" />
 		<p class="sidebar-section">{NAV_SECTION_AUTH}</p>
 		<button class="sidebar-item sign-out" on:click={handleLogout}>{SIGN_OUT_LABEL}</button>
@@ -633,6 +638,28 @@
 							bind:value={project.name}
 							placeholder={PROJECT_NAME_PLACEHOLDER}
 						/>
+					</div>
+
+					<div class="field">
+						<span class="field-label">{PROJECT_FRAMEWORK_LABEL}</span>
+						<div class="framework-fixed">
+							<ServiceIcon service={project.framework} size={15} />
+							{frameworkLabel(project.framework)}
+							<svg
+								width="12"
+								height="12"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								aria-hidden="true"
+							>
+								<rect x="3" y="11" width="18" height="11" rx="2" />
+								<path d="M7 11V7a5 5 0 0 1 10 0v4" />
+							</svg>
+						</div>
+						<p class="field-hint">{PROJECT_FRAMEWORK_FIXED_HINT}</p>
 					</div>
 
 					<div class="field">
@@ -1435,6 +1462,22 @@
 		font-size: 0.8125rem;
 		font-weight: 500;
 		color: var(--text);
+	}
+
+	.framework-fixed {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		padding: 0.45rem 0.65rem;
+		border: 1px dashed var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--bg-subtle);
+		font-size: 0.875rem;
+		color: var(--text);
+		width: fit-content;
+	}
+	.framework-fixed svg {
+		color: var(--text-muted);
 	}
 
 	.field-hint {

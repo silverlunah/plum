@@ -22,4 +22,20 @@ function readCucumberReportFile() {
 	}
 }
 
-module.exports = { REPORTS_DIR, readCucumberReportFile };
+/**
+ * Reads a run's own report file and removes it. Each lane writes to its own path
+ * so concurrent lanes cannot clobber one another, and the file is transient — the
+ * report it produced is persisted to the database by the caller.
+ */
+function readReportFile(filePath) {
+	try {
+		if (!fs.existsSync(filePath)) return null;
+		const raw = fs.readFileSync(filePath, 'utf8');
+		fs.rmSync(filePath, { force: true });
+		return raw;
+	} catch {
+		return null;
+	}
+}
+
+module.exports = { REPORTS_DIR, readCucumberReportFile, readReportFile };
