@@ -24,11 +24,11 @@ export async function fetchAllProjects() {
 	return (await res.json()).projects;
 }
 
-export async function createProject({ name, baseUrl }) {
+export async function createProject({ name }) {
 	const res = await fetch(`${API_BASE}/projects`, {
 		method: 'POST',
 		headers: authHeaders({ json: true }),
-		body: JSON.stringify({ name, baseUrl })
+		body: JSON.stringify({ name })
 	});
 	const data = await res.json();
 	if (!res.ok) throw new Error(data.error ?? 'Failed to create project');

@@ -5,17 +5,17 @@
 
 const fs = require('fs');
 const path = require('path');
-const { slugFor, PROJECTS_DIR } = require('./projectPaths');
+const { slugFor, testsPathFor, PROJECTS_DIR } = require('./projectPaths');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
 
-// A known project always resolves to its own projects/<slug>/tests/ — even if
-// the folder isn't there yet, so a project with no tests reads as empty rather
-// than falling through to another project's or the shared demo `tests/`. The
-// legacy `tests/` dir is only for a single-project install with no slug.
+// A known project always resolves to its own projects/<slug>/<testsPath>/ (default
+// "tests") — even if the folder isn't there yet, so a project with no tests reads
+// as empty rather than falling through to another project's or the shared demo
+// `tests/`. The legacy `tests/` dir is only for a single-project install with no slug.
 function resolveTestsRoot(projectId) {
 	const slug = projectId != null ? slugFor(projectId) : null;
-	if (slug) return path.join(PROJECTS_DIR, slug, 'tests');
+	if (slug) return path.join(PROJECTS_DIR, slug, testsPathFor(projectId));
 	return path.join(BACKEND_DIR, 'tests');
 }
 

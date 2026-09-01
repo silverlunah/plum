@@ -45,9 +45,7 @@ router.post('/', jwtAuth, requireOwner, async (req, res, next) => {
 			return res
 				.status(400)
 				.json({ error: 'Project name needs at least one letter or number (a–z, 0–9)' });
-		res
-			.status(201)
-			.json({ project: await projectService.create({ name, baseUrl: req.body.baseUrl }) });
+		res.status(201).json({ project: await projectService.create({ name }) });
 	} catch (e) {
 		next(e);
 	}
