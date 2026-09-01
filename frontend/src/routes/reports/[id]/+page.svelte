@@ -1426,8 +1426,25 @@
 
 		.feature-header {
 			flex-wrap: wrap;
-			gap: 0.5rem;
+			gap: 0.4rem 0.6rem;
 			padding: 0.75rem 1rem;
+		}
+
+		.feature-name {
+			flex-basis: 100%;
+		}
+
+		.feature-right {
+			flex-basis: 100%;
+			justify-content: flex-start;
+		}
+
+		.feature-file {
+			flex: 1;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
 		}
 
 		.scenario-header {
