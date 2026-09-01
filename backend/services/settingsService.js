@@ -19,7 +19,6 @@ const projectPublicSelect = {
 	name: true,
 	logoUrl: true,
 	timezone: true,
-	baseUrl: true,
 	maxRetries: true,
 	defaultHome: true,
 	manualRepositoryOnly: true,
@@ -39,14 +38,13 @@ const getProject = async (projectId) => {
 
 const updateProject = async (
 	projectId,
-	{ name, logoUrl, timezone, baseUrl, maxRetries, defaultHome, manualRepositoryOnly, testsPath }
+	{ name, logoUrl, timezone, maxRetries, defaultHome, manualRepositoryOnly, testsPath }
 ) => {
 	const project = await prisma.project.update({
 		where: { id: projectId },
 		data: {
 			...(name !== undefined && { name }),
 			...(logoUrl !== undefined && { logoUrl }),
-			...(baseUrl !== undefined && { baseUrl }),
 			...(timezone !== undefined && { timezone }),
 			...(maxRetries !== undefined && { maxRetries: Number(maxRetries) || 0 }),
 			...(defaultHome !== undefined && {

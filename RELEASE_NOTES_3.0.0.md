@@ -6,7 +6,7 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
 
 ---
 
-## 3.1.0
+## 3.0.4
 
 - **Custom tests folder per project** (Settings → Project → _Tests folder_). A
   relative subpath inside the project folder — default `tests`, set it deeper
@@ -18,6 +18,9 @@ hardening. This is a breaking change — read **Upgrading** before deploying.
   written under `backend/reports/` (`/app/reports` in the container).
 - The test-file watcher now follows features at any depth (fixing a dead glob
   after the chokidar 5 upgrade) and skips `node_modules` / `.git`.
+- Removed the project **Base URL** field — it was set at project creation but
+  never read at run time. The per-project target is `BASE_URL` in the tests
+  folder's `.env`; CI and MCP still pass their own per-run override.
 
 ## 3.0.3 (hotfix)
 
