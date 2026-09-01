@@ -23,7 +23,7 @@ const TRIGGER_TYPE = Object.freeze({
 /**
  * Sentinel written into partial node-mode report filenames (never stored in main DB).
  * Used by remote runner nodes and by the built-in lane when running as part of a
- * distributed job (PLUM_MODE=node blocks the DB write in generate-report.js).
+ * distributed job — the primary persists the one report for the whole run.
  */
 const TRIGGER_REMOTE = 'remote-trigger';
 

@@ -30,7 +30,7 @@ plum init                       # takes no arguments — scaffolds ./tests/
 
 # edit tests/.env → BASE_URL=https://your-app.com
 
-plum run-test                   # runs ./tests locally — no Docker, no database
+npx playwright test             # runs your tests locally — no Docker, no database
 plum create-test                # scaffold a new .feature + Page + Steps
 ```
 
@@ -80,7 +80,7 @@ Full documentation is available at:
 | [Installation](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/installation-JftwFX9csC)                       | Requirements, global install, first-user setup, plugins                             |
 | [Setting Up the Server](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-the-server-vj0Ab1kJVs)     | Production server setup, reverse proxy (Nginx/Caddy), Docker                        |
 | [Setting Up Nodes](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-nodes-dtmekJGJia)               | Runner nodes, the registration secret, start-on-boot, managing nodes                |
-| [Running Tests Locally](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/running-tests-locally-GGhFcqaAQ8)     | `plum run-test` flags, parallel runs, debugging tips                                |
+| [Running Tests Locally](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/running-tests-locally-GGhFcqaAQ8)     | Running tests natively, parallel runs, debugging tips                               |
 | [Writing Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/writing-tests-XeHJQdtH49)                     | Feature files, step definitions, optional page objects, best practices              |
 | [Projects](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/projects-ilfc8LUyO7)                               | One organisation, many projects — anatomy, on-disk layout, create / switch / delete |
 | [Roles & Access](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/roles-access-s0wx91Uo7g)                     | Owner / admin / user, per-project membership, what each role sees                   |
@@ -96,29 +96,24 @@ Full documentation is available at:
 
 ## Command Reference
 
-| Command                       | Description                                                                                                                                      |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `plum init`                   | Scaffold a self-contained `./tests/` folder for local test authoring (`plum run-test`)                                                           |
-| `plum project init "<name>"`  | Re-create a server project's `projects/<slug>/tests/` folder (the server normally does this when you add the project)                            |
-| `plum server start`           | Start the full UI stack via Docker                                                                                                               |
-| `plum server restart`         | Rebuild Docker images and restart the server without prompts                                                                                     |
-| `plum server stop`            | Stop the server (data preserved)                                                                                                                 |
-| `plum server reconfig`        | Re-enter server settings without starting                                                                                                        |
-| `plum update`                 | Update Plum if a newer version is published, then restart every registered server and node (asks before each); no-ops when already on the latest |
-| `plum node start [name]`      | Register a node with the server and start it on this machine (`--boot` / `--no-boot` to (un)set start-on-boot)                                   |
-| `plum node list`              | List this machine's nodes and their status                                                                                                       |
-| `plum node restart [name]`    | Stop, refresh dependencies, and restart a node                                                                                                   |
-| `plum node stop [name]`       | Stop a node                                                                                                                                      |
-| `plum node delete <name>`     | Stop the node, delete its local config, and unregister it from the server                                                                        |
-| `plum node reconfig [name]`   | Re-enter a node's settings and re-register, without starting it                                                                                  |
-| `plum run-test`               | Run all tests locally without Docker                                                                                                             |
-| `plum run-test @tag`          | Run tests matching a tag                                                                                                                         |
-| `plum run-test --parallel N`  | Run tests across N parallel workers                                                                                                              |
-| `plum run-test --browser <b>` | Run in `chromium` (default) or `firefox`                                                                                                         |
-| `plum run-test --help`        | Show usage for `run-test`                                                                                                                        |
-| `plum create-step`            | Interactively scaffold a new step definition                                                                                                     |
-| `plum create-test`            | Interactively scaffold a full feature (`.feature` + Page + Steps)                                                                                |
-| `plum manage-nodes`           | Open the interactive node management menu                                                                                                        |
+| Command                      | Description                                                                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `plum init`                  | Scaffold a self-contained `./tests/` folder for local test authoring                                                                             |
+| `plum project init "<name>"` | Re-create a server project's `projects/<slug>/tests/` folder (the server normally does this when you add the project)                            |
+| `plum server start`          | Start the full UI stack via Docker                                                                                                               |
+| `plum server restart`        | Rebuild Docker images and restart the server without prompts                                                                                     |
+| `plum server stop`           | Stop the server (data preserved)                                                                                                                 |
+| `plum server reconfig`       | Re-enter server settings without starting                                                                                                        |
+| `plum update`                | Update Plum if a newer version is published, then restart every registered server and node (asks before each); no-ops when already on the latest |
+| `plum node start [name]`     | Register a node with the server and start it on this machine (`--boot` / `--no-boot` to (un)set start-on-boot)                                   |
+| `plum node list`             | List this machine's nodes and their status                                                                                                       |
+| `plum node restart [name]`   | Stop, refresh dependencies, and restart a node                                                                                                   |
+| `plum node stop [name]`      | Stop a node                                                                                                                                      |
+| `plum node delete <name>`    | Stop the node, delete its local config, and unregister it from the server                                                                        |
+| `plum node reconfig [name]`  | Re-enter a node's settings and re-register, without starting it                                                                                  |
+| `plum create-step`           | Interactively scaffold a new step definition                                                                                                     |
+| `plum create-test`           | Interactively scaffold a full feature (`.feature` + Page + Steps)                                                                                |
+| `plum manage-nodes`          | Open the interactive node management menu                                                                                                        |
 
 ---
 

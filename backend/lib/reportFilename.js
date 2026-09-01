@@ -10,19 +10,6 @@ const fs = require('fs');
 const REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
 
 /**
- * Reads the transient cucumber_report.json written by the most recent local test run.
- * Returns the raw JSON string, or null if the file is absent or unreadable.
- */
-function readCucumberReportFile() {
-	try {
-		const p = path.join(REPORTS_DIR, 'cucumber_report.json');
-		return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;
-	} catch {
-		return null;
-	}
-}
-
-/**
  * Reads a run's own report file and removes it. Each lane writes to its own path
  * so concurrent lanes cannot clobber one another, and the file is transient — the
  * report it produced is persisted to the database by the caller.
@@ -38,4 +25,4 @@ function readReportFile(filePath) {
 	}
 }
 
-module.exports = { REPORTS_DIR, readCucumberReportFile, readReportFile };
+module.exports = { REPORTS_DIR, readReportFile };

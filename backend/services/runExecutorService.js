@@ -398,19 +398,25 @@ function runLane(run, io, emit, lane, chunkIds, retrySplit, framework, laneLogs)
 								baseUrl: run.baseUrl
 							},
 							onLog,
-							(code, content) =>
-								resolve({
-									code,
-									rawJson: JSON.parse(
-										content ??
-											makeSyntheticFailReport(
-												run.projectId,
-												lane.name,
-												chunkIds,
-												'could not fetch report from runner'
-											)
-									)
-								}),
+							(code, content) => {
+								// A node runs the project's own runner, so its report arrives in
+								// that framework's format and needs the same adaptation a local
+								// lane gets. The synthetic fallback is already feature-shaped.
+								const parsed = content
+									? parseLaneReport(framework, content)
+									: {
+											rawJson: JSON.parse(
+												makeSyntheticFailReport(
+													run.projectId,
+													lane.name,
+													chunkIds,
+													'could not fetch report from runner'
+												)
+											),
+											attempts: null
+										};
+								resolve({ code, rawJson: parsed.rawJson, attempts: parsed.attempts });
+							},
 							(batch) =>
 								io &&
 								io.emit(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, {

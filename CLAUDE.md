@@ -198,7 +198,7 @@ spawn(process.execPath, [scriptPath], { stdio: 'inherit' });
 spawn('node', [scriptPath]);
 ```
 
-The same rule applies when one script invokes another directly via `execSync`/`execFileSync` (e.g. `run-tests.js` calling `generate-report.js`). Prefer `execFileSync(process.execPath, [absoluteScriptPath], opts)` over `execSync('node relative/path.js')` — it takes an argument array like `spawn` (no shell-quoting needed) and doesn't depend on `node` being resolvable via PATH or on the caller's `cwd`.
+The same rule applies when one script invokes another directly via `execSync`/`execFileSync`. Prefer `execFileSync(process.execPath, [absoluteScriptPath], opts)` over `execSync('node relative/path.js')` — it takes an argument array like `spawn` (no shell-quoting needed) and doesn't depend on `node` being resolvable via PATH or on the caller's `cwd`.
 
 ### File paths — always use `path.join()` or `path.resolve()`
 

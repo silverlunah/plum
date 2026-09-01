@@ -10,8 +10,9 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { startRRwebPoller } = require('../lib/rrwebPoller');
 const { TRIGGER_REMOTE } = require('../constants/triggers');
-const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { DEFAULT_BROWSER, DEFAULT_FRAMEWORK, isFramework } = require('../constants/defaults');
 const { JOB_STATUS } = require('../constants/jobStatus');
+const { buildRunCommand } = require('../lib/runnerCommand');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
 
@@ -23,13 +24,17 @@ function getJob(jobId) {
 	return jobs[jobId];
 }
 
-// Starts a remote test job dispatched from the primary server: materializes
-// any uploaded test files, spawns `npm run test`, and tracks logs + rrweb
-// batches for HTTP polling (see pollJob).
+// Starts a remote test job dispatched from the primary server: materializes any
+// uploaded test files, runs the project's own runner CLI in that folder, and
+// tracks logs + rrweb batches for HTTP polling (see pollJob).
+//
+// `framework` comes from the primary, since a node holds no project state. An
+// older primary sends none, so it falls back to the default.
 function startJob({
 	tags,
 	browser = DEFAULT_BROWSER,
 	workers = 1,
+	framework,
 	tests = null,
 	env: userEnv = {}
 }) {
@@ -66,11 +71,24 @@ function startJob({
 		rrwebBatches: [],
 		exitCode: null,
 		startedAt: Date.now(),
-		meta: { tags: tags || '', browser, workers },
+		meta: { tags: tags || '', browser, workers, framework },
 		tempTestsDir,
 		reportFile,
 		ssDir
 	};
+
+	const jobFramework = isFramework(framework) ? framework : DEFAULT_FRAMEWORK;
+	const cmd = buildRunCommand({
+		framework: jobFramework,
+		testsRoot: tempTestsDir ?? BACKEND_DIR,
+		reportFile,
+		tag: tags || '',
+		browser,
+		workers,
+		// The primary owns retries: for Cucumber it re-dispatches, and for Playwright
+		// it passes its own --retries on the lane that needs them.
+		retries: 0
+	});
 
 	const env = {
 		...process.env,
@@ -79,21 +97,27 @@ function startJob({
 		// own copy. Spread before the job-control vars below so a stray same-named
 		// var in the user's .env can never override how this job actually runs.
 		...userEnv,
+		...cmd.env,
 		TAG: tags || '',
 		TRIGGER: TRIGGER_REMOTE,
 		BROWSER: browser,
 		REPORT_RUNNERS: String(workers),
-		CUCUMBER_REPORT_FILE: reportFile,
 		PLUM_SS_DIR: ssDir,
-		...(tempTestsDir ? { TESTS_ROOT: tempTestsDir } : {})
+		...(tempTestsDir ? { TESTS_ROOT: tempTestsDir } : {}),
+		// The job runs from a temp dir outside this node's tree, so upward resolution
+		// cannot reach the toolchain. The uploaded folder deliberately excludes
+		// node_modules; the node's own backend supplies Playwright and Cucumber.
+		NODE_PATH: process.env.NODE_PATH
+			? `${path.join(BACKEND_DIR, 'node_modules')}${path.delimiter}${process.env.NODE_PATH}`
+			: path.join(BACKEND_DIR, 'node_modules')
 	};
-	if (workers > 1) env.PARALLEL = String(workers);
 
 	const ssPoller = startRRwebPoller(ssDir, (batch) => {
 		jobs[jobId].rrwebBatches.push(batch);
 	});
 
-	const proc = spawn('npm', ['run', 'test'], { env, shell: true, cwd: BACKEND_DIR });
+	jobs[jobId].logs += `> ${cmd.bin} ${cmd.args.join(' ')}\n`;
+	const proc = spawn('npx', [cmd.bin, ...cmd.args], { env, shell: true, cwd: cmd.cwd });
 	jobs[jobId].proc = proc;
 	proc.stdout.on('data', (d) => {
 		jobs[jobId].logs += d.toString();
