@@ -334,14 +334,18 @@
 		user-select: none;
 	}
 
-	/* Compact: the panel drops out of its right-edge overlay and becomes a
-	   full-width block stacked under the player (see RecordingPlayer). */
+	/* Compact: instead of flanking the player, the panel slides up over the
+	   Steps rail (see RecordingPlayer). Closing it drops back to the steps. */
 	@media (max-width: 1024px) {
 		.inspector-root {
-			position: relative;
+			inset: auto 0 0 0;
 			width: 100% !important;
 			height: 46vh;
-			flex-shrink: 0;
+		}
+		.inspector-panel {
+			border-left: none;
+			border-top: 1px solid var(--border);
+			box-shadow: 0 -8px 24px rgb(0 0 0 / 0.14);
 		}
 		.resize-handle {
 			display: none;

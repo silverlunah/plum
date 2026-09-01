@@ -110,6 +110,7 @@
 	@media (max-width: 1024px) {
 		.steps-rail {
 			width: auto;
+			flex: 0 0 auto;
 			max-height: 32vh;
 			border-top: 1px solid var(--border);
 		}

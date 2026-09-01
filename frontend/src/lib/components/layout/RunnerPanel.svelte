@@ -1676,6 +1676,16 @@
 			min-width: 0;
 		}
 
+		/* Workers is a fixed 3-button stepper — let it size to content instead of
+		   stretching a half-width column (which balloons the +/− hit areas). */
+		.bar-center > .ctrl-group:has(.stepper) {
+			flex: 0 0 auto;
+		}
+
+		.stepper {
+			align-self: flex-start;
+		}
+
 		.dropdown-wrap {
 			width: 100%;
 		}
