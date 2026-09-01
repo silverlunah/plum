@@ -1614,8 +1614,7 @@
 		opacity: 0.7;
 	}
 
-	/* ── Mobile: the bar keeps only status + Run + expand; the control row
-	   folds into the drawer, revealed by the same expand toggle. ── */
+	/* Mobile: the control row reuses the drawer — hidden until the bar is expanded. */
 	@media (max-width: 640px) {
 		.bar {
 			flex-wrap: wrap;
@@ -1676,8 +1675,7 @@
 			min-width: 0;
 		}
 
-		/* Workers is a fixed 3-button stepper — let it size to content instead of
-		   stretching a half-width column (which balloons the +/− hit areas). */
+		/* Content-width, else the half-width column balloons the +/− hit areas. */
 		.bar-center > .ctrl-group:has(.stepper) {
 			flex: 0 0 auto;
 		}

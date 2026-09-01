@@ -958,8 +958,7 @@
 		white-space: nowrap;
 	}
 
-	/* ── Compact: player on top, Steps rail and Inspector stack beneath it
-	   instead of flanking it as columns. ── */
+	/* Compact: order:-1 lifts the player above the Steps rail that precedes it in DOM. */
 	@media (max-width: 1024px) {
 		.recording-player {
 			flex-direction: column;

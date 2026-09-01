@@ -334,8 +334,7 @@
 		user-select: none;
 	}
 
-	/* Compact: instead of flanking the player, the panel slides up over the
-	   Steps rail (see RecordingPlayer). Closing it drops back to the steps. */
+	/* Compact: slides up over the Steps rail instead of flanking the player. */
 	@media (max-width: 1024px) {
 		.inspector-root {
 			inset: auto 0 0 0;

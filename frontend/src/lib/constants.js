@@ -47,8 +47,7 @@ export const CASE_HISTORY_BARS_MAX = 20;
 // The player reserves exactly this much width; anything wider overlays the replay.
 export const INSPECTOR_MIN_WIDTH = 280;
 
-// Responsive breakpoints. Kept in sync with the `@media (max-width: …)` values
-// in component styles and read by the viewport store for layout-mode switches.
+// Must match the `@media (max-width: …)` values hard-coded in component styles.
 export const MOBILE_MAX = 640;
 export const TABLET_MAX = 1024;
 
