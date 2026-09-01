@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  A self-hosted QA platform for teams doing manual <em>and</em> automated testing: a full test-case repository alongside a ready-to-use <a href="https://playwright.dev">Playwright</a> + <a href="https://cucumber.io">Cucumber</a> automation environment.<br/><br/>
+  Self-hosted QA platform for teams doing manual <em>and</em> automated testing. Comes with a full test-case repository alongside a ready-to-use <a href="https://playwright.dev">Playwright</a> + <a href="https://cucumber.io">Cucumber</a> automation environment.<br/><br/>
 Author tests in Gherkin, run them from the CLI or UI, track manual test runs, view and export reports, schedule jobs, and get Discord / Slack notifications.
 </p>
 
