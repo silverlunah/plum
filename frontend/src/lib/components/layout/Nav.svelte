@@ -540,5 +540,24 @@
 		.hamburger {
 			display: flex;
 		}
+
+		.inner {
+			gap: 0.75rem;
+			padding: 0 1rem;
+		}
+
+		.project-trigger {
+			max-width: 130px;
+		}
+
+		.actions {
+			gap: 0.375rem;
+		}
+	}
+
+	@media (max-width: 380px) {
+		.project-trigger .project-name {
+			display: none;
+		}
 	}
 </style>

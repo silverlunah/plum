@@ -964,4 +964,20 @@
 		flex-shrink: 0;
 		cursor: pointer;
 	}
+
+	@media (max-width: 640px) {
+		.page-header h1 {
+			font-size: 1.9rem;
+		}
+
+		.header-row {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.875rem;
+		}
+
+		.data-table {
+			min-width: 640px;
+		}
+	}
 </style>

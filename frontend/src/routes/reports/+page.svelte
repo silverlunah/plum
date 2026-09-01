@@ -672,4 +672,36 @@
 	.pagination-wrap {
 		margin-top: 1.25rem;
 	}
+
+	@media (max-width: 640px) {
+		h1 {
+			font-size: 1.9rem;
+		}
+
+		.header-top {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.875rem;
+		}
+
+		.report-item {
+			flex-wrap: wrap;
+			gap: 0.5rem 0.75rem;
+			padding: 0.75rem 0.9rem;
+		}
+
+		.item-meta {
+			flex-wrap: wrap;
+			gap: 0.35rem 0.6rem;
+		}
+
+		.item-tags {
+			flex-basis: 100%;
+		}
+
+		/* No hover on touch — keep the per-row delete reachable. */
+		.row-delete-btn {
+			opacity: 0.55;
+		}
+	}
 </style>
