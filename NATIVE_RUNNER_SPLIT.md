@@ -38,6 +38,32 @@ only test selection plus a report destination. `plum run-test` goes away; users 
   where `testService.js` yields 1 outline + an examples table.
 - Cucumber has `--retry`, `--retry-tag-filter`, `--parallel`. No `--shard`.
 
+## Finding: projects already resolve the shared node_modules
+
+`npx playwright test` run inside `projects/<slug>/tests/` resolves `@playwright/test`,
+`dotenv` and everything else by walking **up** the tree to the backend's
+`node_modules` — verified on the host, and the container layout is identical
+(`WORKDIR /app`, projects bind-mounted at `/app/projects`, modules at
+`/app/node_modules`). Six specs listed with no `NODE_PATH` and no local
+`node_modules`.
+
+So "projects become npm packages" as originally planned — a `package.json` and a full
+`npm install` per project — would duplicate ~300MB per project and buy nothing for
+either server runs or a developer running the CLI by hand inside the install tree.
+`NODE_PATH` is only needed where a run executes **outside** the tree, i.e. a dispatched
+node's temp dir, and that use is legitimate and can stay.
+
+What genuinely remains is `plum.plugins.json`, which installs a project's extra
+dependencies into the **backend's own** `package.json`: one project's dependency is
+installed for every project, and it mutates a file that Plum upgrades replace.
+Recommended replacement: a per-project `package.json` that is installed **only when it
+declares dependencies**. Projects needing nothing get no `node_modules` and resolve
+upward as they do now; a project needing `@faker-js/faker` gets a local `node_modules`
+holding just that, and Node's resolution handles the mix (local first, then up).
+
+Estimate effect: Phase 1b drops from ~3d to ~1d, and the risk "nodes have no
+per-project deps" mostly evaporates — nodes keep using `NODE_PATH`.
+
 ## Hazards
 
 1. **Migration default must not reach existing rows.** _Deferred, not solved._ The
@@ -77,9 +103,9 @@ only test selection plus a report destination. `plum run-test` goes away; users 
       what a run executes from and what `testsPath` can relocate. `reconcile()` uses a
       per-framework sentinel file (`features` / `playwright.config.ts`) so it is
       idempotent for both. `plum project init` takes `--framework`.
-- [ ] **1b. Projects become npm packages** (blocks the native spawn)
-      Per-project `package.json` + install; retire `plum.plugins.json` and the
-      `NODE_PATH` injection.
+- [ ] **1b. Per-project dependencies** — RESCOPED, see finding below. Per-project
+      `node_modules` turned out to be unnecessary; only `plum.plugins.json` still
+      needs replacing.
 - [ ] **2. Reporter packages** — `@plum-e2e/playwright-reporter`,
       `@plum-e2e/cucumber-formatter`. File mode (`PLUM_REPORT_FILE`) + authenticated
       HTTP mode (`PLUM_API_URL` + `PLUM_TOKEN`). No-op when neither is set.
