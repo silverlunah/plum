@@ -1604,6 +1604,11 @@
 			flex-wrap: wrap;
 		}
 
+		.field-label {
+			flex-wrap: wrap;
+			gap: 0.15rem 0.5rem;
+		}
+
 		.field-row {
 			grid-template-columns: 1fr;
 		}

@@ -1396,4 +1396,88 @@
 		display: flex;
 		flex-direction: column;
 	}
+
+	@media (max-width: 640px) {
+		.report-header {
+			padding: 1.1rem;
+		}
+
+		.header-status {
+			gap: 0.75rem;
+		}
+
+		.status-icon-wrap {
+			width: 40px;
+			height: 40px;
+		}
+
+		h1 {
+			font-size: 1.5rem;
+		}
+
+		.header-stats {
+			gap: 1rem 1.25rem;
+			flex-wrap: wrap;
+		}
+
+		.stat-num {
+			font-size: 1.4rem;
+		}
+
+		.feature-header {
+			flex-wrap: wrap;
+			gap: 0.4rem 0.6rem;
+			padding: 0.75rem 1rem;
+		}
+
+		.feature-name {
+			flex-basis: 100%;
+		}
+
+		.feature-right {
+			flex-basis: 100%;
+			justify-content: flex-start;
+		}
+
+		.feature-file {
+			flex: 1;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.scenario-header {
+			flex-wrap: wrap;
+			gap: 0.4rem 0.6rem;
+			padding: 0.7rem 0.85rem;
+		}
+
+		.scenario-name {
+			flex-basis: 100%;
+			order: 1;
+		}
+
+		.scenario-tags {
+			flex-wrap: wrap;
+		}
+
+		.step-row {
+			flex-wrap: wrap;
+		}
+
+		.step-error,
+		.step-datatable {
+			margin-left: 0.5rem;
+		}
+
+		.replay-modal-header {
+			padding: 0.75rem 2.75rem;
+		}
+
+		.logs-body {
+			padding: 0.875rem 1rem;
+			font-size: 0.72rem;
+		}
+	}
 </style>

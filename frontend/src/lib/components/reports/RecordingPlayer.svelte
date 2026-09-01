@@ -9,6 +9,7 @@
 	import 'rrweb-player/dist/style.css';
 	import { fetchRecordingEvents } from '$lib/api/reports';
 	import { INSPECTOR_MIN_WIDTH } from '$lib/constants';
+	import { isCompact } from '$lib/stores/viewport';
 	import { computeRecordingSegments } from '$lib/utils/format';
 	import { describeElement } from '$lib/utils/inspectElement';
 	import StepsRail from './StepsRail.svelte';
@@ -28,6 +29,7 @@
 	export let inspecting = false;
 
 	const MIN_PLAYER_WIDTH = 480;
+	const MIN_PLAYER_WIDTH_COMPACT = 300;
 	const MIN_PLAYER_HEIGHT = 320;
 	const CONTROLLER_HEIGHT = 80;
 	// Covers rrweb's 50ms 'finish' scheduling delay after a paused seek, so it's
@@ -453,7 +455,8 @@
 	function buildPlayer(resumeState = null) {
 		buildGeneration += 1;
 		const stageRect = stage.getBoundingClientRect();
-		const width = Math.max(MIN_PLAYER_WIDTH, Math.floor(stageRect.width));
+		const minWidth = $isCompact ? MIN_PLAYER_WIDTH_COMPACT : MIN_PLAYER_WIDTH;
+		const width = Math.max(minWidth, Math.floor(stageRect.width));
 		// Subtract rrweb's controller height — MultiTabTimeline overlays into
 		// that same reserved strip, no extra space needed.
 		const height = Math.max(
@@ -620,7 +623,7 @@
 
 	<div
 		class="player-stage"
-		style:margin-right={inspecting ? `${INSPECTOR_MIN_WIDTH}px` : null}
+		style:margin-right={inspecting && !$isCompact ? `${INSPECTOR_MIN_WIDTH}px` : null}
 		bind:this={stage}
 	>
 		<div class="player-column">
@@ -953,5 +956,22 @@
 		font-size: 0.72rem;
 		line-height: 1;
 		white-space: nowrap;
+	}
+
+	/* Compact: order:-1 lifts the player above the Steps rail that precedes it in DOM. */
+	@media (max-width: 1024px) {
+		.recording-player {
+			flex-direction: column;
+			overflow: hidden;
+		}
+
+		.player-stage {
+			order: -1;
+			flex: 1 1 auto;
+			width: 100%;
+			min-height: 44vh;
+			align-items: center;
+			margin-right: 0 !important;
+		}
 	}
 </style>

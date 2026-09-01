@@ -138,4 +138,22 @@
 		flex-direction: column;
 		gap: 1rem;
 	}
+
+	@media (max-width: 640px) {
+		.backdrop {
+			align-items: flex-end;
+			padding: 0;
+		}
+
+		.panel {
+			max-width: none;
+			max-height: 88vh;
+			border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+			padding: 1.25rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+		}
+
+		.header {
+			margin-bottom: 1rem;
+		}
+	}
 </style>

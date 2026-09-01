@@ -334,6 +334,23 @@
 		user-select: none;
 	}
 
+	/* Compact: slides up over the Steps rail instead of flanking the player. */
+	@media (max-width: 1024px) {
+		.inspector-root {
+			inset: auto 0 0 0;
+			width: 100% !important;
+			height: 46vh;
+		}
+		.inspector-panel {
+			border-left: none;
+			border-top: 1px solid var(--border);
+			box-shadow: 0 -8px 24px rgb(0 0 0 / 0.14);
+		}
+		.resize-handle {
+			display: none;
+		}
+	}
+
 	.inspector-panel {
 		position: absolute;
 		inset: 0;

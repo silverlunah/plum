@@ -354,4 +354,20 @@
 		width: auto;
 		min-width: 180px;
 	}
+
+	@media (max-width: 640px) {
+		.filters {
+			flex-wrap: wrap;
+		}
+		.filters .field-input {
+			flex: 1 1 45%;
+			min-width: 0;
+		}
+		.feed li {
+			flex-wrap: wrap;
+		}
+		.feed time {
+			flex-basis: 100%;
+		}
+	}
 </style>
