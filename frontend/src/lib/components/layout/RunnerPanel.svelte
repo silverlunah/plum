@@ -1613,4 +1613,92 @@
 		text-align: center;
 		opacity: 0.7;
 	}
+
+	/* ── Mobile: the bar keeps only status + Run + expand; the control row
+	   folds into the drawer, revealed by the same expand toggle. ── */
+	@media (max-width: 640px) {
+		.bar {
+			flex-wrap: wrap;
+			height: auto;
+			min-height: 52px;
+			padding: 0.5rem 0.875rem;
+			gap: 0.5rem;
+		}
+
+		.flex-gap,
+		.flex-gap-sm {
+			display: none;
+		}
+
+		.bar-left {
+			flex: 1;
+			min-width: 0;
+		}
+
+		.run-btn {
+			order: 2;
+			height: 32px;
+		}
+
+		.expand-btn {
+			order: 3;
+		}
+
+		.bar-center {
+			order: 10;
+			flex-basis: 100%;
+			flex-wrap: wrap;
+			gap: 0.5rem 0.625rem;
+			padding-top: 0.625rem;
+			border-top: 1px solid var(--border);
+		}
+
+		.panel:not(.expanded) .bar-center {
+			display: none;
+		}
+
+		.ctrl-divider {
+			display: none;
+		}
+
+		.input-wrap,
+		.run-chip {
+			flex-basis: 100%;
+			max-width: none;
+		}
+
+		.tag-input {
+			width: 100%;
+		}
+
+		.bar-center > .ctrl-group {
+			flex: 1 1 calc(50% - 0.32rem);
+			min-width: 0;
+		}
+
+		.dropdown-wrap {
+			width: 100%;
+		}
+
+		.dropdown-trigger {
+			width: 100%;
+			justify-content: space-between;
+		}
+
+		.dropdown-menu {
+			max-width: calc(100vw - 1.75rem);
+		}
+
+		.notify-toggles {
+			flex-wrap: wrap;
+		}
+
+		.body {
+			padding: 0.625rem 0.875rem;
+		}
+
+		.run-card {
+			flex-wrap: wrap;
+		}
+	}
 </style>
