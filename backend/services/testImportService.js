@@ -109,7 +109,7 @@ async function importTestCases(projectId, payload, userId) {
 	// A just-imported case whose ID matches an @tag in a .feature file is
 	// automated even though no run has happened yet — reconcile the flag now so
 	// the badge shows immediately.
-	await reportService.syncAutomatedFromFeatures(projectId);
+	await reportService.syncAutomatedFromTests(projectId);
 
 	return result;
 }

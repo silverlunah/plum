@@ -172,12 +172,12 @@ function cleanupLegacyScreenshots() {
 
 async function syncAutomatedFlags(projectId) {
 	const reportService = require('../services/reportService');
-	if (projectId != null) return reportService.syncAutomatedFromFeatures(projectId).catch(() => {});
+	if (projectId != null) return reportService.syncAutomatedFromTests(projectId).catch(() => {});
 	// startup: every project
 	try {
 		const prisma = require('../services/prisma');
 		const projects = await prisma.project.findMany({ select: { id: true } });
-		for (const p of projects) await reportService.syncAutomatedFromFeatures(p.id).catch(() => {});
+		for (const p of projects) await reportService.syncAutomatedFromTests(p.id).catch(() => {});
 	} catch {}
 }
 
@@ -191,12 +191,19 @@ async function loadChokidar() {
 	}
 }
 
+// A change to any of these can add or remove a test id. Playwright's default
+// testMatch is **/*.@(spec|test).?(c|m)[jt]s?(x), so a project can legitimately
+// name its tests either way.
+const TEST_FILE_RE = /\.feature$|\.(spec|test)\.[cm]?[jt]sx?$/;
+
 function watchTestFiles(chokidar, testsDir) {
-	// chokidar v4+ has no globs and a custom testsPath puts features at any depth,
-	// so watch the whole projects/ tree and react only to `.feature` changes —
-	// skipping the node_modules/.git a checked-out repo brings.
+	// chokidar v4+ has no globs and a custom testsPath puts tests at any depth, so
+	// watch the whole projects/ tree and react only to test-file changes — skipping
+	// the node_modules/.git a checked-out repo brings.
 	const projectsDir = process.env.PROJECTS_DIR || path.join(path.dirname(testsDir), 'projects');
-	const targets = [path.join(testsDir, 'features'), projectsDir].filter(fs.existsSync);
+	// testsDir itself, not testsDir/features: a Playwright project has no features/
+	// folder, so watching only that missed every spec file.
+	const targets = [testsDir, projectsDir].filter(fs.existsSync);
 	if (targets.length === 0) return;
 
 	let debounce = null;
@@ -206,7 +213,7 @@ function watchTestFiles(chokidar, testsDir) {
 			ignored: (p) => /(^|[/\\])(node_modules|\.git)([/\\]|$)/.test(p)
 		})
 		.on('all', (event, filePath) => {
-			if (!filePath.endsWith('.feature')) return;
+			if (!TEST_FILE_RE.test(filePath)) return;
 			clearTimeout(debounce);
 			debounce = setTimeout(() => {
 				console.log(`📝 Tests changed (${event}: ${path.basename(filePath)})`);

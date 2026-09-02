@@ -73,7 +73,7 @@ const updateProject = async (
 		// cases are automated now that the feature files resolve elsewhere.
 		await require('../lib/projectPaths').refresh();
 		require('./reportService')
-			.syncAutomatedFromFeatures(projectId)
+			.syncAutomatedFromTests(projectId)
 			.catch(() => {});
 	}
 

@@ -679,16 +679,25 @@ const pruneOldReports = async (retentionDays) => {
 	return prisma.report.deleteMany({ where: { createdAt: { lt: cutoff } } });
 };
 
-const { featuresDir } = require('../lib/testsRoot');
-
-async function syncAutomatedFromFeatures(projectId) {
+/**
+ * Marks a repository case automated when a test in the project carries its id as a
+ * tag. Reads the project's discovered tests rather than scanning .feature text: a
+ * Playwright project has no features/ directory, so the old scan returned early and
+ * no case in such a project was ever marked automated.
+ */
+async function syncAutomatedFromTests(projectId) {
 	try {
-		const dir = featuresDir(projectId);
-		if (!fs.existsSync(dir)) return;
+		const { getTestSuites } = require('./testService');
+		const { suites } = getTestSuites(projectId);
 		const tagSet = new Set();
-		for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.feature'))) {
-			const content = fs.readFileSync(path.join(dir, file), 'utf8');
-			for (const m of content.matchAll(/@(\S+)/g)) tagSet.add(m[1]);
+		const add = (id) => {
+			for (const one of Array.isArray(id) ? id : [id]) {
+				if (one) tagSet.add(String(one).replace(/^@/, ''));
+			}
+		};
+		for (const suite of suites) {
+			add(suite.suiteId);
+			for (const test of suite.tests) add(test.id);
 		}
 		if (tagSet.size === 0) return;
 		await prisma.testCase.updateMany({
@@ -700,7 +709,7 @@ async function syncAutomatedFromFeatures(projectId) {
 			data: { isAutomated: true }
 		});
 	} catch (e) {
-		console.error('[sync] syncAutomatedFromFeatures failed:', e.message);
+		console.error('[sync] syncAutomatedFromTests failed:', e.message);
 	}
 }
 
@@ -713,7 +722,7 @@ module.exports = {
 	saveReport,
 	saveCombinedReport,
 	attachDurationToLatestReport,
-	syncAutomatedFromFeatures,
+	syncAutomatedFromTests,
 	deleteReport,
 	deleteReports,
 	pruneOldReports,
