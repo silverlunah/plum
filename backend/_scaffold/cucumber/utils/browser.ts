@@ -181,7 +181,9 @@ export async function markStepStart(stepName: string): Promise<void> {
  * server looks for.
  */
 export async function flushRecordings(
-	attach: (data: Buffer, mime: string) => Promise<void>
+	// Cucumber's `this.attach` is an intersection of overloads whose Buffer form
+	// returns void, so requiring Promise<void> here matched none of them.
+	attach: (data: Buffer, mime: string) => void | Promise<void>
 ): Promise<void> {
 	if (_liveRRwebTimer) {
 		clearInterval(_liveRRwebTimer);
