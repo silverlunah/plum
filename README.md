@@ -31,7 +31,7 @@ plum init                       # takes no arguments — scaffolds ./tests/
 # edit tests/.env → BASE_URL=https://your-app.com
 
 npx playwright test             # runs your tests locally — no Docker, no database
-plum create-test                # Cucumber projects: scaffold a .feature + Page + Steps
+plum create-test                # scaffold a new test + page object for this project
 ```
 
 `plum init` creates a self-contained `tests/` folder — feature files, steps, page objects, `.env`, `tsconfig.json`, `.vscode/`, `package.json` — the same layout a project has on the server. Open the `tests/` folder in your editor.
@@ -112,7 +112,7 @@ Full documentation is available at:
 | `plum node delete <name>`    | Stop the node, delete its local config, and unregister it from the server                                                                        |
 | `plum node reconfig [name]`  | Re-enter a node's settings and re-register, without starting it                                                                                  |
 | `plum create-step`           | Interactively scaffold a new step definition                                                                                                     |
-| `plum create-test`           | Cucumber projects only: scaffold a full feature (`.feature` + Page + Steps)                                                                      |
+| `plum create-test`           | Scaffold a new test and page object — a `.spec.ts` for Playwright, a `.feature` + Steps for Cucumber. `--name <Name>` skips the prompt           |
 | `plum manage-nodes`          | Open the interactive node management menu                                                                                                        |
 
 ---

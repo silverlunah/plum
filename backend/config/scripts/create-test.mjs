@@ -33,9 +33,56 @@ function stripPageSuffix(pascal) {
 	return pascal.endsWith('Page') ? pascal.slice(0, -4) : pascal;
 }
 
+// The folder is the source of truth: this script runs inside a project and has no
+// database to ask.
+const isPlaywright = fs.existsSync(path.join(testsRoot, 'playwright.config.ts'));
+
 /* ------------------------------------------------------------------ */
 /*  File generators                                                    */
 /* ------------------------------------------------------------------ */
+
+function generateSpec(pascal, base, suiteTag, testTag) {
+	return `import { test } from '../fixtures/plum';
+import { ${base}Page } from '../pages/${base}Page';
+
+test.describe('${pascal}', { tag: '${suiteTag}' }, () => {
+	test.describe.configure({ mode: 'parallel' });
+
+	let ${base.toLowerCase()}: ${base}Page;
+
+	test.beforeEach(async ({ page, step }) => {
+		${base.toLowerCase()} = new ${base}Page(page);
+		await step('I am on the ${pascal} page', () => ${base.toLowerCase()}.goTo());
+	});
+
+	test('Example test', { tag: '${testTag}' }, async ({ step }) => {
+		await step('I perform an action', () => ${base.toLowerCase()}.performAction());
+		await step('I should see the expected result', () => ${base.toLowerCase()}.verifyResult());
+	});
+});
+`;
+}
+
+function generatePlaywrightPage(base) {
+	return `import { Page } from '@playwright/test';
+
+export class ${base}Page {
+	constructor(private readonly page: Page) {}
+
+	async goTo() {
+		await this.page.goto(process.env.BASE_URL as string);
+	}
+
+	async performAction() {
+		// TODO: implement
+	}
+
+	async verifyResult() {
+		// TODO: implement
+	}
+}
+`;
+}
 
 function generateFeature(pascal, kebab, suiteTag, testTag) {
 	return `${suiteTag}
@@ -93,15 +140,27 @@ Then('I should see the expected result', async () => {
 async function main() {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Create Test  ')));
 
-	const rawName = await clack.text({
-		message: 'Feature name',
-		placeholder: 'Checkout, LoginPage, Cart…',
-		hint: 'Creates a .feature, Steps.ts and Page.ts',
-		validate: (v) => (!v.trim() ? 'Feature name is required' : undefined)
-	});
+	// --name skips the prompt, so this is scriptable as well as interactive.
+	const flagIndex = process.argv.indexOf('--name');
+	const flagName = flagIndex !== -1 ? process.argv[flagIndex + 1] : undefined;
+
+	const rawName =
+		flagName ??
+		(await clack.text({
+			message: isPlaywright ? 'Test name' : 'Feature name',
+			placeholder: 'Checkout, LoginPage, Cart…',
+			hint: isPlaywright
+				? 'Creates a .spec.ts and Page.ts'
+				: 'Creates a .feature, Steps.ts and Page.ts',
+			validate: (v) => (!v.trim() ? 'A name is required' : undefined)
+		}));
 	if (clack.isCancel(rawName)) {
 		clack.cancel('Cancelled.');
 		process.exit(0);
+	}
+	if (!String(rawName).trim()) {
+		clack.log.error('A name is required — pass one with --name, or run without flags.');
+		process.exit(1);
 	}
 
 	const pascal = toPascalCase(rawName.trim());
@@ -110,11 +169,13 @@ async function main() {
 	const suiteTag = `@suite-${kebab}`;
 	const testTag = `@test-${kebab}-1`;
 
+	const specPath = path.join(testsRoot, 'specs', `${pascal}.spec.ts`);
 	const featurePath = path.join(testsRoot, 'features', `${pascal}.feature`);
 	const pagePath = path.join(testsRoot, 'pages', `${base}Page.ts`);
 	const stepsPath = path.join(testsRoot, 'step_definitions', `${pascal}Steps.ts`);
 
-	const conflicts = [featurePath, pagePath, stepsPath].filter(fs.existsSync);
+	const planned = isPlaywright ? [specPath, pagePath] : [featurePath, pagePath, stepsPath];
+	const conflicts = planned.filter(fs.existsSync);
 	if (conflicts.length > 0) {
 		clack.log.error('The following files already exist:');
 		conflicts.forEach((f) => clack.log.warn(`  ${path.relative(process.cwd(), f)}`));
@@ -125,33 +186,53 @@ async function main() {
 	const s = clack.spinner();
 	s.start('Generating files…');
 
-	fs.mkdirSync(path.join(testsRoot, 'features'), { recursive: true });
 	fs.mkdirSync(path.join(testsRoot, 'pages'), { recursive: true });
-	fs.mkdirSync(path.join(testsRoot, 'step_definitions'), { recursive: true });
 
-	fs.writeFileSync(featurePath, generateFeature(pascal, kebab, suiteTag, testTag), 'utf8');
-	fs.writeFileSync(pagePath, generatePage(base), 'utf8');
-	fs.writeFileSync(stepsPath, generateSteps(pascal, base, kebab), 'utf8');
+	if (isPlaywright) {
+		fs.mkdirSync(path.join(testsRoot, 'specs'), { recursive: true });
+		fs.writeFileSync(specPath, generateSpec(pascal, base, suiteTag, testTag), 'utf8');
+		fs.writeFileSync(pagePath, generatePlaywrightPage(base), 'utf8');
+	} else {
+		fs.mkdirSync(path.join(testsRoot, 'features'), { recursive: true });
+		fs.mkdirSync(path.join(testsRoot, 'step_definitions'), { recursive: true });
+		fs.writeFileSync(featurePath, generateFeature(pascal, kebab, suiteTag, testTag), 'utf8');
+		fs.writeFileSync(pagePath, generatePage(base), 'utf8');
+		fs.writeFileSync(stepsPath, generateSteps(pascal, base, kebab), 'utf8');
+	}
 
 	s.stop(pc.green('✓ Files created'));
 
 	const rel = (p) => path.relative(process.cwd(), p);
 
+	const runCommand = isPlaywright
+		? `npx playwright test --grep ${testTag}`
+		: `npx cucumber-js --tags ${testTag}`;
+
 	clack.note(
 		[
-			`${pc.dim('Feature:')}  ${pc.white(rel(featurePath))}`,
+			...(isPlaywright
+				? [`${pc.dim('Spec:')}     ${pc.white(rel(specPath))}`]
+				: [
+						`${pc.dim('Feature:')}  ${pc.white(rel(featurePath))}`,
+						`${pc.dim('Steps:')}    ${pc.white(rel(stepsPath))}`
+					]),
 			`${pc.dim('Page:')}     ${pc.white(rel(pagePath))}`,
-			`${pc.dim('Steps:')}    ${pc.white(rel(stepsPath))}`,
 			'',
 			`${pc.dim('Suite tag:')} ${pc.cyan(suiteTag)}`,
 			`${pc.dim('Test tag:')}  ${pc.cyan(testTag)}`,
 			'',
-			`${pc.bold('Run with:')}  ${pc.cyan(`plum run-test ${testTag}`)}`
+			`${pc.bold('Run with:')}  ${pc.cyan(runCommand)}`
 		].join('\n'),
 		`${pascal} scaffold`
 	);
 
-	clack.outro(pc.magenta('Done! Fill in your scenarios and implement the page methods.'));
+	clack.outro(
+		pc.magenta(
+			isPlaywright
+				? 'Done! Fill in the steps and implement the page methods.'
+				: 'Done! Fill in your scenarios and implement the page methods.'
+		)
+	);
 }
 
 main().catch((err) => {

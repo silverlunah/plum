@@ -33,9 +33,9 @@ const legacyRootEnvPath = path.join(process.cwd(), '.env');
 const preferring = (primary, fallback) =>
 	fs.existsSync(primary) || !fs.existsSync(fallback) ? primary : fallback;
 
-// Both generators emit Gherkin — a .feature file and step definitions — which a
-// Playwright project has no use for. The folder is the source of truth here: these
-// commands run inside a project directory, with no database to ask.
+// A step definition only exists in Cucumber; create-test handles both frameworks
+// itself. The folder is the source of truth here: this runs inside a project
+// directory, with no database to ask.
 function refuseUnlessGherkin(command) {
 	const root = resolveLocalTestsRoot() ?? userTestsPath;
 	if (fs.existsSync(path.join(root, 'playwright.config.ts'))) {
@@ -1197,8 +1197,8 @@ switch (command) {
 					'   ```',
 					'3. **Write your first test** — scaffold a full feature or generate a single step:',
 					'   ```bash',
-					'   plum create-test   # scaffold .feature + Page.ts + Steps.ts',
-					'   plum create-step   # add a single step to an existing file',
+					'   plum create-test   # scaffold a new test, page object and steps',
+					'   plum create-step   # Cucumber: add a step to an existing file',
 					'   ```',
 					'4. **Start the full UI** (requires Docker) to trigger tests, view reports, and manage your test repository:',
 					'   ```bash',
@@ -1220,7 +1220,8 @@ switch (command) {
 					'| `plum server start` | Start the full UI via Docker (interactive setup) |',
 					'| `plum server reconfig` | Change server URL/ports without starting |',
 					'| `plum server stop` | Stop the server |',
-					'| `plum create-step` | Interactively generate a new step definition |',
+					'| `plum create-test` | Scaffold a new test and page object |',
+					'| `plum create-step` | Cucumber only: generate a new step definition |',
 					'| `plum node start <name>` | Register a node and start it here |',
 					'| `plum node list` | List this machine’s nodes |',
 					'',
@@ -1321,7 +1322,7 @@ switch (command) {
 				`  ${pc.cyan('plum server start')}`,
 				'',
 				`${pc.bold('Generate tests')}`,
-				`  ${pc.cyan('plum create-test')}         scaffold a new feature`,
+				`  ${pc.cyan('plum create-test')}         scaffold a new test`,
 				`  ${pc.cyan('plum create-step')}         add a step definition`
 			].join('\n'),
 			'Next steps'
@@ -1507,9 +1508,8 @@ switch (command) {
 	}
 
 	case 'create-test': {
-		refuseUnlessGherkin('create-test');
 		const createTestScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-test.mjs');
-		execFileSync(process.execPath, [createTestScript], {
+		execFileSync(process.execPath, [createTestScript, ...process.argv.slice(3)], {
 			cwd: process.cwd(),
 			stdio: 'inherit',
 			env: {
