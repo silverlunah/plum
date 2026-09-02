@@ -1124,7 +1124,11 @@ function readNodeSecretFromPrimary() {
 			)
 				.toString()
 				.trim();
-			if (secret) return secret;
+			// cleanSecret because the fallback `cat` can return a file that a past
+			// licence-header sweep prepended to. The server reads it correctly either
+			// way, but an operator copying this line for a remote node would not.
+			const cleaned = cleanSecret(secret);
+			if (cleaned) return cleaned;
 		} catch {}
 	}
 	return null;
