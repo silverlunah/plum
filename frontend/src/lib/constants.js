@@ -59,6 +59,6 @@ export const TABLET_MAX = 1024;
 
 export const BUILTIN_RUNNER_ID = 'built-in';
 
-export const DOCS_URL = 'https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd';
+export const DOCS_URL = 'https://github.com/silverlunah/plum/wiki';
 export const PLAYWRIGHT_URL = 'https://playwright.dev';
 export const CUCUMBER_URL = 'https://cucumber.io';
