@@ -540,11 +540,14 @@ function installTestsProjectDeps(testsPath) {
 		return;
 	}
 	try {
-		clack.log.step('Downloading browsers (chromium, firefox)...');
-		execSync('npx playwright install chromium firefox', { cwd: testsPath, stdio: 'inherit' });
+		clack.log.step('Downloading browsers...');
+		execSync('npx playwright install chromium firefox webkit', {
+			cwd: testsPath,
+			stdio: 'inherit'
+		});
 	} catch {
 		clack.log.warn(
-			'Could not download browsers. Run `npx playwright install chromium firefox` in tests/.'
+			'Could not download browsers. Run `npx playwright install chromium firefox webkit` in tests/.'
 		);
 	}
 }
