@@ -5,6 +5,11 @@
 
 // Plum's session recording. Import `test` from here instead of @playwright/test
 // and your runs get report replay and step-by-step results.
+//
+// `test` is the only thing you have to take from this file. Everything else —
+// expect, Page, Locator, devices — imports from @playwright/test as usual, and
+// adding a Playwright API to your tests never means editing this file. `expect` is
+// re-exported at the bottom purely so a spec can take both from one import.
 
 import { test as base, BrowserContext, Page, TestInfo } from '@playwright/test';
 import * as fs from 'fs';

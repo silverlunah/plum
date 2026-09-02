@@ -13,7 +13,15 @@ and merges new tests straight in.
    without them is reported as a single pass or fail.
 
 Import `test` from `fixtures/plum` rather than `@playwright/test` — that is what
-records the session for report replay. Everything else is ordinary Playwright.
+records the session for report replay. It is the only import that changes:
+`expect`, `Page`, `Locator` and everything else come from `@playwright/test` as
+usual, whether or not you use page objects, and you never have to edit the fixture
+to use a new Playwright API.
+
+```ts
+import { expect, type Page } from '@playwright/test';
+import { test } from '../fixtures/plum';
+```
 
 The example suite covers the four shapes you are likely to need: a basic test, a
 negative test, a parameterised one (the equivalent of a Scenario Outline, one test
