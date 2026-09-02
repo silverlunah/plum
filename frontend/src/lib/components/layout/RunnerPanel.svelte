@@ -13,6 +13,7 @@
 		runnerConfig,
 		panelExpanded,
 		builtInEnabled,
+		resolveSelectedRunners,
 		triggerRun,
 		cancelRun,
 		reportsVersion,
@@ -81,6 +82,10 @@
 	import { clickOutside } from '$lib/actions/clickOutside';
 
 	let availableRunners = [];
+	// Gates the builtInEnabled subscription: it must not reconcile the saved
+	// selection until the real toggle state and node list have both loaded, or
+	// its synchronous first fire would clobber a valid saved selection.
+	let runnersReady = false;
 	// { [runnerId]: 'checking' | 'up' | 'down' }, the runner list is DB-only and
 	// carries no health, so its dots would otherwise always read healthy.
 	let nodePings = {};
@@ -106,23 +111,30 @@
 			const exp = localStorage.getItem('plum:panelExpanded');
 			if (exp !== null) panelExpanded.set(exp === 'true');
 		} catch {}
-		fetchBuiltInEnabled()
-			.then(({ builtInRunnerEnabled }) => builtInEnabled.set(builtInRunnerEnabled))
-			.catch(() => {});
-
-		fetchRunners()
-			.then((r) => {
-				availableRunners = r ?? [];
-				// Drop any saved selection pointing at runners that no longer exist,
-				// so a deleted runner can't linger in the selection and break runs.
-				const validIds = new Set([BUILTIN_RUNNER_ID, ...availableRunners.map((x) => x.id)]);
-				runnerConfig.update((c) => {
-					const pruned = c.selectedRunners.filter((id) => validIds.has(id));
-					return { ...c, selectedRunners: pruned.length > 0 ? pruned : [BUILTIN_RUNNER_ID] };
-				});
-				pingNodes();
-			})
-			.catch(() => {});
+		// Resolve the toggle state and the node list together, then reconcile the
+		// saved selection against both. Done piecemeal, a race between the two
+		// fetches could re-check the built-in runner even with its toggle off.
+		Promise.all([
+			fetchBuiltInEnabled()
+				.then((r) => r.builtInRunnerEnabled)
+				.catch(() => false),
+			fetchRunners()
+				.then((r) => r ?? [])
+				.catch(() => [])
+		]).then(([enabled, runners]) => {
+			availableRunners = runners;
+			runnersReady = true;
+			builtInEnabled.set(enabled);
+			runnerConfig.update((c) => ({
+				...c,
+				selectedRunners: resolveSelectedRunners(
+					c.selectedRunners,
+					enabled,
+					runners.map((r) => r.id)
+				)
+			}));
+			pingNodes();
+		});
 
 		fetchIntegrations()
 			.then((i) => (integrations = i))
@@ -163,15 +175,15 @@
 			} catch {}
 		});
 		_unsubBuiltIn = builtInEnabled.subscribe((v) => {
-			runnerConfig.update((c) => {
-				if (!v && c.selectedRunners.includes(BUILTIN_RUNNER_ID)) {
-					const others = c.selectedRunners.filter((r) => r !== BUILTIN_RUNNER_ID);
-					const fallback =
-						others.length > 0 ? others : availableRunners[0] ? [availableRunners[0].id] : [];
-					return { ...c, selectedRunners: fallback };
-				}
-				return c;
-			});
+			if (!runnersReady) return;
+			runnerConfig.update((c) => ({
+				...c,
+				selectedRunners: resolveSelectedRunners(
+					c.selectedRunners,
+					v,
+					availableRunners.map((r) => r.id)
+				)
+			}));
 		});
 
 		const s = io(API_BASE, {

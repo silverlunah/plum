@@ -31,6 +31,7 @@
 	import { setProjects, activeProject, activeFramework } from '$lib/stores/project';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
+	import { isMobile } from '$lib/stores/viewport';
 	import { TIMEZONES } from '$lib/utils/timezones';
 	import {
 		API_BASE,
@@ -212,8 +213,14 @@
 		(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('plum:settings:section')) ||
 		'project';
 
+	// On mobile the sidebar and content are separate views (a drill-down), so
+	// picking a section swaps to the content; the back control returns to the list.
+	// A section deep-link opens straight to the content.
+	let mobileShowContent = VALID_SECTIONS.has(querySection);
+
 	function setSection(s) {
 		section = s;
+		mobileShowContent = true;
 		try {
 			sessionStorage.setItem('plum:settings:section', s);
 		} catch {}
@@ -572,7 +579,11 @@
 	<UpdateBanner />
 {/if}
 
-<div class="settings-layout">
+<div
+	class="settings-layout"
+	class:mobile-list={$isMobile && !mobileShowContent}
+	class:mobile-content={$isMobile && mobileShowContent}
+>
 	<!-- Left sidebar -->
 	<aside class="settings-sidebar">
 		<p class="sidebar-section">{NAV_SECTION_GENERAL}</p>
@@ -620,6 +631,22 @@
 
 	<!-- Right content -->
 	<div class="settings-content">
+		<button class="mobile-back" on:click={() => (mobileShowContent = false)}>
+			<svg
+				width="14"
+				height="14"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<polyline points="15 18 9 12 15 6" />
+			</svg>
+			{HEADING}
+		</button>
+
 		<!-- PROJECT -->
 		{#if section === 'project'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
@@ -1413,6 +1440,24 @@
 		min-width: 0;
 	}
 
+	/* Shown only in the mobile drill-down (see max-width: 640px). */
+	.mobile-back {
+		display: none;
+		align-items: center;
+		gap: 0.4rem;
+		margin-bottom: 1.25rem;
+		padding: 0;
+		background: none;
+		border: none;
+		color: var(--text-muted);
+		font-family: var(--font-body);
+		font-size: 0.875rem;
+		cursor: pointer;
+	}
+	.mobile-back:hover {
+		color: var(--text);
+	}
+
 	.content-section {
 		display: flex;
 		flex-direction: column;
@@ -1632,9 +1677,17 @@
 			position: static;
 		}
 
-		.settings-sidebar nav {
-			flex-direction: row;
-			flex-wrap: wrap;
+		.settings-layout.mobile-list .settings-content,
+		.settings-layout.mobile-content .settings-sidebar {
+			display: none;
+		}
+
+		.settings-layout.mobile-content .mobile-back {
+			display: inline-flex;
+		}
+
+		.sidebar-item {
+			padding: 0.7rem 0.75rem;
 		}
 
 		.field-label {

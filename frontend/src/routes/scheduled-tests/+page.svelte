@@ -14,7 +14,12 @@
 	} from '$lib/api/schedules';
 	import { fetchRunners, fetchBuiltInEnabled } from '$lib/api/runners';
 	import { fetchIntegrations } from '$lib/api/settings';
-	import { backgroundRuns, findActiveCronRun, builtInEnabled } from '$lib/stores/runner';
+	import {
+		backgroundRuns,
+		findActiveCronRun,
+		builtInEnabled,
+		resolveSelectedRunners
+	} from '$lib/stores/runner';
 	import { BROWSERS, BUILTIN_RUNNER_ID } from '$lib/constants';
 	import {
 		BUILTIN_RUNNER_LABEL,
@@ -133,11 +138,11 @@
 
 	// Don't default a new job to the built-in runner when it's off, reach for a
 	// node instead (still falls back to built-in if that's genuinely all there is).
-	$: fallbackRunnerIds = $builtInEnabled
-		? [BUILTIN_RUNNER_ID]
-		: availableRunners[0]
-			? [availableRunners[0].id]
-			: [BUILTIN_RUNNER_ID];
+	$: fallbackRunnerIds = resolveSelectedRunners(
+		[],
+		$builtInEnabled,
+		availableRunners.map((r) => r.id)
+	);
 
 	function toggleFormRunner(id) {
 		const current = form.runnerIds;

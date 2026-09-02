@@ -464,7 +464,9 @@
 		margin-top: -2.5rem;
 		margin-bottom: -5rem;
 		padding-bottom: 5rem;
-		height: calc(100vh - 56px);
+		/* dvh, not vh: on mobile the browser's collapsing toolbar makes 100vh
+		   taller than the visible viewport, pushing the terminal off-screen. */
+		height: calc(100dvh - 56px);
 		box-sizing: border-box;
 		display: flex;
 		flex-direction: column;
@@ -824,8 +826,10 @@
 
 		.run-view {
 			grid-template-columns: 1fr;
-			grid-template-rows: minmax(44vh, 1fr) minmax(28vh, auto);
-			overflow-y: auto;
+			/* Bounded rows (minmax(0, …), not auto) so the terminal panel gets a
+			   real height and scrolls internally instead of growing the page. */
+			grid-template-rows: minmax(0, 40dvh) minmax(0, 1fr);
+			overflow: hidden;
 		}
 
 		.stream-panel {
