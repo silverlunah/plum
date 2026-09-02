@@ -387,18 +387,26 @@ function runLane(run, io, emit, lane, chunkIds, retrySplit, framework, laneLogs)
 						baseUrl: run.baseUrl,
 						onLog,
 						io
-					}).then(({ code, raw }) => ({
-						code,
-						rawJson: JSON.parse(
-							raw ??
-								makeSyntheticFailReport(
-									run.projectId,
-									lane.name,
-									chunkIds,
-									'process exited with error'
-								)
-						)
-					}))
+					}).then(({ code, raw }) => {
+						// The built-in lane of a distributed run needs the same per-framework
+						// adaptation the single built-in path and the dispatched lanes get.
+						// Without it a Playwright report reaches the retry merge as an object.
+						const parsed = raw
+							? parseLaneReport(framework, raw)
+							: {
+									rawJson: JSON.parse(
+										makeSyntheticFailReport(
+											run.projectId,
+											lane.name,
+											chunkIds,
+											'process exited with error'
+										)
+									),
+									attempts: null
+								};
+						warnIfNothingRan(parsed.rawJson, currentTag, onLog);
+						return { code, rawJson: parsed.rawJson, attempts: parsed.attempts };
+					})
 			: (currentTag) =>
 					new Promise((resolve) => {
 						runnerService.dispatchAndPoll(
