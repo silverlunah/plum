@@ -8,7 +8,7 @@ ARG NODE_IMAGE=node:22-alpine
 FROM ${NODE_IMAGE} AS build
 WORKDIR /app
 
-COPY .npmrc package.json package-lock.json ./
+COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY svelte.config.js vite.config.js jsconfig.json ./
@@ -27,7 +27,7 @@ FROM ${NODE_IMAGE}
 WORKDIR /app
 ENV NODE_ENV=production
 
-COPY .npmrc package.json package-lock.json ./
+COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 # Baked fallback for deployments that prefer to fix the API URL at build time.

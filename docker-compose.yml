@@ -35,7 +35,6 @@ services:
       - 'host.docker.internal:host-gateway'
     volumes:
       - ./backend/reports:/app/reports
-      - ./backend/tests:/app/tests:rw
     depends_on:
       postgres:
         condition: service_healthy
