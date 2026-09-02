@@ -201,7 +201,8 @@ model Project {
   // changeable afterwards — the scaffold, the runner command and the report
   // shape all derive from it, so switching would orphan every existing test.
   // Deliberately absent from every update path; see settingsService.updateProject.
-  framework            String       @default("cucumber")
+  // The default is what a NEW project gets; existing rows keep their own value.
+  framework            String       @default("playwright")
 
   members  ProjectMember[]
   suites   TestSuite[]

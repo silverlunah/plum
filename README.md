@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  Self-hosted QA platform for teams doing manual <em>and</em> automated testing. Comes with a full test-case repository alongside a ready-to-use <a href="https://playwright.dev">Playwright</a> + <a href="https://cucumber.io">Cucumber</a> automation environment.<br/><br/>
-Author tests in Gherkin, run them from the CLI or UI, track manual test runs, view and export reports, schedule jobs, and get Discord / Slack notifications.
+  Self-hosted QA platform for teams doing manual <em>and</em> automated testing. Comes with a full test-case repository alongside a ready-to-use <a href="https://playwright.dev">Playwright</a> automation environment, or <a href="https://cucumber.io">Cucumber</a> if your team writes Gherkin.<br/><br/>
+Each project picks Playwright or Cucumber when it's created. Run tests from the CLI or UI, track manual test runs, view and export reports, schedule jobs, and get Discord / Slack notifications.
 </p>
 
 ---
@@ -31,7 +31,7 @@ plum init                       # takes no arguments — scaffolds ./tests/
 # edit tests/.env → BASE_URL=https://your-app.com
 
 npx playwright test             # runs your tests locally — no Docker, no database
-plum create-test                # scaffold a new .feature + Page + Steps
+plum create-test                # Cucumber projects: scaffold a .feature + Page + Steps
 ```
 
 `plum init` creates a self-contained `tests/` folder — feature files, steps, page objects, `.env`, `tsconfig.json`, `.vscode/`, `package.json` — the same layout a project has on the server. Open the `tests/` folder in your editor.
@@ -48,13 +48,13 @@ plum server start
 
 `plum server start` creates the `projects/` folder (the bind-mount target) and the Docker config in the current directory. Open **http://localhost:3002**, complete first-run setup, and create your organisation, first project, and owner account. The server scaffolds each project's `projects/<slug>/tests/` folder itself when you add the project in **Settings → Project** — you don't run `plum init` or `plum project init` for that (`plum project init "<name>"` only re-creates a folder the server lost).
 
-If a project's repo keeps its Cucumber tests deeper than a top-level `tests/` (e.g. `apps/web/e2e/`), set that subpath in **Settings → Project → Tests folder**. It's always relative to `projects/<slug>/`; a project with a custom path manages that folder itself and is never scaffolded.
+If a project's repo keeps its tests deeper than a top-level `tests/` (e.g. `apps/web/e2e/`), set that subpath in **Settings → Project → Tests folder**. It's always relative to `projects/<slug>/`; a project with a custom path manages that folder itself and is never scaffolded.
 
 The stack's containers use `restart: unless-stopped`, so the server comes back after a reboot once Docker itself starts. To bring runner nodes back too, register them with `plum node start <name> --boot` (or answer the prompt).
 
 ### Writing tests (no server)
 
-`plum init` scaffolds a self-contained `tests/` folder — feature files, step definitions, page objects, `tests/.env`, `tests/tsconfig.json`, `tests/.vscode/`, `tests/package.json` — and installs the Playwright/Cucumber toolchain. Open the `tests/` folder in your editor; it's the same layout a project folder has on the server, so a local project drops straight into `projects/<slug>/tests/`. Nothing else is required to write and run tests on your machine.
+`plum init` scaffolds a self-contained `tests/` folder for the framework this install defaults to — specs (or feature files and step definitions), page objects, the runner config, `tests/.env`, `tests/tsconfig.json`, `tests/.vscode/`, `tests/package.json` — and installs the toolchain. Open the `tests/` folder in your editor; it's the same layout a project folder has on the server, so a local project drops straight into `projects/<slug>/tests/`. Nothing else is required to write and run tests on your machine.
 
 ### For contributors
 
@@ -112,7 +112,7 @@ Full documentation is available at:
 | `plum node delete <name>`    | Stop the node, delete its local config, and unregister it from the server                                                                        |
 | `plum node reconfig [name]`  | Re-enter a node's settings and re-register, without starting it                                                                                  |
 | `plum create-step`           | Interactively scaffold a new step definition                                                                                                     |
-| `plum create-test`           | Interactively scaffold a full feature (`.feature` + Page + Steps)                                                                                |
+| `plum create-test`           | Cucumber projects only: scaffold a full feature (`.feature` + Page + Steps)                                                                      |
 | `plum manage-nodes`          | Open the interactive node management menu                                                                                                        |
 
 ---
@@ -151,12 +151,25 @@ npm run manage-nodes         # open the node management menu
 
 ### Test file locations
 
+A Playwright project:
+
 ```
-backend/tests/
-  features/          — Gherkin .feature files
-  step_definitions/  — TypeScript step implementations
-  pages/             — Page Object Models (optional)
-  utils/             — Browser setup, hooks, helpers
+projects/<slug>/tests/
+  playwright.config.ts — yours: browsers, timeouts, traces, reporters
+  specs/               — *.spec.ts test files
+  pages/               — Page Object Models (optional)
+  fixtures/plum.ts     — session recording for report replay
+```
+
+A Cucumber project:
+
+```
+projects/<slug>/tests/
+  cucumber.js          — yours: paths, requires, formatters
+  features/            — Gherkin .feature files
+  step_definitions/    — TypeScript step implementations
+  pages/               — Page Object Models (optional)
+  utils/               — browser setup, hooks, helpers
 ```
 
 > After any backend dependency or schema change, rebuild: `npm run docker:up`

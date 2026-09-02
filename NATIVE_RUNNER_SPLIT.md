@@ -192,8 +192,15 @@ per-project deps" mostly evaporates — nodes keep using `NODE_PATH`.
       and payload shape the poller expects.
       NOT verified: the live page itself (`/live/<id>`) has never been opened against
       a running Playwright job — only the files it feeds on have been checked.
-- [ ] **7. Flip the default to Playwright** — last, so new projects never land in a
-      mode whose ingestion and report UI are unfinished.
+- [x] **7. Flip the default to Playwright** — DONE. `ALTER COLUMN ... SET DEFAULT`
+      alone, so no existing row moves; verified on a throwaway database that
+      pre-existing projects keep their framework, a new project with none given gets
+      `playwright`, and `cucumber` is still explicitly choosable. Applied to the live
+      database: `default` is still cucumber, the column default is playwright.
+      `Report.framework` keeps its `cucumber` default on purpose — saveReport always
+      writes it explicitly, so the default only reaches rows predating the column.
+      README reframed around the per-project choice, with a layout section for each
+      framework.
 
 ## Decisions still needed
 
