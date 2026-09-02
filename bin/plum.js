@@ -350,6 +350,205 @@ function scaffoldProjectDir(testsDir, framework) {
 	if (!fs.existsSync(env)) fs.copyFileSync(path.join(testsDir, '.env.example'), env);
 }
 
+// The scaffold's own README is server-oriented, so `plum init` writes this one
+// for a standalone project. Framework-specific throughout: a Playwright project
+// has no features/ or step_definitions/, and telling its owner otherwise is the
+// first thing they read.
+function buildTestsReadme(framework) {
+	const pw = framework === 'playwright';
+	const run = pw ? 'npx playwright test' : 'npx cucumber-js';
+	const byTag = pw ? 'npx playwright test --grep @tag' : 'npx cucumber-js --tags @tag';
+	const byId = pw ? 'npx playwright test --grep @TC-001' : 'npx cucumber-js --tags @TC-001';
+	const bySuite = pw ? 'npx playwright test --grep @TS-001' : 'npx cucumber-js --tags @TS-001';
+
+	const commands = pw
+		? [
+				'| `npx playwright test` | Run all tests locally |',
+				'| `npx playwright test --grep @tag` | Run tests matching a tag |',
+				'| `npx playwright test --workers N` | Run tests across N parallel workers |',
+				'| `npx playwright test --project=firefox` | Run in a specific browser |',
+				'| `npx playwright test --shard=1/2` | Run one half of the suite |',
+				'| `npx playwright test --ui` | Open the Playwright UI mode |'
+			]
+		: [
+				'| `npx cucumber-js` | Run all scenarios locally |',
+				'| `npx cucumber-js --tags @tag` | Run scenarios matching a tag |',
+				'| `npx cucumber-js --parallel N` | Run scenarios across N parallel workers |',
+				'| `BROWSER=firefox npx cucumber-js` | Run in a specific browser |',
+				"| `npx cucumber-js --tags '@a or @b'` | Tag expressions |"
+			];
+
+	const layout = pw
+		? [
+				'specs/            , your .spec.ts test files',
+				'fixtures/         , plum.ts (Plum-owned, do not edit) and pages.ts (your fixtures)',
+				'pages/            , Page Object Models (optional)',
+				'utils/            , shared constants and helpers'
+			]
+		: [
+				'features/         , Gherkin .feature files (write your scenarios here)',
+				'step_definitions/ , TypeScript step implementations',
+				'pages/            , Page Object Models (optional)',
+				'utils/            , browser setup, hooks, shared helpers'
+			];
+
+	const layersNote = pw
+		? 'Specs are the only required layer. Page objects are optional, keep the Playwright calls in your spec if you prefer, but recommended once a page grows past a few interactions.'
+		: 'Feature files and step definitions are the two required layers. Page objects are optional, keep the Playwright calls in your steps if you prefer, but recommended once a page grows past a few interactions.';
+
+	const tagExample = pw
+		? [
+				'```ts',
+				"test.describe('Login @TS-001', () => {",
+				"\ttest('User can log in with valid credentials @TC-001', async ({ page }) => {",
+				'\t\t// ...',
+				'\t});',
+				'});',
+				'```'
+			]
+		: [
+				'```gherkin',
+				'@TS-001',
+				'Feature: Login',
+				'',
+				'  @TC-001',
+				'  Scenario: User can log in with valid credentials',
+				'    Given I am on the login page',
+				'    When I enter valid credentials',
+				'    Then I should see the dashboard',
+				'```'
+			];
+
+	const resources = pw
+		? [
+				'- [Playwright test API](https://playwright.dev/docs/api/class-test), describe, test, hooks and fixtures',
+				'- [Locators](https://playwright.dev/docs/locators), finding elements the way Playwright recommends',
+				'- [Assertions](https://playwright.dev/docs/test-assertions), the `expect` matchers',
+				'- [Trace viewer](https://playwright.dev/docs/trace-viewer), debugging a failed run'
+			]
+		: [
+				'- [Gherkin syntax reference](https://cucumber.io/docs/gherkin/reference/), feature files, scenarios, tags, scenario outlines',
+				'- [Step definitions guide](https://cucumber.io/docs/cucumber/step-definitions/), connecting Gherkin steps to TypeScript',
+				'- [Playwright docs](https://playwright.dev/docs/intro), the browser API used inside page objects'
+			];
+
+	return [
+		'# My Tests',
+		'',
+		`Powered by [Plum](https://github.com/silverlunah/plum), ${pw ? 'Playwright' : 'Cucumber'} + Test Repository.`,
+		'',
+		'## Getting Started',
+		'',
+		"Your project is ready. Here's what to do next:",
+		'',
+		"1. **Open `.env`** and set `BASE_URL` to your application's URL.",
+		'2. **Run the example tests** to confirm everything works:',
+		'   ```bash',
+		`   ${run}`,
+		'   ```',
+		'3. **Write your first test**:',
+		'   ```bash',
+		'   plum create-test   # scaffold a new test, page object and steps',
+		...(pw ? [] : ['   plum create-step   # add a step to an existing feature file']),
+		'   ```',
+		'4. **Start the full UI** (requires Docker) to trigger tests, view reports, and manage your test repository:',
+		'   ```bash',
+		'   plum server start',
+		'   ```',
+		'   On first run, Plum walks you through creating the organisation, first project and owner account. Then open **http://localhost:3002** and sign in.',
+		'',
+		'---',
+		'',
+		'## Commands',
+		'',
+		'| Command | Description |',
+		'| --- | --- |',
+		...commands,
+		'| `plum server start` | Start the full UI via Docker (interactive setup) |',
+		'| `plum server reconfig` | Change server URL/ports without starting |',
+		'| `plum server stop` | Stop the server |',
+		'| `plum create-test` | Scaffold a new test and page object |',
+		...(pw ? [] : ['| `plum create-step` | Generate a new step definition |']),
+		'| `plum node start <name>` | Register a node and start it here |',
+		'| `plum node list` | List this machine’s nodes |',
+		'',
+		'---',
+		'',
+		'## Configuration',
+		'',
+		'| File | Purpose |',
+		'| --- | --- |',
+		'| `.env` | Set `BASE_URL` (your app) and `IS_HEADLESS` (`true`/`false`) |',
+		'| `package.json` | Add extra npm packages your tests need |',
+		...(pw ? ['| `playwright.config.ts` | Browsers, retries, timeouts, reporters |'] : []),
+		'',
+		'---',
+		'',
+		'## Layout',
+		'',
+		'```',
+		...layout,
+		'.env              , BASE_URL and IS_HEADLESS',
+		'package.json      , extra npm packages your tests need',
+		'```',
+		'',
+		'This whole folder is your test project, open it in your editor, and',
+		'`git init` here (or sync it into a server project via **Automated Tests**).',
+		'',
+		layersNote,
+		'',
+		`Each ${pw ? 'test' : 'scenario'} needs a unique tag so you can run it by itself:`,
+		'',
+		...tagExample,
+		'',
+		'```bash',
+		`${byId}   # run a single test`,
+		`${bySuite}   # run the whole suite`,
+		'```',
+		'',
+		'---',
+		'',
+		'## Test Repository',
+		'',
+		'Plum includes a built-in test case management system. Access it from the **Test Repository** tab in the UI.',
+		'',
+		'- **Test Suites**, group related test cases. Each suite gets an auto-assigned ID (e.g. `TS-001`).',
+		'- **Test Cases**, document steps (Action / Test Data / Expected Output), set priority, and assign a `@tag` to link automation.',
+		'- **Test Runs**, build a run from any combination of cases, execute them one by one (pass/fail/blocked/skip), and track history.',
+		`- **Auto-linking**, when a build completes, Plum matches ${pw ? 'test' : 'scenario'} tags against \`automatedTag\` values on your test cases and marks them as automated.`,
+		'- **Export / import**, export test cases (whole repository or one suite) as CSV or JSON from the Suites tab. The JSON re-imports from **Settings → Test Cases**, a case whose ID already exists is skipped; anything else is imported with a fresh ID.',
+		'',
+		`To link a test case to automation, set its **Automated tag** (e.g. \`test-login-1\`) to match the \`@tag\` on the ${pw ? 'test' : 'scenario'}.`,
+		'',
+		'---',
+		`## ${pw ? 'Playwright' : 'Cucumber & Gherkin'} Resources`,
+		'',
+		...resources,
+		'- [Plum documentation](https://github.com/silverlunah/plum), full README and reference'
+	].join('\n');
+}
+
+// `plum init` leaves a project that cannot run otherwise: no tests/node_modules,
+// so the runner CLI is missing, and no browser binaries. Both are warn-only, an
+// offline machine should still end up with a scaffold it can install later.
+function installTestsProjectDeps(testsPath) {
+	try {
+		clack.log.step('Installing test dependencies...');
+		execSync('npm install --no-audit --no-fund', { cwd: testsPath, stdio: 'inherit' });
+	} catch {
+		clack.log.warn('Could not install test dependencies. Run `npm install` in tests/ yourself.');
+		return;
+	}
+	try {
+		clack.log.step('Downloading browsers (chromium, firefox)...');
+		execSync('npx playwright install chromium firefox', { cwd: testsPath, stdio: 'inherit' });
+	} catch {
+		clack.log.warn(
+			'Could not download browsers. Run `npx playwright install chromium firefox` in tests/.'
+		);
+	}
+}
+
 function applyServerConfig(cfg) {
 	const { writeEnvFile, buildOverrideYaml } = serverConfigLib();
 	const cwd = process.cwd();
@@ -1271,121 +1470,7 @@ switch (command) {
 		{
 			const userReadmePath = path.join(userTestsPath, 'README.md');
 			if (!fs.existsSync(userReadmePath)) {
-				const readmeContent = [
-					'# My Tests',
-					'',
-					'Powered by [Plum](https://github.com/silverlunah/plum), Playwright + Cucumber + Test Repository.',
-					'',
-					'## Getting Started',
-					'',
-					"Your project is ready. Here's what to do next:",
-					'',
-					"1. **Open `.env`** and set `BASE_URL` to your application's URL.",
-					'2. **Run the example tests** to confirm everything works:',
-					'   ```bash',
-					'   npx playwright test        # or: npx cucumber-js',
-					'   ```',
-					'3. **Write your first test**, scaffold a full feature or generate a single step:',
-					'   ```bash',
-					'   plum create-test   # scaffold a new test, page object and steps',
-					'   plum create-step   # Cucumber: add a step to an existing file',
-					'   ```',
-					'4. **Start the full UI** (requires Docker) to trigger tests, view reports, and manage your test repository:',
-					'   ```bash',
-					'   plum server start',
-					'   ```',
-					'   On first run, Plum walks you through creating the organisation, first project and owner account. Then open **http://localhost:3002** and sign in.',
-					'',
-					'---',
-					'',
-					'## Commands',
-					'',
-					'| Command | Description |',
-					'| --- | --- |',
-					'| `npx playwright test` | Run all tests locally |',
-					'| `npx playwright test --grep @tag` | Run tests matching a tag |',
-					'| `npx playwright test --workers N` | Run tests across N parallel workers |',
-					'| `npx playwright test --project=firefox` | Run in a specific browser |',
-					'| `npx cucumber-js --tags @tag` | The Cucumber equivalents |',
-					'| `plum server start` | Start the full UI via Docker (interactive setup) |',
-					'| `plum server reconfig` | Change server URL/ports without starting |',
-					'| `plum server stop` | Stop the server |',
-					'| `plum create-test` | Scaffold a new test and page object |',
-					'| `plum create-step` | Cucumber only: generate a new step definition |',
-					'| `plum node start <name>` | Register a node and start it here |',
-					'| `plum node list` | List this machine’s nodes |',
-					'',
-					'---',
-					'',
-					'## Configuration',
-					'',
-					'| File | Purpose |',
-					'| --- | --- |',
-					'| `.env` | Set `BASE_URL` (your app) and `IS_HEADLESS` (`true`/`false`) |',
-					'| `package.json` | Add extra npm packages your tests need |',
-					'',
-					'---',
-					'',
-					'## Layout',
-					'',
-					'```',
-					'features/         , Gherkin .feature files (write your scenarios here)',
-					'step_definitions/ , TypeScript step implementations',
-					'pages/            , Page Object Models (optional)',
-					'utils/            , Browser setup, hooks, shared helpers',
-					'.env              , BASE_URL and IS_HEADLESS',
-					'package.json      , extra npm packages your tests need',
-					'```',
-					'',
-					'This whole folder is your test project, open it in your editor, and',
-					'`git init` here (or sync it into a server project via **Automated Tests**).',
-					'',
-					'Feature files and step definitions are the two required layers. Page objects are optional, keep the Playwright calls in your steps if you prefer, but recommended once a page grows past a few interactions.',
-					'',
-					'Each scenario needs a unique tag so you can run it by itself:',
-					'',
-					'```gherkin',
-					'@suite-login',
-					'Feature: Login',
-					'',
-					'  @test-login-1',
-					'  Scenario: User can log in with valid credentials',
-					'    Given I am on the login page',
-					'    When I enter valid credentials',
-					'    Then I should see the dashboard',
-					'```',
-					'',
-					'```bash',
-					'npx playwright test --grep @TC-001   # run a single test',
-					'npx playwright test --grep @TS-001   # run the whole suite',
-					'npx cucumber-js --tags @TC-001       # the Cucumber equivalent',
-					'```',
-					'',
-					'---',
-					'',
-					'## Test Repository',
-					'',
-					'Plum includes a built-in test case management system. Access it from the **Test Repository** tab in the UI.',
-					'',
-					'- **Test Suites**, Group related test cases. Each suite gets an auto-assigned ID (e.g. `TS-001`).',
-					'- **Test Cases**, Document steps (Action / Test Data / Expected Output), set priority, and assign a Cucumber `@tag` to link automation.',
-					'- **Test Runs**, Build a run from any combination of cases, execute them one by one (pass/fail/blocked/skip), and track history.',
-					'- **Auto-linking**, When a build completes, Plum matches Cucumber scenario tags against `automatedTag` values on your test cases and marks them as automated.',
-					'- **Export / import**, Export test cases (whole repository or one suite) as CSV or JSON from the Suites tab. The JSON re-imports from **Settings → Test Cases**, a case whose ID already exists is skipped; anything else is imported with a fresh ID.',
-					'',
-					'To link a test case to automation, set its **Automated tag** (e.g. `test-login-1`) to match the `@tag` on the Cucumber scenario.',
-					'',
-					'---',
-					'',
-					'## Cucumber & Gherkin Resources',
-					'',
-					'New to Cucumber? These links will get you up to speed quickly:',
-					'',
-					'- [Gherkin syntax reference](https://cucumber.io/docs/gherkin/reference/), Feature files, Scenarios, Given/When/Then, tags, Scenario Outlines',
-					'- [Step definitions guide](https://cucumber.io/docs/cucumber/step-definitions/), Connecting Gherkin steps to TypeScript code',
-					'- [Playwright docs](https://playwright.dev/docs/intro), Browser automation API used inside page objects',
-					'- [Plum documentation](https://github.com/silverlunah/plum), Full README and reference'
-				].join('\n');
+				const readmeContent = buildTestsReadme(initFramework);
 				fs.writeFileSync(userReadmePath, readmeContent + '\n', 'utf8');
 				clack.log.success('tests/README.md created.');
 			} else {
@@ -1396,6 +1481,11 @@ switch (command) {
 		// Install dependencies
 		clack.log.step('Installing dependencies (npm run init)...');
 		execSync('npm run init', { cwd: plumRoot, stdio: 'inherit' });
+		installTestsProjectDeps(userTestsPath);
+
+		const initPw = initFramework === 'playwright';
+		const initRunAll = initPw ? 'npx playwright test' : 'npx cucumber-js';
+		const initRunTag = initPw ? 'npx playwright test --grep @tag' : 'npx cucumber-js --tags @tag';
 
 		clack.note(
 			[
@@ -1404,16 +1494,15 @@ switch (command) {
 				`Extra packages     ${pc.dim('→')}  ${pc.cyan('tests/package.json')}`,
 				'',
 				`${pc.bold('Run tests locally')}`,
-				`  ${pc.cyan('npx playwright test')}              run all tests`,
-				`  ${pc.cyan('npx playwright test --grep @tag')}  run by tag`,
-				`  ${pc.dim('(a Cucumber project uses npx cucumber-js --tags @tag)')}`,
+				`  ${pc.cyan(initRunAll)}${' '.repeat(Math.max(2, 34 - initRunAll.length))}run all tests`,
+				`  ${pc.cyan(initRunTag)}${' '.repeat(Math.max(2, 34 - initRunTag.length))}run by tag`,
 				'',
 				`${pc.bold('Start the full UI')}  ${pc.dim('(requires Docker)')}`,
 				`  ${pc.cyan('plum server start')}`,
 				'',
 				`${pc.bold('Generate tests')}`,
 				`  ${pc.cyan('plum create-test')}         scaffold a new test`,
-				`  ${pc.cyan('plum create-step')}         add a step definition`
+				...(initPw ? [] : [`  ${pc.cyan('plum create-step')}         add a step definition`])
 			].join('\n'),
 			'Next steps'
 		);
