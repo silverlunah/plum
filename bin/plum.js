@@ -1164,16 +1164,20 @@ switch (command) {
 			clack.log.error(`Unknown framework "${initFlag}". Use ${INIT_FRAMEWORKS.join(' or ')}.`);
 			process.exit(1);
 		}
+		// This install's own default, from `plum server start`. Used to pre-select the
+		// prompt, and taken as the answer when there is no terminal to ask.
+		const configuredFramework = serverConfigLib().loadServerConfig(process.cwd()).framework;
 		let initFramework = initFlag;
 		if (!initFramework && interactiveAllowed()) {
 			const picked = await clack.select({
 				message: 'Which test framework?',
-				options: INIT_FRAMEWORKS.map((id) => ({ value: id, label: frameworkLabel(id) }))
+				options: INIT_FRAMEWORKS.map((id) => ({ value: id, label: frameworkLabel(id) })),
+				initialValue: isFramework(configuredFramework) ? configuredFramework : INIT_FRAMEWORKS[0]
 			});
 			if (clack.isCancel(picked)) cancelAndExit();
 			initFramework = picked;
 		}
-		initFramework ??= serverConfigLib().loadServerConfig(process.cwd()).framework;
+		initFramework ??= configuredFramework;
 
 		// The whole test project lives in tests/, same self-contained layout as a
 		// server project's projects/<slug>/tests/. Fill-in copy: an existing
