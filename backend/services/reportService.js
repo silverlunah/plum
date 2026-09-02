@@ -686,7 +686,7 @@ const pruneOldReports = async (retentionDays) => {
  */
 async function syncAutomatedFromTests(projectId) {
 	try {
-		const tagSet = require('./testService').getTestIds(projectId);
+		const tagSet = await require('./testService').getTestIds(projectId);
 		if (tagSet.size === 0) return;
 		await prisma.testCase.updateMany({
 			where: { projectId, displayId: { in: [...tagSet] }, isAutomated: false },

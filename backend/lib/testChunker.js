@@ -13,8 +13,8 @@ const { getTestSuites } = require('../services/testService');
  * @param {string} tag  Cucumber tag expression (e.g. '@suite-login')
  * @returns {string[]}
  */
-function getTestIdsForTag(projectId, tag) {
-	const { suites } = getTestSuites(projectId);
+async function getTestIdsForTag(projectId, tag) {
+	const { suites } = await getTestSuites(projectId);
 	const ids = [];
 	const normalTag = tag?.trim();
 

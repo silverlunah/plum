@@ -60,10 +60,10 @@ async function cancel(runId) {
 // Stand-in Cucumber JSON for a lane that never produced a real report (process
 // crashed, node unreachable) so its scenarios still show as failed by name
 // instead of silently vanishing from the combined report.
-function makeSyntheticFailReport(projectId, laneName, testIds, reason) {
+async function makeSyntheticFailReport(projectId, laneName, testIds, reason) {
 	const nameMap = {};
 	try {
-		const { suites } = getTestSuites(projectId);
+		const { suites } = await getTestSuites(projectId);
 		for (const suite of suites) {
 			for (const test of suite.tests) {
 				for (const id of Array.isArray(test.id) ? test.id : [test.id]) {
@@ -148,6 +148,18 @@ function parseLaneReport(framework, raw) {
 	if (framework !== FRAMEWORK.PLAYWRIGHT) return { rawJson: parsed, attempts: null };
 	const { features, attempts } = toFeatures(parsed);
 	return { rawJson: features, attempts };
+}
+
+/**
+ * A lane's report in Plum's shape, or a stand-in naming the tests it was given when
+ * the lane never sent one (process crashed, node unreachable).
+ */
+async function laneReport(framework, raw, { projectId, laneName, ids, reason }) {
+	if (raw) return parseLaneReport(framework, raw);
+	return {
+		rawJson: JSON.parse(await makeSyntheticFailReport(projectId, laneName, ids, reason)),
+		attempts: null
+	};
 }
 
 // Runs the project's own runner CLI from its own tests folder, the same command a
@@ -237,10 +249,9 @@ async function runBuiltIn(run, io, emit) {
 		emit(SOCKET_EVENTS.BG_RUN_LANE_LOG, { laneId, log: text });
 	};
 
+	const selectedIds = await getTestIdsForTag(run.projectId, run.tag);
 	emit(SOCKET_EVENTS.BG_RUN_LANES_INIT, {
-		lanes: [
-			{ id: laneId, name: 'Built-in', testCount: getTestIdsForTag(run.projectId, run.tag).length }
-		]
+		lanes: [{ id: laneId, name: 'Built-in', testCount: selectedIds.length }]
 	});
 
 	const { code, rawJson, attempts } = await runWithRetries({
@@ -412,23 +423,13 @@ function runLane(run, io, emit, lane, plan, retrySplit, framework, laneLogs) {
 						baseUrl: run.baseUrl,
 						onLog,
 						io
-					}).then(({ code, raw }) => {
-						// The built-in lane of a distributed run needs the same per-framework
-						// adaptation the single built-in path and the dispatched lanes get.
-						// Without it a Playwright report reaches the retry merge as an object.
-						const parsed = raw
-							? parseLaneReport(framework, raw)
-							: {
-									rawJson: JSON.parse(
-										makeSyntheticFailReport(
-											run.projectId,
-											lane.name,
-											plan.ids,
-											'process exited with error'
-										)
-									),
-									attempts: null
-								};
+					}).then(async ({ code, raw }) => {
+						const parsed = await laneReport(framework, raw, {
+							projectId: run.projectId,
+							laneName: lane.name,
+							ids: plan.ids,
+							reason: 'process exited with error'
+						});
 						warnIfNothingRan(parsed.rawJson, currentTag, onLog);
 						return { code, rawJson: parsed.rawJson, attempts: parsed.attempts };
 					})
@@ -445,23 +446,15 @@ function runLane(run, io, emit, lane, plan, retrySplit, framework, laneLogs) {
 								baseUrl: run.baseUrl
 							},
 							onLog,
-							(code, content) => {
+							async (code, content) => {
 								// A node runs the project's own runner, so its report arrives in
-								// that framework's format and needs the same adaptation a local
-								// lane gets. The synthetic fallback is already feature-shaped.
-								const parsed = content
-									? parseLaneReport(framework, content)
-									: {
-											rawJson: JSON.parse(
-												makeSyntheticFailReport(
-													run.projectId,
-													lane.name,
-													plan.ids,
-													'could not fetch report from runner'
-												)
-											),
-											attempts: null
-										};
+								// that framework's format and needs the same adaptation.
+								const parsed = await laneReport(framework, content, {
+									projectId: run.projectId,
+									laneName: lane.name,
+									ids: plan.ids,
+									reason: 'could not fetch report from runner'
+								});
 								resolve({ code, rawJson: parsed.rawJson, attempts: parsed.attempts });
 							},
 							(batch) =>
@@ -557,7 +550,7 @@ async function execute(run, io) {
 		const isSingleBuiltIn = validated.length === 1 && validated[0] === BUILT_IN_RUNNER_ID;
 		if (isSingleBuiltIn) return await runBuiltIn(run, roomIo, emit);
 
-		const allIds = getTestIdsForTag(run.projectId, run.tag);
+		const allIds = await getTestIdsForTag(run.projectId, run.tag);
 		const { framework } = await settingsService.getProject(run.projectId);
 		const lanePlan = planLanes(framework, run.tag, allIds, validated.length);
 		// Surplus runners beyond the plan would each re-run the full selection and

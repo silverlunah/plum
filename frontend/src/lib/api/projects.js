@@ -12,6 +12,14 @@ function authHeaders({ json = false } = {}) {
 	return h;
 }
 
+// The framework the operator chose at `plum server start`, so the create form
+// pre-selects it rather than always offering the built-in default.
+export async function fetchServerDefaults() {
+	const res = await fetch(`${API_BASE}/server/defaults`, { headers: authHeaders() });
+	if (!res.ok) return {};
+	return res.json();
+}
+
 export async function fetchProjects() {
 	const res = await fetch(`${API_BASE}/projects`, { headers: authHeaders() });
 	if (!res.ok) throw new Error('Failed to load projects');

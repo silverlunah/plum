@@ -76,6 +76,9 @@
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
+	import LockIcon from '$lib/components/icons/LockIcon.svelte';
+	import IconSelect from '$lib/components/ui/IconSelect.svelte';
+	import { clickOutside } from '$lib/actions/clickOutside';
 
 	let availableRunners = [];
 	// { [runnerId]: 'checking' | 'up' | 'down' }, the runner list is DB-only and
@@ -84,25 +87,12 @@
 	let testRuns = [];
 	let selectedRun = null; // { id, title, tags: string[] | null }
 	let selectedRunLoading = false;
-	let browserOpen = false;
 	let runnersOpen = false;
 	let runPickOpen = false;
 	let runAllModalOpen = false;
 	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
 	let notifyDiscord = false;
 	let notifySlack = false;
-
-	function clickOutside(node) {
-		function handle(e) {
-			if (!node.contains(e.target)) node.dispatchEvent(new CustomEvent('clickoutside'));
-		}
-		document.addEventListener('click', handle, true);
-		return {
-			destroy() {
-				document.removeEventListener('click', handle, true);
-			}
-		};
-	}
 
 	let _unsubConfig, _unsubExpanded, _unsubBuiltIn, _unsubActiveProject, _socket;
 	let lastFinished = null; // { reportId, verdict }, most recent completed run, for the bar's View Report shortcut
@@ -353,8 +343,6 @@
 		queued: queuedCount,
 		verdict: lastFinished?.verdict
 	});
-
-	$: currentBrowser = BROWSERS.find((b) => b.id === cfg.browser) ?? BROWSERS[0];
 
 	$: runnerSummary = computeRunnerSummary(cfg, availableRunners);
 
@@ -645,50 +633,14 @@
 			<!-- Browser -->
 			<div class="ctrl-group">
 				<span class="ctrl-label">{BROWSER_LABEL}</span>
-				<div class="dropdown-wrap" use:clickOutside on:clickoutside={() => (browserOpen = false)}>
-					<button
-						class="dropdown-trigger"
-						class:open={browserOpen}
-						on:click={() => {
-							browserOpen = !browserOpen;
-						}}
-					>
-						<span class="browser-trigger-label">
-							<ServiceIcon service={currentBrowser.id} size={13} />
-							{currentBrowser.label}
-						</span>
-						<svg
-							width="10"
-							height="10"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							class="trigger-chevron"
-							class:open={browserOpen}
-						>
-							<polyline points="6 9 12 15 18 9" />
-						</svg>
-					</button>
-					{#if browserOpen}
-						<div class="dropdown-menu" transition:fly={{ y: 6, duration: 130 }}>
-							{#each BROWSERS as b}
-								<button
-									class="dropdown-item"
-									class:active={cfg.browser === b.id}
-									on:click={() => {
-										runnerConfig.update((c) => ({ ...c, browser: b.id }));
-										browserOpen = false;
-									}}
-								>
-									<ServiceIcon service={b.id} size={13} />
-									{b.label}
-								</button>
-							{/each}
-						</div>
-					{/if}
-				</div>
+				<IconSelect
+					variant="bar"
+					placement="top"
+					animate
+					options={BROWSERS}
+					value={cfg.browser}
+					on:change={(e) => runnerConfig.update((c) => ({ ...c, browser: e.detail }))}
+				/>
 			</div>
 
 			<!-- Runners (only when external runners exist) -->
@@ -866,20 +818,7 @@
 								{#if !openable}
 									<!-- A locked row is otherwise indistinguishable from a clickable
 									     one, so clicking it looked like nothing happened. -->
-									<svg
-										class="run-card-lock"
-										width="11"
-										height="11"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2.5"
-										stroke-linecap="round"
-										aria-hidden="true"
-									>
-										<rect x="3" y="11" width="18" height="11" rx="2" />
-										<path d="M7 11V7a5 5 0 0 1 10 0v4" />
-									</svg>
+									<span class="run-card-lock"><LockIcon size={11} strokeWidth={2.5} /></span>
 								{/if}
 								{#if run.projectName}
 									<span class="run-card-project">{run.projectName}</span>
@@ -1208,12 +1147,6 @@
 	/* Dropdown */
 	.dropdown-wrap {
 		position: relative;
-	}
-
-	.browser-trigger-label {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
 	}
 
 	.dropdown-trigger {

@@ -13,7 +13,7 @@ const { FRAMEWORK } = require('../constants/defaults');
 // Cucumber suites are parsed straight out of the .feature text. Playwright has no
 // equivalent source of truth: a spec's tests only exist once the file is loaded,
 // so its list comes from `playwright test --list` instead.
-const getTestSuites = (projectId) => {
+const getTestSuites = async (projectId) => {
 	if (frameworkFor(projectId) === FRAMEWORK.PLAYWRIGHT) {
 		return getPlaywrightSuites(resolveTestsRoot(projectId));
 	}
@@ -151,14 +151,14 @@ const getTestSuites = (projectId) => {
  * periodic sync. Both used to scan .feature text themselves, which silently found
  * nothing in a Playwright project.
  */
-const getTestIds = (projectId) => {
+const getTestIds = async (projectId) => {
 	const ids = new Set();
 	const add = (id) => {
 		for (const one of Array.isArray(id) ? id : [id]) {
 			if (one) ids.add(String(one).replace(/^@/, ''));
 		}
 	};
-	for (const suite of getTestSuites(projectId).suites) {
+	for (const suite of (await getTestSuites(projectId)).suites) {
 		add(suite.suiteId);
 		for (const test of suite.tests) add(test.id);
 	}

@@ -90,7 +90,8 @@ function buildOverrideYaml({
 	projectsAbs,
 	backendPort,
 	apiUrl,
-	plumVersion
+	plumVersion,
+	framework
 }) {
 	return (
 		[
@@ -98,6 +99,9 @@ function buildOverrideYaml({
 			'  backend:',
 			'    environment:',
 			`      PLUM_VERSION: "${plumVersion || ''}"`,
+			// Which framework the project-create form should pre-select. The config file
+			// itself lives on the host, outside the container.
+			`      PLUM_DEFAULT_FRAMEWORK: "${framework || ''}"`,
 			'    volumes:',
 			`      - "${reportsAbs}:/app/reports"`,
 			`      - "${projectsAbs}:/app/projects"`,

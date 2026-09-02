@@ -65,7 +65,7 @@ npm run init        # installs all monorepo dependencies
 npm run docker:up   # builds and starts the full stack
 ```
 
-The UI is available at **http://localhost:3002**. For fast HMR while developing the frontend, run the Vite dev server outside Docker (`http://localhost:5173`), see the **Development** section below.
+The UI is available at **http://localhost:3002**. For fast HMR while developing the frontend, run the Vite dev server outside Docker, see the **Development** section below.
 
 ---
 
@@ -134,7 +134,8 @@ The frontend dev server runs outside Docker for fast HMR:
 
 ```bash
 cd frontend
-npm run dev          # available at http://localhost:5173
+npm run dev          # available at http://localhost:3002, or the next free port
+                     # if the container already holds it
 ```
 
 ### Backend, writing and running tests
@@ -155,21 +156,22 @@ A Playwright project:
 
 ```
 projects/<slug>/tests/
-  playwright.config.ts, yours: browsers, timeouts, traces, reporters
-  specs/              , *.spec.ts test files
-  pages/              , Page Object Models (optional)
-  fixtures/plum.ts    , session recording for report replay
+  playwright.config.ts   yours: browsers, timeouts, traces, reporters
+  specs/                 *.spec.ts test files
+  pages/                 Page Object Models (optional)
+  fixtures/pages.ts      your page-object fixtures
+  fixtures/plum.ts       session recording for report replay (Plum's)
 ```
 
 A Cucumber project:
 
 ```
 projects/<slug>/tests/
-  cucumber.js         , yours: paths, requires, formatters
-  features/           , Gherkin .feature files
-  step_definitions/   , TypeScript step implementations
-  pages/              , Page Object Models (optional)
-  utils/              , browser setup, hooks, helpers
+  cucumber.js            yours: paths, requires, formatters
+  features/              Gherkin .feature files
+  step_definitions/      TypeScript step implementations
+  pages/                 Page Object Models (optional)
+  utils/                 browser setup, hooks, helpers (Plum's recording lives here)
 ```
 
 > After any backend dependency or schema change, rebuild: `npm run docker:up`

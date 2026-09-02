@@ -5,12 +5,22 @@
 
 // Wires up Plum's session recording: removing or reordering code here can silently break report replay.
 
-import { Before, After, BeforeStep, ITestCaseHookParameter } from '@cucumber/cucumber';
+import {
+	Before,
+	After,
+	BeforeStep,
+	setDefaultTimeout,
+	ITestCaseHookParameter
+} from '@cucumber/cucumber';
 import { setup, teardown, flushRecordings, markStepStart } from './browser';
 import { WELCOME_MESSAGE } from './constants';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+// Cucumber's default is 5 seconds, which a cold browser launch or a slow page can
+// exceed. Raise it here if your app needs longer.
+setDefaultTimeout(30_000);
 
 /**
  * Pickle steps carry no keyword (Cucumber normalizes Given/When/Then/And/But

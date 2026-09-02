@@ -9,8 +9,12 @@ const testService = require('../services/testService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireProjectAccess } = require('../middleware/requireProjectAccess');
 
-router.get('/', jwtAuth, requireProjectAccess, (req, res) => {
-	res.json({ suites: testService.getTestSuites(req.projectId).suites });
+router.get('/', jwtAuth, requireProjectAccess, async (req, res, next) => {
+	try {
+		res.json({ suites: (await testService.getTestSuites(req.projectId)).suites });
+	} catch (e) {
+		next(e);
+	}
 });
 
 module.exports = router;

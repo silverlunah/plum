@@ -10,6 +10,7 @@
 	import { fetchAssignablePool } from '$lib/api/users';
 	import {
 		fetchProjects,
+		fetchServerDefaults,
 		fetchAllProjects,
 		createProject,
 		deleteProject,
@@ -19,6 +20,7 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Paginator from '$lib/components/ui/Paginator.svelte';
+	import IconSelect from '$lib/components/ui/IconSelect.svelte';
 	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 	import { CANCEL_LABEL, SEARCH_PLACEHOLDER } from '$lib/copy/common';
 	import { FRAMEWORKS } from '$lib/constants';
@@ -112,22 +114,11 @@
 	// ── Other projects (owner) ──
 	let allProjects = [];
 	let newName = '';
-	let newFramework = FRAMEWORKS[0];
-	let frameworkOpen = false;
-
-	// Same pattern as the browser picker in RunnerPanel, a native <select> cannot
-	// render the framework logos.
-	function clickOutside(node) {
-		function handle(e) {
-			if (!node.contains(e.target)) node.dispatchEvent(new CustomEvent('clickoutside'));
-		}
-		document.addEventListener('click', handle, true);
-		return {
-			destroy() {
-				document.removeEventListener('click', handle, true);
-			}
-		};
-	}
+	// Replaced on mount by whatever the operator chose at `plum server start`; this is
+	// only the fallback for a config that predates that prompt.
+	let defaultFramework = FRAMEWORKS[0];
+	let newFramework = defaultFramework;
+	const frameworkOptions = FRAMEWORKS.map((id) => ({ id, label: frameworkLabel(id) }));
 	let creating = false;
 	let createError = '';
 
@@ -149,6 +140,13 @@
 
 	onMount(async () => {
 		try {
+			const { framework } = await fetchServerDefaults();
+			if (FRAMEWORKS.includes(framework)) {
+				defaultFramework = framework;
+				newFramework = framework;
+			}
+		} catch {}
+		try {
 			assignable = await fetchAssignablePool();
 		} catch {}
 		if (isOwner) await loadAllProjects();
@@ -169,7 +167,7 @@
 			setProjects(await fetchProjects());
 			await loadAllProjects();
 			newName = '';
-			newFramework = FRAMEWORKS[0];
+			newFramework = defaultFramework;
 		} catch (e) {
 			createError = e.message;
 		} finally {
@@ -211,51 +209,12 @@
 			<h4>{NEW_PROJECT_LABEL}</h4>
 			<div class="new-row">
 				<input class="field-input" bind:value={newName} placeholder={NAME_LABEL} />
-				<div class="dropdown-wrap" use:clickOutside on:clickoutside={() => (frameworkOpen = false)}>
-					<button
-						type="button"
-						class="dropdown-trigger"
-						class:open={frameworkOpen}
-						aria-label={PROJECT_FRAMEWORK_LABEL}
-						on:click={() => (frameworkOpen = !frameworkOpen)}
-					>
-						<span class="trigger-label">
-							<ServiceIcon service={newFramework} size={13} />
-							{frameworkLabel(newFramework)}
-						</span>
-						<svg
-							width="10"
-							height="10"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							class="trigger-chevron"
-							class:open={frameworkOpen}
-						>
-							<polyline points="6 9 12 15 18 9" />
-						</svg>
-					</button>
-					{#if frameworkOpen}
-						<div class="dropdown-menu">
-							{#each FRAMEWORKS as id}
-								<button
-									type="button"
-									class="dropdown-item"
-									class:active={newFramework === id}
-									on:click={() => {
-										newFramework = id;
-										frameworkOpen = false;
-									}}
-								>
-									<ServiceIcon service={id} size={13} />
-									{frameworkLabel(id)}
-								</button>
-							{/each}
-						</div>
-					{/if}
-				</div>
+				<IconSelect
+					options={frameworkOptions}
+					value={newFramework}
+					ariaLabel={PROJECT_FRAMEWORK_LABEL}
+					on:change={(e) => (newFramework = e.detail)}
+				/>
 				<Button on:click={handleCreate} disabled={creating || !newName.trim()}>
 					{CREATE_PROJECT_LABEL}
 				</Button>
@@ -496,87 +455,6 @@
 	.new-row .field-input {
 		flex: 1;
 		min-width: 160px;
-	}
-	/* Framework picker, mirrors the browser dropdown in RunnerPanel, which a
-	   native <select> cannot do because it has to show each framework's logo. */
-	.dropdown-wrap {
-		position: relative;
-		flex: 0 0 auto;
-	}
-	.dropdown-trigger {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.45rem 0.6rem;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		background: var(--bg-elevated);
-		font-family: var(--font-body);
-		font-size: 0.8125rem;
-		color: var(--text);
-		cursor: pointer;
-		white-space: nowrap;
-		transition:
-			border-color var(--duration-fast),
-			background var(--duration-fast),
-			color var(--duration-fast);
-	}
-	.dropdown-trigger:hover {
-		border-color: color-mix(in srgb, var(--text-muted) 50%, var(--border));
-	}
-	.dropdown-trigger.open {
-		border-color: var(--accent);
-		background: var(--accent-soft);
-		color: var(--accent);
-	}
-	.trigger-label {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-	}
-	.trigger-chevron {
-		transition: transform 0.18s var(--ease-out);
-		flex-shrink: 0;
-	}
-	.trigger-chevron.open {
-		transform: rotate(180deg);
-	}
-	.dropdown-menu {
-		position: absolute;
-		top: calc(100% + 6px);
-		left: 0;
-		min-width: 140px;
-		background: var(--bg-elevated);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-md);
-		box-shadow: 0 8px 28px rgba(0, 0, 0, 0.13);
-		padding: 0.3rem;
-		z-index: 300;
-		display: flex;
-		flex-direction: column;
-	}
-	.dropdown-item {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		width: 100%;
-		padding: 0.35rem 0.5rem;
-		border: none;
-		border-radius: var(--radius-sm);
-		background: transparent;
-		font-family: var(--font-body);
-		font-size: 0.8125rem;
-		color: var(--text);
-		cursor: pointer;
-		text-align: left;
-		transition: background var(--duration-fast);
-	}
-	.dropdown-item:hover {
-		background: var(--bg-subtle);
-	}
-	.dropdown-item.active {
-		color: var(--accent);
-		background: var(--accent-soft);
 	}
 
 	.project-row {

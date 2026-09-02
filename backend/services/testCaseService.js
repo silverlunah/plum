@@ -12,9 +12,9 @@ const caseLabel = (c) => `${c.displayId} ${c.title}`;
 
 // True when a test in the project already carries this case's id as a tag, so a
 // case created after its automation exists starts out marked automated.
-function isTaggedInTests(projectId, displayId) {
+async function isTaggedInTests(projectId, displayId) {
 	try {
-		return getTestIds(projectId).has(displayId);
+		return (await getTestIds(projectId)).has(displayId);
 	} catch {
 		return false;
 	}
@@ -101,7 +101,7 @@ async function create(
 			priority: priority ?? 'Medium',
 			createdById,
 			viaMcp,
-			isAutomated: isTaggedInTests(projectId, displayId)
+			isAutomated: await isTaggedInTests(projectId, displayId)
 		},
 		select: caseSelect
 	});

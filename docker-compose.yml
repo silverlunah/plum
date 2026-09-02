@@ -43,10 +43,17 @@ services:
       - app-network
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        # Optional: bakes the API URL in as the image's default. Left unset, the
+        # frontend entrypoint applies VITE_API_URL from the environment on every
+        # start (docker-compose.override.yml supplies it), so the API URL can
+        # change without rebuilding.
+        VITE_API_URL: '${VITE_API_URL:-}'
     restart: unless-stopped
     ports:
-      - '${FRONTEND_PORT:-3002}:5173'
+      - '${FRONTEND_PORT:-3002}:3002'
     depends_on:
       - backend
     networks:

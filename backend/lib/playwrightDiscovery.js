@@ -3,13 +3,13 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-const { execFileSync } = require('child_process');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const fs = require('fs');
 const path = require('path');
 
-// `--list` loads every spec file, which costs about a second. The repository page,
-// the run bar and the chunker all ask for the same list, so it is cached per tests
-// folder and invalidated by the newest mtime under it.
+// The repository page, the run bar and the chunker all ask for the same list, so it
+// is cached per tests folder and invalidated by the newest mtime under it.
 const cache = new Map();
 
 // Playwright reports tags without the leading @ ("TC-001"); Plum's test ids carry
@@ -41,15 +41,23 @@ function newestMtime(dir) {
 	return newest;
 }
 
-function listSpecs(testsRoot) {
-	const raw = execFileSync('npx', ['playwright', 'test', '--list', '--reporter=json'], {
-		cwd: testsRoot,
-		encoding: 'utf8',
-		shell: true,
-		stdio: ['ignore', 'pipe', 'pipe'],
-		env: { ...process.env, PLUM_REPORT_FILE: '' }
-	});
-	return JSON.parse(raw);
+const execFileAsync = promisify(execFile);
+
+// Loading every spec file costs about a second, so this must not block the event
+// loop: it runs inside HTTP handlers and once per project at boot.
+async function listSpecs(testsRoot) {
+	const { stdout } = await execFileAsync(
+		'npx',
+		['playwright', 'test', '--list', '--reporter=json'],
+		{
+			cwd: testsRoot,
+			encoding: 'utf8',
+			shell: true,
+			maxBuffer: 32 * 1024 * 1024,
+			env: { ...process.env, PLUM_REPORT_FILE: '' }
+		}
+	);
+	return JSON.parse(stdout);
 }
 
 /**
@@ -61,7 +69,7 @@ function listSpecs(testsRoot) {
  * suite named after the file. `steps` is always empty: Playwright has no steps
  * until a test actually runs, and only if the author used test.step().
  */
-function getPlaywrightSuites(testsRoot) {
+async function getPlaywrightSuites(testsRoot) {
 	if (!fs.existsSync(testsRoot)) return { suites: [] };
 
 	const stamp = newestMtime(testsRoot);
@@ -70,7 +78,7 @@ function getPlaywrightSuites(testsRoot) {
 
 	let listed;
 	try {
-		listed = listSpecs(testsRoot);
+		listed = await listSpecs(testsRoot);
 	} catch (e) {
 		// A spec that does not compile, or a missing config, surfaced as an empty
 		// list rather than a 500, the same way an unreadable feature file is.

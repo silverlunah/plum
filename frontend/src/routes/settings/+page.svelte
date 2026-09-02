@@ -25,6 +25,7 @@
 		downloadTestCaseExport
 	} from '$lib/api/repository';
 	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
+	import LockIcon from '$lib/components/icons/LockIcon.svelte';
 	import { updateProfile, changePassword } from '$lib/api/auth';
 	import { fetchProjects } from '$lib/api/projects';
 	import { setProjects, activeProject, activeFramework } from '$lib/stores/project';
@@ -645,19 +646,7 @@
 						<div class="framework-fixed">
 							<ServiceIcon service={project.framework} size={15} />
 							{frameworkLabel(project.framework)}
-							<svg
-								width="12"
-								height="12"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								aria-hidden="true"
-							>
-								<rect x="3" y="11" width="18" height="11" rx="2" />
-								<path d="M7 11V7a5 5 0 0 1 10 0v4" />
-							</svg>
+							<span class="framework-lock"><LockIcon /></span>
 						</div>
 						<p class="field-hint">{PROJECT_FRAMEWORK_FIXED_HINT}</p>
 					</div>
@@ -1476,7 +1465,8 @@
 		color: var(--text);
 		width: fit-content;
 	}
-	.framework-fixed svg {
+	.framework-lock {
+		display: inline-flex;
 		color: var(--text-muted);
 	}
 

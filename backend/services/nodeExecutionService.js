@@ -23,6 +23,25 @@ const jobs = {};
 // two nodes on one host share os.tmpdir(), and a suite can legitimately run for
 // hours, so matching every plum-* artifact could delete a live run's files.
 const ARTIFACT_PREFIX = `plum-${process.env.RUNNER_ID || 'node'}-`;
+
+// Job payloads live under ~/.plum, not in the installed package: a global install is
+// often root-owned and is replaced wholesale on update.
+const DATA_DIR = path.join(os.homedir(), '.plum');
+
+/**
+ * Uploaded tests must be able to resolve the toolchain. A directory outside the
+ * install tree cannot reach it by walking up, and NODE_PATH is not an answer:
+ * Playwright's loader does not dedupe it against its own instance, so the run dies
+ * with "two different versions of @playwright/test" and finds no tests. A link to
+ * the node's own node_modules restores ordinary resolution. A junction is used on
+ * Windows because, unlike a symlink, it needs no elevation.
+ */
+function linkToolchain(jobDir) {
+	const target = path.join(BACKEND_DIR, 'node_modules');
+	const link = path.join(jobDir, 'node_modules');
+	if (!fs.existsSync(target) || fs.existsSync(link)) return;
+	fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+}
 const STALE_ARTIFACT_MS = 24 * 60 * 60 * 1000;
 
 /**
@@ -55,8 +74,8 @@ function sweepStaleJobArtifacts() {
 		}
 	} catch {}
 
-	const jobsRoot = path.join(BACKEND_DIR, '.plum-jobs');
 	try {
+		const jobsRoot = path.join(DATA_DIR, 'jobs');
 		for (const name of fs.readdirSync(jobsRoot)) {
 			const full = path.join(jobsRoot, name);
 			if (!older(full)) continue;
@@ -92,13 +111,7 @@ function startJob({
 	// path.resolve ensures absolute even if TMPDIR env var is set to a relative path
 	const tmpdir = path.resolve(os.tmpdir());
 
-	// Uploaded tests live *inside* the node's own tree, not in os.tmpdir(). A job dir
-	// outside it has to reach the toolchain through NODE_PATH, and Playwright's
-	// loader does not dedupe that against its own instance: the run dies with
-	// "two different versions of @playwright/test" and finds no tests. Nested here,
-	// ordinary upward resolution finds the node's node_modules, exactly as a
-	// project under the primary's projects/ folder does.
-	const jobsRoot = path.join(BACKEND_DIR, '.plum-jobs');
+	const jobsRoot = path.join(DATA_DIR, 'jobs');
 
 	// Write test files sent by the primary into a per-job temp dir
 	let tempTestsDir = null;
@@ -113,6 +126,7 @@ function startJob({
 			fs.mkdirSync(path.dirname(dest), { recursive: true });
 			fs.writeFileSync(dest, Buffer.from(content, 'base64'));
 		}
+		linkToolchain(tempTestsDir);
 	}
 
 	// Each job writes to its own temp file so concurrent jobs on the same node

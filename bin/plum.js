@@ -168,6 +168,37 @@ async function promptPort(message, initial, onFree) {
  *                 Server flow
  * ------------------------------------------------------ */
 
+/**
+ * Why the API and UI must not share an origin: the API mounts its routers at bare
+ * paths (/reports, /settings, …) and the UI owns routes of the same names, so one
+ * origin serving both has no way to tell them apart. They are separate ports by
+ * default; this refuses the configurations where that stops being true.
+ *
+ * Returns an error string, or null when the pair is usable.
+ */
+function serverUrlProblem(apiUrl, uiUrl) {
+	let api;
+	let ui;
+	try {
+		api = new URL(apiUrl);
+		ui = new URL(uiUrl);
+	} catch {
+		return 'Both URLs must be absolute, starting with http:// or https://';
+	}
+	if (api.origin === ui.origin) {
+		return (
+			`The API and the UI cannot both be ${api.origin}. They serve overlapping ` +
+			'paths, so give them different ports or hostnames.'
+		);
+	}
+	// A page served over https cannot call an http API: the browser blocks it as
+	// mixed content, with nothing visible on the server side.
+	if (ui.protocol !== api.protocol) {
+		return `Use the same scheme for both: the UI is ${ui.protocol} and the API is ${api.protocol}.`;
+	}
+	return null;
+}
+
 async function configureServer({ force }) {
 	const { loadServerConfig, saveServerConfig } = serverConfigLib();
 	const { FRAMEWORKS, DEFAULT_FRAMEWORK, frameworkLabel, isFramework } = defaultsConstants();
@@ -262,14 +293,19 @@ async function configureServer({ force }) {
 		}
 
 		if (mode === 'production') {
-			cfg.apiUrl = await promptPublicUrl(
-				'Public URL or IP of the Plum backend / API',
-				cfg.apiUrl || `http://localhost:${cfg.backendPort}`
-			);
-			cfg.uiUrl = await promptPublicUrl(
-				'Public URL or IP of the Plum UI (frontend)',
-				cfg.uiUrl || `http://localhost:${cfg.frontendPort}`
-			);
+			for (;;) {
+				cfg.apiUrl = await promptPublicUrl(
+					'Public URL or IP of the Plum backend / API',
+					cfg.apiUrl || `http://localhost:${cfg.backendPort}`
+				);
+				cfg.uiUrl = await promptPublicUrl(
+					'Public URL or IP of the Plum UI (frontend)',
+					cfg.uiUrl || `http://localhost:${cfg.frontendPort}`
+				);
+				const problem = serverUrlProblem(cfg.apiUrl, cfg.uiUrl);
+				if (!problem) break;
+				clack.log.warn(problem);
+			}
 		} else {
 			cfg.apiUrl = `http://localhost:${cfg.backendPort}`;
 			cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
@@ -279,6 +315,12 @@ async function configureServer({ force }) {
 		if (!cfg.mode) cfg.mode = 'local';
 		if (!cfg.apiUrl) cfg.apiUrl = `http://localhost:${cfg.backendPort}`;
 		if (!cfg.uiUrl) cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
+	}
+
+	const urlProblem = serverUrlProblem(cfg.apiUrl, cfg.uiUrl);
+	if (urlProblem) {
+		clack.log.error(urlProblem);
+		process.exit(1);
 	}
 
 	saveServerConfig(cwd, cfg);
@@ -325,6 +367,7 @@ function applyServerConfig(cfg) {
 			reportsAbs: path.resolve(cwd, 'reports').replace(/\\/g, '/'),
 			projectsAbs: path.join(cwd, 'projects').replace(/\\/g, '/'),
 			backendPort: cfg.backendPort,
+			framework: cfg.framework,
 			apiUrl: cfg.apiUrl,
 			plumVersion: readPlumVersion()
 		}),

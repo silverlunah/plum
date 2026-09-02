@@ -6,9 +6,10 @@
 // Plum's session recording. Import `test` from here instead of @playwright/test
 // and your runs get report replay and step-by-step results.
 //
-// `test` is the only import that changes. expect, Page and everything else come
-// from @playwright/test as usual, and you never need to edit this file to use a
-// new Playwright API.
+// This file is Plum's: leave it alone. Add your own fixtures in fixtures/pages.ts,
+// which extends this test. `test` is the only import that changes, expect, Page
+// and everything else come from @playwright/test as usual, and you never need to
+// edit this file to use a new Playwright API.
 
 import { test as base, BrowserContext, Page, TestInfo } from '@playwright/test';
 import * as fs from 'fs';
@@ -28,7 +29,7 @@ const RECORD_BUNDLE_PATH = path.join(
 
 const LIVE_FLUSH_INTERVAL_MS = 500;
 
-export type Step = <T>(name: string, body: () => Promise<T> | T) => Promise<T>;
+export type PlumStep = <T>(name: string, body: () => Promise<T> | T) => Promise<T>;
 
 type RecordedStep = { name: string; status: 'passed' | 'failed'; duration: number; error?: string };
 
@@ -42,6 +43,19 @@ interface TabRecording {
 }
 
 const tabIdForIndex = (index: number): string => (index === 0 ? 'main' : `tab-${index + 1}`);
+
+// Off the fixture type on purpose: a fixture named in `extend` shows up in every
+// test's autocomplete, and this accumulator is not API.
+const stepsByTest = new WeakMap<TestInfo, RecordedStep[]>();
+
+function stepsFor(testInfo: TestInfo): RecordedStep[] {
+	let steps = stepsByTest.get(testInfo);
+	if (!steps) {
+		steps = [];
+		stepsByTest.set(testInfo, steps);
+	}
+	return steps;
+}
 
 async function markStep(page: Page, name: string): Promise<void> {
 	try {
@@ -58,32 +72,24 @@ async function markStep(page: Page, name: string): Promise<void> {
 }
 
 export const test = base.extend<{
-	plumSteps: RecordedStep[];
-	step: Step;
+	plumStep: PlumStep;
 	context: BrowserContext;
 }>({
-	plumSteps: async ({}, use) => {
-		await use([]);
-	},
-
-	/**
-	 * Reports a step and marks it on the replay timeline. Use this in place of
-	 * `test.step`.
-	 *
-	 * Playwright's JSON report drops steps that run inside a hook, so `step` keeps
-	 * its own list: which is what lets a `beforeEach` show up in Plum alongside the
-	 * steps in the test body.
-	 */
-	step: async ({ page, plumSteps }, use) => {
-		const step = async <T>(name: string, body: () => Promise<T> | T): Promise<T> => {
+	// Reports a step and marks it on the replay timeline. Use this in place of
+	// `test.step`: Playwright's JSON report drops steps that run inside a hook, so
+	// plumStep keeps its own list, which is what lets a `beforeEach` show up in
+	// Plum alongside the steps in the test body.
+	plumStep: async ({ page }, use, testInfo) => {
+		const recorded = stepsFor(testInfo);
+		const plumStep = async <T>(name: string, body: () => Promise<T> | T): Promise<T> => {
 			await markStep(page, name);
 			const startedAt = Date.now();
 			try {
 				const value = await base.step(name, async () => await body());
-				plumSteps.push({ name, status: 'passed', duration: Date.now() - startedAt });
+				recorded.push({ name, status: 'passed', duration: Date.now() - startedAt });
 				return value;
 			} catch (e: unknown) {
-				plumSteps.push({
+				recorded.push({
 					name,
 					status: 'failed',
 					duration: Date.now() - startedAt,
@@ -92,12 +98,12 @@ export const test = base.extend<{
 				throw e;
 			}
 		};
-		await use(step);
+		await use(plumStep);
 	},
 
 	// Overrides Playwright's own context fixture so every page in it is recorded,
 	// including popups and target=_blank tabs.
-	context: async ({ context, plumSteps }, use, testInfo) => {
+	context: async ({ context }, use, testInfo) => {
 		const tabs = new Map<Page, TabRecording>();
 		let tabCounter = 0;
 		let liveCounter = 0;
@@ -185,7 +191,7 @@ export const test = base.extend<{
 
 		if (liveTimer) clearInterval(liveTimer);
 		flushLive();
-		await attachResults(testInfo, workerId, tabs, plumSteps);
+		await attachResults(testInfo, workerId, tabs, stepsFor(testInfo));
 	}
 });
 

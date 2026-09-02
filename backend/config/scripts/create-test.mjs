@@ -42,22 +42,27 @@ const isPlaywright = fs.existsSync(path.join(testsRoot, 'playwright.config.ts'))
 /* ------------------------------------------------------------------ */
 
 function generateSpec(pascal, base, suiteTag, testTag) {
-	return `import { test } from '../fixtures/plum';
+	const fixture = base.toLowerCase();
+	return `import { test as base } from '../fixtures/plum';
 import { ${base}Page } from '../pages/${base}Page';
+
+// Move this into fixtures/pages.ts once a second spec needs the same page.
+const test = base.extend<{ ${fixture}: ${base}Page }>({
+	${fixture}: async ({ page }, use) => {
+		await use(new ${base}Page(page));
+	}
+});
 
 test.describe('${pascal}', { tag: '${suiteTag}' }, () => {
 	test.describe.configure({ mode: 'parallel' });
 
-	let ${base.toLowerCase()}: ${base}Page;
-
-	test.beforeEach(async ({ page, step }) => {
-		${base.toLowerCase()} = new ${base}Page(page);
-		await step('I am on the ${pascal} page', () => ${base.toLowerCase()}.goTo());
+	test.beforeEach(async ({ ${fixture}, plumStep }) => {
+		await plumStep('I am on the ${pascal} page', () => ${fixture}.goTo());
 	});
 
-	test('Example test', { tag: '${testTag}' }, async ({ step }) => {
-		await step('I perform an action', () => ${base.toLowerCase()}.performAction());
-		await step('I should see the expected result', () => ${base.toLowerCase()}.verifyResult());
+	test('Example test', { tag: '${testTag}' }, async ({ ${fixture}, plumStep }) => {
+		await plumStep('I perform an action', () => ${fixture}.performAction());
+		await plumStep('I should see the expected result', () => ${fixture}.verifyResult());
 	});
 });
 `;

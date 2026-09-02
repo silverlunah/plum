@@ -8,8 +8,8 @@ and merges new tests straight in.
 2. Add specs under `specs/`, page objects under `pages/`.
 3. Tag tests with `{ tag: '@TC-001' }`, Plum selects tests by tag, passing them
    to `--grep`.
-4. Take `step` from the fixture and wrap each action in it. Plum shows every step
-   as its own row in the report, including steps inside `beforeEach`. A test
+4. Take `plumStep` from the fixture and wrap each action in it. Plum shows every
+   step as its own row in the report, including steps inside `beforeEach`. A test
    without them is reported as a single pass or fail.
 
 Import `test` from `fixtures/plum` rather than `@playwright/test`, that is what
@@ -21,6 +21,19 @@ to use a new Playwright API.
 ```ts
 import { expect, type Page } from '@playwright/test';
 import { test } from '../fixtures/plum';
+```
+
+`fixtures/plum.ts` is Plum's, leave it as it is. `fixtures/pages.ts` is yours: it
+extends Plum's `test` with a fixture per page object, so a spec receives the pages
+it needs and no test shares state with another. Add your pages there and import
+`test` from `fixtures/pages` instead, as the example suite does.
+
+```ts
+import { test } from '../fixtures/pages';
+
+test('...', async ({ login, plumStep }) => {
+	await plumStep('I click on the login button', () => login.iClickOnTheLoginButton());
+});
 ```
 
 The example suite covers the four shapes you are likely to need: a basic test, a

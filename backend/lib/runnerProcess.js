@@ -22,8 +22,12 @@ const { PLUM_MODE_NODE, DEFAULT_PORT } = require('../constants/env');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
 const SERVER_PATH = path.join(BACKEND_DIR, 'server.js');
-const REGISTRY_PATH = path.join(BACKEND_DIR, '.runners.local.json');
-const LOGS_DIR = path.join(BACKEND_DIR, 'logs');
+// Runtime state lives under ~/.plum, alongside the node config store, so the
+// installed package stays read-only. A global install is frequently root-owned and
+// is replaced wholesale on update.
+const DATA_DIR = path.join(os.homedir(), '.plum');
+const REGISTRY_PATH = path.join(DATA_DIR, 'runners.local.json');
+const LOGS_DIR = path.join(DATA_DIR, 'logs');
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'host.docker.internal']);
 
