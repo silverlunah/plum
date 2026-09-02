@@ -57,6 +57,8 @@ docker-compose.override.yml
 /backend/test-results/
 /backend/reports/
 /backend/node_modules/
+# Uploaded test payloads for in-flight dispatched jobs — deleted when each finishes.
+/backend/.plum-jobs/
 
 # Cron Job Config
 /backend/config/cron-jobs.json

@@ -43,10 +43,18 @@ function startJob({
 	// path.resolve ensures absolute even if TMPDIR env var is set to a relative path
 	const tmpdir = path.resolve(os.tmpdir());
 
+	// Uploaded tests live *inside* the node's own tree, not in os.tmpdir(). A job dir
+	// outside it has to reach the toolchain through NODE_PATH, and Playwright's
+	// loader does not dedupe that against its own instance: the run dies with
+	// "two different versions of @playwright/test" and finds no tests. Nested here,
+	// ordinary upward resolution finds the node's node_modules, exactly as a
+	// project under the primary's projects/ folder does.
+	const jobsRoot = path.join(BACKEND_DIR, '.plum-jobs');
+
 	// Write test files sent by the primary into a per-job temp dir
 	let tempTestsDir = null;
 	if (tests && Object.keys(tests).length > 0) {
-		tempTestsDir = path.join(tmpdir, `plum-job-${jobId}`);
+		tempTestsDir = path.join(jobsRoot, `plum-job-${jobId}`);
 		for (const [rel, content] of Object.entries(tests)) {
 			const dest = path.join(tempTestsDir, rel);
 			// Keep writes inside the job dir — `rel` comes off the wire.
@@ -103,13 +111,7 @@ function startJob({
 		BROWSER: browser,
 		REPORT_RUNNERS: String(workers),
 		PLUM_SS_DIR: ssDir,
-		...(tempTestsDir ? { TESTS_ROOT: tempTestsDir } : {}),
-		// The job runs from a temp dir outside this node's tree, so upward resolution
-		// cannot reach the toolchain. The uploaded folder deliberately excludes
-		// node_modules; the node's own backend supplies Playwright and Cucumber.
-		NODE_PATH: process.env.NODE_PATH
-			? `${path.join(BACKEND_DIR, 'node_modules')}${path.delimiter}${process.env.NODE_PATH}`
-			: path.join(BACKEND_DIR, 'node_modules')
+		...(tempTestsDir ? { TESTS_ROOT: tempTestsDir } : {})
 	};
 
 	const ssPoller = startRRwebPoller(ssDir, (batch) => {
