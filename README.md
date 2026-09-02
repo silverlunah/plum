@@ -1,4 +1,4 @@
-![Plum social preview](https://repository-images.githubusercontent.com/936477779/c7897789-fd10-40dc-8cd5-5ebe41b59bfd)
+![Plum social preview](https://repository-images.githubusercontent.com/936477779/7e440872-39bf-459b-b69c-1f602a9de960)
 
 <p align="center">
   <a href="https://www.npmjs.com/package/plum-e2e"><img src="https://img.shields.io/npm/v/plum-e2e?color=7c3aed&label=plum-e2e" alt="npm version" /></a>
@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  Self-hosted QA platform for teams doing manual <em>and</em> automated testing. Comes with a full test-case repository alongside a ready-to-use <a href="https://playwright.dev">Playwright</a> automation environment, or <a href="https://cucumber.io">Cucumber</a> if your team writes Gherkin.<br/><br/>
+  Self-hosted QA platform for teams doing manual <em>and</em> automated testing. Comes with a full test-case repository alongside a ready-to-use <a href="https://playwright.dev">Playwright</a> or <a href="https://cucumber.io">Cucumber</a> test environment.<br/><br/>
 Each project picks Playwright or Cucumber when it's created. Run tests from the CLI or UI, track manual test runs, view and export reports, schedule jobs, and get Discord / Slack notifications.
 </p>
 
@@ -24,63 +24,59 @@ Each project picks Playwright or Cucumber when it's created. Run tests from the 
 
 ```bash
 npm install -g plum-e2e
-mkdir my-tests && cd my-tests
-plum init                    # add --framework cucumber for Gherkin
 ```
 
-Set `BASE_URL` in `tests/.env`, then run:
+---
+
+## Quickstart a project
+
+Run this on one machine for your team. It sets up the server and its UI: the Test Repository, reports, session replay, schedules, notifications and MCP.
 
 ```bash
+mkdir plum-server && cd plum-server
+plum server start            # Choose between Playwright or Cucumber project
+```
+
+- Each project picks **Playwright or Cucumber** when it is created, and that choice is permanent.
+- The server scaffolds `projects/<slug>/tests/` itself. `plum project init "<name>"` only re-creates a folder that went missing.
+- Tests deeper than `tests/` (say `apps/web/e2e/`) go in **Settings → Project → Tests folder**, relative to `projects/<slug>/` to support wherever you initiate Git.
+- Containers use `restart: unless-stopped`, so the server returns after a reboot. For nodes too, whenever you register with `plum node start`.
+
+---
+
+## If you don't want a UI
+
+```bash
+plum init          # Choose between Playwright or Cucumber project
 npx playwright test          # a Cucumber project uses: npx cucumber-js
 ```
 
 That's it. `plum init` scaffolds `tests/`, installs the runner and downloads browsers, so the example tests run straight away. Open `tests/` in your editor; it is the same layout a project has on the server, so it drops into `projects/<slug>/tests/` later if you add the UI.
 
-Use `plum create-test` to scaffold a new test and page object.
-
----
-
-## Server (web UI)
-
-Run this on one machine for your team. It gives you the Test Repository, reports, session replay, schedules, notifications and MCP.
-
-```bash
-npm install -g plum-e2e
-mkdir plum && cd plum
-plum server start
-```
-
-It asks whether the machine is local or on a network, then brings up Docker, runs migrations and creates `projects/`. Open **http://localhost:3002** and finish setup: organisation, first project, owner account.
-
-A few things worth knowing:
-
-- Each project picks **Playwright or Cucumber** when it is created, and that choice is permanent.
-- The server scaffolds `projects/<slug>/tests/` itself. `plum project init "<name>"` only re-creates a folder that went missing.
-- Tests deeper than `tests/` (say `apps/web/e2e/`) go in **Settings → Project → Tests folder**, relative to `projects/<slug>/`. A project with a custom path is never scaffolded.
-- Containers use `restart: unless-stopped`, so the server returns after a reboot. For nodes too, register with `plum node start <name> --boot`.
+Use `plum create-test` to scaffold a new test. It asks whether to add a page object too (default no); pass `--page` to opt in without the prompt.
 
 ---
 
 ## Command reference
 
-| Command                      | Description                                                                |
-| ---------------------------- | -------------------------------------------------------------------------- |
-| `plum init`                  | Scaffold a local `./tests/` folder. `--framework playwright\|cucumber`     |
-| `plum create-test`           | Scaffold a test and page object. `--name <Name>` skips the prompt          |
-| `plum create-step`           | Cucumber only: scaffold a step definition                                  |
-| `plum server start`          | Start the UI stack via Docker                                              |
-| `plum server restart`        | Rebuild images and restart, no prompts                                     |
-| `plum server stop`           | Stop the server, data preserved                                            |
-| `plum server reconfig`       | Re-enter server settings without starting                                  |
-| `plum project init "<name>"` | Re-create a server project's tests folder                                  |
-| `plum node start [name]`     | Register a node and start it here. `--boot` / `--no-boot`                  |
-| `plum node list`             | This machine's nodes and their status                                      |
-| `plum node restart [name]`   | Stop, refresh dependencies, restart                                        |
-| `plum node stop [name]`      | Stop a node                                                                |
-| `plum node delete [name]`    | Stop it, delete its config, unregister it. No name deletes every node here |
-| `plum node reconfig [name]`  | Re-enter a node's settings, without starting                               |
-| `plum manage-nodes`          | Interactive node management menu                                           |
-| `plum update`                | Update Plum, then restart registered servers and nodes                     |
+| Command                      | Description                                                                      |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| `plum init`                  | Scaffold a local `./tests/` folder. `--framework playwright\|cucumber`           |
+| `plum create-test`           | Scaffold a test. `--page` also adds a page object, `--name <Name>` skips prompts |
+| `plum create-step`           | Cucumber only: scaffold a step definition (page object optional)                 |
+| `plum server start`          | Start the UI stack via Docker                                                    |
+| `plum server restart`        | Rebuild images and restart, no prompts                                           |
+| `plum server stop`           | Stop the server, data preserved                                                  |
+| `plum server reconfig`       | Re-enter server settings without starting                                        |
+| `plum project init "<name>"` | Re-create a server project's tests folder                                        |
+| `plum node start [name]`     | Register a node and start it here. `--boot` / `--no-boot`                        |
+| `plum node list`             | This machine's nodes and their status                                            |
+| `plum node restart [name]`   | Stop, refresh dependencies, restart                                              |
+| `plum node stop [name]`      | Stop a node                                                                      |
+| `plum node delete [name]`    | Stop it, delete its config, unregister it. No name deletes every node here       |
+| `plum node reconfig [name]`  | Re-enter a node's settings, without starting                                     |
+| `plum manage-nodes`          | Interactive node management menu                                                 |
+| `plum update`                | Update Plum, then restart registered servers and nodes                           |
 
 ---
 
@@ -130,8 +126,6 @@ Full documentation is available at:
 | [MCP Integration](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/mcp-integration-yGjbsFrI76)                 | Per-member MCP keys, connecting an AI client, tools, `(MCP)` attribution           |
 | [Activity Logs](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/activity-logs-5BJzE7o8oU)                     | Audit feed of project and org changes, MCP attribution, retention                  |
 | [Backup](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/backup-RNNObJfct9)                                   | Instance-level database backup, schedule, S3 target                                |
-
----
 
 ---
 
