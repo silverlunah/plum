@@ -3,23 +3,18 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-const fs = require('fs');
-const path = require('path');
 const prisma = require('./prisma');
 const activityService = require('./activityService');
 const { ACTIVITY_ACTION } = require('../constants/activity');
-const { featuresDir } = require('../lib/testsRoot');
+const { getTestIds } = require('./testService');
 
 const caseLabel = (c) => `${c.displayId} ${c.title}`;
 
-function isTaggedInFeatures(projectId, displayId) {
+// True when a test in the project already carries this case's id as a tag, so a
+// case created after its automation exists starts out marked automated.
+function isTaggedInTests(projectId, displayId) {
 	try {
-		const dir = featuresDir(projectId);
-		const tag = `@${displayId}`;
-		return fs
-			.readdirSync(dir)
-			.filter((f) => f.endsWith('.feature'))
-			.some((f) => fs.readFileSync(path.join(dir, f), 'utf8').includes(tag));
+		return getTestIds(projectId).has(displayId);
 	} catch {
 		return false;
 	}
@@ -106,7 +101,7 @@ async function create(
 			priority: priority ?? 'Medium',
 			createdById,
 			viaMcp,
-			isAutomated: isTaggedInFeatures(projectId, displayId)
+			isAutomated: isTaggedInTests(projectId, displayId)
 		},
 		select: caseSelect
 	});

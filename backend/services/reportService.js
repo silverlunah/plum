@@ -687,18 +687,7 @@ const pruneOldReports = async (retentionDays) => {
  */
 async function syncAutomatedFromTests(projectId) {
 	try {
-		const { getTestSuites } = require('./testService');
-		const { suites } = getTestSuites(projectId);
-		const tagSet = new Set();
-		const add = (id) => {
-			for (const one of Array.isArray(id) ? id : [id]) {
-				if (one) tagSet.add(String(one).replace(/^@/, ''));
-			}
-		};
-		for (const suite of suites) {
-			add(suite.suiteId);
-			for (const test of suite.tests) add(test.id);
-		}
+		const tagSet = require('./testService').getTestIds(projectId);
 		if (tagSet.size === 0) return;
 		await prisma.testCase.updateMany({
 			where: {

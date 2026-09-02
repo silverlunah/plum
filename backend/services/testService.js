@@ -144,4 +144,25 @@ const getTestSuites = (projectId) => {
 	return { suites };
 };
 
-module.exports = { getTestSuites };
+/**
+ * Every test and suite id in the project, without the leading @.
+ *
+ * The one answer to "is this case automated", shared by the create path and the
+ * periodic sync. Both used to scan .feature text themselves, which silently found
+ * nothing in a Playwright project.
+ */
+const getTestIds = (projectId) => {
+	const ids = new Set();
+	const add = (id) => {
+		for (const one of Array.isArray(id) ? id : [id]) {
+			if (one) ids.add(String(one).replace(/^@/, ''));
+		}
+	};
+	for (const suite of getTestSuites(projectId).suites) {
+		add(suite.suiteId);
+		for (const test of suite.tests) add(test.id);
+	}
+	return ids;
+};
+
+module.exports = { getTestSuites, getTestIds };
