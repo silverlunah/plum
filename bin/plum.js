@@ -177,6 +177,11 @@ async function promptPort(message, initial, onFree) {
  *
  * Returns an error string, or null when the pair is usable.
  */
+// There is no stored mode: a network install is one whose URLs are not loopback,
+// which is the same thing the old `mode` field recorded and could contradict.
+const LOOPBACK = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i;
+const isNetworkUrl = (u) => !!u && !LOOPBACK.test(u.trim());
+
 function serverUrlProblem(apiUrl, uiUrl) {
 	let api;
 	let ui;
@@ -209,12 +214,18 @@ async function configureServer({ force }) {
 
 	const overrides = {
 		framework: getFlag(args, '--framework'),
-		mode: getFlag(args, '--mode'),
 		backendPort: getFlag(args, '--backend-port'),
 		frontendPort: getFlag(args, '--frontend-port'),
 		apiUrl: getFlag(args, '--api-url'),
 		uiUrl: getFlag(args, '--ui-url')
 	};
+	if (getFlag(args, '--mode') !== undefined) {
+		clack.log.error(
+			'--mode is gone. A network install is just its URLs: pass --api-url and --ui-url. ' +
+				'Omit both for a local one.'
+		);
+		process.exit(1);
+	}
 	if (overrides.framework !== undefined) {
 		const wanted = String(overrides.framework).toLowerCase();
 		if (!isFramework(wanted)) {
@@ -225,7 +236,6 @@ async function configureServer({ force }) {
 		}
 		cfg.framework = wanted;
 	}
-	if (overrides.mode !== undefined) cfg.mode = overrides.mode;
 	if (overrides.backendPort !== undefined) cfg.backendPort = overrides.backendPort;
 	if (overrides.frontendPort !== undefined) cfg.frontendPort = overrides.frontendPort;
 	if (overrides.apiUrl !== undefined) cfg.apiUrl = overrides.apiUrl;
@@ -233,7 +243,6 @@ async function configureServer({ force }) {
 
 	const hasFlags = anyFlags(args, [
 		'--framework',
-		'--mode',
 		'--backend-port',
 		'--frontend-port',
 		'--api-url',
@@ -264,10 +273,9 @@ async function configureServer({ force }) {
 				{ value: 'production', label: 'Production / Network server' },
 				{ value: 'local', label: 'Local machine' }
 			],
-			initialValue: cfg.mode === 'production' ? 'production' : 'local'
+			initialValue: isNetworkUrl(cfg.apiUrl) ? 'production' : 'local'
 		});
 		if (clack.isCancel(mode)) cancelAndExit();
-		cfg.mode = mode;
 
 		const useDefaults = await clack.confirm({
 			message:
@@ -313,7 +321,7 @@ async function configureServer({ force }) {
 		}
 	} else {
 		if (!isFramework(cfg.framework)) cfg.framework = DEFAULT_FRAMEWORK;
-		if (!cfg.mode) cfg.mode = 'local';
+		// No URL given and none saved means local, which is loopback on the chosen ports.
 		if (!cfg.apiUrl) cfg.apiUrl = `http://localhost:${cfg.backendPort}`;
 		if (!cfg.uiUrl) cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
 	}
@@ -1543,8 +1551,8 @@ switch (command) {
 					'  update     update Plum, then restart servers and nodes',
 					'',
 					`  ${pc.dim('Passing any option below skips the prompts:')}`,
-					'  --mode <local|production> --framework <playwright|cucumber>',
-					'  --backend-port <n> --frontend-port <n> --api-url <url> --ui-url <url>',
+					'  --framework <playwright|cucumber> --backend-port <n> --frontend-port <n>',
+					'  --api-url <url> --ui-url <url>   (both set = network install, neither = local)',
 					''
 				].join('\n')
 			);
@@ -1752,7 +1760,6 @@ switch (command) {
 		console.log(
 			'    --framework <f>    playwright | cucumber, default for new projects (default: playwright)'
 		);
-		console.log('    --mode <m>         local | production (default: local)');
 		console.log('    --backend-port <n> Host port for the backend/API (default: 3001)');
 		console.log('    --frontend-port <n> Host port for the UI (default: 3002)');
 		console.log(

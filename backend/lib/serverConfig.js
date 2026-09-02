@@ -23,8 +23,6 @@ function defaults() {
 		// Default test framework for projects created on this server. A project's
 		// own choice is fixed at creation and never re-read from here.
 		framework: DEFAULT_FRAMEWORK,
-		// 'local' derives localhost URLs; 'production' takes operator-supplied ones.
-		mode: 'local',
 		backendPort: '3001',
 		frontendPort: '3002',
 		// Public URLs the browser actually uses. Left blank until the user sets
@@ -48,10 +46,10 @@ function loadServerConfig(dir) {
 }
 
 function saveServerConfig(dir, cfg) {
-	const { framework, mode, backendPort, frontendPort, apiUrl, uiUrl } = cfg;
+	const { framework, backendPort, frontendPort, apiUrl, uiUrl } = cfg;
 	fs.writeFileSync(
 		configPath(dir),
-		JSON.stringify({ framework, mode, backendPort, frontendPort, apiUrl, uiUrl }, null, 2) + '\n',
+		JSON.stringify({ framework, backendPort, frontendPort, apiUrl, uiUrl }, null, 2) + '\n',
 		'utf8'
 	);
 }
