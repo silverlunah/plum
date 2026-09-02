@@ -22,6 +22,7 @@ const plumRoot = path.resolve(__dirname, '..');
 const userTestsPath = path.join(process.cwd(), 'tests');
 const scaffoldTestsPath = path.join(plumRoot, 'backend', '_scaffold');
 const overrideFilePath = path.join(plumRoot, 'docker-compose.override.yml');
+const SERVER_SUBCOMMANDS = new Set(['start', 'stop', 'restart', 'reconfig', 'update']);
 
 // A local test project is self-contained under tests/, same layout as a
 // server project's projects/<slug>/tests/. The cwd-root paths are only a
@@ -888,6 +889,7 @@ async function configureNode({ force, name: nameArg }) {
 	if (!name) name = `node-${generateToken().slice(0, 6)}`;
 
 	const saved = loadNodeByName(name);
+	const preexisting = Object.keys(saved).length > 0;
 
 	let mode = getFlag(args, '--mode') ?? saved.mode ?? 'local';
 	let primary = getFlag(args, '--primary') ?? process.env.PRIMARY_URL ?? saved.primary ?? '';
@@ -898,11 +900,16 @@ async function configureNode({ force, name: nameArg }) {
 	let url = getFlag(args, '--url') ?? saved.url ?? '';
 	// Read from a co-located server; a remote node needs it passed in. cleanSecret
 	// drops a stray license header that the old add-license bug prepended.
+	// The primary is asked before the saved copy on purpose. A node config
+	// outlives the server that issued its secret (~/.plum survives an uninstall,
+	// and the server regenerates the secret in whatever directory it is started
+	// from), so a stale saved value used to win, register with the wrong secret,
+	// and never prompt because a value had been found.
 	let nodeSecret =
 		cleanSecret(getFlag(args, '--node-secret')) ||
 		cleanSecret(process.env.PLUM_NODE_SECRET) ||
-		cleanSecret(saved.nodeSecret) ||
 		cleanSecret(readNodeSecretFromPrimary()) ||
+		cleanSecret(saved.nodeSecret) ||
 		'';
 
 	if (interactive) {
@@ -988,7 +995,7 @@ async function configureNode({ force, name: nameArg }) {
 		pid: saved.pid ?? null
 	});
 	globalRegistryLib().registerInstall('node', nodeHome(name));
-	return { primary, port, browser, token, nodeSecret, name, url, mode };
+	return { primary, port, browser, token, nodeSecret, name, url, mode, preexisting };
 }
 
 async function registerNode({ primary, name, url, token, nodeSecret, browser, port }) {
@@ -1039,6 +1046,15 @@ async function bringNodeUp(cfg) {
 
 	const registeredId = await registerNode(cfg);
 	if (!registeredId) {
+		// A node that never registered has no business leaving its config, token and
+		// secret on disk: it showed up in `plum node list` as a phantom holding a
+		// port. An already-registered node keeps its config, the failure is transient.
+		if (!cfg.preexisting) {
+			const { deleteNodeByName, nodeHome } = nodeRegisterLib();
+			deleteNodeByName(cfg.name);
+			globalRegistryLib().unregisterInstall('node', nodeHome(cfg.name));
+			clack.log.info('Removed the local config for a node that never registered.');
+		}
 		clack.outro(pc.red('Node not started.'));
 		process.exitCode = 1;
 		return;
@@ -1239,23 +1255,21 @@ async function nodeList() {
 	}
 }
 
-async function nodeDelete({ name: nameArg }) {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Node Delete  ')));
-	migrateLegacyNodes();
+async function deleteOneNode(target) {
 	const { loadNodeByName, deleteNodeByName, nodeHome } = nodeRegisterLib();
 	const { stopNode, killPort, forgetNode } = runnerProcessLib();
 	const { unregisterInstall } = globalRegistryLib();
 
-	const target = nameArg || resolveNodeName(null);
-	if (!target) return clack.outro(pc.dim('Done.'));
 	const cfg = loadNodeByName(target);
 
 	stopNode(String(cfg.id ?? target), cfg.port ? Number(cfg.port) : null);
 	if (cfg.port) await killPort(Number(cfg.port));
 
 	if (cfg.id && cfg.primary) {
+		// The primary is asked first for the same reason as on registration: this
+		// node's saved copy may predate the server's current secret.
 		const secret =
-			process.env.PLUM_NODE_SECRET || cfg.nodeSecret || readNodeSecretFromPrimary() || '';
+			process.env.PLUM_NODE_SECRET || readNodeSecretFromPrimary() || cfg.nodeSecret || '';
 		try {
 			const res = await fetch(`${cfg.primary.replace(/\/$/, '')}/runners/${cfg.id}`, {
 				method: 'DELETE',
@@ -1264,19 +1278,45 @@ async function nodeDelete({ name: nameArg }) {
 			});
 			// 404 means someone already removed it there (typically in the web UI),
 			// which is the usual reason to be cleaning up locally at all.
-			if (res.ok) clack.log.success('Removed from primary.');
-			else if (res.status === 404) clack.log.info('Already removed from primary.');
-			else clack.log.warn(`Primary responded HTTP ${res.status}`);
+			if (res.ok) clack.log.success(`Removed "${target}" from primary.`);
+			else if (res.status === 404) clack.log.info(`"${target}" was already gone from primary.`);
+			else clack.log.warn(`Primary responded HTTP ${res.status} for "${target}"`);
 		} catch (e) {
-			clack.log.warn(`Could not reach primary: ${e.message}`);
+			clack.log.warn(`Could not reach primary for "${target}": ${e.message}`);
 		}
 	}
 
 	bootServiceLib().removeNodeBoot(target);
 	deleteNodeByName(target);
-	if (cfg.id) forgetNode(String(cfg.id));
+	forgetNode(String(cfg.id ?? target));
 	unregisterInstall('node', nodeHome(target));
-	clack.outro(pc.green(`Deleted "${target}", process, local config, and primary registration.`));
+}
+
+// No name deletes every node on this machine. Deleting one at a time left the
+// rest of a dev fleet registered, which is never what "clean up" meant.
+async function nodeDelete({ name: nameArg }) {
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Node Delete  ')));
+	migrateLegacyNodes();
+	const { listNodeNames } = nodeRegisterLib();
+
+	const targets = nameArg ? [nameArg] : listNodeNames();
+	if (targets.length === 0) return clack.outro(pc.dim('No nodes on this machine.'));
+
+	if (!nameArg && targets.length > 1 && interactiveAllowed()) {
+		const ok = await clack.confirm({
+			message: `Delete all ${targets.length} nodes on this machine (${targets.join(', ')})?`
+		});
+		if (clack.isCancel(ok) || !ok) return clack.outro(pc.dim('Cancelled.'));
+	}
+
+	for (const target of targets) await deleteOneNode(target);
+	clack.outro(
+		pc.green(
+			targets.length === 1
+				? `Deleted "${targets[0]}", process, local config, and primary registration.`
+				: `Deleted ${targets.length} nodes: ${targets.join(', ')}.`
+		)
+	);
 }
 
 async function nodeReconfig({ name }) {
@@ -1488,6 +1528,33 @@ switch (command) {
 	}
 
 	case 'server':
+		// Explicit list, then reject the unknown: falling through to serverStart()
+		// meant `plum server -h` and any typo built images and started the stack.
+		if (subcommand === '-h' || subcommand === '--help') {
+			console.log(
+				[
+					'',
+					`${pc.bold('Usage:')} plum server <command> [options]`,
+					'',
+					'  start      start the UI stack via Docker (default)',
+					'  stop       stop the server, data preserved',
+					'  restart    rebuild images and restart, no prompts',
+					'  reconfig   re-enter settings without starting',
+					'  update     update Plum, then restart servers and nodes',
+					'',
+					`  ${pc.dim('Passing any option below skips the prompts:')}`,
+					'  --mode <local|production> --framework <playwright|cucumber>',
+					'  --backend-port <n> --frontend-port <n> --api-url <url> --ui-url <url>',
+					''
+				].join('\n')
+			);
+			break;
+		}
+		if (subcommand && !SERVER_SUBCOMMANDS.has(subcommand) && !subcommand.startsWith('--')) {
+			console.log(`Unknown command "plum server ${subcommand}". Try ${pc.cyan('plum server -h')}.`);
+			process.exitCode = 1;
+			break;
+		}
 		if (subcommand === 'stop') {
 			console.log('--------------------------------------\n');
 			console.log('🛑 Stopping Plum server...');
@@ -1548,7 +1615,7 @@ switch (command) {
 					'  list             list this machine’s nodes and their status',
 					'  restart [name]   stop, refresh deps, restart a node',
 					'  stop [name]      stop a node',
-					'  delete <name>    stop it, delete its config, unregister it from the primary',
+					'  delete [name]    stop it, delete its config, unregister it. No name: every node here',
 					'  reconfig [name]  re-enter settings and re-register, without starting',
 					'',
 					'  Options for start: --mode <local|production> --primary <url> --url <url> --port <n> --token <s> --node-secret <s> --browser <chromium|firefox> --boot | --no-boot',
@@ -1718,7 +1785,7 @@ switch (command) {
 		console.log('  node restart [name]  Stop, refresh deps, and restart a node');
 		console.log('  node stop [name]     Stop a node');
 		console.log(
-			'  node delete <name>   Stop it, remove its config, and unregister it from the primary'
+			'  node delete [name]   Stop it, remove its config, unregister it. No name: all nodes here'
 		);
 		console.log(
 			'  node reconfig [name] Re-enter a node’s settings and re-register, without starting'

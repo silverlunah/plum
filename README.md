@@ -63,24 +63,24 @@ A few things worth knowing:
 
 ## Command reference
 
-| Command                      | Description                                                            |
-| ---------------------------- | ---------------------------------------------------------------------- |
-| `plum init`                  | Scaffold a local `./tests/` folder. `--framework playwright\|cucumber` |
-| `plum create-test`           | Scaffold a test and page object. `--name <Name>` skips the prompt      |
-| `plum create-step`           | Cucumber only: scaffold a step definition                              |
-| `plum server start`          | Start the UI stack via Docker                                          |
-| `plum server restart`        | Rebuild images and restart, no prompts                                 |
-| `plum server stop`           | Stop the server, data preserved                                        |
-| `plum server reconfig`       | Re-enter server settings without starting                              |
-| `plum project init "<name>"` | Re-create a server project's tests folder                              |
-| `plum node start [name]`     | Register a node and start it here. `--boot` / `--no-boot`              |
-| `plum node list`             | This machine's nodes and their status                                  |
-| `plum node restart [name]`   | Stop, refresh dependencies, restart                                    |
-| `plum node stop [name]`      | Stop a node                                                            |
-| `plum node delete <name>`    | Stop it, delete its config, unregister it                              |
-| `plum node reconfig [name]`  | Re-enter a node's settings, without starting                           |
-| `plum manage-nodes`          | Interactive node management menu                                       |
-| `plum update`                | Update Plum, then restart registered servers and nodes                 |
+| Command                      | Description                                                                |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| `plum init`                  | Scaffold a local `./tests/` folder. `--framework playwright\|cucumber`     |
+| `plum create-test`           | Scaffold a test and page object. `--name <Name>` skips the prompt          |
+| `plum create-step`           | Cucumber only: scaffold a step definition                                  |
+| `plum server start`          | Start the UI stack via Docker                                              |
+| `plum server restart`        | Rebuild images and restart, no prompts                                     |
+| `plum server stop`           | Stop the server, data preserved                                            |
+| `plum server reconfig`       | Re-enter server settings without starting                                  |
+| `plum project init "<name>"` | Re-create a server project's tests folder                                  |
+| `plum node start [name]`     | Register a node and start it here. `--boot` / `--no-boot`                  |
+| `plum node list`             | This machine's nodes and their status                                      |
+| `plum node restart [name]`   | Stop, refresh dependencies, restart                                        |
+| `plum node stop [name]`      | Stop a node                                                                |
+| `plum node delete [name]`    | Stop it, delete its config, unregister it. No name deletes every node here |
+| `plum node reconfig [name]`  | Re-enter a node's settings, without starting                               |
+| `plum manage-nodes`          | Interactive node management menu                                           |
+| `plum update`                | Update Plum, then restart registered servers and nodes                     |
 
 ---
 
