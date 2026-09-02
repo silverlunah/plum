@@ -62,6 +62,12 @@ async function start() {
 		process.exit(1);
 	}
 
+	if (isNodeMode) {
+		// A previous process may have exited with report files still pending the
+		// in-memory timer that deletes them.
+		require('./services/nodeExecutionService').sweepStaleJobArtifacts();
+	}
+
 	// Confirm the tests directory is in place before doing anything else.
 	ensureTestsDir(testsDir, isNodeMode);
 

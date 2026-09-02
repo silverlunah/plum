@@ -36,6 +36,12 @@
 		"**/prisma/migrations/**",
 		"**/prisma/schema.prisma",
 		"**/.npmignore",
-		"**/.npmrc"
+		"**/.npmrc",
+		"**/.svelte-kit/**",
+		"**/build/**",
+		"**/reports/**",
+		"**/logs/**",
+		"**/.plum-jobs/**",
+		"**/node_modules/**"
 	]
 }

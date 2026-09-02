@@ -20,6 +20,51 @@ const BACKEND_DIR = path.resolve(__dirname, '..');
 // Jobs are purged after 10 minutes post-completion.
 const jobs = {};
 
+const STALE_ARTIFACT_MS = 60 * 60 * 1000;
+
+/**
+ * Removes job artifacts a previous process left behind.
+ *
+ * Each finished job deletes its own report file on a 10-minute timer held in
+ * memory, so restarting a node orphans whatever was still pending — and a report
+ * file carries the run's recordings, so they are not small. Run once at node
+ * startup; anything younger than an hour could belong to a job still in flight.
+ */
+function sweepStaleJobArtifacts() {
+	const now = Date.now();
+	const older = (p) => {
+		try {
+			return now - fs.statSync(p).mtimeMs > STALE_ARTIFACT_MS;
+		} catch {
+			return false;
+		}
+	};
+
+	const tmp = path.resolve(os.tmpdir());
+	let removed = 0;
+	try {
+		for (const name of fs.readdirSync(tmp)) {
+			if (!/^plum-(report-.*\.json|ss-.*)$/.test(name)) continue;
+			const full = path.join(tmp, name);
+			if (!older(full)) continue;
+			fs.rmSync(full, { recursive: true, force: true });
+			removed++;
+		}
+	} catch {}
+
+	const jobsRoot = path.join(BACKEND_DIR, '.plum-jobs');
+	try {
+		for (const name of fs.readdirSync(jobsRoot)) {
+			const full = path.join(jobsRoot, name);
+			if (!older(full)) continue;
+			fs.rmSync(full, { recursive: true, force: true });
+			removed++;
+		}
+	} catch {}
+
+	if (removed > 0) console.log(`🧹 Removed ${removed} stale job artifact(s)`);
+}
+
 function getJob(jobId) {
 	return jobs[jobId];
 }
@@ -179,4 +224,10 @@ function cancelJob(jobId) {
 	return true;
 }
 
-module.exports = { startJob, getJob, pollJob, cancelJob };
+module.exports = {
+	sweepStaleJobArtifacts,
+	startJob,
+	getJob,
+	pollJob,
+	cancelJob
+};
