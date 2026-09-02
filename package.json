@@ -20,7 +20,12 @@
 		"prepare": "husky",
 		"postinstall": "node bin/postinstall.js",
 		"docker:up": "docker compose up -d --build",
-		"docker:down": "docker compose down"
+		"docker:down": "docker compose down",
+		"nodes:up": "node scripts/nodes.cjs up",
+		"nodes:down": "node scripts/nodes.cjs down",
+		"nodes:list": "node scripts/nodes.cjs list",
+		"cli:test": "node scripts/cli-test.cjs",
+		"cli:test:full": "node scripts/cli-test.cjs --full"
 	},
 	"keywords": [],
 	"bin": {

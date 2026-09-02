@@ -128,6 +128,28 @@ npm run docker:up    # build and start all services (detached)
 npm run docker:down  # stop all services
 ```
 
+### Runner nodes
+
+Nodes run as bare processes outside Docker. These register against the local
+server and clean up after themselves:
+
+```bash
+npm run nodes:up     # start 2 nodes on ports 9001-9002 (npm run nodes:up -- 3 for more)
+npm run nodes:list   # show this machine's nodes
+npm run nodes:down   # stop and deregister them
+```
+
+### Testing the CLI
+
+Scaffolds a throwaway project per framework and drives it with the runner's own
+commands, so `plum init` and the run flags are covered end to end:
+
+```bash
+npm run cli:test        # scaffold both frameworks and run each suite (~40s)
+npm run cli:test:full   # adds tags, file:line, browsers, workers, shards,
+                        # retries, generators and tsc (~2min)
+```
+
 ### Frontend (hot reload)
 
 The frontend dev server runs outside Docker for fast HMR:
@@ -140,13 +162,24 @@ npm run dev          # available at http://localhost:3002, or the next free port
 
 ### Backend, writing and running tests
 
+Runs go straight to the project's own runner, from its tests folder:
+
+```bash
+cd projects/<slug>/tests
+npx playwright test                      # a Playwright project
+npx playwright test --grep @TC-001       # one test
+npx playwright test --workers 4          # in parallel
+npx cucumber-js                          # a Cucumber project
+npx cucumber-js --tags @TC-001           # one scenario
+npx cucumber-js --parallel 4             # in parallel
+```
+
+Generators and the node menu live in `backend`:
+
 ```bash
 cd backend
-npm test                     # run all tests
-npm test -- @TC-001          # run a specific scenario
-npm test -- --parallel 4     # run in parallel
-npm run create-step          # scaffold a step definition
-npm run create-test          # scaffold a full test from template
+npm run create-step          # Cucumber: scaffold a step definition
+npm run create-test          # scaffold a test and page object
 npm run manage-nodes         # open the node management menu
 ```
 
