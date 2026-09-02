@@ -2,7 +2,7 @@
 	"license": "./resources/mit-license.txt",
 	"ignoreDefaultIgnores": false,
 	"licenseFormats": {
-		"js|ts|mjs|css": {
+		"js|cjs|ts|mjs|css": {
 			"prepend": "/*",
 			"append": " */\n",
 			"eachLine": {
