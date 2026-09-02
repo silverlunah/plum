@@ -51,13 +51,19 @@ function buildRunCommand({
 		if (grep) args.push('--grep', shellQuote(grep));
 		if (browser) args.push(`--project=${browser}`);
 		if (Number(retries) > 0) args.push(`--retries=${Number(retries)}`);
-		if (Number(workers) > 1) args.push(`--workers=${Number(workers)}`);
+		// Always passed, including 1. Playwright's own default is half the machine's
+		// cores, so omitting the flag for a single worker silently ran five on a
+		// 10-core box while the UI said one.
+		args.push(`--workers=${Math.max(1, Number(workers) || 1)}`);
 		if (shard) args.push(`--shard=${shard.index}/${shard.total}`);
 		return { bin: 'playwright', args, cwd: testsRoot, env };
 	}
 
 	const args = [];
 	if (tag) args.push('--tags', shellQuote(tag));
+	// Only above 1: cucumber-js runs in the main process without the flag, which is
+	// what one worker means. `--parallel 1` would spawn a worker process to do the
+	// same work, and the project's own config already defaults to 0.
 	if (Number(workers) > 1) args.push('--parallel', String(Number(workers)));
 	return { bin: 'cucumber-js', args, cwd: testsRoot, env };
 }
