@@ -29,6 +29,13 @@ npx playwright test --grep @TC-001         # one test, the way Plum runs it
 npx playwright test --ui                   # Playwright's UI mode
 ```
 
-Plum always passes `--project=<browser>` so a run reports one browser, and
-`--retries` from the project's max-retries setting. Everything else — workers,
-timeouts, traces, reporters — comes from `playwright.config.ts`.
+Plum always passes `--project=<browser>` so a run reports one browser,
+`--retries` from the project's max-retries setting, and `--workers` from the
+worker count you pick. Everything else — timeouts, traces, reporters — comes
+from `playwright.config.ts`.
+
+Workers only help if your tests can actually be split. Playwright divides work
+between files, so a single spec file runs in one worker no matter how many you
+ask for; `test.describe.configure({ mode: 'parallel' })` lets the tests inside
+one file spread out too. Tests then run in any order, in separate browsers, so
+they must not depend on one another.

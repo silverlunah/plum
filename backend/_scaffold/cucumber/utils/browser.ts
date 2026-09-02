@@ -136,7 +136,10 @@ function flushLiveRRwebEvents(): void {
 		if (newEvents.length === 0) continue;
 		recording.liveFlushedCount = recording.events.length;
 		try {
-			const seq = `${String(Date.now()).padStart(16, '0')}-${String(++_liveRRwebCounter).padStart(4, '0')}`;
+			// _workerId is part of the name because every worker writes into the same
+			// directory with its own counter — without it two workers can land on the
+			// same millisecond and counter, and one silently overwrites the other.
+			const seq = `${String(Date.now()).padStart(16, '0')}-w${_workerId}-${String(++_liveRRwebCounter).padStart(4, '0')}`;
 			fs.writeFileSync(
 				path.join(ssDir, `${seq}.rrweb.json`),
 				JSON.stringify({

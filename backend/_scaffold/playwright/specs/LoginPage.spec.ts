@@ -11,6 +11,13 @@ import { WELCOME_MESSAGE } from '../utils/constants';
 // Each action is wrapped in test.step() so it shows up as its own row in the Plum
 // report. Without them a test is reported as a single pass or fail.
 test.describe('Demo Sauce Login', { tag: '@TS-001' }, () => {
+	// Playwright splits work across files, not within them: without this a whole
+	// file runs in one worker, and Plum's worker setting appears to do nothing on a
+	// single-file project. Parallel mode lets these tests spread across workers —
+	// each gets its own browser and its own fixtures, so they must not depend on
+	// each other or on order.
+	test.describe.configure({ mode: 'parallel' });
+
 	let login: LoginPage;
 	let homepage: HomepagePage;
 
