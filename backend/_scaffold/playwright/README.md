@@ -8,12 +8,20 @@ and merges new tests straight in.
 2. Add specs under `specs/`, page objects under `pages/`.
 3. Tag tests with `{ tag: '@TC-001' }` — Plum selects tests by tag, passing them
    to `--grep`.
-4. Wrap each action in `test.step()`. Plum shows every step as its own row in the
-   report; a test without them is reported as a single pass or fail.
+4. Take `step` from the fixture and wrap each action in it. Plum shows every step
+   as its own row in the report, including steps inside `beforeEach`. A test
+   without them is reported as a single pass or fail.
+
+Import `test` from `fixtures/plum` rather than `@playwright/test` — that is what
+records the session for report replay. Everything else is ordinary Playwright.
 
 The example suite covers the four shapes you are likely to need: a basic test, a
 negative test, a parameterised one (the equivalent of a Scenario Outline, one test
 per row) and one driven by structured data (the equivalent of a data table).
+
+`npm install` in this folder installs the runner and its types (~50 MB; browsers
+live in a shared cache, not here). Plum does it before a run, and it is what makes
+the folder type-check in your editor.
 
 Give every test its own tag, including each row of a parameterised set. Tags are
 ids: two tests sharing one cannot be told apart in a report or matched to separate

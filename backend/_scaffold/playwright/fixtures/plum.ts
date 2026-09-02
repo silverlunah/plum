@@ -3,27 +3,30 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-// Wires up Plum's session recording — removing or reordering code here can silently break report replay.
+// Plum's session recording. Import `test` from here instead of @playwright/test
+// and your runs get report replay and step-by-step results.
 
-import { test as base, BrowserContext, Page } from '@playwright/test';
+import { test as base, BrowserContext, Page, TestInfo } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
 
-// Must match the mime types Plum's server expects — do not change.
 const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
-// Always attached, even for a test with no recorded events, so the worker that
-// ran it is still recoverable for grouping.
 const WORKER_META_MIME_TYPE = 'application/x-plum-worker+json';
-// @rrweb/record's package.json only exports its main entry ("."), so a deep
-// require.resolve() of the UMD bundle is blocked by Node's exports map — resolve
-// the (exported) main entry instead and locate the sibling file on disk.
+const STEPS_MIME_TYPE = 'application/x-plum-steps+json';
+
+// @rrweb/record only exports its main entry, so resolve that and take the sibling
+// bundle off disk.
 const RECORD_BUNDLE_PATH = path.join(
 	path.dirname(require.resolve('@rrweb/record')),
 	'record.umd.min.cjs'
 );
 
 const LIVE_FLUSH_INTERVAL_MS = 500;
+
+export type Step = (name: string, body: () => Promise<void> | void) => Promise<void>;
+
+type RecordedStep = { name: string; status: 'passed' | 'failed'; duration: number; error?: string };
 
 interface TabRecording {
 	tabId: string;
@@ -36,45 +39,65 @@ interface TabRecording {
 
 const tabIdForIndex = (index: number): string => (index === 0 ? 'main' : `tab-${index + 1}`);
 
-/** The `step` fixture's type, for helpers that take it at describe scope. */
-export type Step = (name: string, body: () => Promise<void> | void) => Promise<void>;
+async function markStep(page: Page, name: string): Promise<void> {
+	try {
+		await page.evaluate((label) => {
+			// @ts-ignore — injected by the rrweb bundle
+			if (window.rrwebRecord?.record?.addCustomEvent) {
+				// @ts-ignore
+				window.rrwebRecord.record.addCustomEvent('step', { name: label });
+			}
+		}, name);
+	} catch {
+		// best-effort: a missing marker only costs a label on the replay timeline
+	}
+}
 
-/**
- * Records every page in the test's context with rrweb and attaches the result,
- * so a Playwright run produces the same replay a Cucumber one does.
- *
- * This overrides Playwright's own `context` fixture rather than launching a
- * browser: Playwright owns that lifecycle, and hooking the context means popups
- * and target=_blank tabs are covered without racing their first navigation.
- */
 export const test = base.extend<{
-	context: BrowserContext;
+	plumSteps: RecordedStep[];
 	step: Step;
+	context: BrowserContext;
 }>({
+	plumSteps: async ({}, use) => {
+		await use([]);
+	},
+
 	/**
-	 * Use this instead of test.step() to get a labelled replay.
+	 * Reports a step and marks it on the replay timeline. Use this in place of
+	 * `test.step`.
 	 *
-	 * It reports the step exactly as test.step() does, and additionally drops a
-	 * marker into the recording so the replay timeline can show which step was
-	 * running. Cucumber does the marking automatically from a BeforeStep hook;
-	 * Playwright has no equivalent, so it happens here.
+	 * Playwright's JSON report drops steps that run inside a hook, so `step` keeps
+	 * its own list — which is what lets a `beforeEach` show up in Plum alongside the
+	 * steps in the test body.
 	 */
-	step: async ({ page }, use) => {
+	step: async ({ page, plumSteps }, use) => {
 		await use(async (name, body) => {
 			await markStep(page, name);
-			await base.step(name, async () => {
-				await body();
-			});
+			const startedAt = Date.now();
+			try {
+				await base.step(name, async () => {
+					await body();
+				});
+				plumSteps.push({ name, status: 'passed', duration: Date.now() - startedAt });
+			} catch (e: unknown) {
+				plumSteps.push({
+					name,
+					status: 'failed',
+					duration: Date.now() - startedAt,
+					error: e instanceof Error ? e.message : String(e)
+				});
+				throw e;
+			}
 		});
 	},
 
-	context: async ({ context }, use, testInfo) => {
+	// Overrides Playwright's own context fixture so every page in it is recorded,
+	// including popups and target=_blank tabs.
+	context: async ({ context, plumSteps }, use, testInfo) => {
 		const tabs = new Map<Page, TabRecording>();
 		let tabCounter = 0;
 		let liveCounter = 0;
 		let liveTimer: ReturnType<typeof setInterval> | null = null;
-		// Playwright runs one worker per OS process and numbers them from 0; report
-		// and display 1-based, like the rest of the worker-count UI.
 		const workerId = testInfo.workerIndex + 1;
 
 		const trackPage = (pg: Page) => {
@@ -88,17 +111,13 @@ export const test = base.extend<{
 				liveFlushedCount: 0
 			};
 			tabs.set(pg, recording);
-			// A static page can go a long time between rrweb events, or emit none at all
-			// after its initial load, so its own timestamps are a poor proxy for how
-			// long it stayed relevant. Real open/close times let the replay UI line
-			// multiple tabs up on one timeline without guessing from event gaps.
 			pg.on('close', () => {
 				recording.closedAt = Date.now();
 			});
 		};
 
-		// Sends only what is newly arrived since the last tick, per tab, so a live
-		// viewer gets a steady trickle instead of the whole buffer growing unbounded.
+		// Only what is new since the last tick, so a live viewer gets a trickle
+		// rather than an ever-growing buffer.
 		const flushLive = () => {
 			const ssDir = process.env.PLUM_SS_DIR;
 			if (!ssDir) return;
@@ -107,9 +126,7 @@ export const test = base.extend<{
 				if (newEvents.length === 0) continue;
 				recording.liveFlushedCount = recording.events.length;
 				try {
-					// workerId is part of the name because every worker writes into the same
-					// directory with its own counter — without it two workers can land on
-					// the same millisecond and counter, and one silently overwrites the other.
+					// The worker id is in the name because every worker writes here.
 					const seq = `${String(Date.now()).padStart(16, '0')}-w${workerId}-${String(++liveCounter).padStart(4, '0')}`;
 					fs.writeFileSync(
 						path.join(ssDir, `${seq}.rrweb.json`),
@@ -121,27 +138,24 @@ export const test = base.extend<{
 						})
 					);
 				} catch {
-					// best-effort — live streaming shouldn't affect the recording itself
+					// best-effort: live streaming must not affect the recording
 				}
 			}
 		};
 
-		// Context-level exposeBinding/addInitScript apply to every page in the
-		// context automatically, current and future.
 		await context.exposeBinding('__plumEmitRRwebEvent', (source, eventJson: string) => {
 			const recording = source.page && tabs.get(source.page);
 			if (!recording) return;
 			try {
 				recording.events.push(JSON.parse(eventJson as string));
 			} catch {
-				// malformed event — drop it, recording is best-effort
+				// malformed event — recording is best-effort
 			}
 		});
 		await context.addInitScript({ path: RECORD_BUNDLE_PATH });
 		await context.addInitScript(() => {
-			// addInitScript runs in every frame, including hidden ad/tracking iframes.
-			// Recordings are tracked per-Page, so an unguarded sub-frame session would
-			// corrupt the tab's event stream with bogus 0x0 "about:blank" entries.
+			// Init scripts run in every frame; recording only the top one keeps ad and
+			// tracking iframes out of the tab's event stream.
 			// @ts-ignore
 			if (window.self !== window.top) return;
 			// @ts-ignore
@@ -149,7 +163,7 @@ export const test = base.extend<{
 				// @ts-ignore
 				window.rrwebRecord.record({
 					emit: (event: unknown) => {
-						// @ts-ignore — exposed by BrowserContext.exposeBinding above
+						// @ts-ignore — exposed above
 						window.__plumEmitRRwebEvent(JSON.stringify(event));
 					}
 				});
@@ -159,72 +173,56 @@ export const test = base.extend<{
 		context.on('page', trackPage);
 		for (const existing of context.pages()) trackPage(existing);
 
-		// Only when someone is actually watching live — a scheduled run with no
-		// viewer shouldn't pay for this.
 		if (process.env.PLUM_SS_DIR) {
 			liveTimer = setInterval(flushLive, LIVE_FLUSH_INTERVAL_MS);
 		}
 
 		await use(context);
 
-		if (liveTimer) {
-			clearInterval(liveTimer);
-			liveTimer = null;
-		}
-		// One last live flush so the stream doesn't miss whatever happened between
-		// the final tick and the end of the test.
+		if (liveTimer) clearInterval(liveTimer);
 		flushLive();
-
-		try {
-			await testInfo.attach('plum-worker', {
-				body: Buffer.from(JSON.stringify({ workerId }), 'utf8'),
-				contentType: WORKER_META_MIME_TYPE
-			});
-		} catch {
-			// best-effort — a missing worker marker just falls back to workerId 1
-		}
-
-		const flushedAt = Date.now();
-		for (const recording of tabs.values()) {
-			if (recording.events.length === 0) continue;
-			try {
-				const payload = JSON.stringify({
-					workerId,
-					tabId: recording.tabId,
-					tabIndex: recording.tabIndex,
-					events: recording.events,
-					openedAt: recording.openedAt,
-					// A tab still open when the test ends (typically the main one) stayed
-					// relevant through to the flush, not just its last DOM event.
-					closedAt: recording.closedAt ?? flushedAt
-				});
-				await testInfo.attach('plum-rrweb', {
-					body: zlib.gzipSync(Buffer.from(payload, 'utf8')),
-					contentType: RRWEB_MIME_TYPE
-				});
-			} catch {
-				// a failed recording flush shouldn't fail the test
-			}
-		}
+		await attachResults(testInfo, workerId, tabs, plumSteps);
 	}
 });
 
-/**
- * Injects a labeled rrweb custom event at the current recording timestamp so the
- * replay UI can show which step was running at any point in the timeline. Used by
- * the `step` fixture above; call it directly only for a marker outside a step.
- */
-export async function markStep(page: Page, name: string): Promise<void> {
-	try {
-		await page.evaluate((label) => {
-			// @ts-ignore — rrwebRecord is injected by the record.umd.min.cjs bundle
-			if (window.rrwebRecord?.record?.addCustomEvent) {
-				// @ts-ignore
-				window.rrwebRecord.record.addCustomEvent('step', { name: label });
-			}
-		}, name);
-	} catch {
-		// best-effort — a missing marker only costs a label in the replay timeline
+async function attachResults(
+	testInfo: TestInfo,
+	workerId: number,
+	tabs: Map<Page, TabRecording>,
+	plumSteps: RecordedStep[]
+): Promise<void> {
+	const attach = async (name: string, body: Buffer, contentType: string) => {
+		try {
+			await testInfo.attach(name, { body, contentType });
+		} catch {
+			// a failed attachment must not fail the test
+		}
+	};
+
+	await attach(
+		'plum-worker',
+		Buffer.from(JSON.stringify({ workerId }), 'utf8'),
+		WORKER_META_MIME_TYPE
+	);
+
+	if (plumSteps.length > 0) {
+		await attach('plum-steps', Buffer.from(JSON.stringify(plumSteps), 'utf8'), STEPS_MIME_TYPE);
+	}
+
+	const flushedAt = Date.now();
+	for (const recording of tabs.values()) {
+		if (recording.events.length === 0) continue;
+		const payload = JSON.stringify({
+			workerId,
+			tabId: recording.tabId,
+			tabIndex: recording.tabIndex,
+			events: recording.events,
+			openedAt: recording.openedAt,
+			// A tab still open at the end stayed relevant to the flush, not just to
+			// its last DOM event.
+			closedAt: recording.closedAt ?? flushedAt
+		});
+		await attach('plum-rrweb', zlib.gzipSync(Buffer.from(payload, 'utf8')), RRWEB_MIME_TYPE);
 	}
 }
 

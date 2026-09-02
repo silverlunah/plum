@@ -80,10 +80,29 @@ function toFeatures(pwJson) {
 	return { features: [...byFile.values()], attempts };
 }
 
-const PLUM_MIME_TYPES = new Set([
-	'application/x-plum-rrweb+json',
-	'application/x-plum-worker+json'
-]);
+const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
+const WORKER_META_MIME_TYPE = 'application/x-plum-worker+json';
+const STEPS_MIME_TYPE = 'application/x-plum-steps+json';
+const RECORDING_MIME_TYPES = new Set([RRWEB_MIME_TYPE, WORKER_META_MIME_TYPE]);
+
+/**
+ * Steps the Plum fixture recorded itself, or null when it wasn't used.
+ *
+ * Preferred over `results[].steps` because Playwright's JSON drops steps that ran
+ * inside a hook — a `beforeEach` would otherwise be missing from the report.
+ */
+function attachedSteps(result) {
+	const found = (result?.attachments ?? []).find(
+		(a) => a.contentType === STEPS_MIME_TYPE && a.body
+	);
+	if (!found) return null;
+	try {
+		const parsed = JSON.parse(Buffer.from(found.body, 'base64').toString('utf8'));
+		return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+	} catch {
+		return null;
+	}
+}
 
 /**
  * Plum's own attachments, re-shaped as a hidden step carrying Cucumber-style
@@ -97,7 +116,7 @@ const PLUM_MIME_TYPES = new Set([
 function buildRecordingStep(results) {
 	const embeddings = results
 		.flatMap((r) => r.attachments ?? [])
-		.filter((a) => PLUM_MIME_TYPES.has(a.contentType) && a.body)
+		.filter((a) => RECORDING_MIME_TYPES.has(a.contentType) && a.body)
 		.map((a) => ({ mime_type: a.contentType, data: a.body }));
 	if (embeddings.length === 0) return null;
 	return {
@@ -138,6 +157,20 @@ function buildSteps(result, title) {
 	}
 
 	const errorMessage = (result.errors ?? []).map((e) => e.message).join('\n\n') || null;
+
+	const recorded = attachedSteps(result);
+	if (recorded) {
+		return recorded.map((step) => ({
+			keyword: '',
+			name: step.name,
+			result: {
+				status: step.status === 'passed' ? 'passed' : 'failed',
+				duration: (step.duration ?? 0) * 1_000_000,
+				...((step.error || errorMessage) && { error_message: step.error ?? errorMessage })
+			}
+		}));
+	}
+
 	const authored = (result.steps ?? []).filter(
 		(s) => s.category === undefined || s.category === 'test.step'
 	);

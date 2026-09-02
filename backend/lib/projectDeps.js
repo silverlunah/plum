@@ -17,7 +17,9 @@ const MARKER_FILE = '.plum-deps';
 function declaredDependencies(testsRoot) {
 	try {
 		const pkg = JSON.parse(fs.readFileSync(path.join(testsRoot, 'package.json'), 'utf8'));
-		return pkg.dependencies ?? {};
+		// devDependencies included: the scaffold declares the runner and its types
+		// there, which is what makes a project type-check in an editor.
+		return { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
 	} catch {
 		return {};
 	}
@@ -33,12 +35,14 @@ const dependencyHash = (deps) =>
  * Installs a project's own extra dependencies into its tests folder, and only
  * when it declares some.
  *
- * A project that declares none needs no install at all: everything Plum provides
- * (Playwright, Cucumber, ts-node) resolves from the backend's own node_modules by
- * walking up the tree, since projects live inside it. Declaring a dependency here
- * puts it in projects/<slug>/<testsPath>/node_modules, where it shadows nothing
- * and no other project sees it — unlike the old plum.plugins.json, which
- * installed one project's packages into the backend for every project.
+ * The scaffold declares the runner and its types, so a project installs its own
+ * toolchain the way any Playwright or Cucumber repo does — about 12 MB, since the
+ * browsers live in a shared cache rather than in node_modules. That is also what
+ * makes the folder type-check when opened in an editor: on the host the backend's
+ * node_modules is a sibling of the project, not an ancestor, so TypeScript cannot
+ * reach it. Anything extra a project adds lands here too, seen by no other
+ * project — unlike the old plum.plugins.json, which installed one project's
+ * packages into the backend for all of them.
  *
  * Synchronous on purpose: a run must not start against a half-installed folder.
  */
