@@ -57,7 +57,28 @@ function loadRegistry() {
 }
 
 function saveRegistry(registry) {
+	fs.mkdirSync(DATA_DIR, { recursive: true });
 	fs.writeFileSync(REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
+}
+
+// Every writer here is a read-modify-write and several nodes can start at once,
+// so re-read immediately before writing. A blind save dropped whatever entries
+// another start had added in between, leaving a live node with no port on record.
+function updateRegistry(mutate) {
+	const registry = loadRegistry();
+	mutate(registry);
+	saveRegistry(registry);
+	return registry;
+}
+
+/** Drops everything this manager kept for a runner: its entry and its log. */
+function forgetNode(id) {
+	updateRegistry((registry) => {
+		delete registry[id];
+	});
+	try {
+		fs.rmSync(path.join(LOGS_DIR, `runner-${id}.log`), { force: true });
+	} catch {}
 }
 
 /**
@@ -262,10 +283,10 @@ function startNode({ id, port, token }) {
 	child.unref();
 	fs.closeSync(out);
 
-	const registry = loadRegistry();
 	const entry = { pid: child.pid, port: String(port), logFile, startedAt: Date.now() };
-	registry[id] = entry;
-	saveRegistry(registry);
+	updateRegistry((registry) => {
+		registry[id] = entry;
+	});
 	return entry;
 }
 
@@ -298,12 +319,10 @@ function stopNode(id, fallbackPort = null) {
 	// Keep the port on record (clearing only the pid) so a later Start reuses
 	// the same port instead of falling back to the runner's URL, which may
 	// not even have an explicit port: or a hardcoded default.
-	if (port) {
-		registry[id] = { ...entry, pid: null, port: String(port) };
-	} else {
-		delete registry[id];
-	}
-	saveRegistry(registry);
+	updateRegistry((reg) => {
+		if (port) reg[id] = { ...entry, pid: null, port: String(port) };
+		else delete reg[id];
+	});
 	return signalled;
 }
 
@@ -342,6 +361,7 @@ async function killPort(port) {
 }
 
 module.exports = {
+	forgetNode,
 	BACKEND_DIR,
 	LOGS_DIR,
 	REGISTRY_PATH,

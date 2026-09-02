@@ -69,13 +69,16 @@ router.post('/', nodeControlAuth, async (req, res) => {
 	}
 });
 
-router.delete('/:id', nodeControlAuth, async (req, res) => {
+// next(e) rather than a blanket 500: deleting a runner that is already gone
+// raises Prisma P2025, which the global handler maps to 404, and a node cleaning
+// up locally needs to tell "already removed" apart from a real failure.
+router.delete('/:id', nodeControlAuth, async (req, res, next) => {
 	try {
 		await runnerService.stop(req.params.id);
 		await runnerService.remove(req.params.id);
 		res.json({ message: 'Runner deleted' });
 	} catch (e) {
-		res.status(500).json({ error: 'Failed to delete runner' });
+		next(e);
 	}
 });
 
