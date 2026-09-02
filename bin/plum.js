@@ -1248,6 +1248,25 @@ async function nodeStop({ name: nameArg }) {
 	clack.outro(stopped ? pc.green(`Stopped "${target}".`) : pc.dim(`"${target}" wasn't running.`));
 }
 
+// Deleting a node in the web UI cannot reach this machine, so its config stays
+// here holding a token and node secret for a runner that no longer exists. Ask
+// each primary once which ids it still knows and flag the leftovers, so
+// `plum node delete` has something to act on. Silent when a primary is down:
+// unreachable is not the same as deleted.
+async function knownRunnerIds(primary, secret) {
+	try {
+		const res = await fetch(`${primary.replace(/\/$/, '')}/runners`, {
+			headers: secret ? { Authorization: `Bearer ${secret}` } : {},
+			signal: AbortSignal.timeout(4000)
+		});
+		if (!res.ok) return null;
+		const { runners } = await res.json();
+		return new Set((runners ?? []).map((r) => String(r.id)));
+	} catch {
+		return null;
+	}
+}
+
 async function nodeList() {
 	migrateLegacyNodes();
 	const { listNodeNames, loadNodeByName } = nodeRegisterLib();
@@ -1258,12 +1277,31 @@ async function nodeList() {
 		return;
 	}
 	const { nodeBootStatus } = bootServiceLib();
-	for (const n of names) {
-		const c = loadNodeByName(n);
+	const configs = names.map((n) => [n, loadNodeByName(n)]);
+
+	const knownByPrimary = new Map();
+	for (const [, c] of configs) {
+		if (!c.primary || knownByPrimary.has(c.primary)) continue;
+		const secret = process.env.PLUM_NODE_SECRET || c.nodeSecret || '';
+		knownByPrimary.set(c.primary, await knownRunnerIds(c.primary, secret));
+	}
+
+	let orphans = 0;
+	for (const [n, c] of configs) {
 		const running = c.id && statusOf(String(c.id)) === 'running';
 		const boot = nodeBootStatus(n) === 'enabled' ? pc.dim(' ⏻ boot') : '';
+		const known = c.primary ? knownByPrimary.get(c.primary) : null;
+		const orphaned = known && c.id && !known.has(String(c.id));
+		if (orphaned) orphans++;
+		const flag = orphaned ? pc.yellow('  deleted on primary') : '';
 		console.log(
-			`${running ? pc.green('●') : pc.dim('○')} ${n.padEnd(16)} ${pc.dim((c.url || '') + '  :' + (c.port || '?'))}${boot}`
+			`${running ? pc.green('●') : pc.dim('○')} ${n.padEnd(16)} ${pc.dim((c.url || '') + '  :' + (c.port || '?'))}${boot}${flag}`
+		);
+	}
+	if (orphans > 0) {
+		clack.log.warn(
+			`${orphans} node${orphans > 1 ? 's' : ''} still ${orphans > 1 ? 'hold' : 'holds'} a token and secret here but no ` +
+				'longer exist on the primary. Remove with `plum node delete <name>`.'
 		);
 	}
 }
@@ -1272,7 +1310,7 @@ async function nodeDelete({ name: nameArg }) {
 	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Node Delete  ')));
 	migrateLegacyNodes();
 	const { loadNodeByName, deleteNodeByName, nodeHome } = nodeRegisterLib();
-	const { stopNode, killPort } = runnerProcessLib();
+	const { stopNode, killPort, forgetNode } = runnerProcessLib();
 	const { unregisterInstall } = globalRegistryLib();
 
 	const target = nameArg || resolveNodeName(null);
@@ -1291,9 +1329,11 @@ async function nodeDelete({ name: nameArg }) {
 				headers: secret ? { Authorization: `Bearer ${secret}` } : {},
 				signal: AbortSignal.timeout(10000)
 			});
-			clack.log[res.ok ? 'success' : 'warn'](
-				res.ok ? 'Removed from primary.' : `Primary responded HTTP ${res.status}`
-			);
+			// 404 means someone already removed it there (typically in the web UI),
+			// which is the usual reason to be cleaning up locally at all.
+			if (res.ok) clack.log.success('Removed from primary.');
+			else if (res.status === 404) clack.log.info('Already removed from primary.');
+			else clack.log.warn(`Primary responded HTTP ${res.status}`);
 		} catch (e) {
 			clack.log.warn(`Could not reach primary: ${e.message}`);
 		}
@@ -1301,6 +1341,7 @@ async function nodeDelete({ name: nameArg }) {
 
 	bootServiceLib().removeNodeBoot(target);
 	deleteNodeByName(target);
+	if (cfg.id) forgetNode(String(cfg.id));
 	unregisterInstall('node', nodeHome(target));
 	clack.outro(pc.green(`Deleted "${target}", process, local config, and primary registration.`));
 }
