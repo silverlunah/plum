@@ -12,6 +12,12 @@ RUN npx playwright install --with-deps
 
 COPY . .
 
+# The legacy single-project tests dir is not shipped (it is .npmignore'd) and a
+# fresh multi-project install has no host tests/ to bind-mount over it, but the
+# server still asserts /app/tests exists on boot. Real tests live under
+# /app/projects/<slug>/tests; this just satisfies the check.
+RUN mkdir -p /app/tests
+
 RUN npx prisma generate
 RUN npm run create-env && sed -i 's/^IS_HEADLESS=false/IS_HEADLESS=true/' .env
 
