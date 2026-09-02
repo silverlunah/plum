@@ -4,7 +4,7 @@
  */
 
 import { writable, get } from 'svelte/store';
-import { BROWSERS, TRIGGER_TYPES } from '$lib/constants';
+import { BROWSERS, TRIGGER_TYPES, BUILTIN_RUNNER_ID } from '$lib/constants';
 import { SOCKET_EVENTS } from '$lib/socketEvents';
 import { MANUAL_RUN_LABEL } from '$lib/copy/runners';
 import { auth } from './auth';
@@ -62,12 +62,28 @@ export const runnerConfig = writable({
 	workers: 1,
 	testID: '',
 	browser: BROWSERS[0].id,
-	selectedRunners: ['built-in']
+	selectedRunners: [BUILTIN_RUNNER_ID]
 });
 
 export const panelExpanded = writable(false);
 
-export const builtInEnabled = writable(true);
+// Assume the built-in runner is off until the server says otherwise: defaulting
+// to `true` and correcting on an async fetch let a disabled built-in runner get
+// pre-selected in the window before the fetch resolved.
+export const builtInEnabled = writable(false);
+
+// The runner ids that should actually be selected, given what was saved, whether
+// the built-in runner is enabled, and which nodes currently exist. Built-in is
+// only a fallback when it's enabled or when there is genuinely nothing else to
+// run on — never just because a saved selection went stale.
+export function resolveSelectedRunners(selected, builtInOn, nodeIds) {
+	const valid = new Set([...(builtInOn ? [BUILTIN_RUNNER_ID] : []), ...nodeIds]);
+	const kept = selected.filter((id) => valid.has(id));
+	if (kept.length > 0) return kept;
+	if (builtInOn) return [BUILTIN_RUNNER_ID];
+	if (nodeIds.length > 0) return [nodeIds[0]];
+	return [BUILTIN_RUNNER_ID];
+}
 
 export const reportsVersion = writable(0);
 export const runsVersion = writable(0);
