@@ -308,13 +308,45 @@ async function runBuiltIn(run, io, emit) {
 // Distributed (multi-runner) path
 // ---------------------------------------------------------------------------
 
-async function runDistributed(run, io, emit, laneInfos, chunks) {
+/**
+ * How the selected tests are divided between lanes — one entry per lane.
+ *
+ * Playwright shards natively: every lane runs the same selection with
+ * `--shard=k/N` and Playwright decides the split, balancing by test count instead
+ * of Plum's round-robin over ids. Cucumber has no equivalent, so each lane gets an
+ * explicit tag expression for its own slice.
+ *
+ * `ids` is only used to name tests in a synthetic report when a lane never reports
+ * back. A shard lane cannot know which tests were its own, so it claims the whole
+ * selection — over-stated, but clearly attributed to that runner rather than lost.
+ */
+function planLanes(framework, tag, allIds, laneCount) {
+	if (framework === FRAMEWORK.PLAYWRIGHT) {
+		const total = Math.min(laneCount, allIds.length);
+		return Array.from({ length: total }, (_, i) => ({
+			tag,
+			shard: { index: i + 1, total },
+			// Playwright balances shards itself; an even division is what it aims for
+			// and is only ever used for the lane's progress label.
+			testCount: Math.floor(allIds.length / total) + (i < allIds.length % total ? 1 : 0),
+			ids: allIds
+		}));
+	}
+	return chunkTests(allIds, laneCount).map((ids) => ({
+		tag: buildTagExpression(ids),
+		shard: null,
+		testCount: ids.length,
+		ids
+	}));
+}
+
+async function runDistributed(run, io, emit, laneInfos, lanePlan) {
 	const startedAt = Date.now();
 	const { maxRetries, framework } = await settingsService.getProject(run.projectId);
 	const retrySplit = splitRetries(framework, maxRetries);
 
 	emit(SOCKET_EVENTS.BG_RUN_LANES_INIT, {
-		lanes: laneInfos.map((l, i) => ({ id: l.id, name: l.name, testCount: chunks[i].length }))
+		lanes: laneInfos.map((l, i) => ({ id: l.id, name: l.name, testCount: lanePlan[i].testCount }))
 	});
 
 	const total = laneInfos.length;
@@ -325,7 +357,7 @@ async function runDistributed(run, io, emit, laneInfos, chunks) {
 
 	const laneResults = await Promise.all(
 		laneInfos.map((lane, i) =>
-			runLane(run, io, emit, lane, chunks[i], retrySplit, framework, laneLogs)
+			runLane(run, io, emit, lane, lanePlan[i], retrySplit, framework, laneLogs)
 		)
 	);
 
@@ -363,9 +395,9 @@ async function runDistributed(run, io, emit, laneInfos, chunks) {
 	return { code: saved.status === REPORT_STATUS.PASS ? 0 : 1, reportId: saved.id };
 }
 
-function runLane(run, io, emit, lane, chunkIds, retrySplit, framework, laneLogs) {
+function runLane(run, io, emit, lane, plan, retrySplit, framework, laneLogs) {
 	const laneId = lane.id;
-	const chunkTag = buildTagExpression(chunkIds);
+	const chunkTag = plan.tag;
 	const onLog = (log) => {
 		laneLogs[laneId] += log;
 		emit(SOCKET_EVENTS.BG_RUN_LANE_LOG, { laneId, log });
@@ -383,6 +415,7 @@ function runLane(run, io, emit, lane, chunkIds, retrySplit, framework, laneLogs)
 						workers: run.workers,
 						browser: run.browser,
 						retries: retrySplit.nativeRetries,
+						shard: plan.shard,
 						testRunId: run.testRunId,
 						baseUrl: run.baseUrl,
 						onLog,
@@ -398,7 +431,7 @@ function runLane(run, io, emit, lane, chunkIds, retrySplit, framework, laneLogs)
 										makeSyntheticFailReport(
 											run.projectId,
 											lane.name,
-											chunkIds,
+											plan.ids,
 											'process exited with error'
 										)
 									),
@@ -416,6 +449,7 @@ function runLane(run, io, emit, lane, chunkIds, retrySplit, framework, laneLogs)
 								tags: currentTag,
 								browser: run.browser,
 								workers: run.workers,
+								shard: plan.shard,
 								baseUrl: run.baseUrl
 							},
 							onLog,
@@ -430,7 +464,7 @@ function runLane(run, io, emit, lane, chunkIds, retrySplit, framework, laneLogs)
 												makeSyntheticFailReport(
 													run.projectId,
 													lane.name,
-													chunkIds,
+													plan.ids,
 													'could not fetch report from runner'
 												)
 											),
@@ -532,10 +566,11 @@ async function execute(run, io) {
 		if (isSingleBuiltIn) return await runBuiltIn(run, roomIo, emit);
 
 		const allIds = getTestIdsForTag(run.projectId, run.tag);
-		const chunks = chunkTests(allIds, validated.length);
-		// Surplus runners beyond the non-empty chunk count would each re-run the
-		// full tag expression and duplicate scenarios — drop them.
-		const activeIds = validated.slice(0, chunks.length);
+		const { framework } = await settingsService.getProject(run.projectId);
+		const lanePlan = planLanes(framework, run.tag, allIds, validated.length);
+		// Surplus runners beyond the plan would each re-run the full selection and
+		// duplicate scenarios — drop them.
+		const activeIds = validated.slice(0, lanePlan.length);
 		if (activeIds.length === 0) {
 			emit(SOCKET_EVENTS.BG_RUN_LOG, { log: 'No tests found matching the selected tag.\n' });
 			return { code: 0, reportId: null, note: 'No tests matched — run skipped.' };
@@ -547,7 +582,7 @@ async function execute(run, io) {
 				return { id, name: r?.name ?? id, dbId: r?.id ?? null };
 			})
 		);
-		return await runDistributed(run, roomIo, emit, laneInfos, chunks);
+		return await runDistributed(run, roomIo, emit, laneInfos, lanePlan);
 	} finally {
 		inflight.delete(run.id);
 	}

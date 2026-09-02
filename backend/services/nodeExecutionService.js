@@ -80,6 +80,7 @@ function startJob({
 	browser = DEFAULT_BROWSER,
 	workers = 1,
 	framework,
+	shard = null,
 	tests = null,
 	env: userEnv = {}
 }) {
@@ -124,7 +125,7 @@ function startJob({
 		rrwebBatches: [],
 		exitCode: null,
 		startedAt: Date.now(),
-		meta: { tags: tags || '', browser, workers, framework },
+		meta: { tags: tags || '', browser, workers, framework, shard },
 		tempTestsDir,
 		reportFile,
 		ssDir
@@ -140,7 +141,10 @@ function startJob({
 		workers,
 		// The primary owns retries: for Cucumber it re-dispatches, and for Playwright
 		// it passes its own --retries on the lane that needs them.
-		retries: 0
+		retries: 0,
+		// Which slice of the selection this lane runs, when the primary sharded
+		// rather than splitting by tag.
+		shard
 	});
 
 	const env = {

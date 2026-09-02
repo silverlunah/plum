@@ -157,9 +157,12 @@ per-project deps" mostly evaporates — nodes keep using `NODE_PATH`.
       tree and the upload excludes `node_modules`).
       Verified on the live stack after deletion: cucumber and playwright, full suite
       (6 scenarios each) and single tag (1 each), all green.
-      NOT done: native `--shard=k/N`. Nodes still get an explicit `--grep`/`--tags`
-      chunk from `testChunker`, which works for both frameworks. A real multi-node run
-      has never been tested — no second node has been registered.
+      Native `--shard=k/N` DONE: `planLanes()` picks the strategy once per run —
+      Playwright lanes run the same selection with `--shard=k/N` and let Playwright
+      balance the split, Cucumber lanes keep an explicit tag chunk since it has no
+      equivalent. Verified across four live nodes: shards 1/4..4/4, 6 scenarios
+      merged with 6 recordings; shards compose with a tag (`--grep "@TC-001|@TC-002"
+    --shard=1/2`); Cucumber still emits `--tags` chunks.
 - [x] **4. Ingestion + discovery** — DONE for the built-in and node paths.
       `lib/playwrightReport.js` adapts Playwright's JSON into the _existing_ stored
       shape rather than adding a second pipeline, so the retry merge, tag sync, report

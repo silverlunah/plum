@@ -229,7 +229,7 @@ async function fetchReportContent(runner, jobId, onLog) {
  */
 async function dispatchAndPoll(
 	runnerId,
-	{ projectId, tags, browser, workers, baseUrl },
+	{ projectId, tags, browser, workers, shard = null, baseUrl },
 	onLog,
 	onDone,
 	onRRwebBatch = null,
@@ -266,6 +266,7 @@ async function dispatchAndPoll(
 				browser,
 				workers,
 				framework: frameworkFor(projectId),
+				shard,
 				tests: collectTestFiles(resolveTestsRoot(projectId)),
 				env: {
 					...loadTestEnv(process.cwd()),
