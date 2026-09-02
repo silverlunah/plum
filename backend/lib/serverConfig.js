@@ -56,8 +56,9 @@ function saveServerConfig(dir, cfg) {
 	);
 }
 
-// Ensures IS_HEADLESS=false in the root .env (for local `plum run-test`), keeping
-// every other entry. Server and node runs force headless regardless of this.
+// Ensures IS_HEADLESS=false in the root .env so a local `npx playwright test` or
+// `npx cucumber-js` run is headed, keeping every other entry. Server and node
+// runs force headless regardless of this.
 function writeEnvFile(dir) {
 	const envPath = path.join(dir, '.env');
 	let content = '';
