@@ -358,10 +358,29 @@ async function runDistributed(run, io, emit, laneInfos, lanePlan) {
 	const laneLogs = {};
 	for (const l of laneInfos) laneLogs[l.id] = '';
 
-	const laneResults = await Promise.all(
+	const settled = await Promise.allSettled(
 		laneInfos.map((lane, i) =>
 			runLane(run, io, emit, lane, lanePlan[i], retrySplit, framework, laneLogs)
 		)
+	);
+	// runLane resolves on every failure it knows about, so a rejection here is an
+	// unforeseen one. Absorb it per lane: one lane throwing must not discard the
+	// work every other lane already finished.
+	const laneResults = await Promise.all(
+		settled.map(async (outcome, i) => {
+			if (outcome.status === 'fulfilled') return outcome.value;
+			const reason = outcome.reason?.message ?? 'lane failed unexpectedly';
+			const log = `\n[ERROR] ${reason}\n`;
+			laneLogs[laneInfos[i].id] += log;
+			emit(SOCKET_EVENTS.BG_RUN_LANE_LOG, { laneId: laneInfos[i].id, log });
+			const parsed = await laneReport(framework, null, {
+				projectId: run.projectId,
+				laneName: laneInfos[i].name,
+				ids: lanePlan[i].ids,
+				reason
+			});
+			return { code: 1, content: JSON.stringify(parsed.rawJson), attempts: parsed.attempts };
+		})
 	);
 
 	let overallCode = 0;
