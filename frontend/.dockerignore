@@ -1,0 +1,10 @@
+# This file is part of Plum.
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+# The Dockerfile copies only src/, static/ and its config files, but keep these out
+# of the build context so a stray local install or build output cannot slow or
+# pollute a build.
+node_modules
+build
+.svelte-kit
+.env
+*.log
