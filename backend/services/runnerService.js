@@ -314,7 +314,10 @@ async function dispatchAndPoll(
 					signal: AbortSignal.timeout(8000)
 				}
 			);
-			if (!res.ok) return;
+			// Must advance the watchdog, not return: a restarted node 404s the job it
+			// forgot (and a rotated token 401s) for good, and lanes are awaited together,
+			// so a lane that never settles hangs the whole run.
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const body = await res.json();
 			unreachableSince = null;
 
@@ -330,12 +333,15 @@ async function dispatchAndPoll(
 				const content = await fetchReportContent(runner, jobId, onLog);
 				finish(body.exitCode ?? (body.status === JOB_STATUS.DONE ? 0 : 1), content);
 			}
-		} catch {
+		} catch (e) {
 			if (unreachableSince === null) {
 				unreachableSince = Date.now();
 			} else if (Date.now() - unreachableSince > NODE_UNREACHABLE_GRACE_MS) {
 				clearInterval(poll);
-				onLog(`\n[ERROR] Runner "${runner.name}" stopped responding, marking this lane failed.\n`);
+				onLog(
+					`\n[ERROR] Runner "${runner.name}" stopped responding (${e.message}), ` +
+						`marking this lane failed.\n`
+				);
 				finish(1, null);
 			}
 		} finally {
