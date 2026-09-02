@@ -68,6 +68,28 @@ test.describe('${pascal}', { tag: '${suiteTag}' }, () => {
 `;
 }
 
+function generateSpecNoPage(pascal, suiteTag, testTag) {
+	return `import { test } from '../fixtures/plum';
+
+test.describe('${pascal}', { tag: '${suiteTag}' }, () => {
+	test.describe.configure({ mode: 'parallel' });
+
+	test('Example test', { tag: '${testTag}' }, async ({ page, plumStep }) => {
+		await plumStep('I am on the ${pascal} page', async () => {
+			// Relative: baseURL comes from playwright.config.ts.
+			await page.goto('/');
+		});
+		await plumStep('I perform an action', async () => {
+			// TODO: implement
+		});
+		await plumStep('I should see the expected result', async () => {
+			// TODO: implement
+		});
+	});
+});
+`;
+}
+
 function generatePlaywrightPage(base) {
 	return `import { Page } from '@playwright/test';
 
@@ -139,6 +161,23 @@ Then('I should see the expected result', async () => {
 `;
 }
 
+function generateStepsNoPage(pascal) {
+	return `import { Given, When, Then } from '@cucumber/cucumber';
+
+Given('I am on the ${pascal} page', async () => {
+  // TODO: implement
+});
+
+When('I perform an action', async () => {
+  // TODO: implement
+});
+
+Then('I should see the expected result', async () => {
+  // TODO: implement
+});
+`;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main                                                               */
 /* ------------------------------------------------------------------ */
@@ -150,14 +189,20 @@ async function main() {
 	const flagIndex = process.argv.indexOf('--name');
 	const flagName = flagIndex !== -1 ? process.argv[flagIndex + 1] : undefined;
 
+	// The page object is opt-in: --page forces it on, --no-page forces it off,
+	// and a scripted run (--name with neither flag) skips it silently.
+	const pageFlag = process.argv.includes('--page')
+		? true
+		: process.argv.includes('--no-page')
+			? false
+			: null;
+
 	const rawName =
 		flagName ??
 		(await clack.text({
 			message: isPlaywright ? 'Test name' : 'Feature name',
 			placeholder: 'Checkout, LoginPage, Cart…',
-			hint: isPlaywright
-				? 'Creates a .spec.ts and Page.ts'
-				: 'Creates a .feature, Steps.ts and Page.ts',
+			hint: isPlaywright ? 'Creates a .spec.ts' : 'Creates a .feature and Steps.ts',
 			validate: (v) => (!v.trim() ? 'A name is required' : undefined)
 		}));
 	if (clack.isCancel(rawName)) {
@@ -167,6 +212,22 @@ async function main() {
 	if (!String(rawName).trim()) {
 		clack.log.error('A name is required: pass one with --name, or run without flags.');
 		process.exit(1);
+	}
+
+	let wantPage = pageFlag;
+	if (wantPage === null) {
+		if (flagName !== undefined) {
+			wantPage = false;
+		} else {
+			wantPage = await clack.confirm({
+				message: 'Also scaffold a page object?',
+				initialValue: false
+			});
+			if (clack.isCancel(wantPage)) {
+				clack.cancel('Cancelled.');
+				process.exit(0);
+			}
+		}
 	}
 
 	const pascal = toPascalCase(rawName.trim());
@@ -180,7 +241,9 @@ async function main() {
 	const pagePath = path.join(testsRoot, 'pages', `${base}Page.ts`);
 	const stepsPath = path.join(testsRoot, 'step_definitions', `${pascal}Steps.ts`);
 
-	const planned = isPlaywright ? [specPath, pagePath] : [featurePath, pagePath, stepsPath];
+	const planned = isPlaywright
+		? [specPath, ...(wantPage ? [pagePath] : [])]
+		: [featurePath, stepsPath, ...(wantPage ? [pagePath] : [])];
 	const conflicts = planned.filter(fs.existsSync);
 	if (conflicts.length > 0) {
 		clack.log.error('The following files already exist:');
@@ -192,18 +255,28 @@ async function main() {
 	const s = clack.spinner();
 	s.start('Generating files…');
 
-	fs.mkdirSync(path.join(testsRoot, 'pages'), { recursive: true });
+	if (wantPage) fs.mkdirSync(path.join(testsRoot, 'pages'), { recursive: true });
 
 	if (isPlaywright) {
 		fs.mkdirSync(path.join(testsRoot, 'specs'), { recursive: true });
-		fs.writeFileSync(specPath, generateSpec(pascal, base, suiteTag, testTag), 'utf8');
-		fs.writeFileSync(pagePath, generatePlaywrightPage(base), 'utf8');
+		fs.writeFileSync(
+			specPath,
+			wantPage
+				? generateSpec(pascal, base, suiteTag, testTag)
+				: generateSpecNoPage(pascal, suiteTag, testTag),
+			'utf8'
+		);
+		if (wantPage) fs.writeFileSync(pagePath, generatePlaywrightPage(base), 'utf8');
 	} else {
 		fs.mkdirSync(path.join(testsRoot, 'features'), { recursive: true });
 		fs.mkdirSync(path.join(testsRoot, 'step_definitions'), { recursive: true });
 		fs.writeFileSync(featurePath, generateFeature(pascal, suiteTag, testTag), 'utf8');
-		fs.writeFileSync(pagePath, generatePage(base), 'utf8');
-		fs.writeFileSync(stepsPath, generateSteps(pascal, base), 'utf8');
+		fs.writeFileSync(
+			stepsPath,
+			wantPage ? generateSteps(pascal, base) : generateStepsNoPage(pascal),
+			'utf8'
+		);
+		if (wantPage) fs.writeFileSync(pagePath, generatePage(base), 'utf8');
 	}
 
 	s.stop(pc.green('✓ Files created'));
@@ -222,7 +295,7 @@ async function main() {
 						`${pc.dim('Feature:')}  ${pc.white(rel(featurePath))}`,
 						`${pc.dim('Steps:')}    ${pc.white(rel(stepsPath))}`
 					]),
-			`${pc.dim('Page:')}     ${pc.white(rel(pagePath))}`,
+			...(wantPage ? [`${pc.dim('Page:')}     ${pc.white(rel(pagePath))}`] : []),
 			'',
 			`${pc.dim('Suite tag:')} ${pc.cyan(suiteTag)}`,
 			`${pc.dim('Test tag:')}  ${pc.cyan(testTag)}`,
@@ -234,9 +307,13 @@ async function main() {
 
 	clack.outro(
 		pc.magenta(
-			isPlaywright
-				? 'Done! Fill in the steps and implement the page methods.'
-				: 'Done! Fill in your scenarios and implement the page methods.'
+			wantPage
+				? isPlaywright
+					? 'Done! Fill in the steps and implement the page methods.'
+					: 'Done! Fill in your scenarios and implement the page methods.'
+				: isPlaywright
+					? 'Done! Fill in the step bodies.'
+					: 'Done! Fill in your scenarios and the step bodies.'
 		)
 	);
 }

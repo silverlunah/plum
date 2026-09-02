@@ -1808,6 +1808,8 @@ switch (command) {
 		console.log('    --parallel <n>     Run across n parallel workers');
 		console.log('    --browser <name>   chromium | firefox (default: chromium)');
 		console.log('  create-step          Interactively scaffold a new step definition');
-		console.log('  create-test          Scaffold a new .feature + Page.ts + Steps.ts');
+		console.log(
+			'  create-test          Scaffold a new test. --page adds a page object, --name skips prompts'
+		);
 		console.log('\n--------------------------------------\n');
 }
