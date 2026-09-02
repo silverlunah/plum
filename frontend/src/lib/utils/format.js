@@ -47,7 +47,7 @@ export function stagger(i, stepMs = 45) {
 }
 
 // "just now" / "5m ago" / "3h ago" / "2d ago", then an absolute date once it's a
-// week old — for feeds where the exact second stops mattering.
+// week old, for feeds where the exact second stops mattering.
 export function relativeTime(iso) {
 	const then = new Date(iso).getTime();
 	if (Number.isNaN(then)) return '';
@@ -162,7 +162,7 @@ export function parseRunnerLogs(logs) {
 /**
  * Buckets a report's features/scenarios by runner (lane) then worker
  * (Cucumber --parallel process), preserving first-seen order. The innermost
- * `features` array keeps the same shape as the flat list it replaces —
+ * `features` array keeps the same shape as the flat list it replaces,
  * callers should only show a group header when a level has more than one
  * bucket.
  */
@@ -225,11 +225,11 @@ export function groupScenariosByRunnerAndWorker(features) {
  * Turns a scenario's tab recordings into an ordered, non-overlapping timeline
  * of {recordingId, from, to} segments (epoch ms), so a replay can auto-switch
  * which tab it's showing instead of a manual tab strip. Recordings missing
- * startedAt/endedAt (written before that field existed) are dropped — nothing
+ * startedAt/endedAt (written before that field existed) are dropped, nothing
  * to line up on a shared clock without them.
  *
  * Tabs are assumed to open/close like a stack (a popup nested inside the tab
- * that opened it) — the only shape browser.ts's own tab tracking produces.
+ * that opened it), the only shape browser.ts's own tab tracking produces.
  */
 export function computeRecordingSegments(recordings) {
 	const usable = recordings.filter((r) => r.startedAt != null && r.endedAt != null);
@@ -259,7 +259,7 @@ export function computeRecordingSegments(recordings) {
 			lastBoundary = b.ts;
 		}
 		// A close for a recording that isn't currently on top means it opened
-		// and closed while something nested inside it was still active — its
+		// and closed while something nested inside it was still active, its
 		// own segment stays open until whatever's on top of it closes too.
 	}
 	const remaining = stack[stack.length - 1];

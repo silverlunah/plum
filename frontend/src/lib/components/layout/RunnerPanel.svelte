@@ -78,7 +78,7 @@
 	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 
 	let availableRunners = [];
-	// { [runnerId]: 'checking' | 'up' | 'down' } — the runner list is DB-only and
+	// { [runnerId]: 'checking' | 'up' | 'down' }, the runner list is DB-only and
 	// carries no health, so its dots would otherwise always read healthy.
 	let nodePings = {};
 	let testRuns = [];
@@ -105,7 +105,7 @@
 	}
 
 	let _unsubConfig, _unsubExpanded, _unsubBuiltIn, _unsubActiveProject, _socket;
-	let lastFinished = null; // { reportId, verdict } — most recent completed run, for the bar's View Report shortcut
+	let lastFinished = null; // { reportId, verdict }, most recent completed run, for the bar's View Report shortcut
 
 	onMount(() => {
 		try {
@@ -139,7 +139,7 @@
 			.catch(() => {});
 
 		// Hydrate runs already queued or running on the backend (e.g. this tab just
-		// loaded/refreshed) — live socket events alone only reach tabs connected at
+		// loaded/refreshed), live socket events alone only reach tabs connected at
 		// the moment an event fires.
 		fetchActiveRuns()
 			.then(({ runs }) => {
@@ -151,7 +151,7 @@
 							next[runId] = makeRunEntry({ projectId, projectName, kind, label, meta, status });
 					}
 					// Drop a client-side run the server no longer tracks (its node died
-					// and a restart cleared it) — but keep a freshly-`done` one so the
+					// and a restart cleared it), but keep a freshly-`done` one so the
 					// completion bar still shows.
 					for (const [runId, entry] of Object.entries(next)) {
 						if (!activeIds.has(runId) && entry.status !== 'done') delete next[runId];
@@ -185,13 +185,13 @@
 		});
 
 		const s = io(API_BASE, {
-			transports: ['websocket'],
+			transports: ['websocket', 'polling'],
 			auth: { token: auth.getToken() }
 		});
 		_socket = s;
 		socket.set(s);
 
-		// Join the active project's room — scopes which run streams this tab gets.
+		// Join the active project's room, scopes which run streams this tab gets.
 		const joinActiveProject = () =>
 			s.emit(SOCKET_EVENTS.JOIN_PROJECT, { projectId: $activeProjectId });
 		s.on('connect', joinActiveProject);
@@ -211,7 +211,7 @@
 		}
 
 		function upsertBgRun(runId, { projectId, projectName, kind, label, meta }, status) {
-			// Keep only label + project for a run the viewer can't open — drop the
+			// Keep only label + project for a run the viewer can't open, drop the
 			// tag / who-started-it that the socket broadcast still carries.
 			const safeMeta = canOpenRun({ projectId }) ? meta : undefined;
 			backgroundRuns.update((r) => ({
@@ -246,7 +246,7 @@
 			);
 		});
 
-		// Upsert the lane — a tab that connected mid-run (or after a refresh)
+		// Upsert the lane, a tab that connected mid-run (or after a refresh)
 		// missed bg-run-lanes-init, so create the lane on first sight rather than
 		// dropping its logs.
 		function patchLane(run, laneId, patch) {
@@ -326,7 +326,7 @@
 	);
 	// A run is openable only when it belongs to the project the viewer is currently
 	// in. Runs from other projects still show in the bar for awareness, but you
-	// have to switch to that project to open one — even if you're a member.
+	// have to switch to that project to open one, even if you're a member.
 	$: canOpenRun = (run) => run.projectId == null || run.projectId === $activeProjectId;
 	$: runningCount = activeRunEntries.filter(([, r]) => r.status === 'running').length;
 	$: queuedCount = activeRunEntries.filter(([, r]) => r.status === 'queued').length;
@@ -408,7 +408,7 @@
 			const set = new Set(c.selectedRunners);
 			if (set.has(id)) {
 				set.delete(id);
-				// Never leave the selection empty — fall back to the built-in runner
+				// Never leave the selection empty, fall back to the built-in runner
 				// when it's available, otherwise keep this one selected.
 				if (set.size === 0) {
 					if ($builtInEnabled) set.add(BUILTIN_RUNNER_ID);
@@ -425,7 +425,7 @@
 		return $runnerConfig.selectedRunners.includes(id);
 	}
 
-	// A checkbox's `checked={isRunnerSelected(id)}` isn't reactive — Svelte can't
+	// A checkbox's `checked={isRunnerSelected(id)}` isn't reactive, Svelte can't
 	// see the `$runnerConfig` read hidden in the call. Bind to this set instead so
 	// the picker always mirrors the model, including a sibling flipped by a toggle.
 	$: selectedRunnerSet = new Set($runnerConfig.selectedRunners);
@@ -796,7 +796,7 @@
 
 			<div class="ctrl-divider"></div>
 
-			<!-- Run button — a run while one is active just queues another -->
+			<!-- Run button, a run while one is active just queues another -->
 			<button
 				class="run-btn"
 				on:click={handleRunClick}
@@ -1343,7 +1343,7 @@
 	.runner-dot.built-in {
 		background: var(--accent);
 	}
-	/* Remote node health — grey until a ping lands, then pass/fail. */
+	/* Remote node health, grey until a ping lands, then pass/fail. */
 	.runner-dot.remote {
 		background: var(--border);
 	}
@@ -1720,7 +1720,7 @@
 		opacity: 0.7;
 	}
 
-	/* Mobile: the control row reuses the drawer — hidden until the bar is expanded. */
+	/* Mobile: the control row reuses the drawer, hidden until the bar is expanded. */
 	@media (max-width: 640px) {
 		.bar {
 			flex-wrap: wrap;

@@ -3,30 +3,22 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// This file belongs to your project, not to Plum. Plum runs the Playwright CLI
-// and passes only which tests to run (--grep / --shard) and where to write the
-// report — everything below is yours to change, and `npx playwright test` from
-// this folder behaves exactly the same way Plum does.
+// Yours to change. Plum only chooses which tests to run and where the report goes,
+// so `npx playwright test` from this folder behaves the same way a Plum run does.
 export default defineConfig({
 	testDir: './specs',
-	// Plum's server and node runs are always headless; there is no display in a
-	// container. Locally, IS_HEADLESS=false in .env lets you watch the browser.
 	use: {
 		baseURL: process.env.BASE_URL,
+		// Server and node runs are always headless. IS_HEADLESS=false in .env lets you
+		// watch the browser on runs you start yourself.
 		headless: process.env.IS_HEADLESS !== 'false',
 		trace: 'retain-on-failure',
 		screenshot: 'only-on-failure'
 	},
-	// Plum passes --retries from the project's max-retries setting, which overrides
-	// this. Playwright's JSON reports every attempt, so Plum reads flakiness
-	// straight out of it. This value only applies to runs you start yourself.
+	// Plum passes --retries and --workers from the project's settings, overriding these.
 	retries: 0,
-	workers: process.env.CI ? 2 : undefined,
-	// Plum sets PLUM_REPORT_FILE when it starts a run; the JSON written there is
-	// what shows up in the Plum UI. Run the command yourself and the variable is
-	// unset, so this entry disappears and you just get the list reporter.
-	// Add your own reporters here — Plum passes no --reporter flag, which would
-	// replace this whole list rather than adding to it.
+	// Keep the json entry: it is how a run reaches the Plum UI. Add your own
+	// reporters alongside it.
 	reporter: [
 		['list'],
 		...(process.env.PLUM_REPORT_FILE

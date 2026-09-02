@@ -9,7 +9,7 @@
 	import 'rrweb-player/dist/style.css';
 	import { LIVE_EMPTY_FRAME_HINT } from '$lib/copy/reports';
 
-	// A growing array — new events are appended by the caller as they stream
+	// A growing array, new events are appended by the caller as they stream
 	// in over the socket. liveMode lets rrweb-player start from zero events
 	// (it otherwise requires a complete Meta+FullSnapshot pair up front).
 	export let events = [];
@@ -26,8 +26,8 @@
 	let resizeObserver;
 
 	// rrweb-player renders at the recording's native resolution. Contain-fit it
-	// inside the panel — the same sizing the replay player (RecordingPlayer)
-	// gets from rrweb-player — so a run looks identical live or replayed. Re-run
+	// inside the panel, the same sizing the replay player (RecordingPlayer)
+	// gets from rrweb-player, so a run looks identical live or replayed. Re-run
 	// on every resize.
 	function updateScale() {
 		if (!nativeWidth || !nativeHeight || !viewport) return;
@@ -64,7 +64,7 @@
 		updateScale();
 	}
 
-	// Feed only what's newly arrived since the last run of this block —
+	// Feed only what's newly arrived since the last run of this block,
 	// addEvent() is the incremental API, not a full-array replace.
 	$: if (player && events.length > fedCount) {
 		for (let i = fedCount; i < events.length; i++) player.addEvent(events[i]);
@@ -73,7 +73,7 @@
 
 	onMount(() => {
 		buildPlayer();
-		// Observe the viewport, not the stage — the stage's size is what we set.
+		// Observe the viewport, not the stage, the stage's size is what we set.
 		resizeObserver = new ResizeObserver(updateScale);
 		resizeObserver.observe(viewport);
 	});
@@ -99,7 +99,7 @@
 
 <style>
 	/* Fills the panel; the stage is sized in JS to a contain-fit of the recording,
-	   centred on the dot-grid canvas — matching the replay player. */
+	   centred on the dot-grid canvas, matching the replay player. */
 	.live-viewport {
 		flex: 1;
 		width: 100%;
@@ -122,7 +122,7 @@
 		left: 0;
 	}
 
-	/* Kept visually in step with the replay player — see RecordingPlayer's .player-mount. */
+	/* Kept visually in step with the replay player, see RecordingPlayer's .player-mount. */
 	.live-mount :global(.rr-player) {
 		border-radius: 0 !important;
 		box-shadow: none !important;
@@ -138,7 +138,7 @@
 		overflow: hidden;
 		background: var(--bg-elevated);
 	}
-	/* Shows only before the browser navigates — the live counterpart to RecordingPlayer's replay hint. */
+	/* Shows only before the browser navigates, the live counterpart to RecordingPlayer's replay hint. */
 	.live-mount :global(.replayer-wrapper)::before {
 		content: var(--live-empty-hint);
 		position: absolute;

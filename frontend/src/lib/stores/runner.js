@@ -37,7 +37,7 @@ export function makeRunEntry({ projectId = null, projectName = '', kind, label, 
 			runTitle: label,
 			startedBy: meta?.startedBy ?? null
 		},
-		// { [laneId]: { [workerId]: { events: [] } } } — always keyed by laneId
+		// { [laneId]: { [workerId]: { events: [] } } }, always keyed by laneId
 		// even for a single-runner run, so the live view's Runner/Worker tabs
 		// don't need a separate code path for that case.
 		rrwebByLane: {}
@@ -72,7 +72,7 @@ export const builtInEnabled = writable(true);
 export const reportsVersion = writable(0);
 export const runsVersion = writable(0);
 
-// crypto.randomUUID exists only in a secure context — a production install
+// crypto.randomUUID exists only in a secure context, a production install
 // served over plain http:// on a bare IP doesn't get it. getRandomValues does.
 function newRunId() {
 	if (crypto.randomUUID) return crypto.randomUUID();
@@ -131,7 +131,7 @@ export function cancelRun(id) {
 	if (s && id) s.emit(SOCKET_EVENTS.CANCEL_TEST, { runId: id });
 }
 
-// Cron runs get a generated run id, not the task name — match one by kind + label.
+// Cron runs get a generated run id, not the task name, match one by kind + label.
 export function findActiveCronRun(runs, taskName) {
 	return Object.values(runs).find(
 		(r) => r.kind === TRIGGER_TYPES.CRON && r.label === taskName && r.status !== 'done'

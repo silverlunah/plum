@@ -7,7 +7,7 @@
 // stripped ("Café" → "cafe"); apostrophes and other punctuation are dropped with
 // no separator ("Jann's" → "janns"); every remaining run of spaces/dashes
 // collapses to one dash. Returns '' when nothing survives (e.g. a name in a
-// non-Latin script) — callers reject that.
+// non-Latin script): callers reject that.
 function slugify(name) {
 	return String(name)
 		.normalize('NFKD')

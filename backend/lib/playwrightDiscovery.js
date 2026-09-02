@@ -72,7 +72,7 @@ function getPlaywrightSuites(testsRoot) {
 	try {
 		listed = listSpecs(testsRoot);
 	} catch (e) {
-		// A spec that does not compile, or a missing config — surfaced as an empty
+		// A spec that does not compile, or a missing config, surfaced as an empty
 		// list rather than a 500, the same way an unreadable feature file is.
 		console.error(`[discovery] playwright --list failed in ${testsRoot}: ${e.message}`);
 		return { suites: [] };
@@ -96,7 +96,7 @@ function getPlaywrightSuites(testsRoot) {
 			return true;
 		});
 		if (specs.length > 0) {
-			// The suite's own tags are the ones every spec beneath it carries — which
+			// The suite's own tags are the ones every spec beneath it carries, which
 			// is what a describe-level tag looks like once Playwright has pushed it
 			// down onto each spec.
 			const shared = specs
@@ -109,7 +109,7 @@ function getPlaywrightSuites(testsRoot) {
 
 			// A test's own tags exclude the suite's. Playwright reports a spec's tags
 			// with everything inherited from its describes already merged in, whereas a
-			// .feature file keeps Feature-level tags separate from Scenario ones — so
+			// .feature file keeps Feature-level tags separate from Scenario ones, so
 			// without this subtraction the suite tag is shown twice on every row.
 			const tests = specs.map((spec) => {
 				const tags = (spec.tags ?? []).map(withAt).filter((t) => !shared?.has(t));

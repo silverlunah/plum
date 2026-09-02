@@ -6,12 +6,12 @@
 const path = require('path');
 const fs = require('fs');
 
-// Anchored to backend/, not cwd — see appSecret.js.
+// Anchored to backend/, not cwd: see appSecret.js.
 const REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
 
 /**
  * Reads a run's own report file and removes it. Each lane writes to its own path
- * so concurrent lanes cannot clobber one another, and the file is transient — the
+ * so concurrent lanes cannot clobber one another, and the file is transient, the
  * report it produced is persisted to the database by the caller.
  */
 function readReportFile(filePath) {

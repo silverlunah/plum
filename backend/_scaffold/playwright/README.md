@@ -1,18 +1,18 @@
 # Project tests
 
-This folder is mounted into Plum at run time — your team owns it, git-manages it,
+This folder is mounted into Plum at run time: your team owns it, git-manages it,
 and merges new tests straight in.
 
 1. Copy `.env.example` to `.env` and set `BASE_URL` (Plum does this for you when
    it creates the project; `.env` is gitignored so it never holds secrets in git).
 2. Add specs under `specs/`, page objects under `pages/`.
-3. Tag tests with `{ tag: '@TC-001' }` — Plum selects tests by tag, passing them
+3. Tag tests with `{ tag: '@TC-001' }`, Plum selects tests by tag, passing them
    to `--grep`.
 4. Take `step` from the fixture and wrap each action in it. Plum shows every step
    as its own row in the report, including steps inside `beforeEach`. A test
    without them is reported as a single pass or fail.
 
-Import `test` from `fixtures/plum` rather than `@playwright/test` — that is what
+Import `test` from `fixtures/plum` rather than `@playwright/test`, that is what
 records the session for report replay. It is the only import that changes:
 `expect`, `Page`, `Locator` and everything else come from `@playwright/test` as
 usual, whether or not you use page objects, and you never have to edit the fixture
@@ -47,7 +47,7 @@ npx playwright test --ui                   # Playwright's UI mode
 
 Plum always passes `--project=<browser>` so a run reports one browser,
 `--retries` from the project's max-retries setting, and `--workers` from the
-worker count you pick. Everything else — timeouts, traces, reporters — comes
+worker count you pick. Everything else (timeouts, traces, reporters) comes
 from `playwright.config.ts`.
 
 Workers only help if your tests can actually be split. Playwright divides work

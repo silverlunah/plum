@@ -24,6 +24,11 @@ const SCAFFOLD_SENTINEL = {
 
 const scaffoldDirFor = (framework) => path.join(SCAFFOLD_DIR, framework);
 
+// Never copy build or dependency folders out of the scaffold, so a stray one there
+// cannot end up in every project.
+const UNCOPYABLE = new Set(['node_modules', 'test-results', 'playwright-report', 'blob-report']);
+const copyable = (src) => !UNCOPYABLE.has(path.basename(src));
+
 // id → slug / tests subpath, so the sync path helpers in testsRoot.js don't need
 // a DB round trip. Kept fresh by refresh() on startup and after any project
 // create / delete / settings save.
@@ -56,7 +61,7 @@ function frameworkFor(projectId) {
 }
 
 // Copies the framework's scaffold into projects/<slug>/tests/. `force: false`
-// makes it a safe fill-in — an operator's edited files and extra tests are never
+// makes it a safe fill-in: an operator's edited files and extra tests are never
 // overwritten.
 //
 // The runner config (playwright.config.ts / cucumber.js) is laid down at the root
@@ -67,7 +72,19 @@ function scaffoldProject(slug, framework) {
 	if (!fs.existsSync(src)) return;
 	const dest = path.join(PROJECTS_DIR, slug, 'tests');
 	fs.mkdirSync(dest, { recursive: true });
-	fs.cpSync(src, dest, { recursive: true, force: false, errorOnExist: false });
+	fs.cpSync(src, dest, {
+		recursive: true,
+		force: false,
+		errorOnExist: false,
+		filter: copyable
+	});
+	// Shipped as `gitignore`: npm strips a file literally named .gitignore from the
+	// published tarball, so it can only reach a project under another name.
+	const ignoreSrc = path.join(dest, 'gitignore');
+	const ignoreDest = path.join(dest, '.gitignore');
+	if (fs.existsSync(ignoreSrc) && !fs.existsSync(ignoreDest)) {
+		fs.renameSync(ignoreSrc, ignoreDest);
+	}
 	const env = path.join(dest, '.env');
 	if (!fs.existsSync(env)) {
 		try {
@@ -78,7 +95,7 @@ function scaffoldProject(slug, framework) {
 
 // The files a run cannot start without, as opposed to the example tests. A
 // project that predates project-owned runner configs has none of these, and
-// full scaffolding is skipped for it because its example tests already exist —
+// full scaffolding is skipped for it because its example tests already exist,
 // so these are filled in separately, on every boot, for every project.
 // tsconfig.json is required, not optional: its "ts-node": { transpileOnly }
 // is what lets `npx cucumber-js` run without type-checking the suite. Plum used
@@ -110,13 +127,13 @@ function ensureRunnerConfig(slug, framework, testsPath = DEFAULT_TESTS_PATH) {
 			fs.copyFileSync(path.join(src, file), target);
 			added.push(file);
 		} catch {
-			// the scaffold has no such file for this framework — nothing to fill in
+			// the scaffold has no such file for this framework, nothing to fill in
 		}
 	}
 	return added;
 }
 
-// Deletes projects/<slug>/ entirely — the project and its tests are gone.
+// Deletes projects/<slug>/ entirely: the project and its tests are gone.
 function removeProjectDir(slug) {
 	if (slug) fs.rmSync(path.join(PROJECTS_DIR, slug), { recursive: true, force: true });
 }
@@ -138,7 +155,7 @@ async function reconcile() {
 		const legacy = path.join(PROJECTS_DIR, String(id));
 		const target = path.join(PROJECTS_DIR, slug);
 		if (fs.existsSync(legacy) && !fs.existsSync(target)) fs.renameSync(legacy, target);
-		// A relocated testsPath is the project's own folder — never scaffolded, but it
+		// A relocated testsPath is the project's own folder, never scaffolded, but it
 		// still needs a runner config to be runnable at all.
 		const relative = sanitizeTestsPath(testsPath);
 		if (relative === DEFAULT_TESTS_PATH) {

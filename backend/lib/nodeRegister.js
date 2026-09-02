@@ -51,7 +51,7 @@ function saveNodeConfig(dir, cfg) {
 }
 
 // ---------------------------------------------------------------------------
-// Named node store — one dir per node under ~/.plum/nodes/<name>/, so a machine
+// Named node store: one dir per node under ~/.plum/nodes/<name>/, so a machine
 // can run several nodes without the operator juggling working directories (a
 // second `plum node start` from the same folder used to overwrite the first
 // node's config and orphan its process).
@@ -113,7 +113,7 @@ function migrateLegacyNodes(legacyDirs) {
 /**
  * Registers the node with the primary. POST /runners upserts on name+url, so
  * re-running this refreshes the token on the existing runner rather than
- * duplicating it — `reused` is reported for messaging only.
+ * duplicating it, `reused` is reported for messaging only.
  *
  * @returns {Promise<{ id: string, reused: boolean }>}
  * @throws {Error} when the primary is unreachable or rejects the request

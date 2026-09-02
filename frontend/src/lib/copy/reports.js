@@ -11,7 +11,7 @@ export const PASSED_LABEL = 'Passed';
 export const FAILED_LABEL = 'Failed';
 
 // ── Reports list ──
-export const LIST_PAGE_TITLE = 'Reports — Plum';
+export const LIST_PAGE_TITLE = 'Reports, Plum';
 export const HEADING = 'Reports';
 export const PASSING_LABEL = 'passing';
 export const RECENT_LABEL = 'Recent';
@@ -34,7 +34,7 @@ export const trendDotTitle = (status, tags, date) => `${status} · ${tags} · ${
 export const deleteSelectedLabel = (count) => `Delete (${count})`;
 
 // ── Report detail ──
-export const DETAIL_PAGE_TITLE = 'Report — Plum';
+export const DETAIL_PAGE_TITLE = 'Report, Plum';
 export const LOAD_ERROR = 'Could not load report.';
 export const STAT_PASSED = 'passed';
 export const STAT_FAILED = 'failed';
@@ -91,13 +91,13 @@ export const recordingTabLabel = (tabIndex) =>
 	tabIndex === 0 ? 'Main tab' : `Tab/Window ${tabIndex + 1}`;
 
 // ── Live run ──
-export const LIVE_PAGE_TITLE = 'Live Run — Plum';
+export const LIVE_PAGE_TITLE = 'Live Run, Plum';
 export const NO_TESTS_RUNNING_HEADING = 'No tests currently running';
 export const NO_TESTS_RUNNING_BODY =
 	'Start a test from the panel below, then come back here to watch it live.';
 export const VIEW_PAST_REPORTS_LINK = 'View past reports →';
 export const SELECT_RUN_HINT =
-	'Select a run above, or wait — the report opens automatically when it finishes.';
+	'Select a run above, or wait, the report opens automatically when it finishes.';
 export const LIVE_BADGE_LABEL = 'Live';
 export const CANCEL_RUN_LABEL = 'Cancel run';
 export const ALL_TESTS_PASSED = 'All tests passed';
@@ -122,7 +122,7 @@ export const redirectingIn = (seconds) => `Redirecting in ${seconds}s…`;
 export const NO_TESTS_MATCHED_HEADING = 'No tests ran';
 export const noTestsMatchedBody = (tags) =>
 	tags && tags !== '@all-tests'
-		? `Nothing in this project matches ${tags}. The run is marked failed because it verified nothing — check the tag, or that the test still exists.`
+		? `Nothing in this project matches ${tags}. The run is marked failed because it verified nothing, check the tag, or that the test still exists.`
 		: 'This project has no tests the runner could find. Check that its tests folder is set correctly in Settings.';
 
 // ── Queued / not-found run ──
@@ -134,5 +134,5 @@ export const RUN_NOT_FOUND_BODY =
 export const RUN_SKIPPED_HEADING = 'Run skipped';
 export const RUN_FORBIDDEN_HEADING = 'Another project’s run';
 export const RUN_FORBIDDEN_BODY =
-	'This run belongs to a different project. Switch to that project to watch it — or ask an admin for access if you’re not a member.';
+	'This run belongs to a different project. Switch to that project to watch it, or ask an admin for access if you’re not a member.';
 export const queuePositionLine = (n) => (n > 0 ? `Position ${n} in the queue` : 'Next up');

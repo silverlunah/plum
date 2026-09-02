@@ -312,7 +312,7 @@
 		try {
 			await saveProject(project);
 			projectPristine = snapshot(project);
-			// Nav reads homepage mode from the projects store — refresh it so the
+			// Nav reads homepage mode from the projects store, refresh it so the
 			// reorder / hide takes effect without a reload.
 			try {
 				setProjects(await fetchProjects());
@@ -500,7 +500,7 @@
 		}
 	}
 
-	// Per-project key — name the server per project so several can coexist in one client config.
+	// Per-project key, name the server per project so several can coexist in one client config.
 	$: mcpServerName = `plum-${$activeProject?.slug ?? 'project'}`;
 	$: mcpConfigSnippet = JSON.stringify(
 		{
@@ -527,9 +527,9 @@
 		'      -d \'{"tag": "@smoke", "baseUrl": "https://your-pr-preview-url"}\''
 	].join('\n');
 
-	// Per-project settings — the owner and an admin of the active project.
+	// Per-project settings, the owner and an admin of the active project.
 	const ELEVATED_SECTIONS = new Set(['project', 'testcases', 'integrations', 'activity']);
-	// Account-wide settings — the owner only.
+	// Account-wide settings, the owner only.
 	const OWNER_SECTIONS = new Set(['runners', 'users', 'backup']);
 
 	$: isOwner = $auth.user?.role === 'owner';

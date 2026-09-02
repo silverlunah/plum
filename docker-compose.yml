@@ -28,6 +28,9 @@ services:
       - '${BACKEND_PORT:-3001}:3001'
     environment:
       DATABASE_URL: 'postgresql://plum:plum@postgres:5432/plum'
+      # Compose does not pass host env through, so an origin pin set by the
+      # operator would otherwise never reach the container.
+      PLUM_ALLOWED_ORIGINS: '${PLUM_ALLOWED_ORIGINS:-}'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     volumes:

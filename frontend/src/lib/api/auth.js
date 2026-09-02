@@ -6,7 +6,7 @@
 import { API_BASE } from '$lib/constants';
 
 // A misconfigured or not-yet-routed API URL can accept a connection and never
-// respond, rather than refusing outright — a plain fetch() would then hang
+// respond, rather than refusing outright, a plain fetch() would then hang
 // forever with no error to catch. AUTH_TIMEOUT_MS bounds that so the UI always
 // resolves one way or another instead of leaving the page blank indefinitely.
 const AUTH_TIMEOUT_MS = 8000;

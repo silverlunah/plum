@@ -9,10 +9,9 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { startRRwebPoller } = require('../lib/rrwebPoller');
-const { TRIGGER_REMOTE } = require('../constants/triggers');
-const { DEFAULT_BROWSER, DEFAULT_FRAMEWORK, isFramework } = require('../constants/defaults');
+const { DEFAULT_BROWSER, FRAMEWORK, isFramework } = require('../constants/defaults');
 const { JOB_STATUS } = require('../constants/jobStatus');
-const { buildRunCommand } = require('../lib/runnerCommand');
+const { buildRunCommand, describeCommand } = require('../lib/runnerCommand');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
 
@@ -20,13 +19,17 @@ const BACKEND_DIR = path.resolve(__dirname, '..');
 // Jobs are purged after 10 minutes post-completion.
 const jobs = {};
 
-const STALE_ARTIFACT_MS = 60 * 60 * 1000;
+// Only this process's own leftovers are swept, and only from a previous run of it:
+// two nodes on one host share os.tmpdir(), and a suite can legitimately run for
+// hours, so matching every plum-* artifact could delete a live run's files.
+const ARTIFACT_PREFIX = `plum-${process.env.RUNNER_ID || 'node'}-`;
+const STALE_ARTIFACT_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Removes job artifacts a previous process left behind.
  *
  * Each finished job deletes its own report file on a 10-minute timer held in
- * memory, so restarting a node orphans whatever was still pending — and a report
+ * memory, so restarting a node orphans whatever was still pending, and a report
  * file carries the run's recordings, so they are not small. Run once at node
  * startup; anything younger than an hour could belong to a job still in flight.
  */
@@ -44,7 +47,7 @@ function sweepStaleJobArtifacts() {
 	let removed = 0;
 	try {
 		for (const name of fs.readdirSync(tmp)) {
-			if (!/^plum-(report-.*\.json|ss-.*)$/.test(name)) continue;
+			if (!name.startsWith(ARTIFACT_PREFIX)) continue;
 			const full = path.join(tmp, name);
 			if (!older(full)) continue;
 			fs.rmSync(full, { recursive: true, force: true });
@@ -73,8 +76,8 @@ function getJob(jobId) {
 // uploaded test files, runs the project's own runner CLI in that folder, and
 // tracks logs + rrweb batches for HTTP polling (see pollJob).
 //
-// `framework` comes from the primary, since a node holds no project state. An
-// older primary sends none, so it falls back to the default.
+// `framework` comes from the primary, since a node holds no project state. A
+// primary old enough to send none can only have Cucumber projects.
 function startJob({
 	tags,
 	browser = DEFAULT_BROWSER,
@@ -103,7 +106,7 @@ function startJob({
 		tempTestsDir = path.join(jobsRoot, `plum-job-${jobId}`);
 		for (const [rel, content] of Object.entries(tests)) {
 			const dest = path.join(tempTestsDir, rel);
-			// Keep writes inside the job dir — `rel` comes off the wire.
+			// Keep writes inside the job dir, `rel` comes off the wire.
 			if (dest !== tempTestsDir && !dest.startsWith(tempTestsDir + path.sep)) {
 				throw new Error(`Illegal test path: ${rel}`);
 			}
@@ -114,14 +117,14 @@ function startJob({
 
 	// Each job writes to its own temp file so concurrent jobs on the same node
 	// cannot clobber each other's reports (shared cucumber_report.json race condition).
-	const reportFile = path.join(tmpdir, `plum-report-${jobId}.json`);
-	const ssDir = path.join(tmpdir, `plum-ss-${jobId}`);
+	const reportFile = path.join(tmpdir, `${ARTIFACT_PREFIX}report-${jobId}.json`);
+	const ssDir = path.join(tmpdir, `${ARTIFACT_PREFIX}ss-${jobId}`);
 	fs.mkdirSync(ssDir, { recursive: true });
 
 	jobs[jobId] = {
 		status: JOB_STATUS.RUNNING,
 		logs: '',
-		// Both drained by pollJob — the primary has no socket back to this node.
+		// Both drained by pollJob: the primary has no socket back to this node.
 		rrwebBatches: [],
 		exitCode: null,
 		startedAt: Date.now(),
@@ -131,7 +134,7 @@ function startJob({
 		ssDir
 	};
 
-	const jobFramework = isFramework(framework) ? framework : DEFAULT_FRAMEWORK;
+	const jobFramework = isFramework(framework) ? framework : FRAMEWORK.CUCUMBER;
 	const cmd = buildRunCommand({
 		framework: jobFramework,
 		testsRoot: tempTestsDir ?? BACKEND_DIR,
@@ -150,15 +153,12 @@ function startJob({
 	const env = {
 		...process.env,
 		// User/test vars (BASE_URL, IS_HEADLESS, custom secrets) forwarded from the
-		// primary's own .env — nodes are stateless runners and shouldn't need their
+		// primary's own .env: nodes are stateless runners and shouldn't need their
 		// own copy. Spread before the job-control vars below so a stray same-named
 		// var in the user's .env can never override how this job actually runs.
 		...userEnv,
 		...cmd.env,
-		TAG: tags || '',
-		TRIGGER: TRIGGER_REMOTE,
 		BROWSER: browser,
-		REPORT_RUNNERS: String(workers),
 		PLUM_SS_DIR: ssDir,
 		...(tempTestsDir ? { TESTS_ROOT: tempTestsDir } : {})
 	};
@@ -167,8 +167,9 @@ function startJob({
 		jobs[jobId].rrwebBatches.push(batch);
 	});
 
-	jobs[jobId].logs += `> ${cmd.bin} ${cmd.args.join(' ')}\n`;
-	const proc = spawn('npx', [cmd.bin, ...cmd.args], { env, shell: true, cwd: cmd.cwd });
+	jobs[jobId].logs += `> ${describeCommand(cmd)}\n`;
+	// No shell, so an injected tag or browser name cannot become a command.
+	const proc = spawn(cmd.command, cmd.args, { env, cwd: cmd.cwd });
 	jobs[jobId].proc = proc;
 	proc.stdout.on('data', (d) => {
 		jobs[jobId].logs += d.toString();
@@ -204,7 +205,7 @@ function startJob({
 	return jobId;
 }
 
-// Drains and returns logs/rrweb batches since `offset`/`rrwebOffset` — used by
+// Drains and returns logs/rrweb batches since `offset`/`rrwebOffset`, used by
 // the primary's HTTP polling loop (this node has no socket.io connection back).
 function pollJob(jobId, offset, rrwebOffset = 0) {
 	const job = jobs[jobId];

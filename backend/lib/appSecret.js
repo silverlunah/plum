@@ -8,7 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const DEFAULT_JWT_SECRET = 'plum-dev-secret-change-in-production';
-// Anchored to backend/, not cwd — a process started from the repo root must not
+// Anchored to backend/, not cwd: a process started from the repo root must not
 // scatter a second reports/ (and its secrets) there.
 const REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
 
@@ -40,14 +40,14 @@ function ensureSecret(envKey, fileName, { defaultValue = null, bytes = 48 } = {}
 		fs.mkdirSync(REPORTS_DIR, { recursive: true });
 		fs.writeFileSync(file, generated, { mode: 0o600 });
 	} catch (e) {
-		console.warn(`⚠️  Could not persist ${envKey} — it will change on restart:`, e.message);
+		console.warn(`⚠️  Could not persist ${envKey}: it will change on restart:`, e.message);
 	}
 	process.env[envKey] = generated;
 	return generated;
 }
 
 // Forces a fresh value, overwriting the persisted file and process.env. Only the
-// node secret is regenerable from the UI — the JWT secret can't be without
+// node secret is regenerable from the UI: the JWT secret can't be without
 // logging everyone out.
 function regenerateSecret(envKey, fileName, { bytes = 48 } = {}) {
 	const generated = crypto.randomBytes(bytes).toString('hex');
@@ -62,7 +62,7 @@ function regenerateSecret(envKey, fileName, { bytes = 48 } = {}) {
 const ensureJwtSecret = () =>
 	ensureSecret('JWT_SECRET', '.plum-jwt-secret', { defaultValue: DEFAULT_JWT_SECRET });
 
-// Bearer credential for the /runners API — `plum node` / manage-nodes use it
+// Bearer credential for the /runners API, `plum node` / manage-nodes use it
 // where there is no browser session.
 const ensureNodeSecret = () => ensureSecret('PLUM_NODE_SECRET', '.plum-node-secret', { bytes: 32 });
 const regenerateNodeSecret = () =>

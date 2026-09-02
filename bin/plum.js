@@ -23,15 +23,12 @@ const userTestsPath = path.join(process.cwd(), 'tests');
 const scaffoldTestsPath = path.join(plumRoot, 'backend', '_scaffold');
 const overrideFilePath = path.join(plumRoot, 'docker-compose.override.yml');
 
-// A local test project is self-contained under tests/ — same layout as a
+// A local test project is self-contained under tests/, same layout as a
 // server project's projects/<slug>/tests/. The cwd-root paths are only a
 // fallback for projects scaffolded before that unification.
 const backendEnvPath = path.join(plumRoot, 'backend', '.env');
 const testsEnvPath = path.join(userTestsPath, '.env');
 const legacyRootEnvPath = path.join(process.cwd(), '.env');
-
-const preferring = (primary, fallback) =>
-	fs.existsSync(primary) || !fs.existsSync(fallback) ? primary : fallback;
 
 // A step definition only exists in Cucumber; create-test handles both frameworks
 // itself. The folder is the source of truth here: this runs inside a project
@@ -41,20 +38,25 @@ function refuseUnlessGherkin(command) {
 	if (fs.existsSync(path.join(root, 'playwright.config.ts'))) {
 		console.error(
 			`✗ ${command} generates a .feature file and step definitions, which a Playwright ` +
-				`project does not use.\n  Add a spec under specs/ instead — see tests/README.md.`
+				`project does not use.\n  Add a spec under specs/ instead, see tests/README.md.`
 		);
 		process.exit(1);
 	}
 }
 
-// Returns null when no features/ dir is found, so callers fail loudly instead of
-// running whatever another project left behind in backend/tests/.
+// A tests folder is recognised by either framework's marker. Recognising only
+// features/ made every Playwright project fall through to the fallback.
+const TESTS_ROOT_MARKERS = ['playwright.config.ts', 'cucumber.js', 'features'];
+
 function resolveLocalTestsRoot(explicit) {
 	const override = explicit ?? process.env.TESTS_ROOT;
 	const candidates = override
 		? [path.resolve(process.cwd(), override)]
 		: [userTestsPath, process.cwd()];
-	return candidates.find((dir) => fs.existsSync(path.join(dir, 'features'))) ?? null;
+	return (
+		candidates.find((dir) => TESTS_ROOT_MARKERS.some((m) => fs.existsSync(path.join(dir, m)))) ??
+		null
+	);
 }
 
 // Sync an .env into backend/.env so the local toolchain (which runs from
@@ -64,7 +66,7 @@ function copyEnvFile(src) {
 		if (fs.existsSync(src)) {
 			fse.copySync(src, backendEnvPath);
 		} else {
-			clack.log.warn(`.env not found (${src}) — skipping backend sync.`);
+			clack.log.warn(`.env not found (${src}), skipping backend sync.`);
 		}
 	} catch (err) {
 		clack.log.error(`Error copying .env: ${err.message}`);
@@ -79,7 +81,7 @@ const runnerProcessLib = () => require(path.join(backendLib, 'runnerProcess.js')
 const globalRegistryLib = () => require(path.join(backendLib, 'globalRegistry.js'));
 const bootServiceLib = () => require(path.join(backendLib, 'bootService.js'));
 
-// A real secret is one hex/base64 line — drop a stray license header (the
+// A real secret is one hex/base64 line, drop a stray license header (the
 // add-license bug used to prepend one to persisted secrets / node configs).
 function cleanSecret(v) {
 	if (!v) return null;
@@ -115,7 +117,7 @@ function cancelAndExit() {
 const VALID_BROWSERS = ['chromium', 'firefox'];
 
 const FRAMEWORK_HINTS = {
-	playwright: 'spec files, native runner — recommended',
+	playwright: 'spec files, native runner, recommended',
 	cucumber: 'Gherkin .feature files and step definitions'
 };
 
@@ -124,7 +126,7 @@ async function promptPublicUrl(message, initial) {
 	for (;;) {
 		const v = await clack.text({
 			message:
-				`${message} — include the scheme (http:// or https://). ` +
+				`${message}, include the scheme (http:// or https://). ` +
 				'Add the :port unless a reverse proxy terminates it on 80/443.',
 			placeholder: initial,
 			defaultValue: initial
@@ -132,11 +134,11 @@ async function promptPublicUrl(message, initial) {
 		if (clack.isCancel(v)) cancelAndExit();
 		const val = (v || initial).trim();
 		if (/^https?:\/\//i.test(val)) return val.replace(/\/+$/, '');
-		clack.log.warn('Needs a scheme — start with http:// or https://');
+		clack.log.warn('Needs a scheme, start with http:// or https://');
 	}
 }
 
-// onFree() fires when the user agrees to free an in-use port — lets the caller flag it for clearing.
+// onFree() fires when the user agrees to free an in-use port, lets the caller flag it for clearing.
 async function promptPort(message, initial, onFree) {
 	const { findPidOnPort } = runnerProcessLib();
 	for (;;) {
@@ -150,7 +152,7 @@ async function promptPort(message, initial, onFree) {
 		const pid = findPidOnPort(Number(port));
 		if (!pid) return port;
 		const free = await clack.confirm({
-			message: `Port ${port} is in use (pid ${pid}) — free it when Plum starts?`,
+			message: `Port ${port} is in use (pid ${pid}), free it when Plum starts?`,
 			initialValue: true
 		});
 		if (clack.isCancel(free)) cancelAndExit();
@@ -284,14 +286,24 @@ async function configureServer({ force }) {
 	return cfg;
 }
 
-// Copies the scaffold (test dirs + .gitignore, .vscode, README, .env.example)
-// into projects/<slug>/tests/. `overwrite: false` makes it a safe fill-in — an
-// operator's edited files and extra tests are left untouched, missing ones added.
+// Copies one framework's scaffold into a tests folder. `overwrite: false` makes it
+// a safe fill-in: an operator's edited files and extra tests are left untouched,
+// missing ones added.
+// Never copied out of the scaffold: a stray build or dependency folder there would
+// otherwise land in every project.
+const SCAFFOLD_SKIP = new Set(['node_modules', 'test-results', 'playwright-report', 'blob-report']);
+
 function scaffoldProjectDir(testsDir, framework) {
 	fse.copySync(path.join(scaffoldTestsPath, framework), testsDir, {
 		overwrite: false,
-		errorOnExist: false
+		errorOnExist: false,
+		filter: (src) => !SCAFFOLD_SKIP.has(path.basename(src))
 	});
+	// Shipped as `gitignore`: npm strips a file literally named .gitignore from the
+	// published tarball, so it can only reach a project under another name.
+	const ignoreSrc = path.join(testsDir, 'gitignore');
+	const ignoreDest = path.join(testsDir, '.gitignore');
+	if (fs.existsSync(ignoreSrc) && !fs.existsSync(ignoreDest)) fs.renameSync(ignoreSrc, ignoreDest);
 	const env = path.join(testsDir, '.env');
 	if (!fs.existsSync(env)) fs.copyFileSync(path.join(testsDir, '.env.example'), env);
 }
@@ -324,11 +336,11 @@ function applyServerConfig(cfg) {
 // Node's fetch resolves "localhost" to ::1 first on many Linux distros (Debian
 // included). If Docker only published the port on IPv4, that first attempt hangs
 // until it times out on every poll, eating the whole budget even though the port
-// is reachable — and reachable fine from a browser, which races both families.
+// is reachable, and reachable fine from a browser, which races both families.
 // 127.0.0.1 sidesteps the DNS/happy-eyeballs mismatch entirely.
 const READY_POLL_INTERVAL_MS = 2000;
 const READY_POLL_MAX_ATTEMPTS = 90; // ~3 minutes
-// Each poll attempt must itself be bounded — a single fetch() with no timeout
+// Each poll attempt must itself be bounded, a single fetch() with no timeout
 // can hang on a stale/dead connection (e.g. right after a container restart)
 // and stall the whole loop indefinitely, regardless of the attempt budget
 // above. This is what caused the intermittent endless "Waiting for server to
@@ -360,14 +372,14 @@ async function waitForServerReady(apiBase) {
 		} catch {}
 		if (i > 0 && i % 15 === 0) {
 			s.message(
-				`Still waiting for server to be ready… (${Math.round((i * READY_POLL_INTERVAL_MS) / 1000)}s — check "docker compose logs -f backend" if this feels stuck)`
+				`Still waiting for server to be ready… (${Math.round((i * READY_POLL_INTERVAL_MS) / 1000)}s, check "docker compose logs -f backend" if this feels stuck)`
 			);
 		}
 	}
 	s.stop(
 		ready
 			? pc.green('✓ Server is ready')
-			: pc.yellow('Server did not respond in time — it may still be starting')
+			: pc.yellow('Server did not respond in time, it may still be starting')
 	);
 	return ready;
 }
@@ -387,7 +399,7 @@ async function runFirstUserSetup(apiBase, uiUrl) {
 }
 
 // A stale process on the backend/frontend port fails the whole stack with a
-// bind error — clear it before `docker compose up`.
+// bind error, clear it before `docker compose up`.
 async function clearServerPorts(cfg) {
 	const { findPidOnPort, killPort } = runnerProcessLib();
 	for (const port of [cfg.backendPort, cfg.frontendPort]) {
@@ -400,7 +412,7 @@ async function clearServerPorts(cfg) {
 }
 
 // docker compose failures (port conflicts, daemon not running, etc.) must not
-// crash the process with a raw stack trace — that would abort serverStart()
+// crash the process with a raw stack trace, that would abort serverStart()
 // before it ever reaches the first-user prompt, with no indication why.
 function runDockerComposeUp(cfg) {
 	try {
@@ -416,7 +428,7 @@ function runDockerComposeUp(cfg) {
 		return true;
 	} catch {
 		clack.log.error(
-			`Docker failed to start the stack — see the output above for the cause.\n` +
+			`Docker failed to start the stack, see the output above for the cause.\n` +
 				`A common cause is another process already using port ${cfg.backendPort} or ${cfg.frontendPort}; ` +
 				`try ${pc.cyan('plum server reconfig')} to pick different ports.`
 		);
@@ -425,7 +437,7 @@ function runDockerComposeUp(cfg) {
 }
 
 async function serverStart() {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Server  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Server  ')));
 	const cfg = await configureServer({ force: false });
 	applyServerConfig(cfg);
 	clack.log.info(`UI: ${pc.cyan(cfg.uiUrl)}`);
@@ -468,7 +480,7 @@ function printNodeSecretHint() {
 }
 
 async function serverRestart() {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Server Restart  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Server Restart  ')));
 	const { loadServerConfig } = serverConfigLib();
 	const cfg = loadServerConfig(process.cwd());
 	applyServerConfig(cfg);
@@ -494,7 +506,7 @@ async function serverRestart() {
 }
 
 // A fresh `npm publish` can take a minute or two to fully propagate across
-// npm's CDN edges — hitting a stale one right after publishing produces an
+// npm's CDN edges, hitting a stale one right after publishing produces an
 // ETARGET error even though the version genuinely exists. Retry a few times
 // with a short delay instead of crashing outright on what's usually transient.
 const NPM_INSTALL_RETRIES = 3;
@@ -508,7 +520,7 @@ async function npmInstallLatestWithRetry() {
 		} catch {
 			if (attempt < NPM_INSTALL_RETRIES) {
 				clack.log.warn(
-					`npm install failed (attempt ${attempt}/${NPM_INSTALL_RETRIES}) — this is often a transient registry propagation delay right after a new release. Retrying in ${NPM_INSTALL_RETRY_DELAY_MS / 1000}s…`
+					`npm install failed (attempt ${attempt}/${NPM_INSTALL_RETRIES}), this is often a transient registry propagation delay right after a new release. Retrying in ${NPM_INSTALL_RETRY_DELAY_MS / 1000}s…`
 				);
 				await new Promise((r) => setTimeout(r, NPM_INSTALL_RETRY_DELAY_MS));
 			}
@@ -534,7 +546,7 @@ function fetchLatestPublishedVersion() {
 }
 
 async function serverUpdate() {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Update  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Update  ')));
 
 	const fromVersion = readPlumVersion();
 	clack.log.step(`Checking for a newer Plum release… (you have ${fromVersion})`);
@@ -567,7 +579,7 @@ async function serverUpdate() {
 	let restartedAnything = false;
 
 	// Re-exec `plum` as a fresh process (cwd set to each install dir) for the
-	// restart steps rather than calling serverRestart()/nodeRestart() directly —
+	// restart steps rather than calling serverRestart()/nodeRestart() directly,
 	// this same process already loaded the OLD code into memory before npm
 	// install ran above, so calling them in-process would rebuild using stale
 	// logic no matter how new the just-installed files on disk actually are.
@@ -575,14 +587,14 @@ async function serverUpdate() {
 		if (!fs.existsSync(path.join(dir, '.plum-server.json'))) continue;
 
 		// This registry is global to the machine, not scoped to the directory
-		// `plum update` was run from — an unrelated project on the same machine
+		// `plum update` was run from, an unrelated project on the same machine
 		// as a registered server would otherwise silently boot that server's
 		// Docker stack. Ask first whenever there's someone to ask; a
 		// non-interactive run (CI, cron, systemd) has no one to ask and keeps
 		// the previous unconditional behavior.
 		if (interactiveAllowed()) {
 			const proceed = await clack.confirm({
-				message: `Found a registered server at ${dir} — restart it?`,
+				message: `Found a registered server at ${dir}, restart it?`,
 				initialValue: true
 			});
 			if (clack.isCancel(proceed)) cancelAndExit();
@@ -610,7 +622,7 @@ async function serverUpdate() {
 
 		// Always attempt the restart rather than gating on the local PID
 		// registry: that registry goes stale and skipping the restart silently
-		// leaves the OLD node process running mismatched code — it still answers
+		// leaves the OLD node process running mismatched code, it still answers
 		// /api/ping so it looks "online" while actually being unreachable.
 		clack.log.step(`Restarting node "${nodeName}"…`);
 		try {
@@ -623,7 +635,7 @@ async function serverUpdate() {
 
 	if (!restartedAnything) {
 		clack.log.info(
-			'No running server or node found — run `plum server start` or `plum node start` when ready.'
+			'No running server or node found, run `plum server start` or `plum node start` when ready.'
 		);
 	}
 
@@ -631,7 +643,7 @@ async function serverUpdate() {
 }
 
 async function serverReconfig() {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Reconfigure Server  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Reconfigure Server  ')));
 	const cfg = await configureServer({ force: true });
 	applyServerConfig(cfg);
 	clack.log.success("Saved. Run 'plum server start' to apply.");
@@ -642,7 +654,7 @@ async function serverReconfig() {
  *                 Node flow
  * ------------------------------------------------------ */
 
-// `plum node <sub> <name>` — the first positional after the subcommand.
+// `plum node <sub> <name>`, the first positional after the subcommand.
 function nodeNameArg() {
 	const a = process.argv[4];
 	return a && !a.startsWith('-') ? a : null;
@@ -655,7 +667,7 @@ function resolveNodeName(explicit) {
 	const names = nodeRegisterLib().listNodeNames();
 	if (names.length === 1) return names[0];
 	if (names.length === 0) {
-		clack.log.warn('No nodes configured here yet — run `plum node start <name>`.');
+		clack.log.warn('No nodes configured here yet, run `plum node start <name>`.');
 	} else {
 		clack.log.warn(`Name which node: ${names.map((n) => pc.cyan(n)).join('  ')}`);
 	}
@@ -685,10 +697,10 @@ async function configureNode({ force, name: nameArg }) {
 			!name &&
 			!anyFlags(args, ['--primary', '--url', '--port', '--token', '--browser']));
 
-	// Name first — the saved config for that name seeds the other defaults.
+	// Name first, the saved config for that name seeds the other defaults.
 	if (!name && interactive) {
 		const v = await clack.text({
-			message: 'Node name or alias — call it whatever you like',
+			message: 'Node name or alias, call it whatever you like',
 			placeholder: 'node-1',
 			defaultValue: 'node-1'
 		});
@@ -735,7 +747,7 @@ async function configureNode({ force, name: nameArg }) {
 		} else {
 			const bp = await clack.text({
 				message:
-					'Port your Plum backend runs on (default 3001 — if you changed it or are unsure, ' +
+					'Port your Plum backend runs on (default 3001, if you changed it or are unsure, ' +
 					'run `docker compose ps` or check Docker Desktop on the server machine)',
 				placeholder: '3001',
 				defaultValue: '3001'
@@ -746,7 +758,7 @@ async function configureNode({ force, name: nameArg }) {
 
 		const portVal = await clack.text({
 			message:
-				'Port this node will listen on — it runs there, and any process already using ' +
+				'Port this node will listen on, it runs there, and any process already using ' +
 				'that port is stopped when the node starts',
 			placeholder: port,
 			defaultValue: port
@@ -760,16 +772,16 @@ async function configureNode({ force, name: nameArg }) {
 				url && !url.includes('host.docker.internal') ? url : 'https://node-1.example.com'
 			);
 		} else {
-			// Local primary runs in Docker — it reaches a host node via
+			// Local primary runs in Docker, it reaches a host node via
 			// host.docker.internal, not localhost.
 			url = `http://host.docker.internal:${port}`;
 			clack.log.info(`This node will register with the server as ${pc.cyan(url)}`);
 		}
 
-		// Couldn't read it from a co-located server — ask, whatever the mode.
+		// Couldn't read it from a co-located server, ask, whatever the mode.
 		if (!nodeSecret) {
 			const s = await clack.text({
-				message: 'PLUM_NODE_SECRET — Settings → Runners → Registration secret (or `plum server`)',
+				message: 'PLUM_NODE_SECRET, Settings → Runners → Registration secret (or `plum server`)',
 				placeholder: 'a1b2c3…'
 			});
 			if (clack.isCancel(s)) cancelAndExit();
@@ -825,7 +837,7 @@ async function registerNode({ primary, name, url, token, nodeSecret, browser, po
 			s.stop(pc.yellow(`Could not register with primary: ${e.message}`));
 		}
 	} else {
-		clack.log.warn('No --primary given — the node is configured but not registered anywhere.');
+		clack.log.warn('No --primary given, the node is configured but not registered anywhere.');
 	}
 
 	saveNodeByName(name, {
@@ -842,7 +854,7 @@ async function registerNode({ primary, name, url, token, nodeSecret, browser, po
 	return registeredId;
 }
 
-// Register a node with the primary and start its process here — this is the one
+// Register a node with the primary and start its process here, this is the one
 // path both `plum node start` and manage-nodes' "Add new node" run.
 async function bringNodeUp(cfg) {
 	const { prepareEnv, startNode, findPidOnPort, killPort, nodeReachable } = runnerProcessLib();
@@ -859,7 +871,7 @@ async function bringNodeUp(cfg) {
 		prepareEnv();
 	} catch (e) {
 		clack.log.error(
-			`Environment prep failed: ${e.message} — not starting (tests would fail at browser launch).`
+			`Environment prep failed: ${e.message}, not starting (tests would fail at browser launch).`
 		);
 		clack.outro(pc.red('Node not started.'));
 		process.exitCode = 1;
@@ -867,7 +879,7 @@ async function bringNodeUp(cfg) {
 	}
 
 	if (findPidOnPort(Number(cfg.port))) {
-		clack.log.step(`Port ${cfg.port} is in use — freeing it...`);
+		clack.log.step(`Port ${cfg.port} is in use, freeing it...`);
 		await killPort(Number(cfg.port));
 	}
 
@@ -876,7 +888,7 @@ async function bringNodeUp(cfg) {
 	const up = await nodeReachable(`http://localhost:${cfg.port}`, cfg.token, 15000);
 	if (up) {
 		clack.outro(
-			pc.green(`Node "${cfg.name}" running (pid ${entry.pid}) — logs at ${entry.logFile}`)
+			pc.green(`Node "${cfg.name}" running (pid ${entry.pid}), logs at ${entry.logFile}`)
 		);
 	} else {
 		clack.log.error(
@@ -891,7 +903,7 @@ async function bringNodeUp(cfg) {
 }
 
 // undefined = leave the boot entry alone (the boot service itself re-runs
-// `node start` with no flag — it must not re-prompt or reinstall).
+// `node start` with no flag, it must not re-prompt or reinstall).
 async function resolveBootChoice(args) {
 	if (anyFlags(args, ['--boot'])) return true;
 	if (anyFlags(args, ['--no-boot'])) return false;
@@ -906,7 +918,7 @@ async function resolveBootChoice(args) {
 
 async function applyBootChoice(name, choice) {
 	if (choice === undefined) return;
-	// The node is already running by this point — a boot-persistence failure
+	// The node is already running by this point, a boot-persistence failure
 	// (no systemd user session, no launchd, locked-down schtasks) must never
 	// take the whole `node start` down with it.
 	try {
@@ -930,7 +942,7 @@ async function applyBootChoice(name, choice) {
 }
 
 async function nodeStart({ reconfig, name }) {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Node  ')));
 	migrateLegacyNodes();
 	const cfg = await configureNode({ force: reconfig, name });
 	await bringNodeUp(cfg);
@@ -940,7 +952,7 @@ async function nodeStart({ reconfig, name }) {
 }
 
 async function nodeRestart({ name: nameArg }) {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Restart  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Node Restart  ')));
 	migrateLegacyNodes();
 	const { loadNodeByName } = nodeRegisterLib();
 	const { prepareEnv, stopNode, startNode, killPort, nodeReachable } = runnerProcessLib();
@@ -949,7 +961,7 @@ async function nodeRestart({ name: nameArg }) {
 	if (!target) return clack.outro(pc.dim('Done.'));
 	const cfg = loadNodeByName(target);
 	if (!cfg.id) {
-		clack.outro(pc.yellow(`"${target}" isn't registered — run \`plum node start ${target}\`.`));
+		clack.outro(pc.yellow(`"${target}" isn't registered, run \`plum node start ${target}\`.`));
 		return;
 	}
 
@@ -970,7 +982,7 @@ async function nodeRestart({ name: nameArg }) {
 		clack.outro(pc.green(`"${target}" restarted (pid ${entry.pid}).`));
 	} else {
 		clack.log.error(
-			pc.red(`"${target}" didn't come back on port ${cfg.port} — check ${entry.logFile}.`)
+			pc.red(`"${target}" didn't come back on port ${cfg.port}, check ${entry.logFile}.`)
 		);
 		process.exitCode = 1;
 		clack.outro(pc.red('Restart unverified.'));
@@ -978,7 +990,7 @@ async function nodeRestart({ name: nameArg }) {
 }
 
 async function nodeStop({ name: nameArg }) {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Stop  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Node Stop  ')));
 	migrateLegacyNodes();
 	const { loadNodeByName } = nodeRegisterLib();
 	const { stopNode, killPort } = runnerProcessLib();
@@ -997,7 +1009,7 @@ async function nodeList() {
 	const { statusOf } = runnerProcessLib();
 	const names = listNodeNames();
 	if (names.length === 0) {
-		clack.log.info('No nodes on this machine — add one with `plum node start <name>`.');
+		clack.log.info('No nodes on this machine, add one with `plum node start <name>`.');
 		return;
 	}
 	const { nodeBootStatus } = bootServiceLib();
@@ -1012,7 +1024,7 @@ async function nodeList() {
 }
 
 async function nodeDelete({ name: nameArg }) {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Node Delete  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Node Delete  ')));
 	migrateLegacyNodes();
 	const { loadNodeByName, deleteNodeByName, nodeHome } = nodeRegisterLib();
 	const { stopNode, killPort } = runnerProcessLib();
@@ -1045,11 +1057,11 @@ async function nodeDelete({ name: nameArg }) {
 	bootServiceLib().removeNodeBoot(target);
 	deleteNodeByName(target);
 	unregisterInstall('node', nodeHome(target));
-	clack.outro(pc.green(`Deleted "${target}" — process, local config, and primary registration.`));
+	clack.outro(pc.green(`Deleted "${target}", process, local config, and primary registration.`));
 }
 
 async function nodeReconfig({ name }) {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Reconfigure Node  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Reconfigure Node  ')));
 	migrateLegacyNodes();
 	const cfg = await configureNode({ force: true, name });
 	await registerNode(cfg);
@@ -1058,7 +1070,7 @@ async function nodeReconfig({ name }) {
 
 // Reads PLUM_NODE_SECRET from the primary's container (env override, else the
 // generated reports/.plum-node-secret) so a co-located node and the menu need no
-// setup. null on a node-only box — the caller then needs --node-secret.
+// setup. null on a node-only box, the caller then needs --node-secret.
 function readNodeSecretFromPrimary() {
 	const { getInstalls } = globalRegistryLib();
 	for (const dir of getInstalls('server')) {
@@ -1101,32 +1113,58 @@ switch (command) {
 	}
 
 	case 'init': {
-		clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Init  ')));
+		clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Init  ')));
 
-		// The whole test project lives in tests/ — same self-contained layout as a
+		const { FRAMEWORKS: INIT_FRAMEWORKS, frameworkLabel, isFramework } = defaultsConstants();
+		const initFlag = getFlag(process.argv.slice(2), '--framework');
+		if (initFlag !== undefined && !isFramework(initFlag)) {
+			clack.log.error(`Unknown framework "${initFlag}". Use ${INIT_FRAMEWORKS.join(' or ')}.`);
+			process.exit(1);
+		}
+		let initFramework = initFlag;
+		if (!initFramework && interactiveAllowed()) {
+			const picked = await clack.select({
+				message: 'Which test framework?',
+				options: INIT_FRAMEWORKS.map((id) => ({ value: id, label: frameworkLabel(id) }))
+			});
+			if (clack.isCancel(picked)) cancelAndExit();
+			initFramework = picked;
+		}
+		initFramework ??= serverConfigLib().loadServerConfig(process.cwd()).framework;
+
+		// The whole test project lives in tests/, same self-contained layout as a
 		// server project's projects/<slug>/tests/. Fill-in copy: an existing
 		// project keeps its edits, missing scaffold files are added. README.md is
 		// written separately (the scaffold's is server-oriented).
 		const existed = fs.existsSync(userTestsPath);
-		fse.copySync(scaffoldTestsPath, userTestsPath, {
+		fse.copySync(path.join(scaffoldTestsPath, initFramework), userTestsPath, {
 			overwrite: false,
 			errorOnExist: false,
-			filter: (src) => path.basename(src) !== 'README.md'
+			filter: (src) => path.basename(src) !== 'README.md' && !SCAFFOLD_SKIP.has(path.basename(src))
 		});
+		{
+			// npm strips a file named .gitignore from the tarball, so it ships as
+			// `gitignore` and is renamed on the way in.
+			const ignoreSrc = path.join(userTestsPath, 'gitignore');
+			const ignoreDest = path.join(userTestsPath, '.gitignore');
+			if (fs.existsSync(ignoreSrc) && !fs.existsSync(ignoreDest)) {
+				fs.renameSync(ignoreSrc, ignoreDest);
+			}
+		}
 		clack.log.success(existed ? '`tests/` filled in with missing files.' : '`tests/` created.');
 
 		{
 			const env = testsEnvPath;
 			if (!fs.existsSync(env)) {
 				fs.copyFileSync(path.join(userTestsPath, '.env.example'), env);
-				clack.log.success('tests/.env created — set BASE_URL to your app.');
+				clack.log.success('tests/.env created, set BASE_URL to your app.');
 			} else {
-				clack.log.warn('tests/.env already exists — skipping.');
+				clack.log.warn('tests/.env already exists, skipping.');
 			}
 		}
-		// .vscode/settings.json ships in the scaffold at tests/.vscode/ — open the
-		// tests/ folder in your editor. Just install the Cucumber extension here.
-		{
+		// The Cucumber extension is only useful to a Cucumber project; Playwright's
+		// own extension discovers playwright.config.ts on its own.
+		if (initFramework === 'cucumber') {
 			try {
 				execSync('code --version', { stdio: 'ignore' });
 				try {
@@ -1144,7 +1182,8 @@ switch (command) {
 			}
 		}
 
-		// tests/tsconfig.json — IDE type resolution only; the runtime uses backend's.
+		// The scaffold ships its own tsconfig.json now; this only fills in a project
+		// scaffolded before that, mapping the toolchain to the backend's copy.
 		{
 			const tsconfigPath = path.join(userTestsPath, 'tsconfig.json');
 			if (!fs.existsSync(tsconfigPath)) {
@@ -1173,7 +1212,7 @@ switch (command) {
 				fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2) + '\n', 'utf8');
 				clack.log.success('tests/tsconfig.json created for IDE type resolution.');
 			} else {
-				clack.log.warn('tests/tsconfig.json already exists — skipping.');
+				clack.log.warn('tests/tsconfig.json already exists, skipping.');
 			}
 		}
 
@@ -1184,7 +1223,7 @@ switch (command) {
 				const readmeContent = [
 					'# My Tests',
 					'',
-					'Powered by [Plum](https://github.com/silverlunah/plum) — Playwright + Cucumber + Test Repository.',
+					'Powered by [Plum](https://github.com/silverlunah/plum), Playwright + Cucumber + Test Repository.',
 					'',
 					'## Getting Started',
 					'',
@@ -1195,7 +1234,7 @@ switch (command) {
 					'   ```bash',
 					'   npx playwright test        # or: npx cucumber-js',
 					'   ```',
-					'3. **Write your first test** — scaffold a full feature or generate a single step:',
+					'3. **Write your first test**, scaffold a full feature or generate a single step:',
 					'   ```bash',
 					'   plum create-test   # scaffold a new test, page object and steps',
 					'   plum create-step   # Cucumber: add a step to an existing file',
@@ -1239,18 +1278,18 @@ switch (command) {
 					'## Layout',
 					'',
 					'```',
-					'features/          — Gherkin .feature files (write your scenarios here)',
-					'step_definitions/  — TypeScript step implementations',
-					'pages/             — Page Object Models (optional)',
-					'utils/             — Browser setup, hooks, shared helpers',
-					'.env               — BASE_URL and IS_HEADLESS',
-					'package.json       — extra npm packages your tests need',
+					'features/         , Gherkin .feature files (write your scenarios here)',
+					'step_definitions/ , TypeScript step implementations',
+					'pages/            , Page Object Models (optional)',
+					'utils/            , Browser setup, hooks, shared helpers',
+					'.env              , BASE_URL and IS_HEADLESS',
+					'package.json      , extra npm packages your tests need',
 					'```',
 					'',
-					'This whole folder is your test project — open it in your editor, and',
+					'This whole folder is your test project, open it in your editor, and',
 					'`git init` here (or sync it into a server project via **Automated Tests**).',
 					'',
-					'Feature files and step definitions are the two required layers. Page objects are optional — keep the Playwright calls in your steps if you prefer — but recommended once a page grows past a few interactions.',
+					'Feature files and step definitions are the two required layers. Page objects are optional, keep the Playwright calls in your steps if you prefer, but recommended once a page grows past a few interactions.',
 					'',
 					'Each scenario needs a unique tag so you can run it by itself:',
 					'',
@@ -1277,11 +1316,11 @@ switch (command) {
 					'',
 					'Plum includes a built-in test case management system. Access it from the **Test Repository** tab in the UI.',
 					'',
-					'- **Test Suites** — Group related test cases. Each suite gets an auto-assigned ID (e.g. `TS-001`).',
-					'- **Test Cases** — Document steps (Action / Test Data / Expected Output), set priority, and assign a Cucumber `@tag` to link automation.',
-					'- **Test Runs** — Build a run from any combination of cases, execute them one by one (pass/fail/blocked/skip), and track history.',
-					'- **Auto-linking** — When a build completes, Plum matches Cucumber scenario tags against `automatedTag` values on your test cases and marks them as automated.',
-					'- **Export / import** — Export test cases (whole repository or one suite) as CSV or JSON from the Suites tab. The JSON re-imports from **Settings → Test Cases** — a case whose ID already exists is skipped; anything else is imported with a fresh ID.',
+					'- **Test Suites**, Group related test cases. Each suite gets an auto-assigned ID (e.g. `TS-001`).',
+					'- **Test Cases**, Document steps (Action / Test Data / Expected Output), set priority, and assign a Cucumber `@tag` to link automation.',
+					'- **Test Runs**, Build a run from any combination of cases, execute them one by one (pass/fail/blocked/skip), and track history.',
+					'- **Auto-linking**, When a build completes, Plum matches Cucumber scenario tags against `automatedTag` values on your test cases and marks them as automated.',
+					'- **Export / import**, Export test cases (whole repository or one suite) as CSV or JSON from the Suites tab. The JSON re-imports from **Settings → Test Cases**, a case whose ID already exists is skipped; anything else is imported with a fresh ID.',
 					'',
 					'To link a test case to automation, set its **Automated tag** (e.g. `test-login-1`) to match the `@tag` on the Cucumber scenario.',
 					'',
@@ -1291,15 +1330,15 @@ switch (command) {
 					'',
 					'New to Cucumber? These links will get you up to speed quickly:',
 					'',
-					'- [Gherkin syntax reference](https://cucumber.io/docs/gherkin/reference/) — Feature files, Scenarios, Given/When/Then, tags, Scenario Outlines',
-					'- [Step definitions guide](https://cucumber.io/docs/cucumber/step-definitions/) — Connecting Gherkin steps to TypeScript code',
-					'- [Playwright docs](https://playwright.dev/docs/intro) — Browser automation API used inside page objects',
-					'- [Plum documentation](https://github.com/silverlunah/plum) — Full README and reference'
+					'- [Gherkin syntax reference](https://cucumber.io/docs/gherkin/reference/), Feature files, Scenarios, Given/When/Then, tags, Scenario Outlines',
+					'- [Step definitions guide](https://cucumber.io/docs/cucumber/step-definitions/), Connecting Gherkin steps to TypeScript code',
+					'- [Playwright docs](https://playwright.dev/docs/intro), Browser automation API used inside page objects',
+					'- [Plum documentation](https://github.com/silverlunah/plum), Full README and reference'
 				].join('\n');
 				fs.writeFileSync(userReadmePath, readmeContent + '\n', 'utf8');
 				clack.log.success('tests/README.md created.');
 			} else {
-				clack.log.warn('tests/README.md already exists — skipping.');
+				clack.log.warn('tests/README.md already exists, skipping.');
 			}
 		}
 
@@ -1310,7 +1349,7 @@ switch (command) {
 		clack.note(
 			[
 				`Your test project  ${pc.dim('→')}  ${pc.cyan('tests/')}  ${pc.dim('(open this folder in your editor)')}`,
-				`App URL            ${pc.dim('→')}  ${pc.cyan('tests/.env')}  ${pc.dim('— set BASE_URL')}`,
+				`App URL            ${pc.dim('→')}  ${pc.cyan('tests/.env')}  ${pc.dim(', set BASE_URL')}`,
 				`Extra packages     ${pc.dim('→')}  ${pc.cyan('tests/package.json')}`,
 				'',
 				`${pc.bold('Run tests locally')}`,
@@ -1357,14 +1396,14 @@ switch (command) {
 
 	case 'start':
 		console.log(
-			`\nSpecify what to start:\n  ${pc.cyan('plum server start')}   — start the web UI stack (Docker)\n  ${pc.cyan('plum node start')}     — start a node\n`
+			`\nSpecify what to start:\n  ${pc.cyan('plum server start')}  , start the web UI stack (Docker)\n  ${pc.cyan('plum node start')}    , start a node\n`
 		);
 		process.exit(1);
 		break;
 
 	case 'restart':
 		console.log(
-			`\nSpecify what to restart:\n  ${pc.cyan('plum server restart')}  — rebuild and restart the server\n  ${pc.cyan('plum node restart')}    — restart the node\n`
+			`\nSpecify what to restart:\n  ${pc.cyan('plum server restart')} , rebuild and restart the server\n  ${pc.cyan('plum node restart')}   , restart the node\n`
 		);
 		process.exit(1);
 		break;
@@ -1375,7 +1414,7 @@ switch (command) {
 
 	case 'stop':
 		console.log(
-			`\nSpecify what to stop:\n  ${pc.cyan('plum server stop')}    — stop the web UI stack\n  ${pc.cyan('plum node stop')}      — stop the node\n`
+			`\nSpecify what to stop:\n  ${pc.cyan('plum server stop')}   , stop the web UI stack\n  ${pc.cyan('plum node stop')}     , stop the node\n`
 		);
 		process.exit(1);
 		break;
@@ -1450,7 +1489,7 @@ switch (command) {
 
 	case 'project': {
 		const { slugify } = require(path.join(plumRoot, 'backend', 'lib', 'slugify'));
-		// Stop at the first flag — the name is the words before it, so
+		// Stop at the first flag, the name is the words before it, so
 		// `project init "Shop" --framework playwright` is named "Shop", not
 		// "Shop --framework playwright".
 		const nameWords = process.argv.slice(4);
@@ -1460,7 +1499,7 @@ switch (command) {
 			console.log('Usage: plum project init "<project name>" [--framework <f>]');
 			console.log("  --framework <f>    playwright | cucumber (default: this install's)");
 			console.log('  Use the exact name from Settings → Projects. The server normally');
-			console.log('  creates this folder for you — run this only to re-create it.');
+			console.log('  creates this folder for you, run this only to re-create it.');
 			break;
 		}
 		const slug = slugify(name);
@@ -1483,13 +1522,13 @@ switch (command) {
 		scaffoldProjectDir(testsDir, framework);
 		console.log(
 			exists
-				? `projects/${slug}/tests/ already exists — filled in any missing ${framework} files.`
+				? `projects/${slug}/tests/ already exists, filled in any missing ${framework} files.`
 				: `✓ Scaffolded projects/${slug}/tests/ for ${framework}`
 		);
 		console.log('');
 		console.log('Next:');
 		console.log(`  1. Set the app URL:  nano projects/${slug}/tests/.env   # BASE_URL=...`);
-		console.log(`  2. Merge new tests straight into projects/${slug}/tests/ — no restart.`);
+		console.log(`  2. Merge new tests straight into projects/${slug}/tests/, no restart.`);
 		break;
 	}
 
@@ -1527,7 +1566,7 @@ switch (command) {
 		console.log('  init                 Set up a new Plum project');
 		console.log('  server start         Start the full UI stack (interactive)');
 		console.log(
-			'    --framework <f>    playwright | cucumber — default for new projects (default: playwright)'
+			'    --framework <f>    playwright | cucumber, default for new projects (default: playwright)'
 		);
 		console.log('    --mode <m>         local | production (default: local)');
 		console.log('    --backend-port <n> Host port for the backend/API (default: 3001)');

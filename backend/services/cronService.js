@@ -11,7 +11,7 @@ const { ACTIVITY_ACTION } = require('../constants/activity');
 const { BUILT_IN_RUNNER_ID, TRIGGER_TYPE } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 
-// Keyed by CronJob.id, not taskName — task names are only unique per project, so
+// Keyed by CronJob.id, not taskName: task names are only unique per project, so
 // two projects can each have a "nightly" job without clobbering each other.
 const scheduledJobs = {};
 

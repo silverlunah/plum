@@ -3,11 +3,11 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-// Minimal in-memory fixed-window limiter — single-process, enough to blunt
+// Minimal in-memory fixed-window limiter, single-process, enough to blunt
 // online credential guessing on /auth. Not a substitute for an edge WAF.
 const buckets = new Map();
 
-function rateLimit({ windowMs, max, key, message = 'Too many attempts — try again later.' }) {
+function rateLimit({ windowMs, max, key, message = 'Too many attempts, try again later.' }) {
 	return (req, res, next) => {
 		const k = key(req);
 		const now = Date.now();

@@ -28,7 +28,7 @@ function defaults() {
 		backendPort: '3001',
 		frontendPort: '3002',
 		// Public URLs the browser actually uses. Left blank until the user sets
-		// them (e.g. behind a reverse proxy) — resolved to a localhost default
+		// them (e.g. behind a reverse proxy): resolved to a localhost default
 		// at the call site otherwise.
 		apiUrl: '',
 		uiUrl: ''
@@ -72,18 +72,18 @@ function writeEnvFile(dir) {
 /**
  * Builds docker-compose.override.yml. Host port remapping is handled by
  * BACKEND_PORT/FRONTEND_PORT env vars read by docker-compose.yml itself
- * (${BACKEND_PORT:-3001} etc) — NOT here, because Compose merges `ports:`
+ * (${BACKEND_PORT:-3001} etc), NOT here, because Compose merges `ports:`
  * lists across files by concatenation rather than replacing them. Defining
  * ports in both the base file and this override would publish both values
  * simultaneously, and fail to start if the base file's default port happens
  * to already be taken. This override only adds volumes and tells the
  * frontend where to reach the backend via VITE_API_URL.
  */
-// The whole ./projects tree is mounted at /app/projects — the backend owns every
+// The whole ./projects tree is mounted at /app/projects, the backend owns every
 // projects/<slug>/tests/ folder (creating them on project creation), so there's
 // nothing per-project to wire here. The legacy single `tests/` mount is added
 // only when that folder exists (a single-project install predating
-// multi-project) — a fresh install has none.
+// multi-project): a fresh install has none.
 function buildOverrideYaml({
 	testsAbs,
 	reportsAbs,

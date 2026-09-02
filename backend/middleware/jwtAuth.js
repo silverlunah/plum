@@ -52,7 +52,7 @@ async function resolveApiKey(token) {
 		select: { projectId: true, user: { select: { id: true, name: true, role: true } } }
 	});
 	if (!mcpKey) return null;
-	// The key stays live only while its owner can still reach the project — a
+	// The key stays live only while its owner can still reach the project, a
 	// member removed from the project loses their key with them.
 	const stillAMember =
 		mcpKey.user.role === ROLE.OWNER ||
@@ -92,7 +92,7 @@ function jwtAuth(req, res, next) {
 	} catch {
 		return res.status(401).json({ error: 'Invalid or expired token' });
 	}
-	// Confirm the user still exists — catches stale JWTs after a DB reset
+	// Confirm the user still exists, catches stale JWTs after a DB reset
 	prisma.user
 		.findUnique({ where: { id: payload.userId }, select: { id: true } })
 		.then((user) => {

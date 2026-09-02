@@ -10,7 +10,7 @@ const { jwtAuth } = require('../middleware/jwtAuth');
 const { accessibleProjectIds } = require('../lib/projectContext');
 
 // Runs the caller can't reach are redacted to what the locked bottom-bar card
-// renders (label, project, status, position) — the tag, runner list and who
+// renders (label, project, status, position): the tag, runner list and who
 // started it are dropped.
 router.get('/', jwtAuth, async (req, res, next) => {
 	try {

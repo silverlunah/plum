@@ -8,7 +8,7 @@ const path = require('path');
 const DEFAULT_TESTS_PATH = 'tests';
 
 // A project's tests folder is always a relative subpath *inside* projects/<slug>/
-// — the container only bind-mounts that tree. Reduce any input to a safe POSIX
+//: the container only bind-mounts that tree. Reduce any input to a safe POSIX
 // subpath, or fall back to the default: reject absolutes, `..`, and drive letters.
 function sanitizeTestsPath(input) {
 	if (typeof input !== 'string') return DEFAULT_TESTS_PATH;

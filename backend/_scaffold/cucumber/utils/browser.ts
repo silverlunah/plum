@@ -3,20 +3,20 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-// Wires up Plum's session recording — removing or reordering code here can silently break report replay.
+// Wires up Plum's session recording: removing or reordering code here can silently break report replay.
 
 import { chromium, firefox, webkit, Browser, BrowserContext, Page } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
 
-// Must match the mime type Plum's server expects — do not change.
+// Must match the mime type Plum's server expects, do not change.
 const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
 // Always attached, even for a scenario with no recorded events, so the
 // worker that ran it is still recoverable for grouping.
 const WORKER_META_MIME_TYPE = 'application/x-plum-worker+json';
 // @rrweb/record's package.json only exports its main entry ("."), so a deep
-// require.resolve() of the UMD bundle is blocked by Node's exports map — resolve
+// require.resolve() of the UMD bundle is blocked by Node's exports map, resolve
 // the (exported) main entry instead and locate the sibling file on disk.
 const RECORD_BUNDLE_PATH = path.join(
 	path.dirname(require.resolve('@rrweb/record')),
@@ -49,7 +49,7 @@ function tabIdForIndex(index: number): string {
 }
 
 // A static page (nothing left to interact with) can go a long time between
-// rrweb events, or emit none at all after its initial load — its own event
+// rrweb events, or emit none at all after its initial load, its own event
 // timestamps are a poor proxy for how long it stayed relevant. Real
 // open/close times let the replay UI line multiple tabs up on one timeline
 // without guessing from event gaps.
@@ -80,21 +80,21 @@ export async function setup(): Promise<void> {
 	_tabs = new Map();
 	_tabCounter = 0;
 	// Cucumber forks one OS process per --parallel worker and injects this env
-	// var into each — 0-indexed, so display/report as 1-based like the rest of
+	// var into each, 0-indexed, so display/report as 1-based like the rest of
 	// the worker-count UI.
 	const parsedWorkerId = parseInt(process.env.CUCUMBER_WORKER_ID ?? '', 10);
 	_workerId = Number.isFinite(parsedWorkerId) ? parsedWorkerId + 1 : 1;
 
 	// Context-level exposeBinding/addInitScript apply to every page in the
-	// context automatically — current and future (popups, target=_blank tabs) —
-	// so recording setup never races a new tab's first navigation.
+	// context automatically, current and future (popups, target=_blank tabs), so
+	// recording setup never races a new tab's first navigation.
 	await _context.exposeBinding('__plumEmitRRwebEvent', (source, eventJson: string) => {
 		const recording = source.page && _tabs.get(source.page);
 		if (!recording) return;
 		try {
 			recording.events.push(JSON.parse(eventJson));
 		} catch {
-			// malformed event — drop it, recording is best-effort
+			// malformed event: drop it, recording is best-effort
 		}
 	});
 	await _context.addInitScript({ path: RECORD_BUNDLE_PATH });
@@ -109,7 +109,7 @@ export async function setup(): Promise<void> {
 			// @ts-ignore
 			window.rrwebRecord.record({
 				emit: (event: unknown) => {
-					// @ts-ignore — exposed by BrowserContext.exposeBinding above
+					// @ts-ignore: exposed by BrowserContext.exposeBinding above
 					window.__plumEmitRRwebEvent(JSON.stringify(event));
 				}
 			});
@@ -119,7 +119,7 @@ export async function setup(): Promise<void> {
 	_context.on('page', attachRecorder);
 	_page = await _context.newPage();
 
-	// Only when someone's actually watching live — a scheduled/background run
+	// Only when someone's actually watching live: a scheduled/background run
 	// with no viewer shouldn't pay for this.
 	if (process.env.PLUM_SS_DIR) {
 		_liveRRwebTimer = setInterval(flushLiveRRwebEvents, 500);
@@ -137,7 +137,7 @@ function flushLiveRRwebEvents(): void {
 		recording.liveFlushedCount = recording.events.length;
 		try {
 			// _workerId is part of the name because every worker writes into the same
-			// directory with its own counter — without it two workers can land on the
+			// directory with its own counter: without it two workers can land on the
 			// same millisecond and counter, and one silently overwrites the other.
 			const seq = `${String(Date.now()).padStart(16, '0')}-w${_workerId}-${String(++_liveRRwebCounter).padStart(4, '0')}`;
 			fs.writeFileSync(
@@ -150,7 +150,7 @@ function flushLiveRRwebEvents(): void {
 				})
 			);
 		} catch {
-			// best-effort — live streaming shouldn't affect the recording itself
+			// best-effort: live streaming shouldn't affect the recording itself
 		}
 	}
 }
@@ -163,14 +163,14 @@ export async function markStepStart(stepName: string): Promise<void> {
 	if (!_page) return;
 	try {
 		await _page.evaluate((name) => {
-			// @ts-ignore — rrwebRecord is injected by the record.umd.min.cjs bundle
+			// @ts-ignore: rrwebRecord is injected by the record.umd.min.cjs bundle
 			if (window.rrwebRecord?.record?.addCustomEvent) {
 				// @ts-ignore
 				window.rrwebRecord.record.addCustomEvent('step', { name });
 			}
 		}, stepName);
 	} catch {
-		// best-effort — a missing marker just means the replay UI won't show a
+		// best-effort: a missing marker just means the replay UI won't show a
 		// step label at that point, it doesn't affect the recording itself
 	}
 }
@@ -197,7 +197,7 @@ export async function flushRecordings(
 			WORKER_META_MIME_TYPE
 		);
 	} catch {
-		// best-effort — a missing worker marker just falls back to workerId 1
+		// best-effort: a missing worker marker just falls back to workerId 1
 	}
 
 	const flushedAt = Date.now();
@@ -228,7 +228,7 @@ export async function teardown(): Promise<void> {
 
 // ---------------------------------------------------------------------------
 // Your code below this line. Everything above wires up Plum's session
-// recording — leave it as-is. Add your own page/context helpers here, built
+// recording: leave it as-is. Add your own page/context helpers here, built
 // on the exported page()/context() above (e.g. a helper for a second tab or
 // a second browser context).
 // ---------------------------------------------------------------------------

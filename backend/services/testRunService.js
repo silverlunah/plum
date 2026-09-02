@@ -238,9 +238,8 @@ async function loadEntry(projectId, entryId) {
 	});
 }
 
-// "TC-004 Valid login — Nightly regression"
-const entryLabel = (loaded) =>
-	`${loaded.case.displayId} ${loaded.case.title} — ${loaded.run.title}`;
+// "TC-004 Valid login, Nightly regression"
+const entryLabel = (loaded) => `${loaded.case.displayId} ${loaded.case.title}, ${loaded.run.title}`;
 
 async function updateEntry(projectId, entryId, { status, notes, executedById }) {
 	const loaded = await loadEntry(projectId, entryId);

@@ -28,7 +28,7 @@ function toKebabCase(str) {
 }
 
 // Strip a trailing "Page" suffix so "CheckoutPage" → base "Checkout",
-// then we append "Page" ourselves — avoiding "CheckoutPagePage".
+// then we append "Page" ourselves: avoiding "CheckoutPagePage".
 function stripPageSuffix(pascal) {
 	return pascal.endsWith('Page') ? pascal.slice(0, -4) : pascal;
 }
@@ -70,7 +70,8 @@ export class ${base}Page {
 	constructor(private readonly page: Page) {}
 
 	async goTo() {
-		await this.page.goto(process.env.BASE_URL as string);
+		// Relative: baseURL comes from playwright.config.ts.
+		await this.page.goto('/');
 	}
 
 	async performAction() {
@@ -84,7 +85,7 @@ export class ${base}Page {
 `;
 }
 
-function generateFeature(pascal, kebab, suiteTag, testTag) {
+function generateFeature(pascal, suiteTag, testTag) {
 	return `${suiteTag}
 Feature: ${pascal}
 
@@ -115,7 +116,7 @@ export class ${base}Page {
 `;
 }
 
-function generateSteps(pascal, base, kebab) {
+function generateSteps(pascal, base) {
 	return `import { Given, When, Then } from '@cucumber/cucumber';
 import { ${base}Page } from '../pages/${base}Page';
 
@@ -138,7 +139,7 @@ Then('I should see the expected result', async () => {
 /* ------------------------------------------------------------------ */
 
 async function main() {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Create Test  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Create Test  ')));
 
 	// --name skips the prompt, so this is scriptable as well as interactive.
 	const flagIndex = process.argv.indexOf('--name');
@@ -159,7 +160,7 @@ async function main() {
 		process.exit(0);
 	}
 	if (!String(rawName).trim()) {
-		clack.log.error('A name is required — pass one with --name, or run without flags.');
+		clack.log.error('A name is required: pass one with --name, or run without flags.');
 		process.exit(1);
 	}
 
@@ -195,9 +196,9 @@ async function main() {
 	} else {
 		fs.mkdirSync(path.join(testsRoot, 'features'), { recursive: true });
 		fs.mkdirSync(path.join(testsRoot, 'step_definitions'), { recursive: true });
-		fs.writeFileSync(featurePath, generateFeature(pascal, kebab, suiteTag, testTag), 'utf8');
+		fs.writeFileSync(featurePath, generateFeature(pascal, suiteTag, testTag), 'utf8');
 		fs.writeFileSync(pagePath, generatePage(base), 'utf8');
-		fs.writeFileSync(stepsPath, generateSteps(pascal, base, kebab), 'utf8');
+		fs.writeFileSync(stepsPath, generateSteps(pascal, base), 'utf8');
 	}
 
 	s.stop(pc.green('✓ Files created'));

@@ -12,11 +12,11 @@ const { slugify } = require('../lib/slugify');
 // Export
 // ---------------------------------------------------------------------------
 
-// Reports (with their rrweb recordings) are opt-in — they can be large, and
+// Reports (with their rrweb recordings) are opt-in, they can be large, and
 // this used to be a hard no ("reports are too large, use pg_dump") back when
 // screenshots lived as external files on disk. Now everything lives in
 // Postgres, so it's just a size tradeoff the admin can choose. Recording.events
-// is gzip-compressed BYTEA — base64 it for JSON transport; startedAt/endedAt
+// is gzip-compressed BYTEA: base64 it for JSON transport; startedAt/endedAt
 // are BigInt, which JSON.stringify can't serialize natively.
 async function exportReports() {
 	const reports = await prisma.report.findMany({
@@ -77,7 +77,7 @@ const exportAll = async (includeReports = false) => {
 			: null,
 		users: users.map(({ updatedAt: _, ...u }) => u),
 		// A backup file travels (S3, laptops); the node token is a live secret, so
-		// drop it — nodes re-register their token on the next `plum node start`.
+		// drop it: nodes re-register their token on the next `plum node start`.
 		runners: runners.map(({ createdAt: _, cronJobs: __, reports: ___, token: ____, ...r }) => ({
 			...r,
 			token: ''
@@ -98,7 +98,7 @@ const exportAll = async (includeReports = false) => {
 };
 
 // ---------------------------------------------------------------------------
-// Import — upsert all exported data, preserve IDs for relational integrity
+// Import: upsert all exported data, preserve IDs for relational integrity
 // ---------------------------------------------------------------------------
 
 const importAll = async (
@@ -115,7 +115,7 @@ const importAll = async (
 ) => {
 	await prisma.$transaction(
 		async (tx) => {
-			// 0. Project — resolved first because cron jobs, suites, cases and runs
+			// 0. Project: resolved first because cron jobs, suites, cases and runs
 			// all carry a projectId FK and the compound (projectId, displayId) /
 			// (projectId, taskName) unique keys the upserts below key on. The id in
 			// the backup file is only right for a same-instance round-trip; a
@@ -143,7 +143,7 @@ const importAll = async (
 					if (project) await tx.project.update({ where: { id: existing.id }, data });
 					projectId = existing.id;
 				} else {
-					// Restore into an empty database — a project needs an org and a slug.
+					// Restore into an empty database: a project needs an org and a slug.
 					const org =
 						(await tx.organization.findFirst({ orderBy: { id: 'asc' } })) ??
 						(await tx.organization.create({ data: { name: 'Default' } }));
@@ -171,7 +171,7 @@ const importAll = async (
 					update: {
 						name: runner.name,
 						url: runner.url,
-						// Backups no longer carry the token — keep whatever the live row has.
+						// Backups no longer carry the token: keep whatever the live row has.
 						...(runner.token && { token: runner.token }),
 						browser: runner.browser
 					}
@@ -258,13 +258,13 @@ const importAll = async (
 				}
 			}
 
-			// 6. Reports + recordings (opt-in — only present if this backup
+			// 6. Reports + recordings (opt-in: only present if this backup
 			// included them). Recordings are always deleted and recreated
-			// rather than upserted — same pattern as test steps above.
+			// rather than upserted: same pattern as test steps above.
 			for (const report of reports) {
 				const { recordings = [], cronJobId: _staleCronJobId, ...reportData } = report;
 
-				// cronJobId can't be trusted as exported — cron jobs above are
+				// cronJobId can't be trusted as exported: cron jobs above are
 				// upserted keyed on taskName, not id, so the id a report recorded
 				// at export time may no longer point at the right row (or any
 				// row). Re-resolve it the same way reportService does when a
@@ -300,10 +300,10 @@ const importAll = async (
 };
 
 // ---------------------------------------------------------------------------
-// S3 upload — S3-compatible object storage (AWS, R2, B2, MinIO)
+// S3 upload, S3-compatible object storage (AWS, R2, B2, MinIO)
 // ---------------------------------------------------------------------------
 
-// A custom endpoint means R2/B2/MinIO/on-prem, not real AWS S3 — those
+// A custom endpoint means R2/B2/MinIO/on-prem, not real AWS S3, those
 // virtually always need path-style addressing (bucket.endpoint/... resolves
 // nowhere for a self-hosted host like a docker service name). Real AWS S3
 // (no custom endpoint) keeps the SDK's virtual-hosted-style default.
@@ -348,7 +348,7 @@ const uploadToS3 = async (jsonData, config) => {
 	return key;
 };
 
-// Lists backups previously uploaded by uploadToS3, newest first — the data
+// Lists backups previously uploaded by uploadToS3, newest first, the data
 // needed for a "restore from S3" flow that doesn't require the admin to pull
 // the file down through the S3 console/CLI themselves first.
 const listS3Backups = async (config) => {

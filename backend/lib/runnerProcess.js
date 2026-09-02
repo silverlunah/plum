@@ -29,7 +29,7 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'host.docker.inter
 
 /**
  * Runners default to this machine's own LAN IP (see nodeRegister's
- * detectLanIp), not a loopback hostname — so isLocalUrl must also recognise
+ * detectLanIp), not a loopback hostname: so isLocalUrl must also recognise
  * this machine's actual interface addresses, or a runner started and later
  * stopped on this same box gets misclassified as remote and loses its
  * "Start" option (nothing else can restart a fully-stopped process for it).
@@ -70,7 +70,7 @@ function findPidOnPort(port) {
 				const parts = line.trim().split(/\s+/);
 				// Columns: Proto, Local Address, Foreign Address, State, PID.
 				// Match the port exactly off the local address (e.g. "0.0.0.0:3002"
-				// or "[::]:3002") — a substring check would false-positive port
+				// or "[::]:3002"): a substring check would false-positive port
 				// "300" against "3002", "13000", etc.
 				const localAddress = parts[1] ?? '';
 				const localPort = localAddress.slice(localAddress.lastIndexOf(':') + 1);
@@ -90,7 +90,7 @@ function findPidOnPort(port) {
 }
 
 // Signal 0 performs the OS-level permission/existence check without actually
-// delivering a signal — the portable way to ask "is this pid alive?".
+// delivering a signal: the portable way to ask "is this pid alive?".
 function isAlive(pid) {
 	try {
 		process.kill(pid, 0);
@@ -118,7 +118,7 @@ function parsePort(url) {
 
 /**
  * Clears the pid of registry entries whose process has died, and persists the
- * result. Keeps the entry itself (with its `port`) rather than deleting it —
+ * result. Keeps the entry itself (with its `port`) rather than deleting it,
  * that's the only place the last-used port for a runner is remembered, so a
  * later Start can reuse it instead of falling back to whatever's in the
  * runner's URL (or a hardcoded default, if the URL has no explicit port).
@@ -145,7 +145,7 @@ function statusOf(id, registry = loadRegistry()) {
  * Installs backend npm dependencies if missing or stale. Shared by `prepareEnv`
  * (which additionally provisions Playwright browsers for test execution) and
  * any caller that only needs `backend/node_modules` to exist, such as `plum
- * mcp` — spawning the MCP server without this guard fails outright if the
+ * mcp`: spawning the MCP server without this guard fails outright if the
  * package was reinstalled/updated since the last time deps were installed
  * (npm install -g wipes node_modules on upgrade) and the user never ran a
  * command that happens to call prepareEnv first.
@@ -183,28 +183,37 @@ function ensureBackendDeps() {
 /**
  * Ensures a local node can actually run tests: backend dependencies must be
  * installed and the Playwright browser binaries present. A node with neither
- * starts fine but every scenario fails at the browser-launch hook. Idempotent —
+ * starts fine but every scenario fails at the browser-launch hook. Idempotent,
  * npm install is skipped when node_modules already exists, and `playwright
  * install` no-ops when the browser is already downloaded.
  */
 function prepareEnv() {
 	ensureBackendDeps();
 
-	// --with-deps also installs the OS-level shared libraries (libnss3, libatk,
-	// etc.) Chromium/Firefox need to actually launch — without it, a fresh
-	// Linux host has the browser binaries but fails at launch time with
-	// "Host system is missing dependencies to run browsers."
-	execSync('npx playwright install --with-deps chromium firefox', {
-		cwd: BACKEND_DIR,
-		stdio: ['ignore', 'inherit', 'inherit'],
-		shell: true
-	});
+	// --with-deps installs the OS libraries the browsers need, but it shells out to
+	// apt-get via sudo on Linux and to PowerShell on Windows. Only root on Linux can
+	// do it unattended, and a failure must not stop the node: having the browsers is
+	// the real precondition.
+	const withDeps = process.platform === 'linux' && process.getuid?.() === 0;
+	try {
+		execSync(`npx playwright install${withDeps ? ' --with-deps' : ''} chromium firefox`, {
+			cwd: BACKEND_DIR,
+			stdio: ['ignore', 'inherit', 'inherit'],
+			shell: true
+		});
+	} catch (e) {
+		console.warn(
+			`⚠️  Browser install reported a problem: ${e.message}\n` +
+				'   If runs fail at launch, install the browsers manually with ' +
+				'`npx playwright install --with-deps chromium firefox`.'
+		);
+	}
 }
 
 /**
  * Polls a node's own /api/ping (at `baseUrl`, e.g. http://localhost:3002) until
  * it reports mode:'node', or the timeout elapses. A detached spawn returns a
- * pid immediately even when the process goes on to die on EADDRINUSE — callers
+ * pid immediately even when the process goes on to die on EADDRINUSE, callers
  * use this to report honestly whether the node actually came up.
  */
 async function nodeReachable(baseUrl, token, timeoutMs = 15000) {
@@ -283,8 +292,8 @@ function stopNode(id, fallbackPort = null) {
 	}
 
 	// Keep the port on record (clearing only the pid) so a later Start reuses
-	// the same port instead of falling back to the runner's URL — which may
-	// not even have an explicit port — or a hardcoded default.
+	// the same port instead of falling back to the runner's URL, which may
+	// not even have an explicit port: or a hardcoded default.
 	if (port) {
 		registry[id] = { ...entry, pid: null, port: String(port) };
 	} else {

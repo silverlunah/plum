@@ -8,6 +8,7 @@ const router = express.Router();
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireOwner } = require('../middleware/requireOwner');
 const projectService = require('../services/projectService');
+const { FRAMEWORKS, isFramework } = require('../constants/defaults');
 const { slugify } = require('../lib/slugify');
 
 // Owner, or an admin assigned to the project named by :id.
@@ -46,6 +47,9 @@ router.post('/', jwtAuth, requireOwner, async (req, res, next) => {
 				.status(400)
 				.json({ error: 'Project name needs at least one letter or number (a–z, 0–9)' });
 		const framework = req.body.framework;
+		if (framework !== undefined && !isFramework(framework)) {
+			return res.status(400).json({ error: `framework must be one of: ${FRAMEWORKS.join(', ')}` });
+		}
 		res.status(201).json({ project: await projectService.create({ name, framework }) });
 	} catch (e) {
 		next(e);

@@ -27,7 +27,7 @@
 		projectMenuOpen = false;
 		if (id === $activeProjectId) return;
 		activeProjectId.set(id);
-		// Every page's data is scoped by the header — reload so it all refetches.
+		// Every page's data is scoped by the header, reload so it all refetches.
 		window.location.reload();
 	}
 

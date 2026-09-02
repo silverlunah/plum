@@ -131,7 +131,7 @@
 		}
 	}
 
-	// Don't default a new job to the built-in runner when it's off — reach for a
+	// Don't default a new job to the built-in runner when it's off, reach for a
 	// node instead (still falls back to built-in if that's genuinely all there is).
 	$: fallbackRunnerIds = $builtInEnabled
 		? [BUILTIN_RUNNER_ID]

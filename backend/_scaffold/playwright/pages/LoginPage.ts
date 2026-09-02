@@ -4,7 +4,8 @@ export class LoginPage {
 	constructor(private readonly page: Page) {}
 
 	async goToLoginPage() {
-		await this.page.goto(process.env.BASE_URL as string);
+		// Relative: baseURL comes from playwright.config.ts.
+		await this.page.goto('/');
 	}
 
 	async iEnterUsername(username: string) {

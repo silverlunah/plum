@@ -11,7 +11,7 @@ const { requireAdmin } = require('../middleware/requireAdmin');
 const { requireProjectAccess } = require('../middleware/requireProjectAccess');
 const userService = require('../services/userService');
 
-// Who can be assigned work in the active project — its members plus the owner.
+// Who can be assigned work in the active project, its members plus the owner.
 router.get('/members', jwtAuth, requireProjectAccess, async (req, res, next) => {
 	try {
 		res.json({ users: await userService.getProjectMembers(req.projectId) });

@@ -12,7 +12,7 @@ export const BROWSERS = [
 
 // Mirrors backend/constants/defaults.js FRAMEWORKS. The first entry is what the
 // project-create form pre-selects, so the offered default is this list's order
-// and nothing else — a separate UI default would drift from the CLI's.
+// and nothing else, a separate UI default would drift from the CLI's.
 // Labels live in copy/settings.js.
 export const FRAMEWORKS = ['playwright', 'cucumber'];
 
@@ -21,7 +21,7 @@ export const TRIGGER_TYPES = Object.freeze({
 	CLI: 'command-line-trigger',
 	MCP: 'mcp-trigger',
 	EXTERNAL: 'external-trigger',
-	// Not a Report.triggerType value — only used as the `kind` tag on bg-run-*
+	// Not a Report.triggerType value, only used as the `kind` tag on bg-run-*
 	// live-broadcast events, alongside the other values reused for that field.
 	CRON: 'cron'
 });

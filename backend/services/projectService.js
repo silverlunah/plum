@@ -67,13 +67,13 @@ async function listAll() {
 	}));
 }
 
-// `slug` is derived from the name once, here, and never changes afterwards —
+// `slug` is derived from the name once, here, and never changes afterwards,
 // it's the project's folder and API identity. Renames don't touch it.
 //
 // `framework` is the same kind of one-shot decision: the scaffold, the runner
 // command and the report shape all follow from it, so there is no update path
 // for it anywhere. An unknown value falls back to the column default rather
-// than erroring — the choice comes from a fixed set in the UI, not free text.
+// than erroring: the choice comes from a fixed set in the UI, not free text.
 async function create({ name, framework }) {
 	const org = await prisma.organization.findFirst({ orderBy: { id: 'asc' } });
 	const slug = await uniqueSlug(slugify(name));
@@ -95,7 +95,7 @@ async function create({ name, framework }) {
 	return project;
 }
 
-// Wipes a project and everything under it — suites, cases, runs, reports, cron,
+// Wipes a project and everything under it: suites, cases, runs, reports, cron,
 // members, the projects/<slug>/ folder. Users are account-level and untouched.
 // Refuses to remove the last project; an org needs at least one.
 async function remove(projectId) {
@@ -117,7 +117,7 @@ async function remove(projectId) {
 	return { ok: true };
 }
 
-// Owners first (implicit members of every project), then the stored members —
+// Owners first (implicit members of every project), then the stored members,
 // each carrying its account role so the UI can badge and gate removal.
 async function getMembers(projectId) {
 	const userFields = { id: true, name: true, email: true, role: true };

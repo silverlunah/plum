@@ -5,7 +5,7 @@
 
 const { AsyncLocalStorage } = require('async_hooks');
 
-// Carries the acting user (and how they're acting — UI vs MCP key) from the auth
+// Carries the acting user (and how they're acting, UI vs MCP key) from the auth
 // middleware down to whichever service ends up writing an ActivityLog row, so
 // those ~30 call sites don't each need an `actor` parameter threaded through.
 const storage = new AsyncLocalStorage();

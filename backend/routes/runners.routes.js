@@ -13,7 +13,7 @@ const { requireOwner } = require('../middleware/requireOwner');
 const { nodeControlAuth, nodeReadAuth } = require('../middleware/nodeControlAuth');
 
 // An open POST /runners let anyone register a rogue node, which then received
-// the test tree and env secrets on dispatch — mutation is owner/secret-gated.
+// the test tree and env secrets on dispatch: mutation is owner/secret-gated.
 // Listing is open to any member so they can target a node for a run.
 router.get('/', nodeReadAuth, async (req, res) => {
 	try {
@@ -24,7 +24,7 @@ router.get('/', nodeReadAuth, async (req, res) => {
 	}
 });
 
-// Instance-wide "run on the primary" switch — every member reads it, the owner sets it.
+// Instance-wide "run on the primary" switch: every member reads it, the owner sets it.
 router.get('/built-in', jwtAuth, async (req, res) => {
 	try {
 		res.json(await settingsService.getBuiltInRunnerEnabled());

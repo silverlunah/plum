@@ -15,7 +15,7 @@ const { withAt } = require('./playwrightDiscovery');
  * terms: a spec file becomes a feature and a test becomes a scenario.
  *
  * Returns { features, attempts } where `attempts` maps a scenario's test-id tag to
- * how many times Playwright ran it — read from `results[]`, which is why Playwright
+ * how many times Playwright ran it: read from `results[]`, which is why Playwright
  * retries natively while Cucumber needs Plum's own loop.
  */
 function toFeatures(pwJson) {
@@ -89,7 +89,7 @@ const RECORDING_MIME_TYPES = new Set([RRWEB_MIME_TYPE, WORKER_META_MIME_TYPE]);
  * Steps the Plum fixture recorded itself, or null when it wasn't used.
  *
  * Preferred over `results[].steps` because Playwright's JSON drops steps that ran
- * inside a hook — a `beforeEach` would otherwise be missing from the report.
+ * inside a hook: a `beforeEach` would otherwise be missing from the report.
  */
 function attachedSteps(result) {
 	const found = (result?.attachments ?? []).find(
@@ -107,7 +107,7 @@ function attachedSteps(result) {
 /**
  * Plum's own attachments, re-shaped as a hidden step carrying Cucumber-style
  * `embeddings`. Cucumber puts them on its hidden After-hook step, and
- * reportService.extractRecordings reads exactly that — so presenting them the same
+ * reportService.extractRecordings reads exactly that, so presenting them the same
  * way means replay works for Playwright with no change to the report pipeline.
  *
  * Every attempt's attachments are included: a test that failed then passed on a
@@ -139,7 +139,7 @@ function stepStatus(status) {
 
 /**
  * test.step() calls become steps. A test without them has no step breakdown at
- * all, so it becomes a single step carrying the test's own outcome and error —
+ * all, so it becomes a single step carrying the test's own outcome and error,
  * otherwise the report would show a scenario with nothing in it.
  *
  * `keyword` is deliberately empty: Given/When/Then is Gherkin vocabulary and a

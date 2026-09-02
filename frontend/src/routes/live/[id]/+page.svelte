@@ -69,7 +69,7 @@
 	$: status = run?.status ?? null;
 	$: lanes = run?.lanes ?? [];
 	$: isMulti = lanes.length > 1;
-	// A run is viewable only from within its own project — the bottom bar won't
+	// A run is viewable only from within its own project, the bottom bar won't
 	// link here otherwise, but a pasted URL can. (Socket events still reach the
 	// client; server-side room isolation is a separate change.)
 	$: runProjectId = run?.projectId ?? listedProjectId;

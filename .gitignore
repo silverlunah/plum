@@ -61,10 +61,8 @@ docker-compose.override.yml
 /backend/.plum-jobs/
 
 # Cron Job Config
-/backend/config/cron-jobs.json
 
 # Global Settings
-/backend/config/settings.json
 
 #-----------------------#
 #  Frontend .gitignore  #
@@ -92,4 +90,3 @@ docker-compose.override.yml
 # Vite
 /frontend/vite.config.js.timestamp-*
 /frontend/vite.config.ts.timestamp-*
-backend/config/*.bak

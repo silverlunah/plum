@@ -105,7 +105,7 @@ router.post('/integrations', scopedAdmin, async (req, res, next) => {
 	}
 });
 
-// An MCP key acts as the member who minted it, with that member's role — so any
+// An MCP key acts as the member who minted it, with that member's role, so any
 // member manages their own, no admin gate.
 router.get('/mcp', scoped, async (req, res, next) => {
 	try {

@@ -3,7 +3,7 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-// ActivityLog.action values. Dotted <entity>.<verb> strings — the frontend maps
+// ActivityLog.action values. Dotted <entity>.<verb> strings, the frontend maps
 // each to a human sentence and icon. `scope` on the row (not here) decides who
 // can see it: 'project' → that project's admins, 'org' → the owner.
 const ACTIVITY_ACTION = Object.freeze({

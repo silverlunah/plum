@@ -55,7 +55,7 @@ model Report {
   startedBy   String?
   // runnerCount = distinct runner machines/lanes in this run (built-in counts as one).
   // workerCount = Cucumber --parallel workers within each runner. Two independent
-  // axes of parallelism — kept as separate columns since one DB column used to mean
+  // axes of parallelism: kept as separate columns since one DB column used to mean
   // one or the other depending on which code path wrote it.
   runnerCount Int               @default(1)
   workerCount Int               @default(1)
@@ -89,7 +89,7 @@ model Report {
   @@index([projectId])
 }
 
-// One row per (report, scenario, worker, browser tab) — a scenario that opens
+// One row per (report, scenario, worker, browser tab), a scenario that opens
 // extra tabs, or runs under a multi-worker runner, produces multiple rows.
 // `events` is a gzip-compressed JSON array of rrweb events.
 model Recording {
@@ -100,7 +100,7 @@ model Recording {
   workerId   Int      @default(1)
   tabId      String   @default("main")
   tabIndex   Int      @default(0)
-  // Epoch ms of this tab's first/last recorded event — lets the replay UI line
+  // Epoch ms of this tab's first/last recorded event, lets the replay UI line
   // multiple tabs up on one absolute timeline and auto-switch between them.
   // Null on recordings written before this field existed.
   startedAt  BigInt?
@@ -146,8 +146,8 @@ model Organization {
 
 // Append-only audit trail. `scope` splits project-level events (visible to that
 // project's admins) from org-level ones (owner only). The actor's name is
-// denormalised into `actorLabel` — with a "(MCP)" suffix when the action came
-// through an MCP key — so a row still reads correctly after the user is renamed
+// denormalised into `actorLabel`: with a "(MCP)" suffix when the action came
+// through an MCP key: so a row still reads correctly after the user is renamed
 // or deleted.
 model ActivityLog {
   id          String   @id @default(cuid())
@@ -187,7 +187,7 @@ model Project {
   notifyPublicUrl      String       @default("")
   maxRetries           Int          @default(0)
   // Which page members land on: "automated" (Automated Tests) or "repository"
-  // (Test Repository). Purely presentational — reorders the nav, no route changes.
+  // (Test Repository). Purely presentational: reorders the nav, no route changes.
   defaultHome          String       @default("automated")
   // When true, the automated-testing surface (Automated Tests, Reports,
   // Scheduled, the run bar) is hidden project-wide and this is a manual test
@@ -195,10 +195,10 @@ model Project {
   manualRepositoryOnly Boolean      @default(false)
   // Where this project's tests live, relative to projects/<slug>/. Default
   // "tests"; set deeper (e.g. "apps/web/e2e") when the repo nests them.
-  // Always sanitised to a subpath — never absolute, never escapes the folder.
+  // Always sanitised to a subpath: never absolute, never escapes the folder.
   testsPath            String       @default("tests")
   // "cucumber" or "playwright". Chosen when the project is created and never
-  // changeable afterwards — the scaffold, the runner command and the report
+  // changeable afterwards: the scaffold, the runner command and the report
   // shape all derive from it, so switching would orphan every existing test.
   // Deliberately absent from every update path; see settingsService.updateProject.
   // The default is what a NEW project gets; existing rows keep their own value.
@@ -359,7 +359,7 @@ model TestRunEntry {
 
 // One row per run request (manual, cron, external, mcp). A run stays `queued`
 // until every runner it targets is free, then flips to `running`, then `done`.
-// DB-backed so the queue survives a restart — stale `running` rows are
+// DB-backed so the queue survives a restart: stale `running` rows are
 // reconciled to `done` on boot and queued rows resume.
 model RunQueue {
   id            String    @id

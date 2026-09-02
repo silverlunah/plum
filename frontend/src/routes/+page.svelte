@@ -22,7 +22,7 @@
 	$: if ($activeProject) go($activeProject);
 
 	onMount(() => {
-		// Projects never loaded (offline / error) — fall back to Automated Tests.
+		// Projects never loaded (offline / error), fall back to Automated Tests.
 		const t = setTimeout(() => go(null), 2500);
 		return () => clearTimeout(t);
 	});

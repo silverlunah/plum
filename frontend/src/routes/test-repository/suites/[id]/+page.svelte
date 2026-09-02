@@ -387,7 +387,7 @@
 >
 	{#if confirmDeleteCase}
 		{DELETE_LABEL}
-		<strong>{confirmDeleteCase.displayId} — {confirmDeleteCase.title}</strong
+		<strong>{confirmDeleteCase.displayId}, {confirmDeleteCase.title}</strong
 		>{CANNOT_BE_UNDONE_SUFFIX}
 	{/if}
 </ConfirmModal>
@@ -469,7 +469,7 @@
 <Modal bind:open={moveCaseOpen} title={MOVE_TEST_CASE_MODAL_TITLE}>
 	<div class="form-fields">
 		{#if moveCaseTarget}
-			<p class="move-case-subtitle">{moveCaseTarget.displayId} — {moveCaseTarget.title}</p>
+			<p class="move-case-subtitle">{moveCaseTarget.displayId}, {moveCaseTarget.title}</p>
 		{/if}
 		{#if otherSuites.length === 0}
 			<p class="form-error">{NO_SUITES_AVAILABLE}</p>
@@ -478,7 +478,7 @@
 				<label class="field-label" for="move-suite">{MOVE_TO_SUITE_LABEL}</label>
 				<select id="move-suite" class="field-input" bind:value={moveCaseSuiteId}>
 					{#each otherSuites as s}
-						<option value={s.id}>{s.displayId} — {s.name}</option>
+						<option value={s.id}>{s.displayId}, {s.name}</option>
 					{/each}
 				</select>
 			</div>
@@ -498,7 +498,7 @@
 	<div class="breadcrumb">
 		<a href="/test-repository" class="bc-link">{TEST_REPOSITORY_BREADCRUMB}</a>
 		<span class="bc-sep">›</span>
-		<span class="bc-current">{suite.displayId} — {suite.name}</span>
+		<span class="bc-current">{suite.displayId}, {suite.name}</span>
 	</div>
 
 	<div class="suite-header">
@@ -816,7 +816,7 @@
 									{#each recentHistory(selectedCase.history) as h (h.id)}
 										<span
 											class="history-bar {resultClass(h.result)}"
-											title="{h.result} — {new Date(h.executedAt).toLocaleString()}"
+											title="{h.result}, {new Date(h.executedAt).toLocaleString()}"
 										></span>
 									{/each}
 								</div>
@@ -926,8 +926,8 @@
 										<div class="steps-table-row">
 											<span class="col-num">{i + 1}</span>
 											<span class="col-action">{step.action}</span>
-											<span class="col-data">{step.testData || '—'}</span>
-											<span class="col-expected">{step.expectedOutput || '—'}</span>
+											<span class="col-data">{step.testData || ','}</span>
+											<span class="col-expected">{step.expectedOutput || ','}</span>
 										</div>
 									{/each}
 								</div>
@@ -966,7 +966,7 @@
 												{:else}
 													<span class="history-source history-missing">{RUN_NOT_FOUND}</span>
 												{/if}
-												<span class="history-by">{h.executedBy?.name ?? '—'}</span>
+												<span class="history-by">{h.executedBy?.name ?? ','}</span>
 												<span class="history-date">{new Date(h.executedAt).toLocaleString()}</span>
 											</div>
 											{#if h.notes}

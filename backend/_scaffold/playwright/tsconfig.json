@@ -8,8 +8,5 @@
 		"skipLibCheck": true,
 		"types": ["node"],
 		"resolveJsonModule": true
-	},
-	"ts-node": {
-		"transpileOnly": true
 	}
 }

@@ -11,7 +11,7 @@
 	$: klass = keywordClass(keyword);
 </script>
 
-<!-- Playwright steps carry no keyword — Given/When/Then is Gherkin's, not theirs. -->
+<!-- Playwright steps carry no keyword, Given/When/Then is Gherkin's, not theirs. -->
 {#if keyword}
 	<span
 		class="kw"

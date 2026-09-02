@@ -109,7 +109,7 @@ function appendStepToFile(filePath, stepType, stepText, methodName, pageClassNam
 /* ------------------------------------------------------------------ */
 
 async function main() {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Create Step  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Create Step  ')));
 
 	// 1. Step type
 	const stepTypeChoice = await clack.select({
@@ -194,7 +194,7 @@ async function main() {
 		const newPageName = await clack.text({
 			message: 'Page name',
 			placeholder: 'home',
-			hint: '"Page.ts" will be appended — e.g. "home" → HomePage.ts',
+			hint: '"Page.ts" will be appended: e.g. "home" → HomePage.ts',
 			validate: (v) => (!v.trim() ? 'Page name is required' : undefined)
 		});
 		if (clack.isCancel(newPageName)) {

@@ -5,7 +5,7 @@
 
 import { pluralize } from './common';
 
-export const PAGE_TITLE = 'Automated Tests — Plum';
+export const PAGE_TITLE = 'Automated Tests, Plum';
 export const HEADING = 'Automated Tests';
 export const SEARCH_PLACEHOLDER = 'Search suites or tests…';
 export const NO_SUITES_MESSAGE = 'No test suites found.';

@@ -11,7 +11,7 @@ const { getPlaywrightSuites } = require('../lib/playwrightDiscovery');
 const { FRAMEWORK } = require('../constants/defaults');
 
 // Cucumber suites are parsed straight out of the .feature text. Playwright has no
-// equivalent source of truth — a spec's tests only exist once the file is loaded —
+// equivalent source of truth: a spec's tests only exist once the file is loaded,
 // so its list comes from `playwright test --list` instead.
 const getTestSuites = (projectId) => {
 	if (frameworkFor(projectId) === FRAMEWORK.PLAYWRIGHT) {

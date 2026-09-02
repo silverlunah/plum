@@ -112,7 +112,7 @@
 	function handleKeydown(e) {
 		if (!replayOpen) return;
 		// While inspecting, RecordingPlayer's own Escape handler turns inspect
-		// mode off — only close the modal when that's not in play.
+		// mode off, only close the modal when that's not in play.
 		if (e.key === 'Escape' && !replayInspecting) closeReplay();
 	}
 
@@ -146,11 +146,11 @@
 	$: skipped = allScenarios.filter((s) => s.status === 'skipped' || s.status === 'pending').length;
 	// detail.duration is real wall-clock time (recorded by the orchestrator, start to
 	// combined-report-save). Summed scenario durations overcount when scenarios ran in
-	// parallel (multiple workers/runners) — only used as a fallback for reports saved
+	// parallel (multiple workers/runners), only used as a fallback for reports saved
 	// before this field existed.
 	$: totalDuration = detail?.duration ?? allScenarios.reduce((s, sc) => s + sc.duration, 0);
 	// `allRecordings` is referenced here (not just inside scenarioHasRecording)
-	// purely so Svelte's compiler tracks it as a dependency — recordings load
+	// purely so Svelte's compiler tracks it as a dependency, recordings load
 	// asynchronously after `detail`, and without this the {@const groupHasReplay}
 	// checks inside the each-block tree below never re-evaluate once they arrive.
 	$: runnerGroups = detail && allRecordings ? groupScenariosByRunnerAndWorker(detail.features) : [];

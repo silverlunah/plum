@@ -39,10 +39,20 @@ const port = parseInt(process.env.PORT || DEFAULT_PORT, 10);
 const server = http.createServer(app);
 
 // Real-time transport for live test output, the rrweb stream, and run status.
-const io = new Server(server, { cors: { origin: '*' } });
+// Same pin as the HTTP layer: a deployment that restricts origins should not have
+// the websocket accept everything.
+function allowedOrigins() {
+	const list = (process.env.PLUM_ALLOWED_ORIGINS || '')
+		.split(',')
+		.map((o) => o.trim())
+		.filter(Boolean);
+	return list.length > 0 ? list : '*';
+}
+
+const io = new Server(server, { cors: { origin: allowedOrigins() } });
 
 // Sockets stream live test output and DOM recordings (which can hold
-// credentials) — signed-in users only. Per-project scoping is in socketHandler.
+// credentials), signed-in users only. Per-project scoping is in socketHandler.
 if (!isNodeMode) {
 	const { verifyToken } = require('./services/userService');
 	io.use((socket, next) => {
@@ -56,9 +66,9 @@ if (!isNodeMode) {
 }
 
 async function start() {
-	// A node runs arbitrary test code — refuse to start without the token that gates it.
+	// A node runs arbitrary test code, refuse to start without the token that gates it.
 	if (isNodeMode && !process.env.NODE_TOKEN) {
-		console.error('❌ Node mode requires NODE_TOKEN — start nodes with `plum node start`.');
+		console.error('❌ Node mode requires NODE_TOKEN, start nodes with `plum node start`.');
 		process.exit(1);
 	}
 

@@ -3,7 +3,7 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-export const PAGE_TITLE = 'Scheduled Tests — Plum';
+export const PAGE_TITLE = 'Scheduled Tests, Plum';
 export const HEADING = 'Scheduled Tests';
 export const SUBTITLE = 'Manage recurring test runs via cron jobs';
 export const NEW_JOB_LABEL = '+ New Job';
@@ -27,7 +27,7 @@ export const RUNNERS_LABEL = 'Runners';
 export const RUNNERS_HINT = 'Select one or more nodes';
 export const THIS_SERVER_HINT = 'this server';
 export const NO_RUNNERS_AVAILABLE =
-	'The built-in runner is off and no nodes are registered — start a node or re-enable the built-in runner in Settings → Runners.';
+	'The built-in runner is off and no nodes are registered, start a node or re-enable the built-in runner in Settings → Runners.';
 export const NOTIFICATIONS_LABEL = 'Notifications';
 
 export const ALL_FIELDS_REQUIRED = 'All fields are required.';

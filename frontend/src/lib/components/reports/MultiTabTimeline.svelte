@@ -6,7 +6,7 @@
 <script>
 	import { createEventDispatcher } from 'svelte';
 
-	// Replaces rrweb-player's own timeline for multi-tab recordings — rrweb's
+	// Replaces rrweb-player's own timeline for multi-tab recordings, rrweb's
 	// timeline belongs to whichever player is currently mounted and resets on
 	// every segment hand-off, so it can't track absolute position across tabs.
 	export let from = 0;

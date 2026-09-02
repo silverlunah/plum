@@ -36,7 +36,7 @@
 	// never misread as reaching a natural finish.
 	const FINISH_SUPPRESS_MS = 150;
 	// Player would otherwise exactly fill .player-stage, leaving the button row
-	// flush against its edge — shrinks it so centering leaves a margin.
+	// flush against its edge, shrinks it so centering leaves a margin.
 	const STAGE_BREATHING_ROOM = 24;
 
 	let stage;
@@ -53,7 +53,7 @@
 	let currentStepIndex = -1;
 	let stepTimestamps = [];
 
-	// Placed on one timeline so playback can auto-switch tabs — see computeRecordingSegments.
+	// Placed on one timeline so playback can auto-switch tabs, see computeRecordingSegments.
 	let recordingsById = new Map();
 	let eventsByRecordingId = new Map();
 	let segments = [];
@@ -61,11 +61,11 @@
 	$: activeRecording = recordingsById.get(segments[activeSegmentIndex]?.recordingId);
 
 	// buildPlayer's mounted slice can start later than the segment's own `from`
-	// (see its headIdx search) — this is that slice's real local-zero.
+	// (see its headIdx search), this is that slice's real local-zero.
 	// seekToAbsolute needs it to know whether an in-place goto() can reach a target.
 	let mountedFirst = 0;
 
-	// rrweb's own timeline resets per segment — this tracks absolute position
+	// rrweb's own timeline resets per segment, this tracks absolute position
 	// continuously across every rebuild, feeding MultiTabTimeline (multi-tab
 	// only; single-tab's one player already has a correct native timeline).
 	let livePosition = 0;
@@ -73,14 +73,14 @@
 	function tickLivePosition() {
 		armClickGuard();
 		// Skip while finished: the finish handler snaps livePosition to overallTo
-		// (endedAt can sit past the last real event) — polling here would
+		// (endedAt can sit past the last real event), polling here would
 		// immediately overwrite that.
 		const replayer = currentReplayer();
 		if (replayer && !finished) livePosition = mountedFirst + replayer.getCurrentTime();
 		livePositionRaf = requestAnimationFrame(tickLivePosition);
 	}
 
-	// Replays are read-only — block a click on a link/button from navigating the
+	// Replays are read-only, block a click on a link/button from navigating the
 	// iframe off the recording (inspect mode's own click handler still runs).
 	// rrweb swaps the iframe document on each FullSnapshot, so re-arm on change.
 	let guardedDoc = null;
@@ -111,7 +111,7 @@
 		const rect = target.getBoundingClientRect();
 		const iframeRect = iframe.getBoundingClientRect();
 		const stageRect = stage.getBoundingClientRect();
-		// rrweb-player scales the iframe to fit — clientWidth/Height are pre-scale,
+		// rrweb-player scales the iframe to fit, clientWidth/Height are pre-scale,
 		// getBoundingClientRect post-scale; ratio = scale.
 		const scaleX = iframeRect.width / (iframe.clientWidth || 1);
 		const scaleY = iframeRect.height / (iframe.clientHeight || 1);
@@ -136,7 +136,7 @@
 		selectedElement = describeElement(node);
 	}
 
-	// goto() offsets are relative to a recording's first event — bounded to this
+	// goto() offsets are relative to a recording's first event, bounded to this
 	// segment's own slice so a repeat appearance doesn't land in an earlier one.
 	function segmentEventBounds(seg) {
 		const events = eventsByRecordingId.get(seg?.recordingId) ?? [];
@@ -161,7 +161,7 @@
 	}
 
 	// ts is the next step's marker, so deriving the highlight from it would pick
-	// the wrong step — see jumpToStep.
+	// the wrong step, see jumpToStep.
 	function seekToAbsolute(ts, autoplay, stepIndexOverride) {
 		let targetIdx = segments.findIndex((s) => ts >= s.from && ts <= s.to);
 		if (targetIdx === -1) targetIdx = segments.length - 1;
@@ -172,14 +172,14 @@
 		const speed = currentReplayer()?.config.speed ?? 1;
 
 		// An in-place goto() only works if the mounted slice already covers `ts`
-		// — e.g. after toggling Inspect there may be nothing loaded to render.
+		//, e.g. after toggling Inspect there may be nothing loaded to render.
 		// Rebuild instead so the right FullSnapshot gets loaded again.
 		if (targetIdx === activeSegmentIndex && ts >= mountedFirst) {
 			if (!autoplay) suppressFinishUntil = Date.now() + FINISH_SUPPRESS_MS;
 			player?.goto(ts - mountedFirst, autoplay);
 			if (stepIndexOverride !== undefined) currentStepIndex = stepIndexOverride;
 			// goto() can cross a mid-stream FullSnapshot (e.g. a tab navigating off
-			// about:blank) and silently reset the iframe document — re-attach.
+			// about:blank) and silently reset the iframe document, re-attach.
 			if (inspecting) {
 				teardownInspectListeners();
 				setupInspectListeners();
@@ -200,9 +200,9 @@
 	function jumpToStep(i) {
 		if (stepTimestamps[i] === undefined || !player) return;
 		currentStepIndex = i;
-		// Jump to the next marker — step i's own marker fires before its actions run.
+		// Jump to the next marker, step i's own marker fires before its actions run.
 		// The last step has none: use the segment's real last event, not its `to`
-		// boundary (can sit past it) — landing at/past the real end reads as a
+		// boundary (can sit past it), landing at/past the real end reads as a
 		// natural finish instead of a paused seek (see suppressFinishUntil).
 		let nextTs = stepTimestamps[i + 1];
 		if (nextTs === undefined) {
@@ -231,7 +231,7 @@
 		const onLeave = () => {
 			hoverBox = null;
 		};
-		// Escape fires here, not the outer window — the iframe is its own document.
+		// Escape fires here, not the outer window, the iframe is its own document.
 		const onKeydown = (e) => {
 			if (e.key === 'Escape') toggleInspect();
 		};
@@ -241,12 +241,12 @@
 		doc.addEventListener('mouseleave', onLeave);
 		doc.addEventListener('keydown', onKeydown);
 		// rrweb can rebuild the document in place (document.open()/write()) without
-		// the contentDocument reference changing — watchInspectDoc's reference
+		// the contentDocument reference changing, watchInspectDoc's reference
 		// check alone would miss that a fresh documentElement wiped this marker.
 		try {
 			doc.documentElement.dataset.plumInspectWired = '1';
 		} catch {
-			// cross-origin/detached doc — inspect wiring is best-effort
+			// cross-origin/detached doc, inspect wiring is best-effort
 		}
 
 		cleanupInspect = () => {
@@ -299,7 +299,7 @@
 	// Rebuild since rrweb-player's canvas won't reflow to the resized stage on its own.
 	async function toggleInspect() {
 		inspecting = !inspecting;
-		// Entering inspect rebuilds the player — any node held from a prior session
+		// Entering inspect rebuilds the player, any node held from a prior session
 		// points into a torn-down iframe document.
 		if (inspecting) {
 			selectedElement = null;
@@ -308,7 +308,7 @@
 		}
 		const resumeState = currentPlaybackState();
 		if (resumeState && inspecting) resumeState.paused = true;
-		// jumpToStep pauses exactly at the NEXT marker to show step i's result —
+		// jumpToStep pauses exactly at the NEXT marker to show step i's result,
 		// recomputing the highlight from that boundary would read it as step i+1
 		// having started. Preserve the already-correct index instead.
 		if (resumeState) resumeState.stepIndexOverride = currentStepIndex;
@@ -330,7 +330,7 @@
 		}
 	}
 
-	// Escape exits inspect mode first — the parent's handler checks `inspecting` (bound) before closing.
+	// Escape exits inspect mode first, the parent's handler checks `inspecting` (bound) before closing.
 	function handleWindowKeydown(e) {
 		if (e.key === 'Escape' && inspecting) {
 			toggleInspect();
@@ -345,14 +345,14 @@
 	let finished = false;
 	let restartBoxStyle = '';
 
-	// rrweb schedules 'finish' 50ms after casting the array's last event — even
+	// rrweb schedules 'finish' 50ms after casting the array's last event, even
 	// during a paused seek's sync catch-up. Only real autoplay should trigger
 	// the auto-advance-to-next-tab below.
 	let awaitingNaturalFinish = false;
-	// Set right before any deliberate paused seek — see FINISH_SUPPRESS_MS.
+	// Set right before any deliberate paused seek, see FINISH_SUPPRESS_MS.
 	let suppressFinishUntil = 0;
 
-	// rrweb's 50ms finish timeout isn't cancelled by destroying the replayer —
+	// rrweb's 50ms finish timeout isn't cancelled by destroying the replayer,
 	// a short segment can be torn down before its own stale finish fires,
 	// double-advancing past whatever's current. Each build gets a generation;
 	// a finish only acts if its replayer is still the live one.
@@ -369,7 +369,7 @@
 		restartBoxStyle = `top: ${btnRect.top - stageRect.top}px; left: ${btnRect.left - stageRect.left}px; width: ${btnRect.width}px; height: ${btnRect.height}px;`;
 	}
 
-	// Mutating rrweb's play/pause button directly duplicates the icon — overlay our own instead.
+	// Mutating rrweb's play/pause button directly duplicates the icon, overlay our own instead.
 	function setupFinishRestart() {
 		const replayer = currentReplayer();
 		const playPauseBtn = playPauseButton();
@@ -395,7 +395,7 @@
 			// stalls short of overallTo on natural finish.
 			livePosition = overallTo;
 		});
-		// Derived from the replayer's own lifecycle, not our call sites — the
+		// Derived from the replayer's own lifecycle, not our call sites, the
 		// native play/pause button calls rrweb's own toggle() directly,
 		// bypassing togglePlayPause(). A paused seek still nets out false:
 		// internally it's play() (emits start) then an explicit pause (emits pause).
@@ -428,7 +428,7 @@
 		if (!replayer) return null;
 		if (finished) return { finished: true, speed: replayer.config.speed };
 		// getCurrentTime() is relative to the mounted slice's first event, not
-		// the recording's true first — re-anchor to what buildPlayer expects,
+		// the recording's true first, re-anchor to what buildPlayer expects,
 		// same as seekToAbsolute's mountedFirst.
 		const { first: recordingFirst } = segmentEventBounds(segments[activeSegmentIndex]);
 		return {
@@ -451,13 +451,13 @@
 		}
 	}
 
-	// rrweb-player's size is fixed at construction — rebuild to re-measure the stage.
+	// rrweb-player's size is fixed at construction, rebuild to re-measure the stage.
 	function buildPlayer(resumeState = null) {
 		buildGeneration += 1;
 		const stageRect = stage.getBoundingClientRect();
 		const minWidth = $isCompact ? MIN_PLAYER_WIDTH_COMPACT : MIN_PLAYER_WIDTH;
 		const width = Math.max(minWidth, Math.floor(stageRect.width));
-		// Subtract rrweb's controller height — MultiTabTimeline overlays into
+		// Subtract rrweb's controller height, MultiTabTimeline overlays into
 		// that same reserved strip, no extra space needed.
 		const height = Math.max(
 			MIN_PLAYER_HEIGHT,
@@ -486,7 +486,7 @@
 
 		// A recording with >1 FullSnapshot (an in-page navigation, or a tab still
 		// on about:blank when opened) breaks a paused goto() if it has to
-		// fast-forward across more than one — feed only from the last snapshot
+		// fast-forward across more than one, feed only from the last snapshot
 		// at or before the target.
 		let headIdx = 0;
 		for (let i = 0; i < tailEvents.length; i++) {
@@ -527,7 +527,7 @@
 		setupFinishRestart();
 
 		if (!resumeState) {
-			// setSpeed(1) doesn't sync the controller's displayed speed — click the button instead.
+			// setSpeed(1) doesn't sync the controller's displayed speed, click the button instead.
 			requestAnimationFrame(() => {
 				if (!container) return;
 				const oneXBtn = Array.from(container.querySelectorAll('.rr-controller__btns button')).find(
@@ -538,14 +538,14 @@
 			player.play();
 		} else if (resumeState.finished) {
 			player.setSpeed(resumeState.speed);
-			// A fresh Player starts at its first frame — without this explicit seek,
+			// A fresh Player starts at its first frame, without this explicit seek,
 			// rebuilding here (e.g. toggling Inspect after a natural finish) would
 			// show a blank first frame instead of staying on the last one.
 			suppressFinishUntil = Date.now() + FINISH_SUPPRESS_MS;
 			player.goto(timeOffset, false);
 			finished = true;
 			livePosition = overallTo;
-			// Restart button moved under this rebuild — recompute its position.
+			// Restart button moved under this rebuild, recompute its position.
 			requestAnimationFrame(() => positionRestartButton(playPauseButton()));
 		} else {
 			player.setSpeed(resumeState.speed);
@@ -583,7 +583,7 @@
 		}
 
 		const computed = computeRecordingSegments(recordings);
-		// Older recordings lack startedAt/endedAt — fall back to just the first tab.
+		// Older recordings lack startedAt/endedAt, fall back to just the first tab.
 		segments =
 			computed.length > 0
 				? computed
@@ -739,7 +739,7 @@
 		min-height: 0;
 		display: flex;
 		/* Pin the player to the bottom so its control bar sits flush with the
-		   screen edge — the STAGE_BREATHING_ROOM slack falls above it. */
+		   screen edge, the STAGE_BREATHING_ROOM slack falls above it. */
 		align-items: flex-end;
 		justify-content: center;
 		background-color: var(--bg-subtle);
@@ -765,7 +765,7 @@
 	}
 
 	/* rrweb's .rr-player ships a white fill + drop shadow that would box in the
-	   replay and hide the dot-grid canvas — clear both; the iframe's own border
+	   replay and hide the dot-grid canvas, clear both; the iframe's own border
 	   is the only frame. */
 	.player-mount :global(.rr-player) {
 		border-radius: 0 !important;
@@ -773,7 +773,7 @@
 		background: transparent !important;
 	}
 	/* rrweb-player hardcodes a light controller (#fff bar, #eee track, #11103e
-	   text) — retint it to theme tokens so it isn't a white slab in dark mode. */
+	   text), retint it to theme tokens so it isn't a white slab in dark mode. */
 	.player-mount :global(.rr-controller) {
 		border-radius: 0 !important;
 		background: var(--bg-elevated) !important;
@@ -801,15 +801,15 @@
 		color: var(--white) !important;
 	}
 
-	/* Round the iframe itself — Chrome won't clip it to an ancestor's radius.
-	   rrweb sets pointer-events:none inline, blocking scroll — safe to override,
+	/* Round the iframe itself, Chrome won't clip it to an ancestor's radius.
+	   rrweb sets pointer-events:none inline, blocking scroll, safe to override,
 	   the iframe is sandboxed. */
 	.player-mount :global(iframe) {
 		border-radius: var(--radius-md);
 		pointer-events: auto !important;
 	}
 
-	/* .replayer-wrapper is exactly iframe-sized — the outline border and matching
+	/* .replayer-wrapper is exactly iframe-sized, the outline border and matching
 	   radius/clip go here so the opaque fill behind the page (visible on a blank
 	   step, with the z-index:-1 ::before hint) is rounded too, not a square edge
 	   poking past the iframe's corners. */
@@ -836,7 +836,7 @@
 		pointer-events: none;
 	}
 
-	/* "Skip inactive" is a dead control here — hide it. */
+	/* "Skip inactive" is a dead control here, hide it. */
 	.player-mount :global(.switch) {
 		display: none !important;
 	}
@@ -845,7 +845,7 @@
 	}
 
 	/* Multi-tab only: rrweb's timeline can't span multiple tabs (see
-	   livePosition above) — visibility (not display) keeps its layout space
+	   livePosition above), visibility (not display) keeps its layout space
 	   reserved for MultiTabTimeline to overlay into. */
 	.player-mount-multi :global(.rr-timeline) {
 		visibility: hidden !important;

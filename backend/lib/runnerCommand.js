@@ -3,32 +3,42 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-const { FRAMEWORK } = require('../constants/defaults');
+const path = require('path');
+const { FRAMEWORK, isBrowser } = require('../constants/defaults');
+
+const BACKEND_DIR = path.resolve(__dirname, '..');
+
+// Each runner's CLI is a plain JS entry point, so Plum spawns node against it
+// directly instead of going through `npx` and a shell. That is what makes a tag or
+// browser name impossible to inject: every value below is one argv element, never
+// part of a command string. It also avoids the Windows .cmd-wrapper problem, since
+// process.execPath needs no shell.
+// Located via each package's own package.json rather than a deep path, because a
+// package's `exports` map can refuse a subpath (Cucumber's does for bin/).
+const CLI_ENTRY = {
+	[FRAMEWORK.PLAYWRIGHT]: { pkg: '@playwright/test', bin: 'cli.js' },
+	[FRAMEWORK.CUCUMBER]: { pkg: '@cucumber/cucumber', bin: path.join('bin', 'cucumber.js') }
+};
+
+// Resolved from the project first, so a project pinning its own runner version gets
+// that one, then from the backend, which always has both installed.
+function resolveCli(framework, testsRoot) {
+	const { pkg, bin } = CLI_ENTRY[framework];
+	const manifest = require.resolve(`${pkg}/package.json`, { paths: [testsRoot, BACKEND_DIR] });
+	return path.join(path.dirname(manifest), bin);
+}
 
 /**
- * Builds the native runner invocation for a run.
+ * Builds the runner invocation for a run: which tests, and where the report goes.
+ * Browser, workers, timeouts, traces and reporters come from the project's own
+ * config, so this is a command a developer can reproduce by hand.
  *
- * Plum passes only two kinds of argument: which tests to run, and where to write
- * the report. Browser, workers, timeouts, traces and reporters all come from the
- * project's own playwright.config.ts / cucumber.js, so the command below is one a
- * developer can paste into a terminal and get the same run.
+ * Retries are the exception. They come from the project's max-retries setting, and
+ * the two frameworks need opposite handling: Playwright reports every attempt in
+ * its JSON so `--retries` is passed through, while Cucumber's legacy JSON reports
+ * only the final attempt, so Plum re-runs failures itself and emits no retry flag.
  *
- * Retries are the one exception. They come from the project's max-retries setting
- * rather than the config, and the two frameworks need opposite handling:
- *
- * - Playwright reports every attempt in its JSON (`results[]`), so `--retries` is
- *   passed straight through and one process produces the whole picture.
- * - Cucumber's legacy JSON formatter reports only the *final* attempt, so a native
- *   `--retry` would hide flakiness entirely. Plum re-runs failures itself instead
- *   and counts attempts across processes, which is why no retry flag is emitted
- *   here for Cucumber.
- *
- * Callers spawn this through a shell (`shell: true`), which npm/npx require on
- * Windows, so the selection values are quoted here: a tag expression contains `|`
- * or `(` `)`, which an unquoted shell reads as a pipe or a subshell rather than
- * as part of the argument.
- *
- * @returns {{ bin: string, args: string[], cwd: string, env: Record<string,string> }}
+ * @returns {{ command: string, args: string[], cwd: string, env: Record<string,string> }}
  */
 function buildRunCommand({
 	framework,
@@ -41,50 +51,51 @@ function buildRunCommand({
 	shard = null
 }) {
 	const env = { PLUM_REPORT_FILE: reportFile };
+	const cli = resolveCli(framework, testsRoot);
+	const workerCount = Math.max(1, Number(workers) || 1);
 
 	if (framework === FRAMEWORK.PLAYWRIGHT) {
-		const args = ['test'];
-		// Tags reach Playwright as a title regex, not as tag syntax: Plum's tag
-		// expression "@a or @b" becomes /@a|@b/. The @ is kept so a tag cannot
-		// match a substring of an unrelated test title.
+		const args = [cli, 'test'];
 		const grep = tagsToGrep(tag);
-		if (grep) args.push('--grep', shellQuote(grep));
-		if (browser) args.push(`--project=${browser}`);
+		if (grep) args.push('--grep', grep);
+		// Validated rather than trusted: it arrives from a run request, and an
+		// unknown value would otherwise reach the runner verbatim.
+		if (isBrowser(browser)) args.push(`--project=${browser}`);
 		if (Number(retries) > 0) args.push(`--retries=${Number(retries)}`);
-		// Always passed, including 1. Playwright's own default is half the machine's
-		// cores, so omitting the flag for a single worker silently ran five on a
-		// 10-core box while the UI said one.
-		args.push(`--workers=${Math.max(1, Number(workers) || 1)}`);
-		if (shard) args.push(`--shard=${shard.index}/${shard.total}`);
-		return { bin: 'playwright', args, cwd: testsRoot, env };
+		// Always passed: Playwright's own default is half the machine's cores, so
+		// omitting it for a single worker silently runs several.
+		args.push(`--workers=${workerCount}`);
+		if (shard) args.push(`--shard=${Number(shard.index)}/${Number(shard.total)}`);
+		return { command: process.execPath, args, cwd: testsRoot, env };
 	}
 
-	const args = [];
-	if (tag) args.push('--tags', shellQuote(tag));
+	const args = [cli];
+	if (tag) args.push('--tags', tag);
 	// Only above 1: cucumber-js runs in the main process without the flag, which is
-	// what one worker means. `--parallel 1` would spawn a worker process to do the
-	// same work, and the project's own config already defaults to 0.
-	if (Number(workers) > 1) args.push('--parallel', String(Number(workers)));
-	return { bin: 'cucumber-js', args, cwd: testsRoot, env };
+	// what one worker means.
+	if (workerCount > 1) args.push('--parallel', String(workerCount));
+	return { command: process.execPath, args, cwd: testsRoot, env };
 }
 
 /**
- * "@a or @b" -> "@a|@b". Cucumber tag expressions also support `and` and `not`,
- * which have no regex equivalent here — an expression using them is passed to
- * Playwright as a plain OR of the tags it mentions, which over-selects rather
- * than silently running nothing.
+ * "@a or @b" -> "@a|@b". Cucumber's `and` and `not` have no regex equivalent, so an
+ * expression using them becomes a plain OR of the tags it mentions, which
+ * over-selects rather than silently running nothing.
  */
 function tagsToGrep(tag) {
-	const trimmed = (tag ?? '').trim();
-	if (!trimmed) return '';
-	const tags = trimmed.match(/@[\w-]+/g);
+	const tags = (tag ?? '').trim().match(/@[\w-]+/g);
 	if (!tags || tags.length === 0) return '';
-	return tags.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+	// The trailing guard matters: without it @TC-1 also matches @TC-10, so the same
+	// Plum tag would select a different set on Playwright than on Cucumber, whose
+	// --tags is exact. No escaping is needed, the capture is only @, word chars and -.
+	return tags.map((t) => `${t}(?![\\w-])`).join('|');
 }
 
-// Double quotes work in both POSIX sh and Windows cmd.exe. Any embedded double
-// quote is dropped rather than escaped: the two shells disagree on how to escape
-// one, and no tag or test title Plum generates contains a quote.
-const shellQuote = (value) => `"${String(value).replace(/"/g, '')}"`;
+/** The command as a reader of the run log would type it, minus the resolved CLI path. */
+function describeCommand({ args }) {
+	const [cli, ...rest] = args;
+	const name = /playwright/.test(cli) ? 'playwright' : 'cucumber-js';
+	return [name, ...rest].join(' ');
+}
 
-module.exports = { buildRunCommand, tagsToGrep, shellQuote };
+module.exports = { buildRunCommand, describeCommand };

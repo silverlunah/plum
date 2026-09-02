@@ -198,8 +198,8 @@ const TEST_CASE_CSV_HEADER = [
 
 const BLANK = '';
 
-// A value only prints on the first row of the group it labels — the suite id on
-// the first row of the suite, the case columns on the case's first step — so a
+// A value only prints on the first row of the group it labels, the suite id on
+// the first row of the suite, the case columns on the case's first step, so a
 // spreadsheet reads as nested blocks instead of every column repeating down.
 function testCaseCsvRows(data) {
 	const rows = [TEST_CASE_CSV_HEADER];

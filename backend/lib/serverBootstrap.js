@@ -10,7 +10,7 @@ const { SOCKET_EVENTS } = require('../constants/socketEvents');
 
 const WATCH_OPTS = { usePolling: true, interval: 800, ignoreInitial: true };
 
-// Anchored to backend/, not cwd — see lib/appSecret.js.
+// Anchored to backend/, not cwd: see lib/appSecret.js.
 const REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
 
 function ensureTestsDir(testsDir, isNodeMode) {
@@ -19,7 +19,7 @@ function ensureTestsDir(testsDir, isNodeMode) {
 		return;
 	}
 	if (isNodeMode) {
-		console.warn('⚠️  No tests folder found — will be populated when a job is received');
+		console.warn('⚠️  No tests folder found: will be populated when a job is received');
 		return;
 	}
 	console.error('❌ No tests folder found at /app/tests');
@@ -28,7 +28,7 @@ function ensureTestsDir(testsDir, isNodeMode) {
 
 // A self-restart (POST /api/restart) spawns the replacement before this
 // process has released the port, so the first bind attempt can briefly hit
-// EADDRINUSE — retry instead of dying immediately.
+// EADDRINUSE: retry instead of dying immediately.
 function attachListenRetry(server, port) {
 	let retriesLeft = 20;
 	server.on('error', (err) => {
@@ -84,7 +84,7 @@ async function initCronServices(
 	if (reportRetentionService) await reportRetentionService.init();
 }
 
-// MCP keys are per-project now and resolved live from the DB in jwtAuth — the
+// MCP keys are per-project now and resolved live from the DB in jwtAuth, the
 // only global key is an optional PLUM_MCP_KEY env override (CI). Kept exported
 // so server.js's call site doesn't change.
 async function bootstrapMcpKey() {}
@@ -117,9 +117,9 @@ function handleNodeModeStartup(port) {
 		try {
 			const reg = loadRegistry();
 			// A self-restart already wrote the replacement's pid under this
-			// id before this process exits — only touch the entry if it's
+			// id before this process exits: only touch the entry if it's
 			// still ours, so we don't clobber the new process's registration.
-			// Keep the entry (with its port) rather than deleting it — that's
+			// Keep the entry (with its port) rather than deleting it, that's
 			// the only place a later manual Start can find the port this
 			// runner was last running on.
 			if (reg[runnerId]?.pid === process.pid) {
@@ -130,7 +130,7 @@ function handleNodeModeStartup(port) {
 	};
 
 	// Adding a SIGTERM/SIGINT listener suppresses Node's default
-	// "terminate immediately" behavior — the handler must exit itself,
+	// "terminate immediately" behavior: the handler must exit itself,
 	// or the process (and the port it's bound to) lives on forever
 	// after a plain `kill`/SIGTERM with nothing left to stop it short
 	// of SIGKILL.
@@ -182,11 +182,11 @@ async function syncAutomatedFlags(projectId) {
 }
 
 async function loadChokidar() {
-	// chokidar v5+ is ESM-only — use dynamic import to stay compatible with CJS
+	// chokidar v5+ is ESM-only: use dynamic import to stay compatible with CJS
 	try {
 		return (await import('chokidar')).default;
 	} catch {
-		console.warn('⚠️  chokidar unavailable — file watching disabled');
+		console.warn('⚠️  chokidar unavailable: file watching disabled');
 		return null;
 	}
 }
@@ -198,7 +198,7 @@ const TEST_FILE_RE = /\.feature$|\.(spec|test)\.[cm]?[jt]sx?$/;
 
 function watchTestFiles(chokidar, testsDir) {
 	// chokidar v4+ has no globs and a custom testsPath puts tests at any depth, so
-	// watch the whole projects/ tree and react only to test-file changes — skipping
+	// watch the whole projects/ tree and react only to test-file changes, skipping
 	// the node_modules/.git a checked-out repo brings.
 	const projectsDir = process.env.PROJECTS_DIR || path.join(path.dirname(testsDir), 'projects');
 	// testsDir itself, not testsDir/features: a Playwright project has no features/
@@ -229,7 +229,7 @@ function watchReports(chokidar, io) {
 	chokidar.watch(REPORTS_DIR, { ...WATCH_OPTS, interval: 1200 }).on('add', (filePath) => {
 		const name = path.basename(filePath);
 		if ((name.startsWith('PASS_') || name.startsWith('FAIL_')) && name.endsWith('.json')) {
-			console.log(`📊 New report: ${name} — notifying clients`);
+			console.log(`📊 New report: ${name}: notifying clients`);
 			io.emit(SOCKET_EVENTS.REPORT_READY);
 		}
 	});

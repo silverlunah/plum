@@ -5,7 +5,7 @@
 
 // Socket.io event names shared with the backend. There is no shared package
 // between the two (Node/CommonJS backend, SvelteKit/ESM frontend), so this
-// mirrors backend/constants/socketEvents.js by hand — keep both in sync when
+// mirrors backend/constants/socketEvents.js by hand, keep both in sync when
 // adding or renaming an event.
 export const SOCKET_EVENTS = Object.freeze({
 	// Client → server: request a run / cancel a run by id
@@ -25,7 +25,7 @@ export const SOCKET_EVENTS = Object.freeze({
 	// Global notifications (any client, not tied to a specific run)
 	REPORT_READY: 'report-ready',
 
-	// Collaborative test-run execution — join a run's room, get changes live
+	// Collaborative test-run execution, join a run's room, get changes live
 	TEST_RUN_JOIN: 'test-run-join',
 	TEST_RUN_LEAVE: 'test-run-leave',
 	TEST_RUN_CHANGED: 'test-run-changed',

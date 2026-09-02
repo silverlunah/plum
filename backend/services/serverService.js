@@ -9,7 +9,7 @@ const NPM_URL = `https://registry.npmjs.org/${PACKAGE}/latest`;
 // changelog the banner links to lives in GitHub Releases.
 const RELEASES_PAGE = 'https://github.com/silverlunah/plum/releases';
 
-// Written into the backend container's env by `plum server start` — the root
+// Written into the backend container's env by `plum server start`, the root
 // package.json isn't in the image (only backend/package.json is).
 const current = process.env.PLUM_VERSION || null;
 
@@ -29,7 +29,7 @@ async function checkUpdate() {
 		const res = await fetch(NPM_URL, { signal: AbortSignal.timeout(5000) });
 		if (res.ok) latest = (await res.json()).version ?? null;
 	} catch {
-		// registry unreachable — report what we know
+		// registry unreachable: report what we know
 	}
 	return {
 		current,

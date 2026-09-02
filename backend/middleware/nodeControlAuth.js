@@ -18,13 +18,13 @@ function presentsNodeSecret(req) {
 	);
 }
 
-// Mutating a node — PLUM_NODE_SECRET (CLI, no browser session) or the owner's JWT.
+// Mutating a node, PLUM_NODE_SECRET (CLI, no browser session) or the owner's JWT.
 function nodeControlAuth(req, res, next) {
 	if (presentsNodeSecret(req)) return next();
 	jwtAuth(req, res, () => requireOwner(req, res, next));
 }
 
-// Reading the fleet — any signed-in member (they pick a node for a run), plus the
+// Reading the fleet, any signed-in member (they pick a node for a run), plus the
 // secret so `plum node`'s pre-register check still works.
 function nodeReadAuth(req, res, next) {
 	if (presentsNodeSecret(req)) return next();

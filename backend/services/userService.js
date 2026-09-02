@@ -16,7 +16,7 @@ const { DEFAULT_JWT_SECRET } = require('../lib/appSecret');
 const SALT_ROUNDS = 10;
 const TOKEN_TTL = '30d';
 
-// Read at call time — server.js resolves the real secret into the env at boot.
+// Read at call time: server.js resolves the real secret into the env at boot.
 const jwtSecret = () => process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
 
 const userSelect = { id: true, name: true, email: true, role: true, createdAt: true };
@@ -45,7 +45,7 @@ async function createUser({ name, email, password, role = 'user' }) {
 	return user;
 }
 
-// First boot: the organisation, its first project, and the owner — all or
+// First boot: the organisation, its first project, and the owner, all or
 // nothing. The owner reaches every project implicitly, so no ProjectMember row.
 async function bootstrap({ organizationName, projectName, name, email, password }) {
 	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
@@ -85,7 +85,7 @@ function verifyToken(token) {
 	return jwt.verify(token, jwtSecret());
 }
 
-// Each user with the projects they can reach — the owner reaches every project
+// Each user with the projects they can reach: the owner reaches every project
 // implicitly, everyone else only their explicit memberships.
 async function getAll() {
 	const projectSelect = { id: true, name: true, slug: true };
@@ -105,7 +105,7 @@ async function getAll() {
 	}));
 }
 
-// The whole pool an owner/admin can add to a project — everyone but the owner,
+// The whole pool an owner/admin can add to a project, everyone but the owner,
 // who is already on every project.
 async function getAssignablePool() {
 	return prisma.user.findMany({
@@ -163,7 +163,7 @@ async function updatePassword(id, { currentPassword, newPassword }) {
 	return { ok: true };
 }
 
-// Refuses to demote the last owner — the instance must always have one.
+// Refuses to demote the last owner: the instance must always have one.
 async function updateUser(id, { name, email, role }) {
 	const user = await prisma.user.findUnique({ where: { id } });
 	if (!user) return { ok: false, error: 'User not found' };

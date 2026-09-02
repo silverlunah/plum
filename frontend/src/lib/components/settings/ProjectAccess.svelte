@@ -62,7 +62,7 @@
 
 	// ── Members of the active project ──
 	let assignable = []; // every non-owner user
-	let ownerRows = []; // shown read-only on every project — access is implicit
+	let ownerRows = []; // shown read-only on every project, access is implicit
 	let memberIds = [];
 	let loadedFor = null;
 	let query = '';
@@ -115,7 +115,7 @@
 	let newFramework = FRAMEWORKS[0];
 	let frameworkOpen = false;
 
-	// Same pattern as the browser picker in RunnerPanel — a native <select> cannot
+	// Same pattern as the browser picker in RunnerPanel, a native <select> cannot
 	// render the framework logos.
 	function clickOutside(node) {
 		function handle(e) {
@@ -192,7 +192,7 @@
 			await deleteProject(deleteTarget.id);
 			setProjects(await fetchProjects());
 			deleteTarget = null;
-			// Every page is scoped to the active project — reload so it re-resolves.
+			// Every page is scoped to the active project, reload so it re-resolves.
 			if (wasActive) return window.location.reload();
 			await loadAllProjects();
 		} catch (e) {
@@ -497,7 +497,7 @@
 		flex: 1;
 		min-width: 160px;
 	}
-	/* Framework picker — mirrors the browser dropdown in RunnerPanel, which a
+	/* Framework picker, mirrors the browser dropdown in RunnerPanel, which a
 	   native <select> cannot do because it has to show each framework's logo. */
 	.dropdown-wrap {
 		position: relative;

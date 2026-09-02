@@ -5,7 +5,7 @@
 
 import { SAVING_LABEL, SAVE_LABEL } from './common';
 
-export const PAGE_TITLE = 'Settings — Plum';
+export const PAGE_TITLE = 'Settings, Plum';
 export const HEADING = 'Settings';
 
 export const NAME_LABEL = 'Name';
@@ -57,11 +57,11 @@ export const REPOSITORY_DESC = 'Configure ID prefixes for test suites and cases.
 export const INTEGRATIONS_DESC =
 	'Connect Discord and Slack to receive run notifications with pass/fail results and report links.';
 export const MCP_DESC =
-	'Your personal API key for this project. An MCP client using it acts as you, with your role, scoped to this project — anything it creates or runs is tagged “(MCP)”.';
+	'Your personal API key for this project. An MCP client using it acts as you, with your role, scoped to this project, anything it creates or runs is tagged “(MCP)”.';
 export const ACCOUNT_DESC = 'Manage your profile, credentials and session.';
 export const USERS_DESC = 'Add and manage who can access Plum.';
 export const BACKUP_DESC =
-	'Export your test cases, schedules, users, and project settings. Automate uploads to any S3-compatible storage — Cloudflare R2, Backblaze B2, AWS S3, or MinIO.';
+	'Export your test cases, schedules, users, and project settings. Automate uploads to any S3-compatible storage, Cloudflare R2, Backblaze B2, AWS S3, or MinIO.';
 
 // ── Runner requests / toasts ──
 export const REMOVE_RUNNER_FAILED = 'Failed to remove runner.';
@@ -141,11 +141,11 @@ export const nodeSecretAppliedToast = (n) =>
 		? 'New secret generated.'
 		: `New secret generated and pushed to ${n} node${n === 1 ? '' : 's'}.`;
 export const nodeSecretFailedNodes = (names) =>
-	`Couldn’t reach: ${names.join(', ')} — update the secret there manually.`;
+	`Couldn’t reach: ${names.join(', ')}, update the secret there manually.`;
 export const REGENERATE_NODE_SECRET_FAILED = 'Failed to regenerate the secret.';
 
 export const REGISTER_NODE_NOTE_TITLE = 'Adding a node';
-export const REGISTER_NODE_NOTE_PREFIX = 'Register nodes from the node machine — run';
+export const REGISTER_NODE_NOTE_PREFIX = 'Register nodes from the node machine, run';
 export const REGISTER_NODE_NOTE_MIDDLE = 'to start one and self-register it, or';
 export const REGISTER_NODE_NOTE_SUFFIX =
 	'to manage nodes already set up on that machine. Nodes need the primary’s PLUM_NODE_SECRET, printed by "plum server".';
@@ -170,7 +170,7 @@ export const MIGRATE_IDS_HEADING = 'Migrate IDs';
 export const MIGRATE_DESC_PREFIX =
 	'Rename all existing test IDs to use a new prefix. The tags in your test code are';
 export const MIGRATE_DESC_STRONG = 'not';
-export const MIGRATE_DESC_SUFFIX = 'affected — you manage those separately.';
+export const MIGRATE_DESC_SUFFIX = 'affected, you manage those separately.';
 export const NEW_CASE_PREFIX_LABEL = 'New case prefix';
 export const NEW_SUITE_PREFIX_LABEL = 'New suite prefix';
 export const MIGRATION_COMPLETE_TOAST = 'Prefix migration complete. All IDs updated.';
@@ -189,7 +189,7 @@ export const SLACK_WEBHOOK_HINT = 'Leave blank to disable Slack notifications';
 export const SLACK_WEBHOOK_PLACEHOLDER = 'https://hooks.slack.com/services/…';
 export const PUBLIC_URL_LABEL = 'Public URL';
 export const PUBLIC_URL_HINT =
-	'Base URL of this Plum instance — used to link reports in notifications, and by remote runner nodes to stream live test output back here';
+	'Base URL of this Plum instance, used to link reports in notifications, and by remote runner nodes to stream live test output back here';
 export const PUBLIC_URL_PLACEHOLDER = 'https://plum.yourcompany.com';
 export const INTEGRATIONS_SAVED_TOAST = 'Integration settings saved.';
 export const INTEGRATIONS_SAVE_FAILED = 'Failed to save integration settings.';
@@ -201,7 +201,7 @@ export const CI_DESC_PART2 = 'with an';
 export const CI_DESC_PART3 = 'header. Generate a key on the';
 export const MCP_TAB_LINK_LABEL = 'MCP tab';
 export const CI_DESC_PART4 =
-	'and store it as a repo secret — never commit it directly. Runs triggered this way show up in Reports tagged';
+	'and store it as a repo secret, never commit it directly. Runs triggered this way show up in Reports tagged';
 export const EXTERNAL_BADGE_LABEL = 'External';
 
 const COPY_WORKFLOW_STEP_LABEL = 'Copy Workflow Step';
@@ -221,7 +221,7 @@ export const CONFIG_SNIPPET_CARD_TITLE = 'Config Snippet';
 export const CONFIG_SNIPPET_DESC_PREFIX = "Add this to your MCP client's config file (e.g.";
 export const CONFIG_SNIPPET_DESC_SUFFIX = ', Cursor MCP settings, etc.).';
 export const mcpProjectScopeNote = (name) =>
-	`Every call through this server runs in ${name}. To work with another project, add its own key as a second server — the name (\`plum-<slug>\`) keeps them apart.`;
+	`Every call through this server runs in ${name}. To work with another project, add its own key as a second server, the name (\`plum-<slug>\`) keeps them apart.`;
 export const MCP_KEY_GENERATED_TOAST = 'MCP key generated.';
 export const MCP_KEY_REVOKED_TOAST = 'MCP key revoked.';
 export const MCP_KEY_REVOKE_FAILED = 'Could not revoke the key.';
@@ -285,16 +285,16 @@ export const IMPORT_BLOCK_DESC =
 export const CHOOSE_FILE_LABEL = 'Choose file…';
 export const INCLUDE_REPORTS_LABEL = 'Include reports & recordings';
 export const INCLUDE_REPORTS_HINT =
-	'Applies to both manual export and scheduled S3 backups. Can make backups significantly larger — recordings are session replays, not just screenshots.';
+	'Applies to both manual export and scheduled S3 backups. Can make backups significantly larger, recordings are session replays, not just screenshots.';
 export const includeReportsDisclaimer = (included) =>
 	included
 		? 'Reports and recordings are included in backups.'
-		: 'Reports are not included in backups — enable "Include reports & recordings" above, or run pg_dump directly on the PostgreSQL volume, to back up report history.';
+		: 'Reports are not included in backups, enable "Include reports & recordings" above, or run pg_dump directly on the PostgreSQL volume, to back up report history.';
 export const saveIncludeReportsLabel = (saving) => (saving ? SAVING_LABEL : SAVE_LABEL);
 
 export const S3_STORAGE_CARD_TITLE = 'S3 Storage';
 export const S3_STORAGE_DESC_PREFIX =
-	'Works with any S3-compatible provider — Cloudflare R2, Backblaze B2, AWS S3, or MinIO. Leave';
+	'Works with any S3-compatible provider, Cloudflare R2, Backblaze B2, AWS S3, or MinIO. Leave';
 export const ENDPOINT_URL_LABEL = 'Endpoint URL';
 export const S3_STORAGE_DESC_SUFFIX = 'empty for AWS S3.';
 export const ENDPOINT_URL_HINT = 'Leave blank for AWS S3';
@@ -319,14 +319,14 @@ export const BACKUP_CONFIG_SAVED_TOAST = 'Backup configuration saved.';
 export const BACKUP_CONFIG_SAVE_FAILED = 'Failed to save backup configuration.';
 
 const SECRET_KEY_REQUIRED_HINT = 'Required';
-const SECRET_KEY_ALREADY_SET_HINT = 'A key is already saved — leave blank to keep it';
+const SECRET_KEY_ALREADY_SET_HINT = 'A key is already saved, leave blank to keep it';
 const SECRET_KEY_SET_PLACEHOLDER = '••••••••';
 const SECRET_KEY_UNSET_PLACEHOLDER = 'Enter secret key';
 const TESTING_LABEL = 'Testing…';
 
 export const RESTORE_FROM_S3_CARD_TITLE = 'Restore from S3';
 export const RESTORE_FROM_S3_DESC =
-	'Restores directly from a backup already uploaded to S3 — no need to download it yourself first. Existing records are overwritten. Cron jobs are re-scheduled after restore.';
+	'Restores directly from a backup already uploaded to S3, no need to download it yourself first. Existing records are overwritten. Cron jobs are re-scheduled after restore.';
 export const CONFIGURE_S3_FIRST_RESTORE_MESSAGE = 'Configure S3 storage above to restore from it.';
 export const NO_S3_BACKUPS_MESSAGE = 'No backups found at this bucket/prefix.';
 export const REFRESH_LABEL = 'Refresh';
@@ -341,7 +341,7 @@ export const SCHEDULED_BACKUP_CARD_TITLE = 'Scheduled Backup';
 export const CONFIGURE_S3_FIRST_MESSAGE = 'Configure S3 storage above to enable scheduled backups.';
 export const ENABLE_SCHEDULED_BACKUP_LABEL = 'Enable scheduled backup';
 export const CRON_EXPRESSION_LABEL = 'Cron Expression';
-export const CRON_HINT_PREFIX = '5-field cron — e.g.';
+export const CRON_HINT_PREFIX = '5-field cron, e.g.';
 export const CRON_HINT_SUFFIX = '= daily at 2 AM.';
 export const CRONTAB_LINK_LABEL = 'Test at crontab.guru ↗';
 export const CRON_PLACEHOLDER = '0 2 * * *';
@@ -397,7 +397,7 @@ export const ACTIVITY_SEARCH_PLACEHOLDER = 'Search by name or item…';
 export const ACTIVITY_EMPTY_TITLE = 'Nothing logged yet';
 export const ACTIVITY_EMPTY_BODY = 'Changes to this project show up here as people make them.';
 export const ACTIVITY_ORG_EMPTY_BODY =
-	'Account-wide changes — users, projects, nodes, backup — show up here.';
+	'Account-wide changes, users, projects, nodes, backup, show up here.';
 export const ACTIVITY_LOAD_MORE_LABEL = 'Load more';
 export const ACTIVITY_RETENTION_CARD_TITLE = 'Retention';
 export const ACTIVITY_RETENTION_DESC =
@@ -452,7 +452,7 @@ export function activityTone(action) {
 	return ACTIVITY_ACTION_META[action]?.tone ?? 'neutral';
 }
 
-// { verb, target, detail } — the row renders "<actor> <verb> <target>" with an
+// { verb, target, detail }, the row renders "<actor> <verb> <target>" with an
 // optional trailing "(<detail>)".
 export function activityDescription(entry) {
 	const meta = ACTIVITY_ACTION_META[entry.action];
@@ -498,26 +498,26 @@ export const DELETE_PROJECT_LABEL = 'Delete';
 export const projectRowMeta = (slug, n) => `${slug} · ${n} member${n === 1 ? '' : 's'}`;
 export const PROJECT_FRAMEWORK_LABEL = 'Test framework';
 export const PROJECT_FRAMEWORK_FIXED_HINT =
-	'Fixed when this project was created. The tests, the run command and the report format all depend on it, so it cannot be changed — create a new project to use the other framework.';
+	'Fixed when this project was created. The tests, the run command and the report format all depend on it, so it cannot be changed, create a new project to use the other framework.';
 const FRAMEWORK_LABELS = { playwright: 'Playwright', cucumber: 'Cucumber' };
 export const frameworkLabel = (id) => FRAMEWORK_LABELS[id] ?? id ?? '';
 export const FRAMEWORK_PERMANENT_HINT =
-	'Set once, when the project is created. A project cannot switch frameworks afterwards — its tests, run command and reports all depend on the choice.';
+	'Set once, when the project is created. A project cannot switch frameworks afterwards, its tests, run command and reports all depend on the choice.';
 export const DELETE_PROJECT_MODAL_TITLE = 'Delete project';
 export const deleteProjectWarning = (name) =>
 	`Deleting “${name}” permanently removes every test case, run, report, schedule and its test folder. Users keep their accounts and their names stay on past runs, but the project itself cannot be recovered.`;
-export const DELETE_CONTINUE_LABEL = 'I understand — continue';
+export const DELETE_CONTINUE_LABEL = 'I understand, continue';
 export const deleteProjectConfirmPrompt = (slug) =>
 	`Type the project folder name (${slug}) to permanently delete:`;
 export const CONFIRM_DELETE_PROJECT_LABEL = 'Delete this project';
 
 export const PROJECT_MEMBERS_LABEL = 'Members of this project';
 export const PROJECT_MEMBERS_HINT =
-	'The owner is on every project. Add admins and users, then remove them any time — removing someone only revokes access, their test cases and their name on past runs stay.';
+	'The owner is on every project. Add admins and users, then remove them any time, removing someone only revokes access, their test cases and their name on past runs stay.';
 export const ROLE_PERMISSIONS_LINK = 'What can each role do?';
 export const MANAGE_USERS_LINK = 'Add or edit users →';
 export const MEMBER_SEARCH_PLACEHOLDER = 'Search people to add…';
-export const NO_MEMBERS_YET = 'No one else is assigned yet — search above to add someone.';
+export const NO_MEMBERS_YET = 'No one else is assigned yet, search above to add someone.';
 export const REMOVE_MEMBER_TITLE = 'Remove from this project';
 export const OWNER_MEMBER_TAG = 'Every project';
 
@@ -535,8 +535,8 @@ export const ROLE_PERMISSION_ROWS = [
 	},
 	{
 		label: 'Project settings (name, logo, integrations, MCP, members)',
-		cells: ['all projects', 'assigned', '—']
+		cells: ['all projects', 'assigned', ',']
 	},
-	{ label: 'Create and delete projects', cells: ['✓', '—', '—'] },
-	{ label: 'Manage users, runners and backups', cells: ['✓', '—', '—'] }
+	{ label: 'Create and delete projects', cells: ['✓', ',', ','] },
+	{ label: 'Manage users, runners and backups', cells: ['✓', ',', ','] }
 ];

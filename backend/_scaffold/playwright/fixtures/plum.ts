@@ -6,10 +6,9 @@
 // Plum's session recording. Import `test` from here instead of @playwright/test
 // and your runs get report replay and step-by-step results.
 //
-// `test` is the only thing you have to take from this file. Everything else —
-// expect, Page, Locator, devices — imports from @playwright/test as usual, and
-// adding a Playwright API to your tests never means editing this file. `expect` is
-// re-exported at the bottom purely so a spec can take both from one import.
+// `test` is the only import that changes. expect, Page and everything else come
+// from @playwright/test as usual, and you never need to edit this file to use a
+// new Playwright API.
 
 import { test as base, BrowserContext, Page, TestInfo } from '@playwright/test';
 import * as fs from 'fs';
@@ -29,7 +28,7 @@ const RECORD_BUNDLE_PATH = path.join(
 
 const LIVE_FLUSH_INTERVAL_MS = 500;
 
-export type Step = (name: string, body: () => Promise<void> | void) => Promise<void>;
+export type Step = <T>(name: string, body: () => Promise<T> | T) => Promise<T>;
 
 type RecordedStep = { name: string; status: 'passed' | 'failed'; duration: number; error?: string };
 
@@ -47,7 +46,7 @@ const tabIdForIndex = (index: number): string => (index === 0 ? 'main' : `tab-${
 async function markStep(page: Page, name: string): Promise<void> {
 	try {
 		await page.evaluate((label) => {
-			// @ts-ignore — injected by the rrweb bundle
+			// @ts-ignore: injected by the rrweb bundle
 			if (window.rrwebRecord?.record?.addCustomEvent) {
 				// @ts-ignore
 				window.rrwebRecord.record.addCustomEvent('step', { name: label });
@@ -72,18 +71,17 @@ export const test = base.extend<{
 	 * `test.step`.
 	 *
 	 * Playwright's JSON report drops steps that run inside a hook, so `step` keeps
-	 * its own list — which is what lets a `beforeEach` show up in Plum alongside the
+	 * its own list: which is what lets a `beforeEach` show up in Plum alongside the
 	 * steps in the test body.
 	 */
 	step: async ({ page, plumSteps }, use) => {
-		await use(async (name, body) => {
+		const step = async <T>(name: string, body: () => Promise<T> | T): Promise<T> => {
 			await markStep(page, name);
 			const startedAt = Date.now();
 			try {
-				await base.step(name, async () => {
-					await body();
-				});
+				const value = await base.step(name, async () => await body());
 				plumSteps.push({ name, status: 'passed', duration: Date.now() - startedAt });
+				return value;
 			} catch (e: unknown) {
 				plumSteps.push({
 					name,
@@ -93,7 +91,8 @@ export const test = base.extend<{
 				});
 				throw e;
 			}
-		});
+		};
+		await use(step);
 	},
 
 	// Overrides Playwright's own context fixture so every page in it is recorded,
@@ -154,7 +153,7 @@ export const test = base.extend<{
 			try {
 				recording.events.push(JSON.parse(eventJson as string));
 			} catch {
-				// malformed event — recording is best-effort
+				// malformed event: recording is best-effort
 			}
 		});
 		await context.addInitScript({ path: RECORD_BUNDLE_PATH });
@@ -168,7 +167,7 @@ export const test = base.extend<{
 				// @ts-ignore
 				window.rrwebRecord.record({
 					emit: (event: unknown) => {
-						// @ts-ignore — exposed above
+						// @ts-ignore: exposed above
 						window.__plumEmitRRwebEvent(JSON.stringify(event));
 					}
 				});

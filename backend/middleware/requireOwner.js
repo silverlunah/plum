@@ -5,7 +5,7 @@
 
 const { ROLE } = require('../constants/roles');
 
-// Account-wide settings — user management, runners, backup, creating projects.
+// Account-wide settings, user management, runners, backup, creating projects.
 // Owner only; an admin's reach stops at its assigned projects.
 function requireOwner(req, res, next) {
 	if (req.user?.role !== ROLE.OWNER) {

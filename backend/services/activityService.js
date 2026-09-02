@@ -15,7 +15,7 @@ function actorLabel(ctx) {
 	return ctx.viaMcp ? `${ctx.actorName} (MCP)` : ctx.actorName;
 }
 
-// Write one audit row. Never throws and never blocks the caller's result — a
+// Write one audit row. Never throws and never blocks the caller's result, a
 // failed audit write must not fail the action it was recording.
 async function record(
 	action,
@@ -75,7 +75,7 @@ async function list({
 	return { entries: rows, total, page: Math.max(1, Number(page) || 1), limit: take };
 }
 
-// The distinct actions and actors present in a scope — powers the filter
+// The distinct actions and actors present in a scope, powers the filter
 // dropdowns without the client hard-coding a list that could drift from reality.
 async function filterOptions({ scope, projectId } = {}) {
 	const where = {

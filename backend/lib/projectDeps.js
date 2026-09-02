@@ -36,12 +36,12 @@ const dependencyHash = (deps) =>
  * when it declares some.
  *
  * The scaffold declares the runner and its types, so a project installs its own
- * toolchain the way any Playwright or Cucumber repo does — about 12 MB, since the
+ * toolchain the way any Playwright or Cucumber repo does, about 12 MB, since the
  * browsers live in a shared cache rather than in node_modules. That is also what
  * makes the folder type-check when opened in an editor: on the host the backend's
  * node_modules is a sibling of the project, not an ancestor, so TypeScript cannot
  * reach it. Anything extra a project adds lands here too, seen by no other
- * project — unlike the old plum.plugins.json, which installed one project's
+ * project: unlike the old plum.plugins.json, which installed one project's
  * packages into the backend for all of them.
  *
  * Synchronous on purpose: a run must not start against a half-installed folder.
@@ -57,7 +57,7 @@ function ensureProjectDeps(projectId, { onLog = () => {} } = {}) {
 	try {
 		if (fs.readFileSync(marker, 'utf8').trim() === wanted) return;
 	} catch {
-		// no marker, or an unreadable one — install and rewrite it
+		// no marker, or an unreadable one: install and rewrite it
 	}
 
 	onLog(`Installing project dependencies: ${names.join(', ')}\n`);

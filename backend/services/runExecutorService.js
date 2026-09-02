@@ -13,8 +13,7 @@ const settingsService = require('./settingsService');
 const notificationService = require('./notificationService');
 const { startRRwebPoller } = require('../lib/rrwebPoller');
 const { runWithRetries } = require('../lib/retryRunner');
-const { BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
-const { PLUM_MODE_NODE } = require('../constants/env');
+const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { SOCKET_EVENTS } = require('../constants/socketEvents');
 const { JOB_STATUS, REPORT_STATUS, CANCEL_CODE } = require('../constants/jobStatus');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
@@ -23,7 +22,7 @@ const { resolveTestsRoot, loadProjectEnv } = require('../lib/testsRoot');
 const { ensureProjectDeps } = require('../lib/projectDeps');
 const { REPORTS_DIR, readReportFile } = require('../lib/reportFilename');
 const { FRAMEWORK } = require('../constants/defaults');
-const { buildRunCommand } = require('../lib/runnerCommand');
+const { buildRunCommand, describeCommand } = require('../lib/runnerCommand');
 const { toFeatures } = require('../lib/playwrightReport');
 
 // runId → live handles, so cancel() can stop every process and remote job a run owns.
@@ -42,7 +41,7 @@ function isCancelled(runId) {
 	return inflight.get(runId)?.cancelled === true;
 }
 
-/** Best-effort stop of everything a run owns — local child processes and remote node jobs. */
+/** Best-effort stop of everything a run owns: local child processes and remote node jobs. */
 async function cancel(runId) {
 	const rec = inflight.get(runId);
 	if (!rec) return false;
@@ -80,7 +79,7 @@ function makeSyntheticFailReport(projectId, laneName, testIds, reason) {
 			uri: 'runner-error',
 			name: `Runner: ${laneName}`,
 			keyword: 'Feature',
-			elements: testIds.map((id) => ({
+			elements: testIds.filter(Boolean).map((id) => ({
 				id: id.replace(/^@/, '').toLowerCase(),
 				name: nameMap[id] || id.replace(/^@/, ''),
 				keyword: 'Scenario',
@@ -128,7 +127,7 @@ function warnIfNothingRan(rawJson, tag, onLog) {
 	const scenarios = rawJson.reduce((n, f) => n + (f.elements ?? []).length, 0);
 	if (scenarios > 0) return;
 	onLog(
-		`[ERROR] No tests matched ${tag ? `"${tag}"` : 'this run'} — nothing was executed, ` +
+		`[ERROR] No tests matched ${tag ? `"${tag}"` : 'this run'}, nothing was executed, ` +
 			`so this run is marked failed. Check the tag, or that the tests still exist.\n`
 	);
 }
@@ -151,13 +150,9 @@ function parseLaneReport(framework, raw) {
 	return { rawJson: features, attempts };
 }
 
-// Runs the project's own runner CLI from its own tests folder — the same command
-// a developer would type — rather than Plum's npm script. PLUM_MODE=node is kept
-// so anything the project's config still invokes skips its own DB write; this
-// service persists exactly one report per run.
-//
-// Each lane writes to its own report file, so lanes cannot clobber each other the
-// way the single shared reports/cucumber_report.json could.
+// Runs the project's own runner CLI from its own tests folder, the same command a
+// developer would type. Each lane writes to its own report file, so concurrent
+// lanes cannot clobber one another.
 function spawnBuiltInAttempt({
 	runId,
 	projectId,
@@ -167,6 +162,7 @@ function spawnBuiltInAttempt({
 	workers,
 	browser,
 	retries,
+	shard = null,
 	testRunId,
 	baseUrl,
 	onLog,
@@ -186,28 +182,24 @@ function spawnBuiltInAttempt({
 			tag,
 			browser,
 			workers,
-			retries
+			retries,
+			shard
 		});
 
 		const env = {
 			...process.env,
 			...loadProjectEnv(projectId),
 			...cmd.env,
-			IS_HEADLESS: 'true', // server runs have no display — never headed
-			TAG: tag,
-			TRIGGER: TRIGGER_REMOTE,
+			IS_HEADLESS: 'true', // server runs have no display, never headed
 			BROWSER: browser,
-			REPORT_RUNNERS: String(workers),
-			PLUM_MODE: PLUM_MODE_NODE,
-			PLUM_SS_DIR: ssDir,
-			TESTS_ROOT: resolveTestsRoot(projectId),
-			PLUM_PROJECT_ID: String(projectId)
+			PLUM_SS_DIR: ssDir
 		};
-		if (testRunId) env.TEST_RUN_ID = testRunId;
 		if (baseUrl) env.BASE_URL = baseUrl;
 
-		onLog(`> ${cmd.bin} ${cmd.args.join(' ')}\n`);
-		const proc = spawn('npx', [cmd.bin, ...cmd.args], { env, shell: true, cwd: cmd.cwd });
+		onLog(`> ${describeCommand(cmd)}\n`);
+		// No shell: the runner CLI is spawned as node + argv, so nothing in a tag or
+		// browser name can be interpreted as a command.
+		const proc = spawn(cmd.command, cmd.args, { env, cwd: cmd.cwd });
 		handles(runId).procs.add(proc);
 
 		const ssPoller = startRRwebPoller(ssDir, (batch) => {
@@ -309,7 +301,7 @@ async function runBuiltIn(run, io, emit) {
 // ---------------------------------------------------------------------------
 
 /**
- * How the selected tests are divided between lanes — one entry per lane.
+ * How the selected tests are divided between lanes, one entry per lane.
  *
  * Playwright shards natively: every lane runs the same selection with
  * `--shard=k/N` and Playwright decides the split, balancing by test count instead
@@ -318,7 +310,7 @@ async function runBuiltIn(run, io, emit) {
  *
  * `ids` is only used to name tests in a synthetic report when a lane never reports
  * back. A shard lane cannot know which tests were its own, so it claims the whole
- * selection — over-stated, but clearly attributed to that runner rather than lost.
+ * selection: over-stated, but clearly attributed to that runner rather than lost.
  */
 function planLanes(framework, tag, allIds, laneCount) {
 	if (framework === FRAMEWORK.PLAYWRIGHT) {
@@ -521,7 +513,7 @@ async function maybeNotify(run, report) {
 }
 
 // Runs one queued job (a plain RunQueue row) to completion and resolves with
-// { code, reportId, note? }. Takes only plain fields — no closure — so the queue
+// { code, reportId, note? }. Takes only plain fields (no closure) so the queue
 // can re-dispatch a persisted row after a server restart.
 async function execute(run, io) {
 	handles(run.id); // register before any await so an early cancel is seen
@@ -533,14 +525,14 @@ async function execute(run, io) {
 		: null;
 	const emit = (event, extra) => roomIo && roomIo.emit(event, { runId: run.id, ...extra });
 
-	// Drop runner ids that no longer exist — a stale selection or a runner
+	// Drop runner ids that no longer exist: a stale selection or a runner
 	// deleted while this job sat in the queue must not wedge it.
 	const validated = [];
 	for (const id of run.runnerIds) {
 		if (id === BUILT_IN_RUNNER_ID || (await runnerService.getById(id))) validated.push(id);
 	}
 	if (validated.length === 0) {
-		return { code: 0, reportId: null, note: 'Target runner no longer exists — run skipped.' };
+		return { code: 0, reportId: null, note: 'Target runner no longer exists, run skipped.' };
 	}
 
 	// Coarse start signal stays global for the cross-project run bar; the client
@@ -569,11 +561,11 @@ async function execute(run, io) {
 		const { framework } = await settingsService.getProject(run.projectId);
 		const lanePlan = planLanes(framework, run.tag, allIds, validated.length);
 		// Surplus runners beyond the plan would each re-run the full selection and
-		// duplicate scenarios — drop them.
+		// duplicate scenarios: drop them.
 		const activeIds = validated.slice(0, lanePlan.length);
 		if (activeIds.length === 0) {
 			emit(SOCKET_EVENTS.BG_RUN_LOG, { log: 'No tests found matching the selected tag.\n' });
-			return { code: 0, reportId: null, note: 'No tests matched — run skipped.' };
+			return { code: 0, reportId: null, note: 'No tests matched, run skipped.' };
 		}
 		const laneInfos = await Promise.all(
 			activeIds.map(async (id) => {

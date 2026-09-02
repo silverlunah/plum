@@ -8,7 +8,7 @@ const cors = require('cors');
 const { isNodeMode } = require('./constants/env');
 const app = express();
 
-// `*` is safe here — auth is a header token, not a cookie. Operators who still
+// `*` is safe here, auth is a header token, not a cookie. Operators who still
 // want the browser origin pinned can set PLUM_ALLOWED_ORIGINS (comma-separated).
 const allowedOrigins = (process.env.PLUM_ALLOWED_ORIGINS || '')
 	.split(',')
@@ -20,20 +20,21 @@ app.use(
 		exposedHeaders: ['Content-Disposition']
 	})
 );
-// Dispatching a run to a node ships the whole tests/ tree (base64-encoded,
-// fixtures included) as one JSON body — Express's 100kb default 413s well
-// before a real test suite does.
-app.use(express.json({ limit: '500mb' }));
+app.use(express.json());
 
 // Routes
 
-// Node-only — these run caller-supplied test code; on the primary that's an
+// Node-only, these run caller-supplied test code; on the primary that's an
 // unauthenticated RCE. The primary never serves its own /api/*.
+//
+// The large body limit lives here rather than globally: only a dispatched job
+// uploads a whole tests folder, and a global limit would let an unauthenticated
+// request buffer half a gigabyte on the primary.
 if (isNodeMode()) {
-	app.use('/api', require('./routes/node.routes'));
+	app.use('/api', express.json({ limit: '500mb' }), require('./routes/node.routes'));
 }
 
-// Primary-mode routes — skipped when running as a runner node (no DB available)
+// Primary-mode routes, skipped when running as a runner node (no DB available)
 if (!isNodeMode()) {
 	app.use('/tests', require('./routes/tests.routes'));
 	app.use('/reports', require('./routes/reports.routes'));
@@ -54,11 +55,11 @@ if (!isNodeMode()) {
 	app.use('/mcp', require('./routes/mcp.routes'));
 }
 
-// Global JSON error handler — Express's default sends HTML, which breaks JSON clients
+// Global JSON error handler, Express's default sends HTML, which breaks JSON clients
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
 	console.error(err);
-	// A Prisma error's message leaks query fragments — map it to something safe.
+	// A Prisma error's message leaks query fragments, map it to something safe.
 	// (Plain Errors from services are meant for the user and pass through below.)
 	if (typeof err?.name === 'string' && err.name.startsWith('PrismaClient')) {
 		if (err.code === 'P2002') {

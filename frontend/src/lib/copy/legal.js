@@ -12,7 +12,7 @@ export const TERMS_INTRO =
 export const TERMS_SECTIONS = [
 	{
 		h: 'Your data stays yours',
-		p: 'Everything Plum stores — test cases, runs, reports, session recordings, schedules, user accounts and settings — is written only to the database and disk of the server you run it on. Plum has no cloud service, no account system of its own, and no central servers.'
+		p: 'Everything Plum stores, test cases, runs, reports, session recordings, schedules, user accounts and settings, is written only to the database and disk of the server you run it on. Plum has no cloud service, no account system of its own, and no central servers.'
 	},
 	{
 		h: 'Plum collects nothing',
@@ -20,7 +20,7 @@ export const TERMS_SECTIONS = [
 	},
 	{
 		h: 'Outbound connections are only the ones you configure',
-		p: 'The one exception is an anonymous version check against the public npm registry, used to show an “update available” notice; it sends no information about you or your data. Everything else that leaves your server — Discord or Slack notifications, S3 backups, runner-node traffic, CI trigger callbacks — goes only to endpoints you set up, and carries only what you chose to send there.'
+		p: 'The one exception is an anonymous version check against the public npm registry, used to show an “update available” notice; it sends no information about you or your data. Everything else that leaves your server, Discord or Slack notifications, S3 backups, runner-node traffic, CI trigger callbacks, goes only to endpoints you set up, and carries only what you chose to send there.'
 	},
 	{
 		h: 'You are the operator',

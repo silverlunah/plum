@@ -16,7 +16,7 @@ function read() {
 
 // The project every scoped API call acts on (sent as the X-Plum-Project header).
 export const activeProjectId = writable(read());
-// The projects the current user can reach — filled by the switcher on load.
+// The projects the current user can reach, filled by the switcher on load.
 export const projects = writable([]);
 
 // The active project's full record (name, logo, homepage mode…), or null until

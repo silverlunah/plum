@@ -28,7 +28,7 @@ export function dismissNotification(id) {
 	notifications.update((list) => list.filter((n) => n.id !== id));
 }
 
-// Swaps a live toast in place — e.g. a loading toast to its success/error result.
+// Swaps a live toast in place, e.g. a loading toast to its success/error result.
 export function updateNotification(id, patch) {
 	notifications.update((list) => list.map((n) => (n.id === id ? { ...n, ...patch } : n)));
 }

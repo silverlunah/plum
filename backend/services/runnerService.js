@@ -24,7 +24,7 @@ const NODE_UNREACHABLE_GRACE_MS = 45_000;
 // Runner CRUD
 // ---------------------------------------------------------------------------
 
-// Strips the auth token before a runner row crosses the HTTP boundary — the
+// Strips the auth token before a runner row crosses the HTTP boundary, the
 // token is only ever needed internally (ping/stop/restart/dispatch below all
 // read it via getById, whose result never reaches a client directly).
 function toPublicRunner(runner) {
@@ -41,7 +41,7 @@ const getAll = async () => {
 const normaliseUrl = (url) => (url ?? '').replace(/\/+$/, '');
 
 // Upsert on name+url. Re-registering the same node (`plum node start` run
-// again, a stop/recreate) must refresh its token in place — a second row or a
+// again, a stop/recreate) must refresh its token in place, a second row or a
 // kept-stale token leaves the primary pinging with the wrong credential and the
 // node showing "unreachable".
 const create = async ({ name, url, token, browser = DEFAULT_BROWSER }) => {
@@ -83,7 +83,7 @@ async function remove(id) {
 	return result;
 }
 
-// Raw accessor (includes token) — internal use only, for authenticating
+// Raw accessor (includes token): internal use only, for authenticating
 // outbound requests to the runner node (ping/stop/restart/dispatch below).
 const getById = (id) => prisma.runner.findUnique({ where: { id } });
 
@@ -140,7 +140,7 @@ const stop = (id) => callControlEndpoint(id, 'shutdown', 5000);
 const restart = (id) => callControlEndpoint(id, 'restart', 5000);
 
 // After PLUM_NODE_SECRET is regenerated, hand the new value to every node so its
-// saved config stays valid for the next `plum node` command. Best-effort — an
+// saved config stays valid for the next `plum node` command. Best-effort, an
 // offline node keeps running fine, it just needs a manual update later.
 async function pushNodeSecret(secret) {
 	const runners = await prisma.runner.findMany();
@@ -186,7 +186,7 @@ function collectTestFiles(testsDir) {
 				if (UPLOAD_SKIP_DIRS.has(entry.name)) continue;
 				walk(fullPath, relPath);
 			} else {
-				// base64, not utf8 — utf8 mangles non-text fixtures (e.g. upload test images)
+				// base64, not utf8: utf8 mangles non-text fixtures (e.g. upload test images)
 				// because arbitrary binary bytes aren't valid UTF-8 and get replaced on read.
 				files[relPath] = fs.readFileSync(fullPath).toString('base64');
 			}
@@ -271,7 +271,7 @@ async function dispatchAndPoll(
 				env: {
 					...loadTestEnv(process.cwd()),
 					...loadProjectEnv(projectId),
-					IS_HEADLESS: 'true', // node runs on a server have no display — never headed
+					IS_HEADLESS: 'true', // node runs on a server have no display, never headed
 					...(baseUrl ? { BASE_URL: baseUrl } : {})
 				}
 			}),
@@ -286,19 +286,19 @@ async function dispatchAndPoll(
 	}
 
 	onJobId?.(jobId);
-	onLog(`Connected to runner "${runner.name}" — job ${jobId}\n`);
+	onLog(`Connected to runner "${runner.name}": job ${jobId}\n`);
 
 	let logOffset = 0;
 	let rrwebOffset = 0;
 	let polling = false;
 	let unreachableSince = null;
 	// Tight interval: the live viewer reads logs and rrweb batches straight off
-	// this poll — primary→node, so nothing has to connect the other way.
+	// this poll: primary→node, so nothing has to connect the other way.
 	const poll = setInterval(async () => {
 		if (polling) return;
 		polling = true;
 		try {
-			// Stop the moment the user cancels — don't wait on an unreachable node
+			// Stop the moment the user cancels: don't wait on an unreachable node
 			// to acknowledge it.
 			if (shouldStop()) {
 				clearInterval(poll);
@@ -335,7 +335,7 @@ async function dispatchAndPoll(
 				unreachableSince = Date.now();
 			} else if (Date.now() - unreachableSince > NODE_UNREACHABLE_GRACE_MS) {
 				clearInterval(poll);
-				onLog(`\n[ERROR] Runner "${runner.name}" stopped responding — marking this lane failed.\n`);
+				onLog(`\n[ERROR] Runner "${runner.name}" stopped responding, marking this lane failed.\n`);
 				finish(1, null);
 			}
 		} finally {
@@ -344,7 +344,7 @@ async function dispatchAndPoll(
 	}, 1000);
 }
 
-// Best-effort remote cancel — tells the node to SIGTERM the job's test process.
+// Best-effort remote cancel: tells the node to SIGTERM the job's test process.
 // The polling loop in dispatchAndPoll still finalises the lane when the node
 // reports the job done/errored, so a failed cancel here is not fatal.
 async function cancelRemoteJob(runnerId, jobId) {
