@@ -1,16 +1,15 @@
-const reportFile = process.env.PLUM_REPORT_FILE;
-
-// Yours to change. Plum only chooses which tests to run, so `npx cucumber-js` from
-// this folder behaves the same way a Plum run does.
+// Yours to change. Plum supplies the test selection and the report format on the
+// command line, so `npx cucumber-js` from this folder behaves the same way a Plum
+// run does and nothing here is Plum's to keep.
 module.exports = {
 	default: {
 		requireModule: ['ts-node/register'],
 		require: ['utils/world.ts', 'utils/hooks.ts', 'step_definitions/**/*.ts'],
 		paths: ['features/**/*.feature'],
-		// Keep the json entry: it is how a run reaches the Plum UI.
-		format: ['progress', ...(reportFile ? [`json:${reportFile}`] : [])],
-		// Leave at 0. Plum re-runs failures itself using the project's max-retries
-		// setting, and a retry here would run on top of that.
+		format: ['progress'],
+		// Leave at 0. Cucumber reports only the final attempt of a retry, so Plum
+		// re-runs failed scenarios itself, using the project's max-retries setting;
+		// a retry here would run underneath that and hide the earlier attempts.
 		retry: 0,
 		parallel: 0
 	}
