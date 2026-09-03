@@ -46,6 +46,49 @@ const dependencyHash = (deps) =>
  *
  * Synchronous on purpose: a run must not start against a half-installed folder.
  */
+// Browser builds are tied to the runner version, and the image ships only the ones
+// matching Plum's own. A project pinning a different version therefore fails at
+// launch with "Executable doesn't exist at .../chromium_headless_shell-<build>",
+// so its own browsers are fetched into PLAYWRIGHT_BROWSERS_PATH beside Plum's.
+//
+// Not gated by the dependency marker: node_modules lives in the bind mount and
+// survives a container rebuild, while the browser directory comes back from the
+// image with only Plum's builds, so this has to be re-checked on every run. The
+// install is a fast no-op once the build is present.
+function ensureProjectBrowsers(testsRoot, onLog) {
+	const own = runnerVersion(testsRoot);
+	if (!own || own === plumRunnerVersion()) return;
+	try {
+		execSync('npx playwright install chromium firefox', {
+			cwd: testsRoot,
+			stdio: 'pipe',
+			encoding: 'utf8'
+		});
+	} catch (e) {
+		onLog(`[ERROR] Could not install browsers for Playwright ${own}: ${e.message}\n`);
+	}
+}
+
+function readVersion(file) {
+	try {
+		return JSON.parse(fs.readFileSync(file, 'utf8')).version ?? null;
+	} catch {
+		return null;
+	}
+}
+
+const plumRunnerVersion = () =>
+	readVersion(path.join(__dirname, '..', 'node_modules', '@playwright', 'test', 'package.json'));
+
+// What the project actually resolved, not what it declared: a range tells us nothing.
+function runnerVersion(testsRoot) {
+	for (const pkg of ['@playwright/test', 'playwright']) {
+		const v = readVersion(path.join(testsRoot, 'node_modules', ...pkg.split('/'), 'package.json'));
+		if (v) return v;
+	}
+	return null;
+}
+
 function ensureProjectDeps(projectId, { onLog = () => {} } = {}) {
 	const testsRoot = resolveTestsRoot(projectId);
 	const deps = declaredDependencies(testsRoot);
@@ -55,7 +98,10 @@ function ensureProjectDeps(projectId, { onLog = () => {} } = {}) {
 	const marker = path.join(testsRoot, 'node_modules', MARKER_FILE);
 	const wanted = dependencyHash(deps);
 	try {
-		if (fs.readFileSync(marker, 'utf8').trim() === wanted) return;
+		if (fs.readFileSync(marker, 'utf8').trim() === wanted) {
+			ensureProjectBrowsers(testsRoot, onLog);
+			return;
+		}
 	} catch {
 		// no marker, or an unreadable one: install and rewrite it
 	}
@@ -69,6 +115,7 @@ function ensureProjectDeps(projectId, { onLog = () => {} } = {}) {
 		});
 		fs.mkdirSync(path.dirname(marker), { recursive: true });
 		fs.writeFileSync(marker, wanted, 'utf8');
+		ensureProjectBrowsers(testsRoot, onLog);
 	} catch (e) {
 		// Surfaced in the run log rather than thrown: the tests may not need the
 		// package that failed, and a run that fails on a real import is a clearer
