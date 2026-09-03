@@ -109,23 +109,23 @@ projects/<slug>/tests/
 
 Full documentation lives in the **[GitHub wiki](https://github.com/silverlunah/plum/wiki)**.
 
-| Guide                                                                                             | What it covers                                                                 |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| [Installation](https://github.com/silverlunah/plum/wiki/Installation)                             | Requirements, global install, CLI-only vs. server, first-user setup            |
-| [Setting Up the Server](https://github.com/silverlunah/plum/wiki/Setting-Up-the-Server)           | `plum server start`, ports, local vs. production, reverse proxy                |
-| [Setting Up Nodes](https://github.com/silverlunah/plum/wiki/Setting-Up-Nodes)                     | Runner nodes, the registration secret, start-on-boot, managing nodes           |
-| [Writing Tests](https://github.com/silverlunah/plum/wiki/Writing-Tests)                           | The scaffold, `plumStep`, optional page objects, `create-test` / `create-step` |
-| [Migrating an Existing Repo](https://github.com/silverlunah/plum/wiki/Migrating-an-Existing-Repo) | Adopting a Playwright or Cucumber repo you already have, `plum migrate`        |
-| [Running Tests Locally](https://github.com/silverlunah/plum/wiki/Running-Tests-Locally)           | `npx playwright test` / `npx cucumber-js`, tags, workers, browsers, debugging  |
-| [Projects](https://github.com/silverlunah/plum/wiki/Projects)                                     | One org, many projects, the framework choice, on-disk layout, tests folder     |
-| [Roles and Access](https://github.com/silverlunah/plum/wiki/Roles-and-Access)                     | Owner / admin / user, per-project membership, what each role reaches           |
-| [Test Repository](https://github.com/silverlunah/plum/wiki/Test-Repository)                       | Suites & cases, structured steps, collaborative test runs, linking by tag      |
-| [Reports and Session Replay](https://github.com/silverlunah/plum/wiki/Reports-and-Session-Replay) | The report page, DOM session replay, step rail, inspector, export              |
-| [Retrying Flaky Tests](https://github.com/silverlunah/plum/wiki/Retrying-Flaky-Tests)             | Max-retries setting, how retries work per framework, the flaky badge           |
-| [Integrations](https://github.com/silverlunah/plum/wiki/Integrations)                             | Discord & Slack webhooks, schedules, the REST trigger endpoint for CI          |
-| [MCP Integration](https://github.com/silverlunah/plum/wiki/MCP-Integration)                       | Per-member MCP keys, connecting an AI client, the tools, `(MCP)` attribution   |
-| [Activity Logs](https://github.com/silverlunah/plum/wiki/Activity-Logs)                           | Audit feed of project and org changes, MCP attribution, retention              |
-| [Backup](https://github.com/silverlunah/plum/wiki/Backup)                                         | Instance-level database backup, schedule, an S3-compatible target              |
+| Guide                                                                                             | What it covers                                                                  |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [Installation](https://github.com/silverlunah/plum/wiki/Installation)                             | Requirements, global install, CLI-only vs. server, first-user setup             |
+| [Setting Up the Server](https://github.com/silverlunah/plum/wiki/Setting-Up-the-Server)           | `plum server start`, ports, local vs. production, reverse proxy                 |
+| [Setting Up Nodes](https://github.com/silverlunah/plum/wiki/Setting-Up-Nodes)                     | Runner nodes, the registration secret, start-on-boot, managing nodes            |
+| [Writing Tests](https://github.com/silverlunah/plum/wiki/Writing-Tests)                           | The scaffold, `plumStep`, optional page objects, `create-test` / `create-step`  |
+| [Migrating an Existing Repo](https://github.com/silverlunah/plum/wiki/Migrating-an-Existing-Repo) | Adopting a Playwright or Cucumber repo you already have, `plum migrate`         |
+| [Running Tests Locally](https://github.com/silverlunah/plum/wiki/Running-Tests-Locally)           | `npx playwright test` / `npx cucumber-js`, tags, workers, browsers, debugging   |
+| [Projects](https://github.com/silverlunah/plum/wiki/Projects)                                     | One org, many projects, the framework choice, on-disk layout, tests folder      |
+| [Roles and Access](https://github.com/silverlunah/plum/wiki/Roles-and-Access)                     | Owner / admin / user, per-project membership, what each role reaches            |
+| [Test Repository](https://github.com/silverlunah/plum/wiki/Test-Repository)                       | Suites & cases, structured steps, collaborative test runs, linking by tag       |
+| [Reports and Session Replay](https://github.com/silverlunah/plum/wiki/Reports-and-Session-Replay) | The report page, DOM session replay, step rail, inspector, export               |
+| [Retrying Flaky Tests](https://github.com/silverlunah/plum/wiki/Retrying-Flaky-Tests)             | Max-retries setting, how retries work per framework, the flaky badge            |
+| [Integrations](https://github.com/silverlunah/plum/wiki/Integrations)                             | Discord & Slack webhooks, schedules, the REST trigger endpoint for CI           |
+| [API & MCP](https://github.com/silverlunah/plum/wiki/MCP-Integration)                             | Minting a key, using it for CI or an MCP client, the tools, `(MCP)` attribution |
+| [Activity Logs](https://github.com/silverlunah/plum/wiki/Activity-Logs)                           | Audit feed of project and org changes, MCP attribution, retention               |
+| [Backup](https://github.com/silverlunah/plum/wiki/Backup)                                         | Instance-level database backup, schedule, an S3-compatible target               |
 
 ---
 

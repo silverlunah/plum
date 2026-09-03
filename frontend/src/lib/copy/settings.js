@@ -43,8 +43,8 @@ export const tcImportSummary = ({ importedCases, updatedCases, skippedCases }) =
 	return parts.length ? `Test cases: ${parts.join(' · ')}.` : 'Nothing to import.';
 };
 export const INTEGRATIONS_LABEL = 'Integrations';
-export const MCP_NAV_LABEL = 'MCP';
-export const MCP_HEADING = 'MCP Integration';
+export const MCP_NAV_LABEL = 'API & MCP';
+export const MCP_HEADING = 'API key & MCP access';
 export const ACCOUNT_LABEL = 'Account';
 export const USERS_LABEL = 'Users';
 export const BACKUP_LABEL = 'Backup';
@@ -57,7 +57,7 @@ export const REPOSITORY_DESC = 'Configure ID prefixes for test suites and cases.
 export const INTEGRATIONS_DESC =
 	'Connect Discord and Slack to receive run notifications with pass/fail results and report links.';
 export const MCP_DESC =
-	'Your personal API key for this project. An MCP client using it acts as you, with your role, scoped to this project, anything it creates or runs is tagged “(MCP)”.';
+	'Your personal API key for this project. It authenticates the REST API and an MCP client alike, acting as you with your role, so treat it like your password. Anything it creates or runs is tagged “(MCP)”.';
 export const ACCOUNT_DESC = 'Manage your profile, credentials and session.';
 export const USERS_DESC = 'Add and manage who can access Plum.';
 export const BACKUP_DESC =
@@ -199,7 +199,7 @@ export const CI_DESC_PART1 =
 	'Trigger a Plum run from GitHub Actions (e.g. on a pull request, against its preview deployment) or any other external script by calling';
 export const CI_DESC_PART2 = 'with an';
 export const CI_DESC_PART3 = 'header. Generate a key on the';
-export const MCP_TAB_LINK_LABEL = 'MCP tab';
+export const MCP_TAB_LINK_LABEL = 'API & MCP tab';
 export const CI_DESC_PART4 =
 	'and store it as a repo secret, never commit it directly. Runs triggered this way show up in Reports tagged';
 export const EXTERNAL_BADGE_LABEL = 'External';
