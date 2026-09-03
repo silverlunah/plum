@@ -48,10 +48,11 @@ plum server start            # Choose between Playwright or Cucumber project
 
 ```bash
 plum init          # Choose between Playwright or Cucumber project
+cd tests
 npx playwright test          # a Cucumber project uses: npx cucumber-js
 ```
 
-That's it. `plum init` scaffolds `tests/`, installs the runner and downloads browsers, so the example tests run straight away. Open `tests/` in your editor; it is the same layout a project has on the server, so it drops into `projects/<slug>/tests/` later if you add the UI.
+That's it. `plum init` scaffolds `tests/`, installs the runner and downloads browsers, so the example tests run straight away. Run the runner from `tests/`, where its config lives. Open `tests/` in your editor; it is the same layout a project has on the server, so it drops into `projects/<slug>/tests/` later if you add the UI.
 
 Use `plum create-test` to scaffold a new test. It asks whether to add a page object too (default no); pass `--page` to opt in without the prompt.
 

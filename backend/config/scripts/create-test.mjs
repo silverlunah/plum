@@ -283,9 +283,13 @@ async function main() {
 
 	const rel = (p) => path.relative(process.cwd(), p);
 
-	const runCommand = isPlaywright
-		? `npx playwright test --grep ${testTag}`
-		: `npx cucumber-js --tags ${testTag}`;
+	// The runner reads its config from the tests folder, so a caller standing
+	// above it (which is where `plum init` leaves you) has to cd in first, or
+	// Playwright finds the specs with no config and refuses to run them.
+	const runFrom = path.relative(process.cwd(), testsRoot);
+	const runCommand =
+		(runFrom ? `cd ${runFrom} && ` : '') +
+		(isPlaywright ? `npx playwright test --grep ${testTag}` : `npx cucumber-js --tags ${testTag}`);
 
 	clack.note(
 		[

@@ -1533,7 +1533,11 @@ switch (command) {
 				`App URL            ${pc.dim('→')}  ${pc.cyan('tests/.env')}  ${pc.dim(', set BASE_URL')}`,
 				`Extra packages     ${pc.dim('→')}  ${pc.cyan('tests/package.json')}`,
 				'',
-				`${pc.bold('Run tests locally')}`,
+				// The cd is not decoration: the runner config lives in tests/, and from the
+				// parent folder Playwright finds the specs with no config to go with them
+				// and fails with "did not expect test.describe() to be called here".
+				`${pc.bold('Run tests locally')}  ${pc.dim('(from the tests folder)')}`,
+				`  ${pc.cyan('cd tests')}`,
 				`  ${pc.cyan(initRunAll)}${' '.repeat(Math.max(2, 34 - initRunAll.length))}run all tests`,
 				`  ${pc.cyan(initRunTag)}${' '.repeat(Math.max(2, 34 - initRunTag.length))}run by tag`,
 				'',
