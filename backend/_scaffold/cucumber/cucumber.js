@@ -5,7 +5,7 @@ const reportFile = process.env.PLUM_REPORT_FILE;
 module.exports = {
 	default: {
 		requireModule: ['ts-node/register'],
-		require: ['step_definitions/**/*.ts', 'utils/hooks.ts'],
+		require: ['utils/world.ts', 'utils/hooks.ts', 'step_definitions/**/*.ts'],
 		paths: ['features/**/*.feature'],
 		// Keep the json entry: it is how a run reaches the Plum UI.
 		format: ['progress', ...(reportFile ? [`json:${reportFile}`] : [])],

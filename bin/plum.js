@@ -395,7 +395,8 @@ function buildTestsReadme(framework) {
 				'features/              Gherkin .feature files',
 				'step_definitions/      TypeScript step implementations',
 				'pages/                 Page Object Models (optional)',
-				'utils/                 browser setup and hooks (Plum’s recording lives here)',
+				'utils/world.ts         the World: your per-scenario state',
+				'utils/                 hooks and recording (Plum’s, leave them alone)',
 				'cucumber.js            paths, requires, formatters',
 				'.env                   BASE_URL and IS_HEADLESS'
 			];

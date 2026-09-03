@@ -121,18 +121,21 @@ Feature: ${pascal}
 }
 
 function generatePage(base) {
-	return `import { page } from '../utils/browser';
+	return `import { Page } from '@playwright/test';
 
 export class ${base}Page {
-  static async goTo() {
-    await page().goto(process.env.BASE_URL as string);
+  constructor(private readonly page: Page) {}
+
+  async goTo() {
+    // Relative: baseURL is set on the context in utils/world.ts.
+    await this.page.goto('/');
   }
 
-  static async performAction() {
+  async performAction() {
     // TODO: implement
   }
 
-  static async verifyResult() {
+  async verifyResult() {
     // TODO: implement
   }
 }
@@ -142,33 +145,39 @@ export class ${base}Page {
 function generateSteps(pascal, base) {
 	return `import { Given, When, Then } from '@cucumber/cucumber';
 import { ${base}Page } from '../pages/${base}Page';
+import { PlumWorld } from '../utils/world';
 
-Given('I am on the ${pascal} page', async () => {
-  await ${base}Page.goTo();
+// \`function\` rather than an arrow, so \`this\` is the scenario's World.
+Given('I am on the ${pascal} page', async function (this: PlumWorld) {
+  await new ${base}Page(this.page).goTo();
 });
 
-When('I perform an action', async () => {
-  await ${base}Page.performAction();
+When('I perform an action', async function (this: PlumWorld) {
+  await new ${base}Page(this.page).performAction();
 });
 
-Then('I should see the expected result', async () => {
-  await ${base}Page.verifyResult();
+Then('I should see the expected result', async function (this: PlumWorld) {
+  await new ${base}Page(this.page).verifyResult();
 });
 `;
 }
 
 function generateStepsNoPage(pascal) {
 	return `import { Given, When, Then } from '@cucumber/cucumber';
+import { PlumWorld } from '../utils/world';
 
-Given('I am on the ${pascal} page', async () => {
+// \`function\` rather than an arrow, so \`this\` is the scenario's World and
+// \`this.page\` is its own page.
+Given('I am on the ${pascal} page', async function (this: PlumWorld) {
+  // Relative: baseURL is set on the context in utils/world.ts.
+  await this.page.goto('/');
+});
+
+When('I perform an action', async function (this: PlumWorld) {
   // TODO: implement
 });
 
-When('I perform an action', async () => {
-  // TODO: implement
-});
-
-Then('I should see the expected result', async () => {
+Then('I should see the expected result', async function (this: PlumWorld) {
   // TODO: implement
 });
 `;
