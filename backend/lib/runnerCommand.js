@@ -48,7 +48,8 @@ function buildRunCommand({
 	browser,
 	workers = 1,
 	retries = 0,
-	shard = null
+	shard = null,
+	projectNames = null
 }) {
 	const env = { PLUM_REPORT_FILE: reportFile };
 	const cli = resolveCli(framework, testsRoot);
@@ -60,7 +61,14 @@ function buildRunCommand({
 		if (grep) args.push('--grep', grep);
 		// Validated rather than trusted: it arrives from a run request, and an
 		// unknown value would otherwise reach the runner verbatim.
-		if (isBrowser(browser)) args.push(`--project=${browser}`);
+		//
+		// Skipped when the project's own config declares no such project. Playwright
+		// fails the whole run on an unknown --project ("Project(s) ... not found"),
+		// and an adopted repo is free to name its projects anything; running what the
+		// config does define beats refusing to run at all. An empty list means the
+		// names could not be read, so the flag is passed as before.
+		const declares = !projectNames || projectNames.length === 0 || projectNames.includes(browser);
+		if (isBrowser(browser) && declares) args.push(`--project=${browser}`);
 		if (Number(retries) > 0) args.push(`--retries=${Number(retries)}`);
 		// Always passed: Playwright's own default is half the machine's cores, so
 		// omitting it for a single worker silently runs several.

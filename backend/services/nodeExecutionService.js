@@ -104,6 +104,8 @@ function startJob({
 	framework,
 	shard = null,
 	tests = null,
+	// Resolved by the primary from the project's own config; [] means unknown.
+	projectNames = [],
 	env: userEnv = {}
 }) {
 	const jobId = crypto.randomUUID();
@@ -159,6 +161,7 @@ function startJob({
 		// The primary owns retries: for Cucumber it re-dispatches, and for Playwright
 		// it passes its own --retries on the lane that needs them.
 		retries: 0,
+		projectNames,
 		// Which slice of the selection this lane runs, when the primary sharded
 		// rather than splitting by tag.
 		shard

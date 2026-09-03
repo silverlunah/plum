@@ -24,6 +24,7 @@ const { REPORTS_DIR, readReportFile } = require('../lib/reportFilename');
 const { FRAMEWORK } = require('../constants/defaults');
 const { buildRunCommand, describeCommand } = require('../lib/runnerCommand');
 const { toFeatures } = require('../lib/playwrightReport');
+const { getPlaywrightProjectNames } = require('../lib/playwrightDiscovery');
 
 // runId → live handles, so cancel() can stop every process and remote job a run owns.
 const inflight = new Map();
@@ -179,7 +180,7 @@ async function laneReport(framework, raw, { projectId, laneName, ids, reason }) 
 // Runs the project's own runner CLI from its own tests folder, the same command a
 // developer would type. Each lane writes to its own report file, so concurrent
 // lanes cannot clobber one another.
-function spawnBuiltInAttempt({
+async function spawnBuiltInAttempt({
 	runId,
 	projectId,
 	framework,
@@ -194,6 +195,14 @@ function spawnBuiltInAttempt({
 	onLog,
 	io
 }) {
+	const testsRoot = resolveTestsRoot(projectId);
+	// Read from the cached --list discovery already keeps, so this costs nothing on
+	// a warm project and degrades to "pass the flag as before" if it fails.
+	const projectNames =
+		framework === FRAMEWORK.PLAYWRIGHT
+			? await getPlaywrightProjectNames(testsRoot).catch(() => [])
+			: [];
+
 	return new Promise((resolve) => {
 		ensureProjectDeps(projectId, { onLog });
 
@@ -203,13 +212,14 @@ function spawnBuiltInAttempt({
 
 		const cmd = buildRunCommand({
 			framework,
-			testsRoot: resolveTestsRoot(projectId),
+			testsRoot,
 			reportFile,
 			tag,
 			browser,
 			workers,
 			retries,
-			shard
+			shard,
+			projectNames
 		});
 
 		const env = {

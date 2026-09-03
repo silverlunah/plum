@@ -70,7 +70,7 @@ async function listSpecs(testsRoot) {
  * until a test actually runs, and only if the author used test.step().
  */
 async function getPlaywrightSuites(testsRoot) {
-	if (!fs.existsSync(testsRoot)) return { suites: [] };
+	if (!fs.existsSync(testsRoot)) return { suites: [], projects: [] };
 
 	const stamp = newestMtime(testsRoot);
 	const hit = cache.get(testsRoot);
@@ -83,7 +83,7 @@ async function getPlaywrightSuites(testsRoot) {
 		// A spec that does not compile, or a missing config, surfaced as an empty
 		// list rather than a 500, the same way an unreadable feature file is.
 		console.error(`[discovery] playwright --list failed in ${testsRoot}: ${e.message}`);
-		return { suites: [] };
+		return { suites: [], projects: [] };
 	}
 
 	// Keyed by suite name so the same describe block seen under two browser
@@ -161,9 +161,21 @@ async function getPlaywrightSuites(testsRoot) {
 		collect(fileSuite, null, fileSuite.title ?? fileSuite.file);
 	}
 
-	const value = { suites: [...byName.values()] };
+	const value = {
+		suites: [...byName.values()],
+		// The config's own project names. Plum passes --project=<browser>, and an
+		// adopted repo may name its projects anything at all, which Playwright
+		// rejects outright rather than ignoring.
+		projects: (listed.config?.projects ?? []).map((p) => p.name).filter(Boolean)
+	};
 	cache.set(testsRoot, { stamp, value });
 	return value;
 }
 
-module.exports = { getPlaywrightSuites, withAt };
+/** The project names the tests folder's own config declares, [] if unknown. */
+async function getPlaywrightProjectNames(testsRoot) {
+	const { projects } = await getPlaywrightSuites(testsRoot);
+	return projects ?? [];
+}
+
+module.exports = { getPlaywrightSuites, getPlaywrightProjectNames, withAt };

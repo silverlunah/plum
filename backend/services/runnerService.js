@@ -11,7 +11,8 @@ const { loadTestEnv } = require('../lib/testEnv');
 const { resolveTestsRoot, loadProjectEnv } = require('../lib/testsRoot');
 const { frameworkFor } = require('../lib/projectPaths');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
-const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { DEFAULT_BROWSER, FRAMEWORK } = require('../constants/defaults');
+const { getPlaywrightProjectNames } = require('../lib/playwrightDiscovery');
 const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 const { bearerHeader } = require('../lib/authHeader');
 const { JOB_STATUS, CANCEL_CODE } = require('../constants/jobStatus');
@@ -227,6 +228,17 @@ async function fetchReportContent(runner, jobId, onLog) {
  * @param {(log: string) => void} onLog   Called with each new log chunk
  * @param {(exitCode: number, reportContent: string|null) => void} onDone
  */
+// [] for Cucumber and on any failure, which buildRunCommand reads as "unknown,
+// keep passing --project as before".
+async function playwrightProjectNames(projectId) {
+	if (frameworkFor(projectId) !== FRAMEWORK.PLAYWRIGHT) return [];
+	try {
+		return await getPlaywrightProjectNames(resolveTestsRoot(projectId));
+	} catch {
+		return [];
+	}
+}
+
 async function dispatchAndPoll(
 	runnerId,
 	{ projectId, tags, browser, workers, shard = null, baseUrl },
@@ -266,6 +278,9 @@ async function dispatchAndPoll(
 				browser,
 				workers,
 				framework: frameworkFor(projectId),
+				// The primary has the tests folder and the cached --list, so it resolves the
+				// config's project names once here instead of every node paying for it.
+				projectNames: await playwrightProjectNames(projectId),
 				shard,
 				tests: collectTestFiles(resolveTestsRoot(projectId)),
 				env: {
