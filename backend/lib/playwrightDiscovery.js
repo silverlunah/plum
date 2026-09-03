@@ -4,6 +4,7 @@
  */
 
 const { execFile } = require('child_process');
+const { declaredStepsForFile } = require('./playwrightSteps');
 const { promisify } = require('util');
 const fs = require('fs');
 const path = require('path');
@@ -66,8 +67,9 @@ async function listSpecs(testsRoot) {
  *
  * A describe block becomes a suite and its tag becomes the suite id, which mirrors
  * how a .feature file's Feature-level tag does. A file with no describe becomes one
- * suite named after the file. `steps` is always empty: Playwright has no steps
- * until a test actually runs, and only if the author used test.step().
+ * suite named after the file. `steps` are the test.step() calls the spec declares,
+ * read from its source: Playwright's --list reports none, because a step is a
+ * runtime call rather than metadata.
  */
 async function getPlaywrightSuites(testsRoot) {
 	if (!fs.existsSync(testsRoot)) return { suites: [], projects: [] };
@@ -85,6 +87,18 @@ async function getPlaywrightSuites(testsRoot) {
 		console.error(`[discovery] playwright --list failed in ${testsRoot}: ${e.message}`);
 		return { suites: [], projects: [] };
 	}
+
+	// One parse per spec file, shared by every spec in it. rootDir is the config's
+	// testDir, and a suite's `file` is relative to it.
+	const rootDir = listed.config?.rootDir || testsRoot;
+	const parsedFiles = new Map();
+	const declaredSteps = (relFile, line) => {
+		if (!relFile || !Number.isInteger(line)) return [];
+		if (!parsedFiles.has(relFile)) {
+			parsedFiles.set(relFile, declaredStepsForFile(path.resolve(rootDir, relFile)));
+		}
+		return parsedFiles.get(relFile).get(line) ?? [];
+	};
 
 	// Keyed by suite name so the same describe block seen under two browser
 	// projects collapses into one suite. `--list` repeats every spec once per
@@ -134,7 +148,7 @@ async function getPlaywrightSuites(testsRoot) {
 					id: tags.length > 1 ? tags : (tags[0] ?? null),
 					testCase: spec.title,
 					type: 'spec',
-					steps: []
+					steps: declaredSteps(file, spec.line)
 				};
 			});
 			const suiteName = describeTitle || file;
