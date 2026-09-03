@@ -44,6 +44,22 @@ function newestMtime(dir) {
 
 const execFileAsync = promisify(execFile);
 
+// Playwright still prints its JSON when it refuses to list, with what went wrong
+// in `errors`; those messages name the file and line, which stderr does not.
+function listError(e) {
+	try {
+		const parsed = JSON.parse(e.stdout ?? '');
+		const messages = (parsed.errors ?? [])
+			.map((err) => (err.message ?? '').split('\n')[0].trim())
+			.filter(Boolean);
+		if (messages.length > 0) return messages.join('\n');
+	} catch {
+		// Not JSON: fall through to whatever the process said.
+	}
+	const stderr = (e.stderr ?? '').trim();
+	return stderr.split('\n').slice(0, 3).join('\n') || e.message;
+}
+
 // Loading every spec file costs about a second, so this must not block the event
 // loop: it runs inside HTTP handlers and once per project at boot.
 async function listSpecs(testsRoot) {
@@ -82,10 +98,15 @@ async function getPlaywrightSuites(testsRoot) {
 	try {
 		listed = await listSpecs(testsRoot);
 	} catch (e) {
-		// A spec that does not compile, or a missing config, surfaced as an empty
-		// list rather than a 500, the same way an unreadable feature file is.
+		// A spec that does not compile, a duplicate test title or a missing config
+		// surfaces as an empty list rather than a 500, the same way an unreadable
+		// feature file does. The reason is carried out with it: an empty list on its
+		// own is indistinguishable from having written no tests yet, and the reader
+		// has no way to know Playwright refused to load the files.
 		console.error(`[discovery] playwright --list failed in ${testsRoot}: ${e.message}`);
-		return { suites: [], projects: [] };
+		const value = { suites: [], projects: [], error: listError(e) };
+		cache.set(testsRoot, { stamp, value });
+		return value;
 	}
 
 	// One parse per spec file, shared by every spec in it. rootDir is the config's

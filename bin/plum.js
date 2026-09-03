@@ -1758,6 +1758,22 @@ switch (command) {
 		break;
 	}
 
+	case 'check': {
+		const checkScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'check.mjs');
+		try {
+			execFileSync(process.execPath, [checkScript, ...process.argv.slice(3)], {
+				cwd: process.cwd(),
+				stdio: 'inherit',
+				env: { ...process.env, TESTS_ROOT: resolveLocalTestsRoot() ?? '' }
+			});
+		} catch (e) {
+			// The script exits non-zero when it finds problems, which is the point of
+			// running it in a hook. Pass that through rather than reporting a crash.
+			process.exit(e.status ?? 1);
+		}
+		break;
+	}
+
 	case 'create-test': {
 		const createTestScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-test.mjs');
 		execFileSync(process.execPath, [createTestScript, ...process.argv.slice(3)], {
@@ -1831,5 +1847,9 @@ switch (command) {
 		console.log(
 			'  create-test          Scaffold a new test. --page adds a page object, --name skips prompts'
 		);
+		console.log(
+			'  check                Report duplicate test ids, untagged tests, and files the runner'
+		);
+		console.log('                       cannot read. Exits non-zero, so it fits a hook or CI');
 		console.log('\n--------------------------------------\n');
 }

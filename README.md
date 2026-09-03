@@ -63,6 +63,7 @@ Use `plum create-test` to scaffold a new test. It asks whether to add a page obj
 | Command                      | Description                                                                      |
 | ---------------------------- | -------------------------------------------------------------------------------- |
 | `plum init`                  | Scaffold a local `./tests/` folder. `--framework playwright\|cucumber`           |
+| `plum check`                 | Check a tests folder: duplicate ids, untagged tests, files the runner can't read |
 | `plum create-test`           | Scaffold a test. `--page` also adds a page object, `--name <Name>` skips prompts |
 | `plum create-step`           | Cucumber only: scaffold a step definition (page object optional)                 |
 | `plum server start`          | Start the UI stack via Docker                                                    |
