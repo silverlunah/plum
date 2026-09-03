@@ -4,7 +4,7 @@
  */
 
 // navigator.clipboard is undefined outside a secure context (a production
-// install served over plain http:// on a bare IP) — fall back to a hidden
+// install served over plain http:// on a bare IP), fall back to a hidden
 // textarea + execCommand so copy buttons still work.
 export async function copyText(text) {
 	if (navigator.clipboard?.writeText) {
@@ -12,7 +12,7 @@ export async function copyText(text) {
 			await navigator.clipboard.writeText(text);
 			return;
 		} catch {
-			// permissions or context refused it — use the fallback
+			// permissions or context refused it, use the fallback
 		}
 	}
 	const ta = document.createElement('textarea');

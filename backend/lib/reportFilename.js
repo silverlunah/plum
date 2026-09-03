@@ -6,20 +6,25 @@
 const path = require('path');
 const fs = require('fs');
 
-// Anchored to backend/, not cwd — see appSecret.js.
-const REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
+// Under data/ because that is the mounted, persistent path: see appSecret.js. Each
+// lane writes its raw report here and the backend deletes it once ingested, so the
+// folder is a staging area, not a store.
+const REPORTS_DIR = path.resolve(__dirname, '..', 'data', 'reports');
 
 /**
- * Reads the transient cucumber_report.json written by the most recent local test run.
- * Returns the raw JSON string, or null if the file is absent or unreadable.
+ * Reads a run's own report file and removes it. Each lane writes to its own path
+ * so concurrent lanes cannot clobber one another, and the file is transient, the
+ * report it produced is persisted to the database by the caller.
  */
-function readCucumberReportFile() {
+function readReportFile(filePath) {
 	try {
-		const p = path.join(REPORTS_DIR, 'cucumber_report.json');
-		return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;
+		if (!fs.existsSync(filePath)) return null;
+		const raw = fs.readFileSync(filePath, 'utf8');
+		fs.rmSync(filePath, { force: true });
+		return raw;
 	} catch {
 		return null;
 	}
 }
 
-module.exports = { REPORTS_DIR, readCucumberReportFile };
+module.exports = { REPORTS_DIR, readReportFile };

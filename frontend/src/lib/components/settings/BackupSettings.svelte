@@ -302,7 +302,7 @@
 		(backupConfig.backupS3SecretKey?.trim() || backupS3SecretKeySet)
 	);
 
-	// Fetch the list once, the first time S3 looks configured — Refresh covers reloads.
+	// Fetch the list once, the first time S3 looks configured, Refresh covers reloads.
 	$: if (s3Configured && !s3BackupsLoaded) {
 		s3BackupsLoaded = true;
 		loadS3Backups();
@@ -658,7 +658,7 @@
 		{#if backupLastRunAt}
 			<p class="backup-last-run">
 				{BACKUP_LAST_RUN_PREFIX}
-				{new Date(backupLastRunAt).toLocaleString()} —
+				{new Date(backupLastRunAt).toLocaleString()},
 				{#if backupLastStatus?.startsWith('success:')}
 					<span class="status-success">
 						{uploadedToLabel(backupLastStatus.replace('success:', ''))}

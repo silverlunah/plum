@@ -1,12 +1,12 @@
 {
 	"name": "plum-e2e",
-	"version": "3.1.3",
+	"version": "3.2.0",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/silverlunah/plum.git"
 	},
 	"engines": {
-		"node": ">=20.12.0"
+		"node": ">=22.22.1"
 	},
 	"description": "A ready-to-use E2E test automation environment built on Playwright + Cucumber. Write tests in Gherkin, run them from the CLI or UI, view reports, schedule jobs, manage your entire test case repository, and get notified on Discord or Slack — all in one place.",
 	"main": "index.js",
@@ -17,7 +17,12 @@
 		"prepare": "husky",
 		"postinstall": "node bin/postinstall.js",
 		"docker:up": "docker compose up -d --build",
-		"docker:down": "docker compose down"
+		"docker:down": "docker compose down",
+		"nodes:up": "node scripts/nodes.cjs up",
+		"nodes:down": "node scripts/nodes.cjs down",
+		"nodes:list": "node scripts/nodes.cjs list",
+		"cli:test": "node scripts/cli-test.cjs",
+		"cli:test:full": "node scripts/cli-test.cjs --full"
 	},
 	"keywords": [],
 	"bin": {

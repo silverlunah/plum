@@ -6,7 +6,6 @@
 		"init": "node services/envService.js",
 		"create-step": "node config/scripts/create-step.mjs",
 		"create-env": "node services/envService.js",
-		"test": "node config/scripts/run-tests.js",
 		"manage-nodes": "node scripts/manage-nodes.mjs",
 		"create-test": "node config/scripts/create-test.mjs"
 	},
@@ -14,9 +13,8 @@
 	"author": "silverlunah",
 	"license": "MIT",
 	"devDependencies": {
-		"@playwright/test": "1.50.1",
+		"@playwright/test": "1.62.1",
 		"@types/node": "^22.17.0",
-		"cross-env": "^7.0.3",
 		"prisma": "^6.19.3",
 		"ts-node": "^10.9.2",
 		"typescript": "^5.9.2"
@@ -38,7 +36,7 @@
 		"jsonwebtoken": "^9.0.2",
 		"node-cron": "^3.0.3",
 		"picocolors": "^1.1.1",
-		"playwright": "1.50.1",
+		"playwright": "1.62.1",
 		"socket.io": "^4.8.1"
 	}
 }

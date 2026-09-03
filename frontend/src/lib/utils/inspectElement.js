@@ -43,15 +43,15 @@ function indentBlock(text, indent) {
 		.join('\n');
 }
 
-// Full, indented serialization of an element and everything inside it — every
-// attribute, every text node, every comment, every closing tag — so the Element
+// Full, indented serialization of an element and everything inside it, every
+// attribute, every text node, every comment, every closing tag, so the Element
 // tab shows exactly what a browser's element inspector shows for a selected node.
 function serializeElement(el, indent = '') {
 	const tag = el.tagName.toLowerCase();
 	const open = indent + openingTag(el);
 	if (VOID_ELEMENTS.has(tag)) return open;
 
-	// Script/style hold code, not markup — keep it verbatim.
+	// Script/style hold code, not markup, keep it verbatim.
 	if (tag === 'script' || tag === 'style') {
 		const raw = (el.textContent ?? '').replace(/^\n+|\s+$/g, '');
 		return raw
@@ -109,7 +109,7 @@ export function describeElement(el) {
 
 const CSS_IDENT = /^[A-Za-z_-][\w-]*$/;
 // A class or id that's mostly hashed noise (framework-generated) makes a brittle
-// selector — skip it in favour of something a human wrote.
+// selector, skip it in favour of something a human wrote.
 const LOOKS_GENERATED = (s) =>
 	/(^|[-_])[a-z]?\d{4,}/i.test(s) || /^[a-z]{1,3}[A-Z0-9]{5,}$/.test(s);
 const TESTID_ATTRS = ['data-testid', 'data-test-id', 'data-test', 'data-cy', 'data-qa'];
@@ -198,7 +198,7 @@ export function generateLocators(el) {
 	const doc = el.ownerDocument;
 	const out = [];
 	// `unique` only means something for CSS-ish selectors we can test with
-	// querySelectorAll — leave it undefined for Playwright locators and XPath.
+	// querySelectorAll, leave it undefined for Playwright locators and XPath.
 	const CSS_KINDS = new Set(['testid', 'id', 'class', 'css']);
 	const add = (kind, label, value, playwright) => {
 		if (!value) return;

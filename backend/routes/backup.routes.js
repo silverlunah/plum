@@ -31,15 +31,21 @@ router.get('/export', async (req, res) => {
 
 router.post('/import', async (req, res) => {
 	try {
-		const { cronJobs, project, users, runners, testSuites, testRuns } = req.body;
-		const hasData = [cronJobs, project, users, runners, testSuites, testRuns].some(
-			(v) => v !== undefined && v !== null
-		);
+		// Handed to the service whole. Picking fields out here is what silently
+		// dropped `reports` from every restore: the export wrote them, the
+		// importer knew how to read them, and this list didn't mention them.
+		const body = req.body ?? {};
+		const hasData = [
+			'projects',
+			'cronJobs',
+			'project',
+			'users',
+			'runners',
+			'testSuites',
+			'testRuns'
+		].some((k) => body[k] !== undefined && body[k] !== null);
 		if (!hasData) return res.status(400).json({ error: 'Invalid backup format' });
-		await backupService.importAll(
-			{ cronJobs, project, users, runners, testSuites, testRuns },
-			cronService
-		);
+		await backupService.importAll(body, cronService);
 		res.json({ message: 'Import successful' });
 	} catch (error) {
 		console.error('Import failed:', error);
@@ -142,11 +148,7 @@ router.post('/s3-restore', async (req, res) => {
 		}
 
 		const data = await backupService.downloadFromS3(key, config);
-		const { cronJobs, project, users, runners, testSuites, testRuns } = data;
-		await backupService.importAll(
-			{ cronJobs, project, users, runners, testSuites, testRuns },
-			cronService
-		);
+		await backupService.importAll(data, cronService);
 		res.json({ message: 'Restore successful' });
 	} catch (error) {
 		console.error('S3 restore failed:', error);
@@ -156,12 +158,21 @@ router.post('/s3-restore', async (req, res) => {
 
 router.post('/run-now', async (req, res) => {
 	try {
-		await backupCronService.runBackup();
-		const config = await settingsService.getBackupConfig();
-		if (config.backupLastStatus?.startsWith('error:')) {
-			return res.status(500).json({ error: config.backupLastStatus.replace('error:', '') });
+		const config = await settingsService.getOrgRaw();
+		const missing = ['backupS3Bucket', 'backupS3AccessKey', 'backupS3SecretKey'].filter(
+			(k) => !config[k]
+		);
+		if (missing.length > 0) {
+			return res
+				.status(400)
+				.json({ error: `S3 is not configured (missing: ${missing.join(', ')})` });
 		}
-		res.json({ ok: true, lastRunAt: config.backupLastRunAt, lastStatus: config.backupLastStatus });
+		await backupCronService.runBackup({ force: true });
+		const after = await settingsService.getBackupConfig();
+		if (after.backupLastStatus?.startsWith('error:')) {
+			return res.status(500).json({ error: after.backupLastStatus.replace('error:', '') });
+		}
+		res.json({ ok: true, lastRunAt: after.backupLastRunAt, lastStatus: after.backupLastStatus });
 	} catch (error) {
 		console.error('Backup run-now failed:', error);
 		res.status(500).json({ error: error.message || 'Backup failed' });

@@ -23,7 +23,7 @@ async function accessibleProjectIds(user) {
 }
 
 // The project a request acts on: the X-Plum-Project header when it names one the
-// user can reach, otherwise the user's first accessible project — so single
+// user can reach, otherwise the user's first accessible project, so single
 // project installs and header-less clients keep working. null when the user has
 // no project at all.
 async function resolveProjectId(req) {

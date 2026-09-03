@@ -1,170 +1,209 @@
-![Plum social preview](https://repository-images.githubusercontent.com/936477779/c7897789-fd10-40dc-8cd5-5ebe41b59bfd)
+![Plum social preview](https://repository-images.githubusercontent.com/936477779/7e440872-39bf-459b-b69c-1f602a9de960)
 
 <p align="center">
   <a href="https://www.npmjs.com/package/plum-e2e"><img src="https://img.shields.io/npm/v/plum-e2e?color=7c3aed&label=plum-e2e" alt="npm version" /></a>
   <a href="https://github.com/silverlunah/plum/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="license" /></a>
-  <a href="https://outline.silverlunah.com/collection/plum-XRoE2MURWj"><img src="https://img.shields.io/badge/docs-outline-7c3aed" alt="docs" /></a>
+  <a href="https://github.com/silverlunah/plum/wiki"><img src="https://img.shields.io/badge/docs-wiki-7c3aed" alt="docs" /></a>
 </p>
 
 <p align="center">
-  Self-hosted QA platform for teams doing manual <em>and</em> automated testing. Comes with a full test-case repository alongside a ready-to-use <a href="https://playwright.dev">Playwright</a> + <a href="https://cucumber.io">Cucumber</a> automation environment.<br/><br/>
-Author tests in Gherkin, run them from the CLI or UI, track manual test runs, view and export reports, schedule jobs, and get Discord / Slack notifications.
+  Self-hosted QA platform for teams doing manual <em>and</em> automated testing. Comes with a full test-case repository alongside a ready-to-use <a href="https://playwright.dev">Playwright</a> or <a href="https://cucumber.io">Cucumber</a> test environment.<br/><br/>
+Each project picks Playwright or Cucumber when it's created. Run tests from the CLI or UI, track manual test runs, view and export reports, schedule jobs, and get Discord / Slack notifications.
 </p>
 
 ---
 
 ## Requirements
 
-- [Node.js](https://nodejs.org) **20.12 or newer** (Node 22 LTS recommended) — enforced by the package's `engines` field.
-- [Docker](https://www.docker.com) — needed **only** for the server (web UI) stack. Writing and running tests locally needs neither Docker nor the server. Runner nodes (`plum node start`) run as a plain Node process and also don't need Docker.
+- [Node.js](https://nodejs.org) **22.22.1+**
+- [Docker](https://www.docker.com), only for the web UI. Writing tests and running runner nodes need neither Docker nor the server.
 
 ---
 
-## Quick Start
+## Install
 
 ```bash
 npm install -g plum-e2e
-
-mkdir my-tests && cd my-tests
-plum init                       # takes no arguments — scaffolds ./tests/
-
-# edit tests/.env → BASE_URL=https://your-app.com
-
-plum run-test                   # runs ./tests locally — no Docker, no database
-plum create-test                # scaffold a new .feature + Page + Steps
 ```
 
-`plum init` creates a self-contained `tests/` folder — feature files, steps, page objects, `.env`, `tsconfig.json`, `.vscode/`, `plum.plugins.json` — the same layout a project has on the server. Open the `tests/` folder in your editor.
+---
 
-### Running the server (web UI: Test Repository, reports, schedules, MCP)
+## Quickstart a project
 
-Run this on one machine for your team. It brings up the Docker stack, runs migrations, and — on first start — asks whether you're on a **local machine** or a **production / network server** and which ports to use (backend `3001`, frontend `3002`).
+Run this on one machine for your team. It sets up the server and its UI: the Test Repository, reports, session replay, schedules, notifications and MCP.
 
 ```bash
-npm install -g plum-e2e
-mkdir plum && cd plum
-plum server start
+mkdir plum-server && cd plum-server
+plum server start            # Choose between Playwright or Cucumber project
 ```
 
-`plum server start` creates the `projects/` folder (the bind-mount target) and the Docker config in the current directory. Open **http://localhost:3002**, complete first-run setup, and create your organisation, first project, and owner account. The server scaffolds each project's `projects/<slug>/tests/` folder itself when you add the project in **Settings → Project** — you don't run `plum init` or `plum project init` for that (`plum project init "<name>"` only re-creates a folder the server lost).
+- Each project picks **Playwright or Cucumber** when it is created, and that choice is permanent.
+- The server scaffolds `projects/<slug>/tests/` itself. `plum project init "<name>"` only re-creates a folder that went missing.
+- Tests deeper than `tests/` (say `apps/web/e2e/`) go in **Settings → Project → Tests folder**, relative to `projects/<slug>/` to support wherever you initiate Git.
+- Containers use `restart: unless-stopped`, so the server returns after a reboot. For nodes too, whenever you register with `plum node start`.
 
-If a project's repo keeps its Cucumber tests deeper than a top-level `tests/` (e.g. `apps/web/e2e/`), set that subpath in **Settings → Project → Tests folder**. It's always relative to `projects/<slug>/`; a project with a custom path manages that folder itself and is never scaffolded.
+---
 
-The stack's containers use `restart: unless-stopped`, so the server comes back after a reboot once Docker itself starts. To bring runner nodes back too, register them with `plum node start <name> --boot` (or answer the prompt).
+## If you don't want a UI
 
-### Writing tests (no server)
+```bash
+plum init          # Choose between Playwright or Cucumber project
+cd tests
+npx playwright test          # a Cucumber project uses: npx cucumber-js
+```
 
-`plum init` scaffolds a self-contained `tests/` folder — feature files, step definitions, page objects, `tests/.env`, `tests/tsconfig.json`, `tests/.vscode/`, `tests/plum.plugins.json` — and installs the Playwright/Cucumber toolchain. Open the `tests/` folder in your editor; it's the same layout a project folder has on the server, so a local project drops straight into `projects/<slug>/tests/`. Nothing else is required to write and run tests on your machine.
+That's it. `plum init` scaffolds `tests/`, installs the runner and downloads browsers, so the example tests run straight away. Run the runner from `tests/`, where its config lives. Open `tests/` in your editor; it is the same layout a project has on the server, so it drops into `projects/<slug>/tests/` later if you add the UI.
 
-### For contributors
+Use `plum create-test` to scaffold a new test. It asks whether to add a page object too (default no); pass `--page` to opt in without the prompt.
+
+---
+
+## Command reference
+
+| Command                      | Description                                                                      |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| `plum init`                  | Scaffold a local `./tests/` folder. `--framework playwright\|cucumber`           |
+| `plum create-test`           | Scaffold a test. `--page` also adds a page object, `--name <Name>` skips prompts |
+| `plum create-step`           | Cucumber only: scaffold a step definition (page object optional)                 |
+| `plum server start`          | Start the UI stack via Docker                                                    |
+| `plum server restart`        | Rebuild images and restart, no prompts                                           |
+| `plum server stop`           | Stop the server, data preserved                                                  |
+| `plum server reconfig`       | Re-enter server settings without starting                                        |
+| `plum project init "<name>"` | Re-create a server project's tests folder                                        |
+| `plum node start [name]`     | Register a node and start it here. `--boot` / `--no-boot`                        |
+| `plum node list`             | This machine's nodes and their status                                            |
+| `plum node restart [name]`   | Stop, refresh dependencies, restart                                              |
+| `plum node stop [name]`      | Stop a node                                                                      |
+| `plum node delete [name]`    | Stop it, delete its config, unregister it. No name deletes every node here       |
+| `plum node reconfig [name]`  | Re-enter a node's settings, without starting                                     |
+| `plum manage-nodes`          | Interactive node management menu                                                 |
+| `plum update`                | Update Plum, then restart registered servers and nodes                           |
+
+---
+
+## Project layout
+
+Playwright:
+
+```
+projects/<slug>/tests/
+  playwright.config.ts   yours: browsers, timeouts, traces, reporters
+  specs/                 *.spec.ts test files
+  pages/                 Page Object Models (optional)
+  fixtures/pages.ts      your page-object fixtures
+  fixtures/plum.ts       session recording for report replay (Plum's)
+```
+
+Cucumber:
+
+```
+projects/<slug>/tests/
+  cucumber.js            yours: paths, requires, formatters
+  features/              Gherkin .feature files
+  step_definitions/      TypeScript step implementations
+  pages/                 Page Object Models (optional)
+  utils/                 browser setup, hooks, helpers (Plum's recording lives here)
+```
+
+## Documentation
+
+Full documentation lives in the **[GitHub wiki](https://github.com/silverlunah/plum/wiki)**.
+
+| Guide                                                                                             | What it covers                                                                  |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [Installation](https://github.com/silverlunah/plum/wiki/Installation)                             | Requirements, global install, CLI-only vs. server, first-user setup             |
+| [Setting Up the Server](https://github.com/silverlunah/plum/wiki/Setting-Up-the-Server)           | `plum server start`, ports, local vs. production, reverse proxy                 |
+| [Setting Up Nodes](https://github.com/silverlunah/plum/wiki/Setting-Up-Nodes)                     | Runner nodes, the registration secret, start-on-boot, managing nodes            |
+| [Writing Tests](https://github.com/silverlunah/plum/wiki/Writing-Tests)                           | The scaffold, `plumStep`, optional page objects, `create-test` / `create-step`  |
+| [Migrating an Existing Repo](https://github.com/silverlunah/plum/wiki/Migrating-an-Existing-Repo) | Adopting a Playwright or Cucumber repo you already have                         |
+| [Running Tests Locally](https://github.com/silverlunah/plum/wiki/Running-Tests-Locally)           | `npx playwright test` / `npx cucumber-js`, tags, workers, browsers, debugging   |
+| [Projects](https://github.com/silverlunah/plum/wiki/Projects)                                     | One org, many projects, the framework choice, on-disk layout, tests folder      |
+| [Roles and Access](https://github.com/silverlunah/plum/wiki/Roles-and-Access)                     | Owner / admin / user, per-project membership, what each role reaches            |
+| [Test Repository](https://github.com/silverlunah/plum/wiki/Test-Repository)                       | Suites & cases, structured steps, collaborative test runs, linking by tag       |
+| [Reports and Session Replay](https://github.com/silverlunah/plum/wiki/Reports-and-Session-Replay) | The report page, DOM session replay, step rail, inspector, export               |
+| [Retrying Flaky Tests](https://github.com/silverlunah/plum/wiki/Retrying-Flaky-Tests)             | Max-retries setting, how retries work per framework, the flaky badge            |
+| [Integrations](https://github.com/silverlunah/plum/wiki/Integrations)                             | Discord & Slack webhooks, schedules, the REST trigger endpoint for CI           |
+| [API & MCP](https://github.com/silverlunah/plum/wiki/MCP-Integration)                             | Minting a key, using it for CI or an MCP client, the tools, `(MCP)` attribution |
+| [Activity Logs](https://github.com/silverlunah/plum/wiki/Activity-Logs)                           | Audit feed of project and org changes, MCP attribution, retention               |
+| [Backup](https://github.com/silverlunah/plum/wiki/Backup)                                         | Instance-level database backup, schedule, an S3-compatible target               |
+
+---
+
+## Contributing
+
+Everything below is for developing Plum itself. You don't need any of it to use Plum.
 
 ```bash
 git clone https://github.com/silverlunah/plum.git
 cd plum
-npm run init        # installs all monorepo dependencies
-npm run docker:up   # builds and starts the full stack
+npm run init         # install all monorepo dependencies
+npm run docker:up    # build and start the stack, UI on http://localhost:3002
+npm run docker:down  # stop it
 ```
 
-The UI is available at **http://localhost:3002**. For fast HMR while developing the frontend, run the Vite dev server outside Docker (`http://localhost:5173`) — see the **Development** section below.
+Rebuild with `npm run docker:up` after any backend dependency or schema change.
 
----
+`docker:up` bind-mounts `projects/` into the container, so each project's tests folder
+appears in your checkout and you can edit it directly. Note that Compose takes its
+project name from the directory, so two checkouts both called `plum` share one
+database; clone into a differently named folder if you want an isolated one.
 
-## Documentation
+### Frontend hot reload
 
-Full documentation is available at:
-
-**[https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd)**
-
-| Guide                                                                                                                                    | What it covers                                                                      |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| [Installation](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/installation-JftwFX9csC)                       | Requirements, global install, first-user setup, plugins                             |
-| [Setting Up the Server](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-the-server-vj0Ab1kJVs)     | Production server setup, reverse proxy (Nginx/Caddy), Docker                        |
-| [Setting Up Nodes](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/setting-up-nodes-dtmekJGJia)               | Runner nodes, the registration secret, start-on-boot, managing nodes                |
-| [Running Tests Locally](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/running-tests-locally-GGhFcqaAQ8)     | `plum run-test` flags, parallel runs, debugging tips                                |
-| [Writing Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/writing-tests-XeHJQdtH49)                     | Feature files, step definitions, optional page objects, best practices              |
-| [Projects](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/projects-ilfc8LUyO7)                               | One organisation, many projects — anatomy, on-disk layout, create / switch / delete |
-| [Roles & Access](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/roles-access-s0wx91Uo7g)                     | Owner / admin / user, per-project membership, what each role sees                   |
-| [Test Repository](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/test-repository-NJh4BbRzcK)                 | Suites & cases, test runs, linking automation to cases by tag                       |
-| [Reports & Session Replay](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/reports-session-replay-EfhxJXaaDD) | The report page, session replay, step rail, inspector, export                       |
-| [Retrying Flaky Tests](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/retrying-flaky-tests-NXwRF5SXru)       | Auto-retry failed scenarios, global setting, report badges                          |
-| [Integrations](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/integrations-qfiqfmdP0j)                       | Per-project Discord & Slack webhook notifications, CI/external triggers             |
-| [MCP Integration](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/mcp-integration-yGjbsFrI76)                 | Per-member MCP keys, connecting an AI client, tools, `(MCP)` attribution            |
-| [Activity Logs](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/activity-logs-5BJzE7o8oU)                     | Audit feed of project and org changes, MCP attribution, retention                   |
-| [Backup](https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd/doc/backup-RNNObJfct9)                                   | Instance-level database backup, schedule, S3 target                                 |
-
----
-
-## Command Reference
-
-| Command                       | Description                                                                                                                                      |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `plum init`                   | Scaffold a self-contained `./tests/` folder for local test authoring (`plum run-test`)                                                           |
-| `plum project init "<name>"`  | Re-create a server project's `projects/<slug>/tests/` folder (the server normally does this when you add the project)                            |
-| `plum server start`           | Start the full UI stack via Docker                                                                                                               |
-| `plum server restart`         | Rebuild Docker images and restart the server without prompts                                                                                     |
-| `plum server stop`            | Stop the server (data preserved)                                                                                                                 |
-| `plum server reconfig`        | Re-enter server settings without starting                                                                                                        |
-| `plum update`                 | Update Plum if a newer version is published, then restart every registered server and node (asks before each); no-ops when already on the latest |
-| `plum node start [name]`      | Register a node with the server and start it on this machine (`--boot` / `--no-boot` to (un)set start-on-boot)                                   |
-| `plum node list`              | List this machine's nodes and their status                                                                                                       |
-| `plum node restart [name]`    | Stop, refresh dependencies, and restart a node                                                                                                   |
-| `plum node stop [name]`       | Stop a node                                                                                                                                      |
-| `plum node delete <name>`     | Stop the node, delete its local config, and unregister it from the server                                                                        |
-| `plum node reconfig [name]`   | Re-enter a node's settings and re-register, without starting it                                                                                  |
-| `plum run-test`               | Run all tests locally without Docker                                                                                                             |
-| `plum run-test @tag`          | Run tests matching a tag                                                                                                                         |
-| `plum run-test --parallel N`  | Run tests across N parallel workers                                                                                                              |
-| `plum run-test --browser <b>` | Run in `chromium` (default) or `firefox`                                                                                                         |
-| `plum run-test --help`        | Show usage for `run-test`                                                                                                                        |
-| `plum create-step`            | Interactively scaffold a new step definition                                                                                                     |
-| `plum create-test`            | Interactively scaffold a full feature (`.feature` + Page + Steps)                                                                                |
-| `plum manage-nodes`           | Open the interactive node management menu                                                                                                        |
-
----
-
-## Development
-
-> This section is for contributors developing Plum itself.
-
-### Start the stack
-
-```bash
-npm run docker:up    # build and start all services (detached)
-npm run docker:down  # stop all services
-```
-
-### Frontend (hot reload)
-
-The frontend dev server runs outside Docker for fast HMR:
+The container serves a production build, so run Vite outside Docker while working on the UI:
 
 ```bash
 cd frontend
-npm run dev          # available at http://localhost:5173
+npm run dev          # 3002, or the next free port if the container has it
 ```
 
-### Backend — writing and running tests
+### Runner nodes
+
+Nodes are bare Node processes, not containers. These register against your local server and clean up after themselves:
 
 ```bash
-cd backend
-npm test                     # run all tests
-npm test -- @TC-001          # run a specific scenario
-npm test -- --parallel 4     # run in parallel
-npm run create-step          # scaffold a step definition
-npm run create-test          # scaffold a full test from template
-npm run manage-nodes         # open the node management menu
+npm run nodes:up     # 2 nodes on 9001-9002 (npm run nodes:up -- 3 for more)
+npm run nodes:list
+npm run nodes:down   # stop and deregister
 ```
 
-### Test file locations
+### Testing the CLI
 
-```
-backend/tests/
-  features/          — Gherkin .feature files
-  step_definitions/  — TypeScript step implementations
-  pages/             — Page Object Models (optional)
-  utils/             — Browser setup, hooks, helpers
+Scaffolds a throwaway project per framework and drives it with the runner's own commands, covering `plum init` and the run flags end to end:
+
+```bash
+npm run cli:test        # both frameworks, one suite each (~40s)
+npm run cli:test:full   # adds tags, file:line, browsers, workers, shards,
+                        # retries, generators and tsc (~2min)
 ```
 
-> After any backend dependency or schema change, rebuild: `npm run docker:up`
+### Running a project's tests directly
+
+Runs go straight to the project's own runner, from its tests folder:
+
+```bash
+cd projects/<slug>/tests
+npx playwright test --grep @TC-001     # or: npx cucumber-js --tags @TC-001
+npx playwright test --workers 4        # or: npx cucumber-js --parallel 4
+```
+
+### Generators
+
+Run these from the project you are adding to, so the files land in its tests folder.
+Run them from `backend` and they write into `backend/tests/`, a legacy folder no
+project reads:
+
+```bash
+cd projects/<slug>
+node ../../bin/plum.js create-test     # --page also adds a page object
+node ../../bin/plum.js create-step     # Cucumber only
+```
+
+The node menu is not path-dependent:
+
+```bash
+cd backend && npm run manage-nodes
+```
 
 ---
 

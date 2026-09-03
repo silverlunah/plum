@@ -5,7 +5,7 @@
 
 <script>
 	export let status = 'passed';
-	// A flaky scenario passed, but only on a retry — show it amber, not green.
+	// A flaky scenario passed, but only on a retry, show it amber, not green.
 	export let flaky = false;
 </script>
 

@@ -3,17 +3,27 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-// Wires up Plum's session recording — removing or reordering code here can silently break report replay.
+// Wires up Plum's session recording: removing or reordering code here can silently break report replay.
 
-import { Before, After, BeforeStep, ITestCaseHookParameter } from '@cucumber/cucumber';
+import {
+	Before,
+	After,
+	BeforeStep,
+	setDefaultTimeout,
+	ITestCaseHookParameter
+} from '@cucumber/cucumber';
 import { setup, teardown, flushRecordings, markStepStart } from './browser';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Cucumber's default is 5 seconds, which a cold browser launch or a slow page can
+// exceed. Raise it here if your app needs longer.
+setDefaultTimeout(30_000);
+
 /**
  * Pickle steps carry no keyword (Cucumber normalizes Given/When/Then/And/But
- * away during Gherkin → Pickle compilation) — recover it by walking the
+ * away during Gherkin → Pickle compilation): recover it by walking the
  * gherkinDocument for the AST node the pickle step was compiled from.
  */
 function resolveStepKeyword(gherkinDocument: any, pickleStep: any): string {
@@ -56,6 +66,6 @@ After(async function () {
 
 // ---------------------------------------------------------------------------
 // Your code below this line. Everything above wires up Plum's session
-// recording — leave it as-is. Add your own Before/After/BeforeStep hooks
+// recording: leave it as-is. Add your own Before/After/BeforeStep hooks
 // here; Cucumber runs every registered hook, so yours run alongside Plum's.
 // ---------------------------------------------------------------------------

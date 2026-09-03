@@ -5,20 +5,27 @@
 
 <script>
 	import { PLAYWRIGHT_URL, CUCUMBER_URL } from '$lib/constants';
-	import { LEARN_MORE_LABEL, PLAYWRIGHT_LABEL, CUCUMBER_LABEL } from '$lib/copy/common';
+	import { POWERED_BY_LABEL, PLAYWRIGHT_LABEL, CUCUMBER_LABEL } from '$lib/copy/common';
+	import { activeFramework } from '$lib/stores/project';
 	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
+
+	// A Cucumber project drives Playwright underneath, so it credits both. A
+	// Playwright project never touches Cucumber and must not link to it.
+	$: showCucumber = $activeFramework === 'cucumber';
 </script>
 
 <div class="learn-more">
-	<span class="learn-more-label">{LEARN_MORE_LABEL}</span>
+	<span class="learn-more-label">{POWERED_BY_LABEL}</span>
 	<a href={PLAYWRIGHT_URL} target="_blank" rel="noopener noreferrer">
 		<ServiceIcon service="playwright" size={14} />
 		{PLAYWRIGHT_LABEL}
 	</a>
-	<a href={CUCUMBER_URL} target="_blank" rel="noopener noreferrer">
-		<ServiceIcon service="cucumber" size={14} />
-		{CUCUMBER_LABEL}
-	</a>
+	{#if showCucumber}
+		<a href={CUCUMBER_URL} target="_blank" rel="noopener noreferrer">
+			<ServiceIcon service="cucumber" size={14} />
+			{CUCUMBER_LABEL}
+		</a>
+	{/if}
 </div>
 
 <style>

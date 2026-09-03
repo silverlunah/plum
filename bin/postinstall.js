@@ -7,7 +7,7 @@
  * Runs on every `npm install` of this package (including `npm i -g plum-e2e`
  * and re-installs on update), so backend-dependent commands work immediately
  * without the user first having to run `plum server start` or `plum node
- * start` — the only commands that used to trigger a backend `npm install`
+ * start`, the only commands that used to trigger a backend `npm install`
  * on their own.
  *
  * Best-effort: a failure here must not fail the overall `npm install`, so

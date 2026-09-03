@@ -5,11 +5,11 @@
 
 /**
  * Registers a Plum runner node to start on machine boot / user login, using
- * whatever the platform already ships — systemd (Linux), launchd (macOS),
+ * whatever the platform already ships: systemd (Linux), launchd (macOS),
  * Scheduled Tasks (Windows). No extra daemon, no dependency.
  *
- * The entry just runs `plum node start <name>` — the same command a person would
- * type — so it re-registers with the primary and (re)spawns the node process.
+ * The entry just runs `plum node start <name>`: the same command a person would
+ * type: so it re-registers with the primary and (re)spawns the node process.
  * Uses only Node builtins so it can be called from the published `bin/plum.js`.
  */
 
@@ -24,7 +24,7 @@ function bootArgs(name) {
 	return [PLUM_BIN, 'node', 'start', name];
 }
 
-// systemd / launchd hand the process a bare PATH — `node`, `npx`, `docker` won't
+// systemd / launchd hand the process a bare PATH, `node`, `npx`, `docker` won't
 // resolve. Bake in the dir node lives in plus the PATH the (interactive) install
 // is running with, so the boot invocation sees exactly what the operator does.
 function bootPath() {
@@ -63,7 +63,7 @@ function hasSystemd() {
 // `systemctl --user --version` works with no session at all; anything that
 // actually touches the user bus ("show-environment") fails with
 // "Failed to connect to bus: No medium found" over an SSH login that has no
-// lingering user session — which is the common production case.
+// lingering user session: which is the common production case.
 function userBusReachable() {
 	try {
 		execFileSync('systemctl', ['--user', 'show-environment'], { stdio: 'ignore' });

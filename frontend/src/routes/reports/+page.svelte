@@ -699,7 +699,7 @@
 			flex-basis: 100%;
 		}
 
-		/* No hover on touch — keep the per-row delete reachable. */
+		/* No hover on touch, keep the per-row delete reachable. */
 		.row-delete-btn {
 			opacity: 0.55;
 		}

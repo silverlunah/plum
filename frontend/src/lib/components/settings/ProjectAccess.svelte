@@ -10,6 +10,7 @@
 	import { fetchAssignablePool } from '$lib/api/users';
 	import {
 		fetchProjects,
+		fetchServerDefaults,
 		fetchAllProjects,
 		createProject,
 		deleteProject,
@@ -19,11 +20,17 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Paginator from '$lib/components/ui/Paginator.svelte';
+	import IconSelect from '$lib/components/ui/IconSelect.svelte';
+	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 	import { CANCEL_LABEL, SEARCH_PLACEHOLDER } from '$lib/copy/common';
+	import { FRAMEWORKS } from '$lib/constants';
 	import {
 		NEW_PROJECT_LABEL,
 		NAME_LABEL,
 		CREATE_PROJECT_LABEL,
+		PROJECT_FRAMEWORK_LABEL,
+		FRAMEWORK_PERMANENT_HINT,
+		frameworkLabel,
 		OTHER_PROJECTS_LABEL,
 		DELETE_PROJECT_LABEL,
 		projectRowMeta,
@@ -57,7 +64,7 @@
 
 	// ── Members of the active project ──
 	let assignable = []; // every non-owner user
-	let ownerRows = []; // shown read-only on every project — access is implicit
+	let ownerRows = []; // shown read-only on every project, access is implicit
 	let memberIds = [];
 	let loadedFor = null;
 	let query = '';
@@ -107,6 +114,11 @@
 	// ── Other projects (owner) ──
 	let allProjects = [];
 	let newName = '';
+	// Replaced on mount by whatever the operator chose at `plum server start`; this is
+	// only the fallback for a config that predates that prompt.
+	let defaultFramework = FRAMEWORKS[0];
+	let newFramework = defaultFramework;
+	const frameworkOptions = FRAMEWORKS.map((id) => ({ id, label: frameworkLabel(id) }));
 	let creating = false;
 	let createError = '';
 
@@ -128,6 +140,13 @@
 
 	onMount(async () => {
 		try {
+			const { framework } = await fetchServerDefaults();
+			if (FRAMEWORKS.includes(framework)) {
+				defaultFramework = framework;
+				newFramework = framework;
+			}
+		} catch {}
+		try {
 			assignable = await fetchAssignablePool();
 		} catch {}
 		if (isOwner) await loadAllProjects();
@@ -144,10 +163,11 @@
 		creating = true;
 		createError = '';
 		try {
-			await createProject({ name: newName.trim() });
+			await createProject({ name: newName.trim(), framework: newFramework });
 			setProjects(await fetchProjects());
 			await loadAllProjects();
 			newName = '';
+			newFramework = defaultFramework;
 		} catch (e) {
 			createError = e.message;
 		} finally {
@@ -170,7 +190,7 @@
 			await deleteProject(deleteTarget.id);
 			setProjects(await fetchProjects());
 			deleteTarget = null;
-			// Every page is scoped to the active project — reload so it re-resolves.
+			// Every page is scoped to the active project, reload so it re-resolves.
 			if (wasActive) return window.location.reload();
 			await loadAllProjects();
 		} catch (e) {
@@ -189,10 +209,17 @@
 			<h4>{NEW_PROJECT_LABEL}</h4>
 			<div class="new-row">
 				<input class="field-input" bind:value={newName} placeholder={NAME_LABEL} />
+				<IconSelect
+					options={frameworkOptions}
+					value={newFramework}
+					ariaLabel={PROJECT_FRAMEWORK_LABEL}
+					on:change={(e) => (newFramework = e.detail)}
+				/>
 				<Button on:click={handleCreate} disabled={creating || !newName.trim()}>
 					{CREATE_PROJECT_LABEL}
 				</Button>
 			</div>
+			<p class="hint">{FRAMEWORK_PERMANENT_HINT}</p>
 			{#if createError}<p class="error">{createError}</p>{/if}
 		</section>
 
@@ -209,6 +236,10 @@
 			{#each pagedProjects as p (p.id)}
 				<div class="project-row">
 					<span class="p-name">{p.name}</span>
+					<span class="p-framework">
+						<ServiceIcon service={p.framework} size={11} />
+						{frameworkLabel(p.framework)}
+					</span>
 					<span class="p-meta">{projectRowMeta(p.slug, p.memberCount ?? 0)}</span>
 					<button class="danger-link" on:click={() => openDelete(p)}>{DELETE_PROJECT_LABEL}</button>
 				</div>
@@ -437,6 +468,20 @@
 	.p-name {
 		font-weight: 500;
 		color: var(--text);
+	}
+	.p-framework {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		flex: none;
+		font-size: 0.68rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--accent);
+		background: var(--accent-soft);
+		padding: 0.1rem 0.4rem;
+		border-radius: var(--radius-pill);
 	}
 	.p-meta {
 		flex: 1;

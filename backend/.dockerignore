@@ -1,0 +1,16 @@
+# This file is part of Plum.
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+# `COPY . .` runs after `npm ci`, so without this the host's node_modules (built
+# for the host's OS) replaces the image's Linux install. Everything here is either
+# rebuilt in the image, mounted at run time, or must never reach an image.
+node_modules
+tests
+projects
+data
+logs
+.plum-jobs
+.env
+.runners.local.json
+*.log
+test-results
+playwright-report

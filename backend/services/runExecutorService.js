@@ -13,16 +13,18 @@ const settingsService = require('./settingsService');
 const notificationService = require('./notificationService');
 const { startRRwebPoller } = require('../lib/rrwebPoller');
 const { runWithRetries } = require('../lib/retryRunner');
-const { BUILT_IN_RUNNER_ID, TRIGGER_REMOTE } = require('../constants/triggers');
-const { PLUM_MODE_NODE } = require('../constants/env');
+const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { SOCKET_EVENTS } = require('../constants/socketEvents');
 const { JOB_STATUS, REPORT_STATUS, CANCEL_CODE } = require('../constants/jobStatus');
 const { getTestIdsForTag, chunkTests, buildTagExpression } = require('../lib/testChunker');
 const { getTestSuites } = require('./testService');
 const { resolveTestsRoot, loadProjectEnv } = require('../lib/testsRoot');
-const { readCucumberReportFile } = require('../lib/reportFilename');
-
-const BACKEND_DIR = path.resolve(__dirname, '..');
+const { ensureProjectDeps } = require('../lib/projectDeps');
+const { REPORTS_DIR, readReportFile } = require('../lib/reportFilename');
+const { FRAMEWORK } = require('../constants/defaults');
+const { buildRunCommand, describeCommand } = require('../lib/runnerCommand');
+const { toFeatures } = require('../lib/playwrightReport');
+const { getPlaywrightProjectNames } = require('../lib/playwrightDiscovery');
 
 // runId → live handles, so cancel() can stop every process and remote job a run owns.
 const inflight = new Map();
@@ -40,7 +42,7 @@ function isCancelled(runId) {
 	return inflight.get(runId)?.cancelled === true;
 }
 
-/** Best-effort stop of everything a run owns — local child processes and remote node jobs. */
+/** Best-effort stop of everything a run owns: local child processes and remote node jobs. */
 async function cancel(runId) {
 	const rec = inflight.get(runId);
 	if (!rec) return false;
@@ -59,10 +61,10 @@ async function cancel(runId) {
 // Stand-in Cucumber JSON for a lane that never produced a real report (process
 // crashed, node unreachable) so its scenarios still show as failed by name
 // instead of silently vanishing from the combined report.
-function makeSyntheticFailReport(projectId, laneName, testIds, reason) {
+async function makeSyntheticFailReport(projectId, laneName, testIds, reason) {
 	const nameMap = {};
 	try {
-		const { suites } = getTestSuites(projectId);
+		const { suites } = await getTestSuites(projectId);
 		for (const suite of suites) {
 			for (const test of suite.tests) {
 				for (const id of Array.isArray(test.id) ? test.id : [test.id]) {
@@ -78,7 +80,7 @@ function makeSyntheticFailReport(projectId, laneName, testIds, reason) {
 			uri: 'runner-error',
 			name: `Runner: ${laneName}`,
 			keyword: 'Feature',
-			elements: testIds.map((id) => ({
+			elements: testIds.filter(Boolean).map((id) => ({
 				id: id.replace(/^@/, '').toLowerCase(),
 				name: nameMap[id] || id.replace(/^@/, ''),
 				keyword: 'Scenario',
@@ -104,44 +106,138 @@ function makeSyntheticFailReport(projectId, laneName, testIds, reason) {
 // Built-in (local) attempt
 // ---------------------------------------------------------------------------
 
-// Always spawned with PLUM_MODE=node so generate-report.js skips its own DB
-// write — this service persists exactly one report per run itself. The queue
-// serialises every run that targets the built-in runner, so the shared
-// reports/cucumber_report.json is never contended.
-function spawnBuiltInAttempt({
+/**
+ * Splits the project's max-retries setting between the runner and Plum's own
+ * re-run loop. Exactly one of them must retry, never both.
+ *
+ * Playwright reports every attempt in its JSON, so it retries natively and Plum's
+ * loop stands down. Cucumber's legacy JSON reports only the final attempt, so
+ * Plum re-runs the failures itself to count them and passes no retry flag.
+ */
+function splitRetries(framework, maxRetries) {
+	const n = Number(maxRetries) || 0;
+	return framework === FRAMEWORK.PLAYWRIGHT
+		? { nativeRetries: n, loopRetries: 0 }
+		: { nativeRetries: 0, loopRetries: n };
+}
+
+// Both runners exit 0 when a selection matches nothing, so a run that verified
+// nothing would otherwise look like a clean pass in the log. saveReport marks the
+// report failed; this is what tells the person watching the run bar why.
+function warnIfNothingRan(rawJson, tag, onLog, framework, hadReport = true, code = 0) {
+	const scenarios = rawJson.reduce((n, f) => n + (f.elements ?? []).length, 0);
+	if (scenarios > 0) return;
+	// An empty selection and a missing report file both arrive here with nothing to
+	// show, but they are opposite problems: the second usually means the tests passed
+	// and Plum could not see them, which the tag advice sends people away from.
+	// Only when the runner itself succeeded: a non-zero exit means it failed for its
+	// own reason, already printed above, and blaming the reporter would mislead.
+	if (!hadReport && code === 0) {
+		const how =
+			framework === FRAMEWORK.PLAYWRIGHT
+				? 'playwright.config.ts needs a json reporter writing to process.env.PLUM_REPORT_FILE'
+				: 'cucumber.js needs a json:<PLUM_REPORT_FILE> entry in its format list';
+		onLog(
+			`[ERROR] The runner wrote no report file, so this run is marked failed even if tests ` +
+				`passed above. ${how}.\n`
+		);
+		return;
+	}
+	onLog(
+		`[ERROR] No tests matched ${tag ? `"${tag}"` : 'this run'}, nothing was executed, ` +
+			`so this run is marked failed. Check the tag, or that the tests still exist.\n`
+	);
+}
+
+/**
+ * A lane's raw report in Plum's feature/scenario shape. Cucumber's JSON already is
+ * that shape; Playwright's is an object of suites and stats, adapted here so the
+ * retry merge, the report page and the tag sync stay framework-agnostic.
+ */
+function parseLaneReport(framework, raw) {
+	if (!raw) return { rawJson: [], attempts: null };
+	let parsed;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return { rawJson: [], attempts: null };
+	}
+	if (framework !== FRAMEWORK.PLAYWRIGHT) return { rawJson: parsed, attempts: null };
+	const { features, attempts } = toFeatures(parsed);
+	return { rawJson: features, attempts };
+}
+
+/**
+ * A lane's report in Plum's shape, or a stand-in naming the tests it was given when
+ * the lane never sent one (process crashed, node unreachable).
+ */
+async function laneReport(framework, raw, { projectId, laneName, ids, reason }) {
+	if (raw) return parseLaneReport(framework, raw);
+	return {
+		rawJson: JSON.parse(await makeSyntheticFailReport(projectId, laneName, ids, reason)),
+		attempts: null
+	};
+}
+
+// Runs the project's own runner CLI from its own tests folder, the same command a
+// developer would type. Each lane writes to its own report file, so concurrent
+// lanes cannot clobber one another.
+async function spawnBuiltInAttempt({
 	runId,
 	projectId,
+	framework,
 	laneId,
 	tag,
 	workers,
 	browser,
+	retries,
+	shard = null,
 	testRunId,
 	baseUrl,
 	onLog,
 	io
 }) {
+	const testsRoot = resolveTestsRoot(projectId);
+	// Read from the cached --list discovery already keeps, so this costs nothing on
+	// a warm project and degrades to "pass the flag as before" if it fails.
+	const projectNames =
+		framework === FRAMEWORK.PLAYWRIGHT
+			? await getPlaywrightProjectNames(testsRoot).catch(() => [])
+			: [];
+
 	return new Promise((resolve) => {
+		ensureProjectDeps(projectId, { onLog });
+
 		const ssDir = path.join(os.tmpdir(), `plum-ss-${runId}-${laneId}-${Date.now()}`);
 		fs.mkdirSync(ssDir, { recursive: true });
+		const reportFile = path.join(REPORTS_DIR, `run-${runId}-${laneId}-${Date.now()}.json`);
+
+		const cmd = buildRunCommand({
+			framework,
+			testsRoot,
+			reportFile,
+			tag,
+			browser,
+			workers,
+			retries,
+			shard,
+			projectNames
+		});
 
 		const env = {
 			...process.env,
 			...loadProjectEnv(projectId),
-			IS_HEADLESS: 'true', // server runs have no display — never headed
-			TAG: tag,
-			TRIGGER: TRIGGER_REMOTE,
+			...cmd.env,
+			IS_HEADLESS: 'true', // server runs have no display, never headed
 			BROWSER: browser,
-			REPORT_RUNNERS: String(workers),
-			PLUM_MODE: PLUM_MODE_NODE,
-			PLUM_SS_DIR: ssDir,
-			TESTS_ROOT: resolveTestsRoot(projectId),
-			PLUM_PROJECT_ID: String(projectId)
+			PLUM_SS_DIR: ssDir
 		};
-		if (Number(workers) > 1) env.PARALLEL = String(workers);
-		if (testRunId) env.TEST_RUN_ID = testRunId;
 		if (baseUrl) env.BASE_URL = baseUrl;
 
-		const proc = spawn('npm', ['run', 'test'], { env, shell: true, cwd: BACKEND_DIR });
+		onLog(`> ${describeCommand(cmd)}\n`);
+		// No shell: the runner CLI is spawned as node + argv, so nothing in a tag or
+		// browser name can be interpreted as a command.
+		const proc = spawn(cmd.command, cmd.args, { env, cwd: cmd.cwd });
 		handles(runId).procs.add(proc);
 
 		const ssPoller = startRRwebPoller(ssDir, (batch) => {
@@ -155,7 +251,7 @@ function spawnBuiltInAttempt({
 			ssPoller.stop();
 			fs.rm(ssDir, { recursive: true, force: true }, () => {});
 			handles(runId).procs.delete(proc);
-			resolve({ code, raw: readCucumberReportFile() });
+			resolve({ code, raw: readReportFile(reportFile) });
 		});
 	});
 }
@@ -166,8 +262,12 @@ function spawnBuiltInAttempt({
 
 async function runBuiltIn(run, io, emit) {
 	const startedAt = Date.now();
-	const { maxRetries } = await settingsService.getProject(run.projectId);
+	const { maxRetries, framework } = await settingsService.getProject(run.projectId);
+	const { nativeRetries, loopRetries } = splitRetries(framework, maxRetries);
 	const laneId = BUILT_IN_RUNNER_ID;
+	// Playwright counts its own attempts inside one process, so they come from the
+	// report rather than from Plum's re-run loop.
+	let nativeAttempts = null;
 
 	let logBuffer = '';
 	const onLog = (text) => {
@@ -175,28 +275,32 @@ async function runBuiltIn(run, io, emit) {
 		emit(SOCKET_EVENTS.BG_RUN_LANE_LOG, { laneId, log: text });
 	};
 
+	const selectedIds = await getTestIdsForTag(run.projectId, run.tag);
 	emit(SOCKET_EVENTS.BG_RUN_LANES_INIT, {
-		lanes: [
-			{ id: laneId, name: 'Built-in', testCount: getTestIdsForTag(run.projectId, run.tag).length }
-		]
+		lanes: [{ id: laneId, name: 'Built-in', testCount: selectedIds.length }]
 	});
 
 	const { code, rawJson, attempts } = await runWithRetries({
-		maxRetries,
+		maxRetries: loopRetries,
 		spawnAttempt: async (tagOverride) => {
 			const { code, raw } = await spawnBuiltInAttempt({
 				runId: run.id,
 				projectId: run.projectId,
+				framework,
 				laneId,
 				tag: tagOverride ?? run.tag,
 				workers: run.workers,
 				browser: run.browser,
+				retries: nativeRetries,
 				testRunId: run.testRunId,
 				baseUrl: run.baseUrl,
 				onLog,
 				io
 			});
-			return { code, rawJson: raw ? JSON.parse(raw) : [] };
+			const parsed = parseLaneReport(framework, raw);
+			if (parsed.attempts) nativeAttempts = parsed.attempts;
+			warnIfNothingRan(parsed.rawJson, tagOverride ?? run.tag, onLog, framework, !!raw, code);
+			return { code, rawJson: parsed.rawJson };
 		},
 		onLog
 	});
@@ -220,7 +324,8 @@ async function runBuiltIn(run, io, emit) {
 		testRunId: run.testRunId ?? null,
 		logs: logBuffer || null,
 		duration: Date.now() - startedAt,
-		attempts
+		// Playwright's own retry counts win: Plum's loop did not run for it.
+		attempts: nativeAttempts ?? attempts
 	});
 
 	io && io.emit(SOCKET_EVENTS.REPORT_READY);
@@ -232,12 +337,45 @@ async function runBuiltIn(run, io, emit) {
 // Distributed (multi-runner) path
 // ---------------------------------------------------------------------------
 
-async function runDistributed(run, io, emit, laneInfos, chunks) {
+/**
+ * How the selected tests are divided between lanes, one entry per lane.
+ *
+ * Playwright shards natively: every lane runs the same selection with
+ * `--shard=k/N` and Playwright decides the split, balancing by test count instead
+ * of Plum's round-robin over ids. Cucumber has no equivalent, so each lane gets an
+ * explicit tag expression for its own slice.
+ *
+ * `ids` is only used to name tests in a synthetic report when a lane never reports
+ * back. A shard lane cannot know which tests were its own, so it claims the whole
+ * selection: over-stated, but clearly attributed to that runner rather than lost.
+ */
+function planLanes(framework, tag, allIds, laneCount) {
+	if (framework === FRAMEWORK.PLAYWRIGHT) {
+		const total = Math.min(laneCount, allIds.length);
+		return Array.from({ length: total }, (_, i) => ({
+			tag,
+			shard: { index: i + 1, total },
+			// Playwright balances shards itself; an even division is what it aims for
+			// and is only ever used for the lane's progress label.
+			testCount: Math.floor(allIds.length / total) + (i < allIds.length % total ? 1 : 0),
+			ids: allIds
+		}));
+	}
+	return chunkTests(allIds, laneCount).map((ids) => ({
+		tag: buildTagExpression(ids),
+		shard: null,
+		testCount: ids.length,
+		ids
+	}));
+}
+
+async function runDistributed(run, io, emit, laneInfos, lanePlan) {
 	const startedAt = Date.now();
-	const { maxRetries } = await settingsService.getProject(run.projectId);
+	const { maxRetries, framework } = await settingsService.getProject(run.projectId);
+	const retrySplit = splitRetries(framework, maxRetries);
 
 	emit(SOCKET_EVENTS.BG_RUN_LANES_INIT, {
-		lanes: laneInfos.map((l, i) => ({ id: l.id, name: l.name, testCount: chunks[i].length }))
+		lanes: laneInfos.map((l, i) => ({ id: l.id, name: l.name, testCount: lanePlan[i].testCount }))
 	});
 
 	const total = laneInfos.length;
@@ -246,8 +384,29 @@ async function runDistributed(run, io, emit, laneInfos, chunks) {
 	const laneLogs = {};
 	for (const l of laneInfos) laneLogs[l.id] = '';
 
+	const settled = await Promise.allSettled(
+		laneInfos.map((lane, i) =>
+			runLane(run, io, emit, lane, lanePlan[i], retrySplit, framework, laneLogs)
+		)
+	);
+	// runLane resolves on every failure it knows about, so a rejection here is an
+	// unforeseen one. Absorb it per lane: one lane throwing must not discard the
+	// work every other lane already finished.
 	const laneResults = await Promise.all(
-		laneInfos.map((lane, i) => runLane(run, io, emit, lane, chunks[i], maxRetries, laneLogs))
+		settled.map(async (outcome, i) => {
+			if (outcome.status === 'fulfilled') return outcome.value;
+			const reason = outcome.reason?.message ?? 'lane failed unexpectedly';
+			const log = `\n[ERROR] ${reason}\n`;
+			laneLogs[laneInfos[i].id] += log;
+			emit(SOCKET_EVENTS.BG_RUN_LANE_LOG, { laneId: laneInfos[i].id, log });
+			const parsed = await laneReport(framework, null, {
+				projectId: run.projectId,
+				laneName: laneInfos[i].name,
+				ids: lanePlan[i].ids,
+				reason
+			});
+			return { code: 1, content: JSON.stringify(parsed.rawJson), attempts: parsed.attempts };
+		})
 	);
 
 	let overallCode = 0;
@@ -284,9 +443,9 @@ async function runDistributed(run, io, emit, laneInfos, chunks) {
 	return { code: saved.status === REPORT_STATUS.PASS ? 0 : 1, reportId: saved.id };
 }
 
-function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
+function runLane(run, io, emit, lane, plan, retrySplit, framework, laneLogs) {
 	const laneId = lane.id;
-	const chunkTag = buildTagExpression(chunkIds);
+	const chunkTag = plan.tag;
 	const onLog = (log) => {
 		laneLogs[laneId] += log;
 		emit(SOCKET_EVENTS.BG_RUN_LANE_LOG, { laneId, log });
@@ -298,26 +457,27 @@ function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
 					spawnBuiltInAttempt({
 						runId: run.id,
 						projectId: run.projectId,
+						framework,
 						laneId,
 						tag: currentTag,
 						workers: run.workers,
 						browser: run.browser,
+						retries: retrySplit.nativeRetries,
+						shard: plan.shard,
 						testRunId: run.testRunId,
 						baseUrl: run.baseUrl,
 						onLog,
 						io
-					}).then(({ code, raw }) => ({
-						code,
-						rawJson: JSON.parse(
-							raw ??
-								makeSyntheticFailReport(
-									run.projectId,
-									lane.name,
-									chunkIds,
-									'process exited with error'
-								)
-						)
-					}))
+					}).then(async ({ code, raw }) => {
+						const parsed = await laneReport(framework, raw, {
+							projectId: run.projectId,
+							laneName: lane.name,
+							ids: plan.ids,
+							reason: 'process exited with error'
+						});
+						warnIfNothingRan(parsed.rawJson, currentTag, onLog, framework, !!raw, code);
+						return { code, rawJson: parsed.rawJson, attempts: parsed.attempts };
+					})
 			: (currentTag) =>
 					new Promise((resolve) => {
 						runnerService.dispatchAndPoll(
@@ -327,22 +487,21 @@ function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
 								tags: currentTag,
 								browser: run.browser,
 								workers: run.workers,
+								shard: plan.shard,
 								baseUrl: run.baseUrl
 							},
 							onLog,
-							(code, content) =>
-								resolve({
-									code,
-									rawJson: JSON.parse(
-										content ??
-											makeSyntheticFailReport(
-												run.projectId,
-												lane.name,
-												chunkIds,
-												'could not fetch report from runner'
-											)
-									)
-								}),
+							async (code, content) => {
+								// A node runs the project's own runner, so its report arrives in
+								// that framework's format and needs the same adaptation.
+								const parsed = await laneReport(framework, content, {
+									projectId: run.projectId,
+									laneName: lane.name,
+									ids: plan.ids,
+									reason: 'could not fetch report from runner'
+								});
+								resolve({ code, rawJson: parsed.rawJson, attempts: parsed.attempts });
+							},
 							(batch) =>
 								io &&
 								io.emit(SOCKET_EVENTS.BG_RUN_LANE_RRWEB_BATCH, {
@@ -356,7 +515,9 @@ function runLane(run, io, emit, lane, chunkIds, maxRetries, laneLogs) {
 					});
 
 	return runWithRetries({
-		maxRetries,
+		// Zero for Playwright, whose own process already retried; the project's
+		// max-retries for Cucumber, which cannot report its attempts.
+		maxRetries: retrySplit.loopRetries,
 		spawnAttempt: (t) => attempt(t ?? chunkTag),
 		onLog
 	}).then(({ code, rawJson, attempts }) => ({
@@ -390,7 +551,7 @@ async function maybeNotify(run, report) {
 }
 
 // Runs one queued job (a plain RunQueue row) to completion and resolves with
-// { code, reportId, note? }. Takes only plain fields — no closure — so the queue
+// { code, reportId, note? }. Takes only plain fields (no closure) so the queue
 // can re-dispatch a persisted row after a server restart.
 async function execute(run, io) {
 	handles(run.id); // register before any await so an early cancel is seen
@@ -402,14 +563,14 @@ async function execute(run, io) {
 		: null;
 	const emit = (event, extra) => roomIo && roomIo.emit(event, { runId: run.id, ...extra });
 
-	// Drop runner ids that no longer exist — a stale selection or a runner
+	// Drop runner ids that no longer exist: a stale selection or a runner
 	// deleted while this job sat in the queue must not wedge it.
 	const validated = [];
 	for (const id of run.runnerIds) {
 		if (id === BUILT_IN_RUNNER_ID || (await runnerService.getById(id))) validated.push(id);
 	}
 	if (validated.length === 0) {
-		return { code: 0, reportId: null, note: 'Target runner no longer exists — run skipped.' };
+		return { code: 0, reportId: null, note: 'Target runner no longer exists, run skipped.' };
 	}
 
 	// Coarse start signal stays global for the cross-project run bar; the client
@@ -434,14 +595,15 @@ async function execute(run, io) {
 		const isSingleBuiltIn = validated.length === 1 && validated[0] === BUILT_IN_RUNNER_ID;
 		if (isSingleBuiltIn) return await runBuiltIn(run, roomIo, emit);
 
-		const allIds = getTestIdsForTag(run.projectId, run.tag);
-		const chunks = chunkTests(allIds, validated.length);
-		// Surplus runners beyond the non-empty chunk count would each re-run the
-		// full tag expression and duplicate scenarios — drop them.
-		const activeIds = validated.slice(0, chunks.length);
+		const allIds = await getTestIdsForTag(run.projectId, run.tag);
+		const { framework } = await settingsService.getProject(run.projectId);
+		const lanePlan = planLanes(framework, run.tag, allIds, validated.length);
+		// Surplus runners beyond the plan would each re-run the full selection and
+		// duplicate scenarios: drop them.
+		const activeIds = validated.slice(0, lanePlan.length);
 		if (activeIds.length === 0) {
 			emit(SOCKET_EVENTS.BG_RUN_LOG, { log: 'No tests found matching the selected tag.\n' });
-			return { code: 0, reportId: null, note: 'No tests matched — run skipped.' };
+			return { code: 0, reportId: null, note: 'No tests matched, run skipped.' };
 		}
 		const laneInfos = await Promise.all(
 			activeIds.map(async (id) => {
@@ -450,7 +612,7 @@ async function execute(run, io) {
 				return { id, name: r?.name ?? id, dbId: r?.id ?? null };
 			})
 		);
-		return await runDistributed(run, roomIo, emit, laneInfos, chunks);
+		return await runDistributed(run, roomIo, emit, laneInfos, lanePlan);
 	} finally {
 		inflight.delete(run.id);
 	}

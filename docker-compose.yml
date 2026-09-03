@@ -28,11 +28,19 @@ services:
       - '${BACKEND_PORT:-3001}:3001'
     environment:
       DATABASE_URL: 'postgresql://plum:plum@postgres:5432/plum'
+      # Compose does not pass host env through, so an origin pin set by the
+      # operator would otherwise never reach the container.
+      PLUM_ALLOWED_ORIGINS: '${PLUM_ALLOWED_ORIGINS:-}'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     volumes:
-      - ./backend/reports:/app/reports
-      - ./backend/tests:/app/tests:rw
+      # Both are remapped to absolute cwd paths by docker-compose.override.yml when
+      # the stack is started through `plum server start`. They matter here for a
+      # contributor running `npm run docker:up`, which writes no override: without
+      # the projects mount the test folders only exist inside the container, so they
+      # cannot be edited from the checkout and are lost on the next rebuild.
+      - ./backend/data:/app/data
+      - ./projects:/app/projects
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,10 +48,17 @@ services:
       - app-network
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        # Optional: bakes the API URL in as the image's default. Left unset, the
+        # frontend entrypoint applies VITE_API_URL from the environment on every
+        # start (docker-compose.override.yml supplies it), so the API URL can
+        # change without rebuilding.
+        VITE_API_URL: '${VITE_API_URL:-}'
     restart: unless-stopped
     ports:
-      - '${FRONTEND_PORT:-3002}:5173'
+      - '${FRONTEND_PORT:-3002}:3002'
     depends_on:
       - backend
     networks:

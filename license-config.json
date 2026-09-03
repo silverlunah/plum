@@ -2,7 +2,7 @@
 	"license": "./resources/mit-license.txt",
 	"ignoreDefaultIgnores": false,
 	"licenseFormats": {
-		"js|ts|mjs|css": {
+		"js|cjs|ts|mjs|css": {
 			"prepend": "/*",
 			"append": " */\n",
 			"eachLine": {
@@ -36,6 +36,12 @@
 		"**/prisma/migrations/**",
 		"**/prisma/schema.prisma",
 		"**/.npmignore",
-		"**/.npmrc"
+		"**/.npmrc",
+		"**/.svelte-kit/**",
+		"**/build/**",
+		"**/reports/**",
+		"**/logs/**",
+		"**/.plum-jobs/**",
+		"**/node_modules/**"
 	]
 }

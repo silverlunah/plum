@@ -7,7 +7,7 @@ const { randomUUID } = require('crypto');
 const prisma = require('./prisma');
 const runExecutorService = require('./runExecutorService');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
-const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { isBrowser, DEFAULT_BROWSER } = require('../constants/defaults');
 const { SOCKET_EVENTS } = require('../constants/socketEvents');
 const { JOB_STATUS, CANCEL_CODE } = require('../constants/jobStatus');
 
@@ -57,13 +57,13 @@ function meta(job) {
 	return {
 		tag: job.tag ?? '',
 		workers: Number(job.workers) > 1 ? Number(job.workers) : 1,
-		browser: job.browser ?? DEFAULT_BROWSER,
+		browser: isBrowser(job.browser) ? job.browser : DEFAULT_BROWSER,
 		startedBy: job.startedBy ?? null
 	};
 }
 
 // ---------------------------------------------------------------------------
-// Pump — decides which queued rows may start
+// Pump: decides which queued rows may start
 // ---------------------------------------------------------------------------
 
 let pumping = false;
@@ -179,7 +179,7 @@ async function enqueue(job) {
 			status: QUEUED,
 			tag: job.tag ?? '',
 			workers: Number(job.workers) > 1 ? Number(job.workers) : 1,
-			browser: job.browser ?? DEFAULT_BROWSER,
+			browser: isBrowser(job.browser) ? job.browser : DEFAULT_BROWSER,
 			runnerIds: runnerIds.join(','),
 			testRunId: job.testRunId ?? null,
 			baseUrl: job.baseUrl ?? null,
@@ -228,7 +228,7 @@ async function cancel(id, projectId) {
 		return true;
 	}
 
-	// Running — the executor's own promise then resolves with code 130 and
+	// Running: the executor's own promise then resolves with code 130 and
 	// finalise() emits bg-run-done.
 	await runExecutorService.cancel(id);
 	return true;
@@ -256,7 +256,7 @@ async function getJob(id, projectId) {
 	};
 }
 
-// Not filtered by project — the bottom bar shows every project's active runs for
+// Not filtered by project: the bottom bar shows every project's active runs for
 // awareness. The /active-runs route redacts the ones the caller can't reach.
 async function listActive() {
 	const rows = await prisma.runQueue.findMany({
@@ -280,7 +280,7 @@ async function listActive() {
 
 async function init(io) {
 	setSocketIO(io);
-	// Running rows can only be stale here — this process just started, so their
+	// Running rows can only be stale here: this process just started, so their
 	// child processes died with the previous one.
 	await prisma.runQueue.updateMany({
 		where: { status: RUNNING },

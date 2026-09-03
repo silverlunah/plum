@@ -41,7 +41,7 @@
 	let suites = [];
 	let search = '';
 	let expandedSteps = new Set();
-	// Suites are expanded by default — this tracks the exceptions (collapsed ones).
+	// Suites are expanded by default, this tracks the exceptions (collapsed ones).
 	let collapsedSuites = new Set();
 	let copiedIds = new Set();
 	const copyTimers = new Map();

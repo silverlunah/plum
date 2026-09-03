@@ -4,7 +4,7 @@
  */
 
 import { writable, get } from 'svelte/store';
-import { BROWSERS, TRIGGER_TYPES } from '$lib/constants';
+import { BROWSERS, TRIGGER_TYPES, BUILTIN_RUNNER_ID } from '$lib/constants';
 import { SOCKET_EVENTS } from '$lib/socketEvents';
 import { MANUAL_RUN_LABEL } from '$lib/copy/runners';
 import { auth } from './auth';
@@ -37,7 +37,7 @@ export function makeRunEntry({ projectId = null, projectName = '', kind, label, 
 			runTitle: label,
 			startedBy: meta?.startedBy ?? null
 		},
-		// { [laneId]: { [workerId]: { events: [] } } } — always keyed by laneId
+		// { [laneId]: { [workerId]: { events: [] } } }, always keyed by laneId
 		// even for a single-runner run, so the live view's Runner/Worker tabs
 		// don't need a separate code path for that case.
 		rrwebByLane: {}
@@ -62,17 +62,33 @@ export const runnerConfig = writable({
 	workers: 1,
 	testID: '',
 	browser: BROWSERS[0].id,
-	selectedRunners: ['built-in']
+	selectedRunners: [BUILTIN_RUNNER_ID]
 });
 
 export const panelExpanded = writable(false);
 
-export const builtInEnabled = writable(true);
+// Assume the built-in runner is off until the server says otherwise: defaulting
+// to `true` and correcting on an async fetch let a disabled built-in runner get
+// pre-selected in the window before the fetch resolved.
+export const builtInEnabled = writable(false);
+
+// The runner ids that should actually be selected, given what was saved, whether
+// the built-in runner is enabled, and which nodes currently exist. Built-in is
+// only a fallback when it's enabled or when there is genuinely nothing else to
+// run on — never just because a saved selection went stale.
+export function resolveSelectedRunners(selected, builtInOn, nodeIds) {
+	const valid = new Set([...(builtInOn ? [BUILTIN_RUNNER_ID] : []), ...nodeIds]);
+	const kept = selected.filter((id) => valid.has(id));
+	if (kept.length > 0) return kept;
+	if (builtInOn) return [BUILTIN_RUNNER_ID];
+	if (nodeIds.length > 0) return [nodeIds[0]];
+	return [BUILTIN_RUNNER_ID];
+}
 
 export const reportsVersion = writable(0);
 export const runsVersion = writable(0);
 
-// crypto.randomUUID exists only in a secure context — a production install
+// crypto.randomUUID exists only in a secure context, a production install
 // served over plain http:// on a bare IP doesn't get it. getRandomValues does.
 function newRunId() {
 	if (crypto.randomUUID) return crypto.randomUUID();
@@ -131,7 +147,7 @@ export function cancelRun(id) {
 	if (s && id) s.emit(SOCKET_EVENTS.CANCEL_TEST, { runId: id });
 }
 
-// Cron runs get a generated run id, not the task name — match one by kind + label.
+// Cron runs get a generated run id, not the task name, match one by kind + label.
 export function findActiveCronRun(runs, taskName) {
 	return Object.values(runs).find(
 		(r) => r.kind === TRIGGER_TYPES.CRON && r.label === taskName && r.status !== 'done'

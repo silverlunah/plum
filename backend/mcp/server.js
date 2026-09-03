@@ -8,7 +8,7 @@
  *
  * Exposes Plum's Test Repository and test runner to any MCP-compatible AI client
  * over Streamable HTTP (see routes/mcp.routes.js for the transport wiring). Tool
- * handlers call the same services the REST routes use directly — this module
+ * handlers call the same services the REST routes use directly, this module
  * runs in-process inside the Plum backend, not as a separate subprocess.
  */
 
@@ -91,7 +91,7 @@ function summariseReport(report) {
 
 /**
  * Builds a fresh McpServer with all Plum tools registered, closing over the
- * authenticated user for this request (see routes/mcp.routes.js — a new
+ * authenticated user for this request (see routes/mcp.routes.js, a new
  * server/transport pair is created per request in stateless mode).
  */
 function createMcpServer({ userId, userName, projectId, role, viaMcp, apiKeyKind }) {
@@ -100,7 +100,7 @@ function createMcpServer({ userId, userName, projectId, role, viaMcp, apiKeyKind
 		version: '1.0.0'
 	});
 
-	// Org-wide tools need the instance key — a per-project key stays scoped even
+	// Org-wide tools need the instance key, a per-project key stays scoped even
 	// when the owner holds it.
 	const assertAccountAdmin = () => {
 		if (apiKeyKind !== 'instance') {
@@ -440,7 +440,7 @@ function createMcpServer({ userId, userName, projectId, role, viaMcp, apiKeyKind
 			if (!detail) throw new Error('Report not found');
 			const summary = summariseReport(detail);
 			const lines = [
-				`Report #${summary.id} — ${summary.status?.toUpperCase()}`,
+				`Report #${summary.id}, ${summary.status?.toUpperCase()}`,
 				`Date: ${summary.createdAt}`,
 				`Browser: ${summary.browser}`,
 				`Tags: ${summary.tags || 'all tests'}`,
@@ -464,7 +464,7 @@ function createMcpServer({ userId, userName, projectId, role, viaMcp, apiKeyKind
 	server.tool(
 		'get_report_scenario_detail',
 		[
-			'Get full per-scenario, per-step detail for a Plum test report — the data needed to diagnose',
+			'Get full per-scenario, per-step detail for a Plum test report, the data needed to diagnose',
 			"and self-heal a failing test: every step's status, duration, and full error message.",
 			'',
 			'Use get_report_logs for the raw test-run stdout/stderr.'
@@ -538,10 +538,7 @@ function createMcpServer({ userId, userName, projectId, role, viaMcp, apiKeyKind
 		{
 			format: z.enum(['csv', 'json']).describe('csv or json'),
 			scope: z.enum(['all', 'suite', 'run']).optional().describe('Default: all'),
-			id: z
-				.string()
-				.optional()
-				.describe('Suite or run id — required when scope is "suite" or "run"')
+			id: z.string().optional().describe('Suite or run id, required when scope is "suite" or "run"')
 		},
 		async ({ format, scope = 'all', id }) => {
 			if ((scope === 'suite' || scope === 'run') && !id) {
@@ -574,7 +571,7 @@ function createMcpServer({ userId, userName, projectId, role, viaMcp, apiKeyKind
 	);
 
 	// -- Account administration ------------------------------------------------
-	// Deleting a user or a project is deliberately not here — a human does that
+	// Deleting a user or a project is deliberately not here, a human does that
 	// in the UI.
 
 	const asJson = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] });

@@ -38,7 +38,7 @@ const API_URL = process.env.PLUM_API_URL || 'http://localhost:3001';
 const PLUM_BIN = path.resolve(fileURLToPath(import.meta.url), '../../../bin/plum.js');
 function plumNode(...args) {
 	// The spawned `plum node start` gets all its flags here, so it never prompts
-	// for the registration secret — pass it, or node registration 401s.
+	// for the registration secret, pass it, or node registration 401s.
 	const env = NODE_SECRET ? { ...process.env, PLUM_NODE_SECRET: NODE_SECRET } : process.env;
 	execFileSync(process.execPath, [PLUM_BIN, 'node', ...args], { stdio: 'inherit', env });
 }
@@ -108,7 +108,7 @@ async function deleteRunner(id) {
 
 /**
  * Stops/restarts a runner over the network via the primary's control routes,
- * which hit the runner's own /api/shutdown|restart endpoints — works for any
+ * which hit the runner's own /api/shutdown|restart endpoints, works for any
  * reachable runner, not just ones whose process this manager owns by PID.
  */
 async function controlRunner(id, action) {
@@ -195,7 +195,7 @@ async function runAction(r) {
 		{ value: 'back', label: pc.dim('← Back') }
 	);
 
-	const action = await clack.select({ message: `${r.name} — ${r.url}`, options });
+	const action = await clack.select({ message: `${r.name}, ${r.url}`, options });
 	if (cancelled(action) || action === 'back') return;
 
 	if (action === 'restart') {
@@ -230,7 +230,7 @@ async function runAction(r) {
 		}
 	} else if (action === 'delete') {
 		const confirmed = await clack.confirm({
-			message: `Delete "${r.name}" — its process, local config, and primary registration?`,
+			message: `Delete "${r.name}", its process, local config, and primary registration?`,
 			initialValue: false
 		});
 		if (cancelled(confirmed) || !confirmed) return;
@@ -287,7 +287,7 @@ async function addNode() {
 	if (cancelled(mode)) return;
 
 	const name = await clack.text({
-		message: 'Node name or alias — call it whatever you like',
+		message: 'Node name or alias, call it whatever you like',
 		placeholder: suggested,
 		defaultValue: suggested
 	});
@@ -297,7 +297,7 @@ async function addNode() {
 	if (mode === 'production') {
 		primary = await clack.text({
 			message:
-				'Public URL or IP of the Plum backend / API — include the scheme (http:// or https://). ' +
+				'Public URL or IP of the Plum backend / API, include the scheme (http:// or https://). ' +
 				'Add the :port unless a reverse proxy terminates it on 80/443.',
 			placeholder: 'https://plum.example.com'
 		});
@@ -305,7 +305,7 @@ async function addNode() {
 		primary = String(primary).trim();
 	} else {
 		const bp = await clack.text({
-			message: 'Port your Plum backend runs on (default 3001 — run `docker compose ps` if unsure)',
+			message: 'Port your Plum backend runs on (default 3001, run `docker compose ps` if unsure)',
 			placeholder: '3001',
 			defaultValue: '3001'
 		});
@@ -314,8 +314,7 @@ async function addNode() {
 	}
 
 	const port = await clack.text({
-		message:
-			'Port this node will listen on — any process already using it will be stopped on start',
+		message: 'Port this node will listen on, any process already using it will be stopped on start',
 		placeholder: '9001',
 		defaultValue: '9001'
 	});
@@ -333,19 +332,19 @@ async function addNode() {
 	if (mode === 'production') {
 		url = await clack.text({
 			message:
-				'Public URL or IP the Plum server uses to reach this node — include the scheme ' +
+				'Public URL or IP the Plum server uses to reach this node, include the scheme ' +
 				'(http:// or https://). Add the :port unless a reverse proxy terminates it on 80/443.',
 			placeholder: `https://${name}.example.com`
 		});
 		if (cancelled(url)) return;
 		url = String(url).trim().replace(/\/+$/, '');
 	} else {
-		// Local primary runs in Docker — it reaches a host node via
+		// Local primary runs in Docker, it reaches a host node via
 		// host.docker.internal, not localhost.
 		url = `http://host.docker.internal:${port}`;
 	}
 
-	// Exactly `plum node start` — register, start on this machine, verify,
+	// Exactly `plum node start`, register, start on this machine, verify,
 	// persist. One code path for both entry points.
 	try {
 		plumNode(
@@ -365,22 +364,22 @@ async function addNode() {
 			'chromium'
 		);
 	} catch {
-		clack.log.warn(pc.yellow('Node start reported a problem — see the output above.'));
+		clack.log.warn(pc.yellow('Node start reported a problem, see the output above.'));
 	}
 }
 
 async function main() {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Manage Nodes  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Manage Nodes  ')));
 
 	if (!NODE_SECRET) {
 		clack.log.warn('No PLUM_NODE_SECRET found for this machine.');
 		const entered = await clack.text({
-			message: 'Paste it — Settings → Runners → Registration secret (or `plum server` prints it)',
+			message: 'Paste it, Settings → Runners → Registration secret (or `plum server` prints it)',
 			placeholder: 'leave blank to continue read-only'
 		});
 		if (!cancelled(entered)) NODE_SECRET = cleanSecret(entered);
 		if (!NODE_SECRET) {
-			clack.log.info('Continuing read-only — register / restart / delete will be rejected.');
+			clack.log.info('Continuing read-only, register / restart / delete will be rejected.');
 		}
 	}
 

@@ -67,6 +67,15 @@ ${stepType}('${stepText}', async () => {
 `;
 }
 
+function generateStepFileInline(stepType, stepText) {
+	return `import { ${stepType} } from '@cucumber/cucumber';
+
+${stepType}('${stepText}', async () => {
+\t// TODO: implement
+});
+`;
+}
+
 function appendMethodToPage(filePath, methodName) {
 	let content = fs.readFileSync(filePath, 'utf8');
 	const method = `\n\tstatic async ${methodName}() {\n\t\t// TODO: implement\n\t}\n`;
@@ -77,31 +86,35 @@ function appendMethodToPage(filePath, methodName) {
 
 function appendStepToFile(filePath, stepType, stepText, methodName, pageClassName, pageBaseName) {
 	let content = fs.readFileSync(filePath, 'utf8');
+	content = ensureCucumberImport(content, stepType);
 
-	// Update @cucumber/cucumber import to include the new step type if missing
-	const cucumberImportMatch = content.match(/import\s*\{([^}]+)\}\s*from\s*'@cucumber\/cucumber';/);
-	if (cucumberImportMatch) {
-		const existing = cucumberImportMatch[1].split(',').map((s) => s.trim());
-		if (!existing.includes(stepType)) {
-			const updated = [...existing, stepType].join(', ');
-			content = content.replace(
-				cucumberImportMatch[0],
-				`import { ${updated} } from '@cucumber/cucumber';`
-			);
+	// Add page import if missing, and call the page method. Passing a null
+	// pageClassName inlines a TODO body instead (the "None" choice).
+	let body = '\t// TODO: implement';
+	if (pageClassName) {
+		const pageImportLine = `import { ${pageClassName} } from '../pages/${pageBaseName}';`;
+		if (!content.includes(pageImportLine)) {
+			const lastImportIdx = content.lastIndexOf('\nimport ');
+			const insertAt = content.indexOf('\n', lastImportIdx + 1) + 1;
+			content = content.slice(0, insertAt) + pageImportLine + '\n' + content.slice(insertAt);
 		}
+		body = `\tawait ${pageClassName}.${methodName}();`;
 	}
 
-	// Add page import if missing
-	const pageImportLine = `import { ${pageClassName} } from '../pages/${pageBaseName}';`;
-	if (!content.includes(pageImportLine)) {
-		const lastImportIdx = content.lastIndexOf('\nimport ');
-		const insertAt = content.indexOf('\n', lastImportIdx + 1) + 1;
-		content = content.slice(0, insertAt) + pageImportLine + '\n' + content.slice(insertAt);
-	}
-
-	const stepBlock = `\n${stepType}('${stepText}', async () => {\n\tawait ${pageClassName}.${methodName}();\n});\n`;
+	const stepBlock = `\n${stepType}('${stepText}', async () => {\n${body}\n});\n`;
 	content = content.trimEnd() + '\n' + stepBlock;
 	fs.writeFileSync(filePath, content, 'utf8');
+}
+
+function ensureCucumberImport(content, stepType) {
+	const match = content.match(/import\s*\{([^}]+)\}\s*from\s*'@cucumber\/cucumber';/);
+	if (!match) return content;
+	const existing = match[1].split(',').map((s) => s.trim());
+	if (existing.includes(stepType)) return content;
+	return content.replace(
+		match[0],
+		`import { ${[...existing, stepType].join(', ')} } from '@cucumber/cucumber';`
+	);
 }
 
 /* ------------------------------------------------------------------ */
@@ -109,7 +122,7 @@ function appendStepToFile(filePath, stepType, stepText, methodName, pageClassNam
 /* ------------------------------------------------------------------ */
 
 async function main() {
-	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum — Create Step  ')));
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Create Step  ')));
 
 	// 1. Step type
 	const stepTypeChoice = await clack.select({
@@ -181,7 +194,8 @@ async function main() {
 		message: 'Which page does this step use?',
 		options: [
 			{ value: '__new__', label: pc.green('+ New Page') },
-			...existingPages.map((f) => ({ value: f, label: f }))
+			...existingPages.map((f) => ({ value: f, label: f })),
+			{ value: '__none__', label: 'None — inline the step' }
 		]
 	});
 	if (clack.isCancel(pageChoice)) {
@@ -189,12 +203,12 @@ async function main() {
 		process.exit(0);
 	}
 
-	let pageFileName;
+	let pageFileName = null;
 	if (pageChoice === '__new__') {
 		const newPageName = await clack.text({
 			message: 'Page name',
 			placeholder: 'home',
-			hint: '"Page.ts" will be appended — e.g. "home" → HomePage.ts',
+			hint: '"Page.ts" will be appended: e.g. "home" → HomePage.ts',
 			validate: (v) => (!v.trim() ? 'Page name is required' : undefined)
 		});
 		if (clack.isCancel(newPageName)) {
@@ -202,26 +216,30 @@ async function main() {
 			process.exit(0);
 		}
 		pageFileName = toPageFileName(newPageName);
-	} else {
+	} else if (pageChoice !== '__none__') {
 		pageFileName = pageChoice;
 	}
 
-	const pageClassName = pageFileName.replace('.ts', '');
-	const pageBaseName = pageFileName.replace('.ts', '');
+	const pageClassName = pageFileName ? pageFileName.replace('.ts', '') : null;
+	const pageBaseName = pageClassName;
 	const methodName = toMethodName(stepText);
 
 	const s = clack.spinner();
 	s.start('Generating files...');
 
-	// Handle page file
-	const pageFilePath = path.join(pagesPath, pageFileName);
-	fs.mkdirSync(pagesPath, { recursive: true });
-	if (!fs.existsSync(pageFilePath)) {
-		fs.writeFileSync(pageFilePath, generatePageFile(pageClassName, methodName), 'utf8');
-		s.stop(pc.green(`✓ Created ${pageFileName}`));
+	// Handle page file (skipped entirely for the "None" choice)
+	if (pageFileName) {
+		const pageFilePath = path.join(pagesPath, pageFileName);
+		fs.mkdirSync(pagesPath, { recursive: true });
+		if (!fs.existsSync(pageFilePath)) {
+			fs.writeFileSync(pageFilePath, generatePageFile(pageClassName, methodName), 'utf8');
+			s.stop(pc.green(`✓ Created ${pageFileName}`));
+		} else {
+			appendMethodToPage(pageFilePath, methodName);
+			s.stop(pc.cyan(`↳ Added ${methodName}() to ${pageFileName}`));
+		}
 	} else {
-		appendMethodToPage(pageFilePath, methodName);
-		s.stop(pc.cyan(`↳ Added ${methodName}() to ${pageFileName}`));
+		s.stop(pc.green('✓ Ready'));
 	}
 
 	// Handle step definition file
@@ -230,7 +248,9 @@ async function main() {
 	if (!fs.existsSync(stepFilePath)) {
 		fs.writeFileSync(
 			stepFilePath,
-			generateStepFile(stepType, stepText, methodName, pageClassName, pageBaseName),
+			pageFileName
+				? generateStepFile(stepType, stepText, methodName, pageClassName, pageBaseName)
+				: generateStepFileInline(stepType, stepText),
 			'utf8'
 		);
 		clack.log.success(pc.green(`Created ${stepFileName}`));
@@ -242,13 +262,19 @@ async function main() {
 	clack.note(
 		[
 			`${pc.dim('Step:')}  ${pc.white(`${stepType}('${stepText}')`)}`,
-			`${pc.dim('Page:')}  ${pc.white(`${pageClassName}.${methodName}()`)}`,
-			`${pc.dim('Files:')} ${pc.white(stepFileName)} ${pc.dim('+')} ${pc.white(pageFileName)}`
+			pageFileName
+				? `${pc.dim('Page:')}  ${pc.white(`${pageClassName}.${methodName}()`)}`
+				: `${pc.dim('Page:')}  ${pc.dim('none — inline body')}`,
+			`${pc.dim('Files:')} ${pc.white(stepFileName)}${pageFileName ? ` ${pc.dim('+')} ${pc.white(pageFileName)}` : ''}`
 		].join('\n'),
 		'Summary'
 	);
 
-	clack.outro(pc.magenta('Done! Remember to implement the page method.'));
+	clack.outro(
+		pc.magenta(
+			pageFileName ? 'Done! Remember to implement the page method.' : 'Done! Fill in the step body.'
+		)
+	);
 }
 
 main().catch((err) => {

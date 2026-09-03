@@ -11,9 +11,9 @@ const { isScheduledTrigger, normaliseTrigger, TRIGGER_TYPE } = require('../const
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { REPORT_STATUS } = require('../constants/jobStatus');
 
-// Matched by string literal in backend/tests/utils/browser.ts (flushRecordings) —
-// the two runtimes don't share a module, mirroring how 'image/png' is already
-// duplicated between the two files.
+// Also declared in both scaffolds' recording code (_scaffold/*/utils/browser.ts and
+// _scaffold/playwright/fixtures/plum.ts). Those files are copied into user projects
+// and cannot import from the server, so the value is duplicated on purpose.
 const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
 // Small, always-attached marker (independent of whether any tab actually
 // recorded events) so a scenario's worker is always recoverable for grouping,
@@ -112,7 +112,7 @@ async function resolveCronJobId(projectId, triggerType) {
 }
 
 // An MCP run through the CI trigger endpoint (or an old client) may carry no
-// actor — attribute it to the org owner rather than leaving it blank.
+// actor: attribute it to the org owner rather than leaving it blank.
 async function resolveMcpActor(startedBy, triggerType) {
 	if (startedBy || normaliseTrigger(triggerType) !== TRIGGER_TYPE.MCP) return startedBy || null;
 	const owner = await prisma.user.findFirst({
@@ -135,7 +135,7 @@ function featureMergeKey(feature) {
 	return uri || feature.id || feature.name;
 }
 
-// Mirrors frontend's isTestCaseTag (frontend/src/lib/utils/format.js) — keep in
+// Mirrors frontend's isTestCaseTag (frontend/src/lib/utils/format.js), keep in
 // sync so retry-attempt counts line up with how the report page groups scenarios.
 function isTestCaseTag(tag) {
 	return /^@test[\w-]*/i.test(tag) || /^@tc-?\d+/i.test(tag);
@@ -146,7 +146,7 @@ function scenarioIdTag(scenario) {
 }
 
 // Cucumber's legacy JSON `id` is identical for every Examples row of a Scenario
-// Outline — `line` (the row's own line in the feature file) is the only field
+// Outline, `line` (the row's own line in the feature file) is the only field
 // that actually differs between them, so combine the two for a truly unique key.
 function scenarioUniqueId(scenario) {
 	return `${scenario.id};;${scenario.line}`;
@@ -198,7 +198,7 @@ function getFailedIdTags(rawJson) {
  * replacing each retried scenario's prior-round entry with this round's
  * outcome (matched by Cucumber's own stable scenario id). Mutates
  * `attemptsMap` in place, recording the highest round number each scenario
- * appeared in — that number *is* its total attempt count, since a scenario
+ * appeared in: that number *is* its total attempt count, since a scenario
  * only reappears in a later round if it failed every round before it.
  */
 function mergeRawAttempt(accumulated, attemptRawJson, round, attemptsMap) {
@@ -244,7 +244,7 @@ function extractRecordings(scenario) {
 					tabId,
 					tabIndex,
 					// Real Playwright open/close times (browser.ts), not inferred from the
-					// events themselves — a static page can go quiet, or emit nothing at
+					// events themselves: a static page can go quiet, or emit nothing at
 					// all, long before it actually closes, which made the last-event
 					// timestamp an unreliable stand-in for how long a tab stayed relevant.
 					startedAt: BigInt(openedAt ?? events[0]?.timestamp ?? 0),
@@ -307,7 +307,7 @@ function processCucumberJson(raw, attempts = {}) {
 				status: worstStatus,
 				duration: steps.reduce((s, st) => s + st.duration, 0),
 				attempts: scenarioAttempts,
-				// Failed at least once, then passed — flaky. A scenario that never
+				// Failed at least once, then passed: flaky. A scenario that never
 				// passed is just failed, not flaky.
 				flaky: worstStatus === 'passed' && scenarioAttempts > 1,
 				workerId: extractWorkerId(scenario),
@@ -325,11 +325,16 @@ function processCucumberJson(raw, attempts = {}) {
 	});
 
 	const hasFailures = features.some((f) => f.status === 'failed');
+	// A run that executed nothing is not a pass. Cucumber and Playwright both exit
+	// 0 when a tag or grep matches no tests, so without this a typo in a tag, or
+	// pointing a run at a project whose tests the runner cannot see, reports green
+	// having verified nothing.
+	const ranNothing = features.every((f) => (f.scenarios ?? []).length === 0);
 	const flakyCount = features.reduce((n, f) => n + f.scenarios.filter((s) => s.flaky).length, 0);
 	return {
 		features,
 		recordings,
-		status: hasFailures ? REPORT_STATUS.FAIL : REPORT_STATUS.PASS,
+		status: hasFailures || ranNothing ? REPORT_STATUS.FAIL : REPORT_STATUS.PASS,
 		flakyCount
 	};
 }
@@ -349,6 +354,7 @@ const reportListSelect = {
 	workerCount: true,
 	flakyCount: true,
 	browser: true,
+	framework: true,
 	runnerName: true,
 	createdAt: true,
 	testRun: { select: { id: true, title: true } }
@@ -401,6 +407,7 @@ const getReportDetail = async (projectId, id) => {
 			workerCount: true,
 			flakyCount: true,
 			browser: true,
+			framework: true,
 			runnerName: true,
 			createdAt: true,
 			content: true,
@@ -415,7 +422,7 @@ const getReportDetail = async (projectId, id) => {
 };
 
 /**
- * Metadata for every recording on a report — deliberately excludes `events`
+ * Metadata for every recording on a report: deliberately excludes `events`
  * (can be large) so the replay UI can work out tab timing/order before
  * fetching any actual event data.
  */
@@ -438,7 +445,7 @@ const getRecordings = async (projectId, reportId) => {
 		},
 		orderBy: { tabIndex: 'asc' }
 	});
-	// BigInt doesn't survive JSON.stringify — both fit safely in a JS Number
+	// BigInt doesn't survive JSON.stringify: both fit safely in a JS Number
 	// (epoch ms is well under Number.MAX_SAFE_INTEGER).
 	return recordings.map((r) => ({
 		...r,
@@ -506,6 +513,12 @@ const saveReport = async ({
 	const status = forceFail ? REPORT_STATUS.FAIL : derivedStatus;
 	const cronJobId = await resolveCronJobId(projectId, normTrigger);
 	const actor = await resolveMcpActor(startedBy, normTrigger);
+	// Recorded from the project rather than passed in, so no caller can persist a
+	// report whose stored shape disagrees with the parser that produced it.
+	const project = await prisma.project.findUnique({
+		where: { id: projectId },
+		select: { framework: true }
+	});
 
 	const report = await prisma.report.create({
 		data: {
@@ -519,6 +532,7 @@ const saveReport = async ({
 			workerCount,
 			flakyCount,
 			browser: browser ?? DEFAULT_BROWSER,
+			framework: project.framework,
 			runnerName: runnerName ?? null,
 			runnerId: runnerId ?? null,
 			cronJobId,
@@ -578,8 +592,8 @@ const saveCombinedReport = async ({
 		}
 		const lane = runners[laneIdx];
 		for (const feature of parsed) {
-			// Merging loses which lane a scenario came from — the raw Cucumber JSON
-			// has no such field — so stamp it here, before the merge, while we still
+			// Merging loses which lane a scenario came from: the raw Cucumber JSON
+			// has no such field: so stamp it here, before the merge, while we still
 			// know. processCucumberJson reads this to group the report's scenario
 			// list by runner.
 			for (const scenario of feature.elements ?? []) {
@@ -608,7 +622,7 @@ const saveCombinedReport = async ({
 	}
 
 	// Chunked lanes run disjoint sets of tests, so their attempt maps never
-	// collide — a plain merge is safe.
+	// collide: a plain merge is safe.
 	const attempts = attemptsByLane ? Object.assign({}, ...attemptsByLane.filter(Boolean)) : {};
 
 	return saveReport({
@@ -664,28 +678,22 @@ const pruneOldReports = async (retentionDays) => {
 	return prisma.report.deleteMany({ where: { createdAt: { lt: cutoff } } });
 };
 
-const { featuresDir } = require('../lib/testsRoot');
-
-async function syncAutomatedFromFeatures(projectId) {
+/**
+ * Marks a repository case automated when a test in the project carries its id as a
+ * tag. Reads the project's discovered tests rather than scanning .feature text: a
+ * Playwright project has no features/ directory, so the old scan returned early and
+ * no case in such a project was ever marked automated.
+ */
+async function syncAutomatedFromTests(projectId) {
 	try {
-		const dir = featuresDir(projectId);
-		if (!fs.existsSync(dir)) return;
-		const tagSet = new Set();
-		for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.feature'))) {
-			const content = fs.readFileSync(path.join(dir, file), 'utf8');
-			for (const m of content.matchAll(/@(\S+)/g)) tagSet.add(m[1]);
-		}
+		const tagSet = await require('./testService').getTestIds(projectId);
 		if (tagSet.size === 0) return;
 		await prisma.testCase.updateMany({
-			where: {
-				...(projectId ? { projectId } : {}),
-				displayId: { in: [...tagSet] },
-				isAutomated: false
-			},
+			where: { projectId, displayId: { in: [...tagSet] }, isAutomated: false },
 			data: { isAutomated: true }
 		});
 	} catch (e) {
-		console.error('[sync] syncAutomatedFromFeatures failed:', e.message);
+		console.error('[sync] syncAutomatedFromTests failed:', e.message);
 	}
 }
 
@@ -698,7 +706,7 @@ module.exports = {
 	saveReport,
 	saveCombinedReport,
 	attachDurationToLatestReport,
-	syncAutomatedFromFeatures,
+	syncAutomatedFromTests,
 	deleteReport,
 	deleteReports,
 	pruneOldReports,

@@ -4,7 +4,7 @@
  */
 
 // A leading =, +, or - makes a spreadsheet treat the cell as a formula. (@ is
-// left alone — every Cucumber tag starts with one.)
+// left alone: every Cucumber tag starts with one.)
 const FORMULA_LEADS = /^[=+-]/;
 
 function cell(value) {

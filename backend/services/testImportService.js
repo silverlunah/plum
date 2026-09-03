@@ -43,7 +43,7 @@ async function importTestCases(projectId, payload, userId) {
 			description: suite.description ?? '',
 			priority: suite.priority ?? 'Medium'
 		};
-		// Keep the source displayId when it belongs to this project's prefix — that
+		// Keep the source displayId when it belongs to this project's prefix, that
 		// is what lets a re-import land back on the same rows instead of duplicating.
 		const keepSuiteId = suite.displayId && prefixOf(suite.displayId) === project.testSuitePrefix;
 		const existingSuite = keepSuiteId
@@ -85,7 +85,7 @@ async function importTestCases(projectId, payload, userId) {
 					})
 				: null;
 
-			// Steps are replaced only when the file actually carries some — an older
+			// Steps are replaced only when the file actually carries some, an older
 			// export without steps shouldn't wipe steps off an existing case.
 			const hasSteps = Array.isArray(c.steps) && c.steps.length > 0;
 
@@ -107,9 +107,9 @@ async function importTestCases(projectId, payload, userId) {
 	}
 
 	// A just-imported case whose ID matches an @tag in a .feature file is
-	// automated even though no run has happened yet — reconcile the flag now so
+	// automated even though no run has happened yet: reconcile the flag now so
 	// the badge shows immediately.
-	await reportService.syncAutomatedFromFeatures(projectId);
+	await reportService.syncAutomatedFromTests(projectId);
 
 	return result;
 }

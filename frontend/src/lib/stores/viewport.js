@@ -8,7 +8,7 @@ import { browser } from '$app/environment';
 import { MOBILE_MAX, TABLET_MAX } from '$lib/constants';
 
 // Only for the few spots where JS has to branch on layout mode (e.g. rrweb's
-// pixel width) — styling stays in CSS media queries.
+// pixel width), styling stays in CSS media queries.
 export const viewportWidth = readable(browser ? window.innerWidth : TABLET_MAX + 1, (set) => {
 	if (!browser) return;
 	const update = () => set(window.innerWidth);
@@ -22,5 +22,5 @@ export const viewportWidth = readable(browser ? window.innerWidth : TABLET_MAX +
 
 export const isMobile = derived(viewportWidth, (w) => w <= MOBILE_MAX);
 export const isTablet = derived(viewportWidth, (w) => w > MOBILE_MAX && w <= TABLET_MAX);
-// Phone or tablet — the point where multi-column chrome collapses to one column.
+// Phone or tablet, the point where multi-column chrome collapses to one column.
 export const isCompact = derived(viewportWidth, (w) => w <= TABLET_MAX);

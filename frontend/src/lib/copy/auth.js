@@ -7,7 +7,7 @@ export const CHECKING_SERVER = 'Checking server…';
 export const EMAIL_PLACEHOLDER = 'jane@example.com';
 
 // ── Login ──
-export const LOGIN_PAGE_TITLE = 'Sign in — Plum';
+export const LOGIN_PAGE_TITLE = 'Sign in, Plum';
 export const SIGN_IN_TITLE = 'Sign in';
 export const SIGN_IN_SUBTITLE = 'Access your test workspace';
 export const PASSWORD_PLACEHOLDER = '••••••••';
@@ -16,7 +16,7 @@ export const LOGIN_FAILED_FALLBACK = 'Login failed';
 export const signInLabel = (loading) => (loading ? 'Signing in…' : 'Sign in');
 
 // ── Setup ──
-export const SETUP_PAGE_TITLE = 'Setup — Plum';
+export const SETUP_PAGE_TITLE = 'Setup, Plum';
 
 export const YOUR_NAME_LABEL = 'Your name';
 export const NAME_PLACEHOLDER = 'Jane Smith';
@@ -27,7 +27,7 @@ export const SETUP_FAILED_FALLBACK = 'Setup failed';
 
 export const SETUP_STEP_ORG_TITLE = 'Name your organization';
 export const SETUP_STEP_ORG_SUBTITLE =
-	'Plus a first project — a project keeps its tests and reports separate.';
+	'Plus a first project, a project keeps its tests and reports separate.';
 export const SETUP_STEP_ADMIN_TITLE = 'Create your admin account';
 export const SETUP_STEP_ADMIN_SUBTITLE = 'You can add more people and projects once you are in.';
 export const ORG_NAME_LABEL = 'Organization name';

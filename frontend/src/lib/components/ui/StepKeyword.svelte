@@ -11,13 +11,16 @@
 	$: klass = keywordClass(keyword);
 </script>
 
-<span
-	class="kw"
-	class:kw-given={klass === 'kw-given'}
-	class:kw-when={klass === 'kw-when'}
-	class:kw-then={klass === 'kw-then'}
-	class:kw-and={klass === 'kw-and'}>{keyword}</span
->
+<!-- Playwright steps carry no keyword, Given/When/Then is Gherkin's, not theirs. -->
+{#if keyword}
+	<span
+		class="kw"
+		class:kw-given={klass === 'kw-given'}
+		class:kw-when={klass === 'kw-when'}
+		class:kw-then={klass === 'kw-then'}
+		class:kw-and={klass === 'kw-and'}>{keyword}</span
+	>
+{/if}
 
 <style>
 	.kw {

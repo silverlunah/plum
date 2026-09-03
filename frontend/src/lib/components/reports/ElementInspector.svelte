@@ -127,7 +127,7 @@
 		e.preventDefault();
 		resizing = true;
 		// Pointer capture keeps move/up events coming to the handle even while the
-		// pointer is over the replay iframe — without it the iframe swallows them
+		// pointer is over the replay iframe, without it the iframe swallows them
 		// and the drag silently drops the moment the cursor crosses the player.
 		handleEl.setPointerCapture(e.pointerId);
 		handleEl.addEventListener('pointermove', onResizeMove);
@@ -376,7 +376,7 @@
 		background: color-mix(in srgb, var(--accent) 45%, transparent);
 	}
 
-	/* Visible grab affordance — centred on the panel's left border, near the
+	/* Visible grab affordance, centred on the panel's left border, near the
 	   player's control bar so it never overlaps the replay content. */
 	.resize-grip {
 		position: absolute;

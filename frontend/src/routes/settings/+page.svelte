@@ -25,11 +25,13 @@
 		downloadTestCaseExport
 	} from '$lib/api/repository';
 	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
+	import LockIcon from '$lib/components/icons/LockIcon.svelte';
 	import { updateProfile, changePassword } from '$lib/api/auth';
 	import { fetchProjects } from '$lib/api/projects';
-	import { setProjects, activeProject } from '$lib/stores/project';
+	import { setProjects, activeProject, activeFramework } from '$lib/stores/project';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
+	import { isMobile } from '$lib/stores/viewport';
 	import { TIMEZONES } from '$lib/utils/timezones';
 	import {
 		API_BASE,
@@ -91,6 +93,9 @@
 		ACCOUNT_DESC,
 		PROJECT_NAME_LABEL,
 		PROJECT_NAME_PLACEHOLDER,
+		PROJECT_FRAMEWORK_LABEL,
+		PROJECT_FRAMEWORK_FIXED_HINT,
+		frameworkLabel,
 		LOGO_URL_LABEL,
 		LOGO_URL_HINT,
 		LOGO_URL_PLACEHOLDER,
@@ -208,8 +213,14 @@
 		(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('plum:settings:section')) ||
 		'project';
 
+	// On mobile the sidebar and content are separate views (a drill-down), so
+	// picking a section swaps to the content; the back control returns to the list.
+	// A section deep-link opens straight to the content.
+	let mobileShowContent = VALID_SECTIONS.has(querySection);
+
 	function setSection(s) {
 		section = s;
+		mobileShowContent = true;
 		try {
 			sessionStorage.setItem('plum:settings:section', s);
 		} catch {}
@@ -309,7 +320,7 @@
 		try {
 			await saveProject(project);
 			projectPristine = snapshot(project);
-			// Nav reads homepage mode from the projects store — refresh it so the
+			// Nav reads homepage mode from the projects store, refresh it so the
 			// reorder / hide takes effect without a reload.
 			try {
 				setProjects(await fetchProjects());
@@ -497,7 +508,7 @@
 		}
 	}
 
-	// Per-project key — name the server per project so several can coexist in one client config.
+	// Per-project key, name the server per project so several can coexist in one client config.
 	$: mcpServerName = `plum-${$activeProject?.slug ?? 'project'}`;
 	$: mcpConfigSnippet = JSON.stringify(
 		{
@@ -524,9 +535,9 @@
 		'      -d \'{"tag": "@smoke", "baseUrl": "https://your-pr-preview-url"}\''
 	].join('\n');
 
-	// Per-project settings — the owner and an admin of the active project.
+	// Per-project settings, the owner and an admin of the active project.
 	const ELEVATED_SECTIONS = new Set(['project', 'testcases', 'integrations', 'activity']);
-	// Account-wide settings — the owner only.
+	// Account-wide settings, the owner only.
 	const OWNER_SECTIONS = new Set(['runners', 'users', 'backup']);
 
 	$: isOwner = $auth.user?.role === 'owner';
@@ -568,7 +579,11 @@
 	<UpdateBanner />
 {/if}
 
-<div class="settings-layout">
+<div
+	class="settings-layout"
+	class:mobile-list={$isMobile && !mobileShowContent}
+	class:mobile-content={$isMobile && mobileShowContent}
+>
 	<!-- Left sidebar -->
 	<aside class="settings-sidebar">
 		<p class="sidebar-section">{NAV_SECTION_GENERAL}</p>
@@ -604,9 +619,11 @@
 		<ExternalNavLink href={PLAYWRIGHT_URL} label={PLAYWRIGHT_LABEL}>
 			<ServiceIcon service="playwright" size={14} />
 		</ExternalNavLink>
-		<ExternalNavLink href={CUCUMBER_URL} label={CUCUMBER_LABEL}>
-			<ServiceIcon service="cucumber" size={14} />
-		</ExternalNavLink>
+		{#if $activeFramework === 'cucumber'}
+			<ExternalNavLink href={CUCUMBER_URL} label={CUCUMBER_LABEL}>
+				<ServiceIcon service="cucumber" size={14} />
+			</ExternalNavLink>
+		{/if}
 		<hr class="sidebar-divider" />
 		<p class="sidebar-section">{NAV_SECTION_AUTH}</p>
 		<button class="sidebar-item sign-out" on:click={handleLogout}>{SIGN_OUT_LABEL}</button>
@@ -614,6 +631,22 @@
 
 	<!-- Right content -->
 	<div class="settings-content">
+		<button class="mobile-back" on:click={() => (mobileShowContent = false)}>
+			<svg
+				width="14"
+				height="14"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<polyline points="15 18 9 12 15 6" />
+			</svg>
+			{HEADING}
+		</button>
+
 		<!-- PROJECT -->
 		{#if section === 'project'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
@@ -633,6 +666,16 @@
 							bind:value={project.name}
 							placeholder={PROJECT_NAME_PLACEHOLDER}
 						/>
+					</div>
+
+					<div class="field">
+						<span class="field-label">{PROJECT_FRAMEWORK_LABEL}</span>
+						<div class="framework-fixed">
+							<ServiceIcon service={project.framework} size={15} />
+							{frameworkLabel(project.framework)}
+							<span class="framework-lock"><LockIcon /></span>
+						</div>
+						<p class="field-hint">{PROJECT_FRAMEWORK_FIXED_HINT}</p>
 					</div>
 
 					<div class="field">
@@ -1397,6 +1440,24 @@
 		min-width: 0;
 	}
 
+	/* Shown only in the mobile drill-down (see max-width: 640px). */
+	.mobile-back {
+		display: none;
+		align-items: center;
+		gap: 0.4rem;
+		margin-bottom: 1.25rem;
+		padding: 0;
+		background: none;
+		border: none;
+		color: var(--text-muted);
+		font-family: var(--font-body);
+		font-size: 0.875rem;
+		cursor: pointer;
+	}
+	.mobile-back:hover {
+		color: var(--text);
+	}
+
 	.content-section {
 		display: flex;
 		flex-direction: column;
@@ -1435,6 +1496,23 @@
 		font-size: 0.8125rem;
 		font-weight: 500;
 		color: var(--text);
+	}
+
+	.framework-fixed {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		padding: 0.45rem 0.65rem;
+		border: 1px dashed var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--bg-subtle);
+		font-size: 0.875rem;
+		color: var(--text);
+		width: fit-content;
+	}
+	.framework-lock {
+		display: inline-flex;
+		color: var(--text-muted);
 	}
 
 	.field-hint {
@@ -1599,9 +1677,17 @@
 			position: static;
 		}
 
-		.settings-sidebar nav {
-			flex-direction: row;
-			flex-wrap: wrap;
+		.settings-layout.mobile-list .settings-content,
+		.settings-layout.mobile-content .settings-sidebar {
+			display: none;
+		}
+
+		.settings-layout.mobile-content .mobile-back {
+			display: inline-flex;
+		}
+
+		.sidebar-item {
+			padding: 0.7rem 0.75rem;
 		}
 
 		.field-label {

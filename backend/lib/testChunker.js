@@ -13,8 +13,8 @@ const { getTestSuites } = require('../services/testService');
  * @param {string} tag  Cucumber tag expression (e.g. '@suite-login')
  * @returns {string[]}
  */
-function getTestIdsForTag(projectId, tag) {
-	const { suites } = getTestSuites(projectId);
+async function getTestIdsForTag(projectId, tag) {
+	const { suites } = await getTestSuites(projectId);
 	const ids = [];
 	const normalTag = tag?.trim();
 
@@ -36,7 +36,9 @@ function getTestIdsForTag(projectId, tag) {
 
 		for (const test of suite.tests) {
 			const testIds = Array.isArray(test.id) ? test.id : [test.id];
-			if (suiteMatches || matchesAny(testIds)) {
+			// An untagged Playwright spec has no id; it cannot be selected by tag and
+			// must not reach the chunker as a null.
+			if ((suiteMatches || matchesAny(testIds)) && testIds[0]) {
 				ids.push(testIds[0]);
 			}
 		}

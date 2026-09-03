@@ -9,8 +9,10 @@ const prisma = require('./prisma');
 const activityService = require('./activityService');
 const { loadTestEnv } = require('../lib/testEnv');
 const { resolveTestsRoot, loadProjectEnv } = require('../lib/testsRoot');
+const { frameworkFor } = require('../lib/projectPaths');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
-const { DEFAULT_BROWSER } = require('../constants/defaults');
+const { DEFAULT_BROWSER, FRAMEWORK } = require('../constants/defaults');
+const { getPlaywrightProjectNames } = require('../lib/playwrightDiscovery');
 const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 const { bearerHeader } = require('../lib/authHeader');
 const { JOB_STATUS, CANCEL_CODE } = require('../constants/jobStatus');
@@ -23,7 +25,7 @@ const NODE_UNREACHABLE_GRACE_MS = 45_000;
 // Runner CRUD
 // ---------------------------------------------------------------------------
 
-// Strips the auth token before a runner row crosses the HTTP boundary — the
+// Strips the auth token before a runner row crosses the HTTP boundary, the
 // token is only ever needed internally (ping/stop/restart/dispatch below all
 // read it via getById, whose result never reaches a client directly).
 function toPublicRunner(runner) {
@@ -40,7 +42,7 @@ const getAll = async () => {
 const normaliseUrl = (url) => (url ?? '').replace(/\/+$/, '');
 
 // Upsert on name+url. Re-registering the same node (`plum node start` run
-// again, a stop/recreate) must refresh its token in place — a second row or a
+// again, a stop/recreate) must refresh its token in place, a second row or a
 // kept-stale token leaves the primary pinging with the wrong credential and the
 // node showing "unreachable".
 const create = async ({ name, url, token, browser = DEFAULT_BROWSER }) => {
@@ -82,7 +84,7 @@ async function remove(id) {
 	return result;
 }
 
-// Raw accessor (includes token) — internal use only, for authenticating
+// Raw accessor (includes token): internal use only, for authenticating
 // outbound requests to the runner node (ping/stop/restart/dispatch below).
 const getById = (id) => prisma.runner.findUnique({ where: { id } });
 
@@ -139,7 +141,7 @@ const stop = (id) => callControlEndpoint(id, 'shutdown', 5000);
 const restart = (id) => callControlEndpoint(id, 'restart', 5000);
 
 // After PLUM_NODE_SECRET is regenerated, hand the new value to every node so its
-// saved config stays valid for the next `plum node` command. Best-effort — an
+// saved config stays valid for the next `plum node` command. Best-effort, an
 // offline node keeps running fine, it just needs a manual update later.
 async function pushNodeSecret(secret) {
 	const runners = await prisma.runner.findMany();
@@ -168,6 +170,12 @@ async function pushNodeSecret(secret) {
 // Remote execution
 // ---------------------------------------------------------------------------
 
+// Folders that must never go over the wire. node_modules is the important one: a
+// project that declares its own dependencies has one, and uploading it would send
+// hundreds of megabytes per lane per run. A node resolves the toolchain from its
+// own backend instead (see NODE_PATH in nodeExecutionService).
+const UPLOAD_SKIP_DIRS = new Set(['node_modules', 'test-results', 'playwright-report', '.git']);
+
 function collectTestFiles(testsDir) {
 	const files = {};
 
@@ -176,9 +184,10 @@ function collectTestFiles(testsDir) {
 			const fullPath = path.join(dir, entry.name);
 			const relPath = rel ? `${rel}/${entry.name}` : entry.name;
 			if (entry.isDirectory()) {
+				if (UPLOAD_SKIP_DIRS.has(entry.name)) continue;
 				walk(fullPath, relPath);
 			} else {
-				// base64, not utf8 — utf8 mangles non-text fixtures (e.g. upload test images)
+				// base64, not utf8: utf8 mangles non-text fixtures (e.g. upload test images)
 				// because arbitrary binary bytes aren't valid UTF-8 and get replaced on read.
 				files[relPath] = fs.readFileSync(fullPath).toString('base64');
 			}
@@ -219,9 +228,20 @@ async function fetchReportContent(runner, jobId, onLog) {
  * @param {(log: string) => void} onLog   Called with each new log chunk
  * @param {(exitCode: number, reportContent: string|null) => void} onDone
  */
+// [] for Cucumber and on any failure, which buildRunCommand reads as "unknown,
+// keep passing --project as before".
+async function playwrightProjectNames(projectId) {
+	if (frameworkFor(projectId) !== FRAMEWORK.PLAYWRIGHT) return [];
+	try {
+		return await getPlaywrightProjectNames(resolveTestsRoot(projectId));
+	} catch {
+		return [];
+	}
+}
+
 async function dispatchAndPoll(
 	runnerId,
-	{ projectId, tags, browser, workers, baseUrl },
+	{ projectId, tags, browser, workers, shard = null, baseUrl },
 	onLog,
 	onDone,
 	onRRwebBatch = null,
@@ -257,11 +277,16 @@ async function dispatchAndPoll(
 				tags,
 				browser,
 				workers,
+				framework: frameworkFor(projectId),
+				// The primary has the tests folder and the cached --list, so it resolves the
+				// config's project names once here instead of every node paying for it.
+				projectNames: await playwrightProjectNames(projectId),
+				shard,
 				tests: collectTestFiles(resolveTestsRoot(projectId)),
 				env: {
 					...loadTestEnv(process.cwd()),
 					...loadProjectEnv(projectId),
-					IS_HEADLESS: 'true', // node runs on a server have no display — never headed
+					IS_HEADLESS: 'true', // node runs on a server have no display, never headed
 					...(baseUrl ? { BASE_URL: baseUrl } : {})
 				}
 			}),
@@ -276,19 +301,19 @@ async function dispatchAndPoll(
 	}
 
 	onJobId?.(jobId);
-	onLog(`Connected to runner "${runner.name}" — job ${jobId}\n`);
+	onLog(`Connected to runner "${runner.name}": job ${jobId}\n`);
 
 	let logOffset = 0;
 	let rrwebOffset = 0;
 	let polling = false;
 	let unreachableSince = null;
 	// Tight interval: the live viewer reads logs and rrweb batches straight off
-	// this poll — primary→node, so nothing has to connect the other way.
+	// this poll: primary→node, so nothing has to connect the other way.
 	const poll = setInterval(async () => {
 		if (polling) return;
 		polling = true;
 		try {
-			// Stop the moment the user cancels — don't wait on an unreachable node
+			// Stop the moment the user cancels: don't wait on an unreachable node
 			// to acknowledge it.
 			if (shouldStop()) {
 				clearInterval(poll);
@@ -304,7 +329,10 @@ async function dispatchAndPoll(
 					signal: AbortSignal.timeout(8000)
 				}
 			);
-			if (!res.ok) return;
+			// Must advance the watchdog, not return: a restarted node 404s the job it
+			// forgot (and a rotated token 401s) for good, and lanes are awaited together,
+			// so a lane that never settles hangs the whole run.
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const body = await res.json();
 			unreachableSince = null;
 
@@ -320,12 +348,15 @@ async function dispatchAndPoll(
 				const content = await fetchReportContent(runner, jobId, onLog);
 				finish(body.exitCode ?? (body.status === JOB_STATUS.DONE ? 0 : 1), content);
 			}
-		} catch {
+		} catch (e) {
 			if (unreachableSince === null) {
 				unreachableSince = Date.now();
 			} else if (Date.now() - unreachableSince > NODE_UNREACHABLE_GRACE_MS) {
 				clearInterval(poll);
-				onLog(`\n[ERROR] Runner "${runner.name}" stopped responding — marking this lane failed.\n`);
+				onLog(
+					`\n[ERROR] Runner "${runner.name}" stopped responding (${e.message}), ` +
+						`marking this lane failed.\n`
+				);
 				finish(1, null);
 			}
 		} finally {
@@ -334,7 +365,7 @@ async function dispatchAndPoll(
 	}, 1000);
 }
 
-// Best-effort remote cancel — tells the node to SIGTERM the job's test process.
+// Best-effort remote cancel: tells the node to SIGTERM the job's test process.
 // The polling loop in dispatchAndPoll still finalises the lane when the node
 // reports the job done/errored, so a failed cancel here is not fatal.
 async function cancelRemoteJob(runnerId, jobId) {

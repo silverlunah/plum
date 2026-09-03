@@ -10,12 +10,18 @@ export const BROWSERS = [
 	{ id: 'firefox', label: 'Firefox' }
 ];
 
+// Mirrors backend/constants/defaults.js FRAMEWORKS. The first entry is what the
+// project-create form pre-selects, so the offered default is this list's order
+// and nothing else, a separate UI default would drift from the CLI's.
+// Labels live in copy/settings.js.
+export const FRAMEWORKS = ['playwright', 'cucumber'];
+
 export const TRIGGER_TYPES = Object.freeze({
 	MANUAL: 'manual-trigger',
 	CLI: 'command-line-trigger',
 	MCP: 'mcp-trigger',
 	EXTERNAL: 'external-trigger',
-	// Not a Report.triggerType value — only used as the `kind` tag on bg-run-*
+	// Not a Report.triggerType value, only used as the `kind` tag on bg-run-*
 	// live-broadcast events, alongside the other values reused for that field.
 	CRON: 'cron'
 });
@@ -53,6 +59,6 @@ export const TABLET_MAX = 1024;
 
 export const BUILTIN_RUNNER_ID = 'built-in';
 
-export const DOCS_URL = 'https://outline.silverlunah.com/s/12bf21d1-02ba-49e9-b0df-908976407afd';
+export const DOCS_URL = 'https://github.com/silverlunah/plum/wiki';
 export const PLAYWRIGHT_URL = 'https://playwright.dev';
 export const CUCUMBER_URL = 'https://cucumber.io';

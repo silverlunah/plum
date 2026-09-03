@@ -14,7 +14,7 @@ export const NAME_REQUIRED_ERROR = 'Name is required.';
 export const TITLE_REQUIRED_ERROR = 'Title is required.';
 
 // ── Repository list ──
-export const PAGE_TITLE = 'Test Repository — Plum';
+export const PAGE_TITLE = 'Test Repository, Plum';
 export const HEADING = 'Test Repository';
 export const HEADER_DESC = 'Manage test suites, cases, and track manual test runs.';
 export const NEW_SUITE_LABEL = '+ New Suite';
@@ -111,7 +111,7 @@ export const MOVE_TO_SUITE_LABEL = 'Move to suite';
 export const FAILED_TO_MOVE_CASE = 'Failed to move case.';
 
 export const suiteDetailTitle = (suite) =>
-	`${suite ? `${suite.displayId} — ${suite.name}` : 'Suite'} — Plum`;
+	`${suite ? `${suite.displayId}, ${suite.name}` : 'Suite'}, Plum`;
 export const createdByCapitalized = (name) => `Created by ${name}`;
 export const caseCreatedToast = (displayId) => `${displayId} created.`;
 export const caseDeletedToast = (displayId) => `${displayId} deleted.`;
@@ -144,12 +144,12 @@ export const NO_CASES_IN_SUITE = 'No cases in this suite';
 export const ALL_CASES_ADDED = 'All cases added';
 export const NO_SUITES_AVAILABLE = 'No suites available.';
 export const NOT_IN_PROGRESS_BANNER =
-	'This run is not in progress — start execution to record results.';
+	'This run is not in progress, start execution to record results.';
 export const TOGGLE_STEPS_TITLE = 'Toggle steps';
 export const ASSIGN_TO_ME_LABEL = 'Assign to me';
 export const UNASSIGN_LABEL = 'Unassign';
 export const resultLockedHint = (name) =>
-	`Assigned to ${name} — use "Assign to me" to record a result yourself.`;
+	`Assigned to ${name}, use "Assign to me" to record a result yourself.`;
 export const RESULT_UNASSIGNED_HINT = 'Use "Assign to me" before recording a result.';
 export const IN_PROGRESS_LABEL = 'In Progress';
 export const PASS_LABEL = 'Pass';
@@ -164,7 +164,7 @@ export const RUN_SAVED_TOAST = 'Run saved.';
 export const RUN_MARKED_COMPLETE_TOAST = 'Run marked as complete.';
 export const RUN_REOPENED_TOAST = 'Run reopened.';
 
-export const runDetailTitle = (run) => `${run?.title ?? 'Test Run'} — Plum`;
+export const runDetailTitle = (run) => `${run?.title ?? 'Test Run'}, Plum`;
 export const passedCount = (count) => `${count} passed`;
 export const failedCount = (count) => `${count} failed`;
 export const remainingCount = (count) => `${count} remaining`;

@@ -69,7 +69,7 @@
 	$: status = run?.status ?? null;
 	$: lanes = run?.lanes ?? [];
 	$: isMulti = lanes.length > 1;
-	// A run is viewable only from within its own project — the bottom bar won't
+	// A run is viewable only from within its own project, the bottom bar won't
 	// link here otherwise, but a pasted URL can. (Socket events still reach the
 	// client; server-side room isolation is a separate change.)
 	$: runProjectId = run?.projectId ?? listedProjectId;
@@ -464,7 +464,9 @@
 		margin-top: -2.5rem;
 		margin-bottom: -5rem;
 		padding-bottom: 5rem;
-		height: calc(100vh - 56px);
+		/* dvh, not vh: on mobile the browser's collapsing toolbar makes 100vh
+		   taller than the visible viewport, pushing the terminal off-screen. */
+		height: calc(100dvh - 56px);
 		box-sizing: border-box;
 		display: flex;
 		flex-direction: column;
@@ -824,8 +826,10 @@
 
 		.run-view {
 			grid-template-columns: 1fr;
-			grid-template-rows: minmax(44vh, 1fr) minmax(28vh, auto);
-			overflow-y: auto;
+			/* Bounded rows (minmax(0, …), not auto) so the terminal panel gets a
+			   real height and scrolls internally instead of growing the page. */
+			grid-template-rows: minmax(0, 40dvh) minmax(0, 1fr);
+			overflow: hidden;
 		}
 
 		.stream-panel {

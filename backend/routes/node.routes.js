@@ -9,7 +9,7 @@ const { authGuard } = require('../middleware/auth');
 const { isNodeMode, DEFAULT_PORT } = require('../constants/env');
 const nodeExecutionService = require('../services/nodeExecutionService');
 
-// Health check — primary server uses this to confirm the node is reachable
+// Health check: primary server uses this to confirm the node is reachable
 router.get('/ping', authGuard, (req, res) => {
 	res.json({ ok: true, mode: process.env.PLUM_MODE || 'server' });
 });
@@ -33,7 +33,7 @@ router.post('/restart', authGuard, (req, res) => {
 	}
 	const id = process.env.RUNNER_ID;
 	if (!id) {
-		return res.status(400).json({ error: 'Runner has no RUNNER_ID — cannot self-restart' });
+		return res.status(400).json({ error: 'Runner has no RUNNER_ID, cannot self-restart' });
 	}
 	res.json({ ok: true });
 	setTimeout(() => {

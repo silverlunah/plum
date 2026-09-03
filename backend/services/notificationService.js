@@ -58,7 +58,7 @@ function buildSlackPayload({ jobName, status, counts, browser, tags, reportUrl }
 			type: 'section',
 			text: {
 				type: 'mrkdwn',
-				text: `${icon} *${jobName}* — ${isPass ? 'PASS' : 'FAIL'}\n${counts.passed} / ${counts.total} scenarios passed`
+				text: `${icon} *${jobName}*, ${isPass ? 'PASS' : 'FAIL'}\n${counts.passed} / ${counts.total} scenarios passed`
 			}
 		},
 		{

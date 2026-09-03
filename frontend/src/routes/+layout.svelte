@@ -17,7 +17,7 @@
 	import { checkNeedsSetup } from '$lib/api/auth';
 
 	const PUBLIC_ROUTES = ['/login', '/setup'];
-	// Routes that only make sense with automated testing on — sent to the
+	// Routes that only make sense with automated testing on, sent to the
 	// repository when the active project is manual-only.
 	const AUTOMATION_ROUTES = ['/automated-tests', '/reports', '/scheduled-tests', '/live'];
 

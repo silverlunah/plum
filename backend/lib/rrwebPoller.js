@@ -32,7 +32,7 @@ function startRRwebPoller(ssDir, onRRwebBatch) {
 
 	const interval = setInterval(drain, 400);
 	// A scenario faster than one 400ms tick can exit before the interval ever
-	// fires — stop() drains once more so that last batch isn't dropped.
+	// fires: stop() drains once more so that last batch isn't dropped.
 	return { stop: () => (clearInterval(interval), drain()) };
 }
 

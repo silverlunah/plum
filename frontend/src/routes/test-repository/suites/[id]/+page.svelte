@@ -235,6 +235,12 @@
 		}
 	}
 
+	function closeCaseDetail() {
+		selectedCase = null;
+		selectedCaseLoading = false;
+		editingCase = false;
+	}
+
 	async function selectCase(tc) {
 		selectedCase = null;
 		selectedCaseLoading = true;
@@ -380,6 +386,11 @@
 
 <svelte:head><title>{suiteDetailTitle(suite)}</title></svelte:head>
 
+<svelte:window
+	on:keydown={(e) =>
+		e.key === 'Escape' && (selectedCase || selectedCaseLoading) && closeCaseDetail()}
+/>
+
 <ConfirmModal
 	bind:open={confirmDeleteCaseOpen}
 	title={DELETE_TEST_CASE_TITLE}
@@ -387,7 +398,7 @@
 >
 	{#if confirmDeleteCase}
 		{DELETE_LABEL}
-		<strong>{confirmDeleteCase.displayId} — {confirmDeleteCase.title}</strong
+		<strong>{confirmDeleteCase.displayId}, {confirmDeleteCase.title}</strong
 		>{CANNOT_BE_UNDONE_SUFFIX}
 	{/if}
 </ConfirmModal>
@@ -469,7 +480,7 @@
 <Modal bind:open={moveCaseOpen} title={MOVE_TEST_CASE_MODAL_TITLE}>
 	<div class="form-fields">
 		{#if moveCaseTarget}
-			<p class="move-case-subtitle">{moveCaseTarget.displayId} — {moveCaseTarget.title}</p>
+			<p class="move-case-subtitle">{moveCaseTarget.displayId}, {moveCaseTarget.title}</p>
 		{/if}
 		{#if otherSuites.length === 0}
 			<p class="form-error">{NO_SUITES_AVAILABLE}</p>
@@ -478,7 +489,7 @@
 				<label class="field-label" for="move-suite">{MOVE_TO_SUITE_LABEL}</label>
 				<select id="move-suite" class="field-input" bind:value={moveCaseSuiteId}>
 					{#each otherSuites as s}
-						<option value={s.id}>{s.displayId} — {s.name}</option>
+						<option value={s.id}>{s.displayId}, {s.name}</option>
 					{/each}
 				</select>
 			</div>
@@ -498,7 +509,7 @@
 	<div class="breadcrumb">
 		<a href="/test-repository" class="bc-link">{TEST_REPOSITORY_BREADCRUMB}</a>
 		<span class="bc-sep">›</span>
-		<span class="bc-current">{suite.displayId} — {suite.name}</span>
+		<span class="bc-current">{suite.displayId}, {suite.name}</span>
 	</div>
 
 	<div class="suite-header">
@@ -695,9 +706,17 @@
 			{/if}
 		</div>
 
-		<!-- Case detail panel -->
+		<!-- Case detail panel. On mobile it lifts out of the grid into a bottom
+		     sheet (see the max-width: 768px rules); the backdrop is inert on desktop. -->
 		{#if selectedCase || selectedCaseLoading}
-			<div class="detail-panel" transition:fly={{ x: 20, duration: 200 }}>
+			<div
+				class="detail-backdrop"
+				role="presentation"
+				on:click={closeCaseDetail}
+				on:keydown={(e) => e.key === 'Escape' && closeCaseDetail()}
+				transition:fade={{ duration: 150 }}
+			></div>
+			<div class="detail-panel" transition:fly={{ y: 24, duration: 200 }}>
 				{#if selectedCaseLoading}
 					<div class="detail-loading">{LOADING_LABEL}</div>
 				{:else if selectedCase}
@@ -748,14 +767,7 @@
 										>
 									</button>
 								{/if}
-								<button
-									class="icon-btn"
-									title={CLOSE_LABEL}
-									on:click={() => {
-										selectedCase = null;
-										editingCase = false;
-									}}
-								>
+								<button class="icon-btn" title={CLOSE_LABEL} on:click={closeCaseDetail}>
 									<svg width="13" height="13" viewBox="0 0 14 14" fill="none"
 										><path
 											d="M1 1l12 12M13 1L1 13"
@@ -816,7 +828,7 @@
 									{#each recentHistory(selectedCase.history) as h (h.id)}
 										<span
 											class="history-bar {resultClass(h.result)}"
-											title="{h.result} — {new Date(h.executedAt).toLocaleString()}"
+											title="{h.result}, {new Date(h.executedAt).toLocaleString()}"
 										></span>
 									{/each}
 								</div>
@@ -966,7 +978,7 @@
 												{:else}
 													<span class="history-source history-missing">{RUN_NOT_FOUND}</span>
 												{/if}
-												<span class="history-by">{h.executedBy?.name ?? '—'}</span>
+												<span class="history-by">{h.executedBy?.name ?? ','}</span>
 												<span class="history-date">{new Date(h.executedAt).toLocaleString()}</span>
 											</div>
 											{#if h.notes}
@@ -1269,6 +1281,11 @@
 		padding-bottom: 1.5rem;
 	}
 
+	/* Only used on mobile, where the detail panel is a bottom sheet. */
+	.detail-backdrop {
+		display: none;
+	}
+
 	.detail-loading {
 		padding: 2rem;
 		font-size: 0.875rem;
@@ -1278,6 +1295,10 @@
 	.detail-header {
 		padding: 1.25rem;
 		border-bottom: 1px solid var(--border);
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		background: var(--bg-elevated);
 	}
 
 	.detail-title-row {
@@ -1722,6 +1743,26 @@
 	@media (max-width: 768px) {
 		.workspace.split {
 			grid-template-columns: 1fr;
+		}
+
+		.detail-backdrop {
+			display: block;
+			position: fixed;
+			inset: 0;
+			z-index: 240;
+			background: color-mix(in srgb, var(--bg) 55%, transparent);
+		}
+
+		/* Lift out of the grid into a bottom sheet so a selected case isn't just
+		   appended below the whole list. */
+		.detail-panel {
+			position: fixed;
+			inset: auto 0 0 0;
+			z-index: 250;
+			max-height: 85dvh;
+			border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+			border-bottom: none;
+			box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
 		}
 
 		.step-editor-fields {

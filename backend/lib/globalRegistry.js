@@ -7,7 +7,7 @@
  * `.plum-server.json`/`.plum-node.json` live in whatever directory the user
  * happened to run `plum server start`/`plum node start` from. `plum update`
  * needs to find and restart those installs later regardless of the cwd it's
- * invoked from — this is the one place, independent of any project
+ * invoked from: this is the one place, independent of any project
  * directory, that remembers where they are.
  */
 

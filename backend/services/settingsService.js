@@ -13,7 +13,7 @@ const getProjectRaw = async (projectId) => {
 	return prisma.project.findUnique({ where: { id: projectId } });
 };
 
-// Non-secret columns only — the raw row also carries the webhook URLs.
+// Non-secret columns only: the raw row also carries the webhook URLs.
 const projectPublicSelect = {
 	id: true,
 	name: true,
@@ -22,10 +22,14 @@ const projectPublicSelect = {
 	maxRetries: true,
 	defaultHome: true,
 	manualRepositoryOnly: true,
-	testsPath: true
+	testsPath: true,
+	// Read-only: surfaced so the UI can label the project, never accepted back.
+	// updateProject() destructures an explicit allowlist, so adding it here
+	// cannot make it writable: but do not add it to that destructure either.
+	framework: true
 };
 
-// The single organisation. Raw accessor includes backupS3SecretKey — only for
+// The single organisation. Raw accessor includes backupS3SecretKey, only for
 // internal callers (e.g. backup.routes.js needs the real secret for a
 // connection test). Never expose it directly over HTTP.
 const getOrgRaw = async () => {
@@ -60,7 +64,7 @@ const updateProject = async (
 
 	if (timezone !== undefined) {
 		// Cron jobs read the timezone at schedule time. reload() re-schedules every
-		// project's jobs — coarse, but there's no per-project reload.
+		// project's jobs: coarse, but there's no per-project reload.
 		await require('./cronService').reload();
 	}
 
@@ -69,7 +73,7 @@ const updateProject = async (
 		// cases are automated now that the feature files resolve elsewhere.
 		await require('../lib/projectPaths').refresh();
 		require('./reportService')
-			.syncAutomatedFromFeatures(projectId)
+			.syncAutomatedFromTests(projectId)
 			.catch(() => {});
 	}
 
@@ -85,13 +89,16 @@ const getTestPrefixes = async (projectId) => {
 	return { testCasePrefix: project.testCasePrefix, testSuitePrefix: project.testSuitePrefix };
 };
 
+// The route behind this is member-level, so the returned row must not carry the
+// webhook URLs that GET /settings/integrations keeps behind an admin gate.
 const updateTestPrefixes = async (projectId, { testCasePrefix, testSuitePrefix }) => {
 	const project = await prisma.project.update({
 		where: { id: projectId },
 		data: {
 			...(testCasePrefix !== undefined && { testCasePrefix }),
 			...(testSuitePrefix !== undefined && { testSuitePrefix })
-		}
+		},
+		select: { id: true, name: true, testCasePrefix: true, testSuitePrefix: true }
 	});
 	await activityService.record(ACTIVITY_ACTION.PROJECT_PREFIXES_UPDATE, {
 		projectId,

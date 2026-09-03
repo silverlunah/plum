@@ -13,6 +13,7 @@
 		runnerConfig,
 		panelExpanded,
 		builtInEnabled,
+		resolveSelectedRunners,
 		triggerRun,
 		cancelRun,
 		reportsVersion,
@@ -76,15 +77,21 @@
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
+	import LockIcon from '$lib/components/icons/LockIcon.svelte';
+	import IconSelect from '$lib/components/ui/IconSelect.svelte';
+	import { clickOutside } from '$lib/actions/clickOutside';
 
 	let availableRunners = [];
-	// { [runnerId]: 'checking' | 'up' | 'down' } — the runner list is DB-only and
+	// Gates the builtInEnabled subscription: it must not reconcile the saved
+	// selection until the real toggle state and node list have both loaded, or
+	// its synchronous first fire would clobber a valid saved selection.
+	let runnersReady = false;
+	// { [runnerId]: 'checking' | 'up' | 'down' }, the runner list is DB-only and
 	// carries no health, so its dots would otherwise always read healthy.
 	let nodePings = {};
 	let testRuns = [];
 	let selectedRun = null; // { id, title, tags: string[] | null }
 	let selectedRunLoading = false;
-	let browserOpen = false;
 	let runnersOpen = false;
 	let runPickOpen = false;
 	let runAllModalOpen = false;
@@ -92,20 +99,8 @@
 	let notifyDiscord = false;
 	let notifySlack = false;
 
-	function clickOutside(node) {
-		function handle(e) {
-			if (!node.contains(e.target)) node.dispatchEvent(new CustomEvent('clickoutside'));
-		}
-		document.addEventListener('click', handle, true);
-		return {
-			destroy() {
-				document.removeEventListener('click', handle, true);
-			}
-		};
-	}
-
 	let _unsubConfig, _unsubExpanded, _unsubBuiltIn, _unsubActiveProject, _socket;
-	let lastFinished = null; // { reportId, verdict } — most recent completed run, for the bar's View Report shortcut
+	let lastFinished = null; // { reportId, verdict }, most recent completed run, for the bar's View Report shortcut
 
 	onMount(() => {
 		try {
@@ -116,30 +111,37 @@
 			const exp = localStorage.getItem('plum:panelExpanded');
 			if (exp !== null) panelExpanded.set(exp === 'true');
 		} catch {}
-		fetchBuiltInEnabled()
-			.then(({ builtInRunnerEnabled }) => builtInEnabled.set(builtInRunnerEnabled))
-			.catch(() => {});
-
-		fetchRunners()
-			.then((r) => {
-				availableRunners = r ?? [];
-				// Drop any saved selection pointing at runners that no longer exist,
-				// so a deleted runner can't linger in the selection and break runs.
-				const validIds = new Set([BUILTIN_RUNNER_ID, ...availableRunners.map((x) => x.id)]);
-				runnerConfig.update((c) => {
-					const pruned = c.selectedRunners.filter((id) => validIds.has(id));
-					return { ...c, selectedRunners: pruned.length > 0 ? pruned : [BUILTIN_RUNNER_ID] };
-				});
-				pingNodes();
-			})
-			.catch(() => {});
+		// Resolve the toggle state and the node list together, then reconcile the
+		// saved selection against both. Done piecemeal, a race between the two
+		// fetches could re-check the built-in runner even with its toggle off.
+		Promise.all([
+			fetchBuiltInEnabled()
+				.then((r) => r.builtInRunnerEnabled)
+				.catch(() => false),
+			fetchRunners()
+				.then((r) => r ?? [])
+				.catch(() => [])
+		]).then(([enabled, runners]) => {
+			availableRunners = runners;
+			runnersReady = true;
+			builtInEnabled.set(enabled);
+			runnerConfig.update((c) => ({
+				...c,
+				selectedRunners: resolveSelectedRunners(
+					c.selectedRunners,
+					enabled,
+					runners.map((r) => r.id)
+				)
+			}));
+			pingNodes();
+		});
 
 		fetchIntegrations()
 			.then((i) => (integrations = i))
 			.catch(() => {});
 
 		// Hydrate runs already queued or running on the backend (e.g. this tab just
-		// loaded/refreshed) — live socket events alone only reach tabs connected at
+		// loaded/refreshed), live socket events alone only reach tabs connected at
 		// the moment an event fires.
 		fetchActiveRuns()
 			.then(({ runs }) => {
@@ -151,7 +153,7 @@
 							next[runId] = makeRunEntry({ projectId, projectName, kind, label, meta, status });
 					}
 					// Drop a client-side run the server no longer tracks (its node died
-					// and a restart cleared it) — but keep a freshly-`done` one so the
+					// and a restart cleared it), but keep a freshly-`done` one so the
 					// completion bar still shows.
 					for (const [runId, entry] of Object.entries(next)) {
 						if (!activeIds.has(runId) && entry.status !== 'done') delete next[runId];
@@ -173,25 +175,25 @@
 			} catch {}
 		});
 		_unsubBuiltIn = builtInEnabled.subscribe((v) => {
-			runnerConfig.update((c) => {
-				if (!v && c.selectedRunners.includes(BUILTIN_RUNNER_ID)) {
-					const others = c.selectedRunners.filter((r) => r !== BUILTIN_RUNNER_ID);
-					const fallback =
-						others.length > 0 ? others : availableRunners[0] ? [availableRunners[0].id] : [];
-					return { ...c, selectedRunners: fallback };
-				}
-				return c;
-			});
+			if (!runnersReady) return;
+			runnerConfig.update((c) => ({
+				...c,
+				selectedRunners: resolveSelectedRunners(
+					c.selectedRunners,
+					v,
+					availableRunners.map((r) => r.id)
+				)
+			}));
 		});
 
 		const s = io(API_BASE, {
-			transports: ['websocket'],
+			transports: ['websocket', 'polling'],
 			auth: { token: auth.getToken() }
 		});
 		_socket = s;
 		socket.set(s);
 
-		// Join the active project's room — scopes which run streams this tab gets.
+		// Join the active project's room, scopes which run streams this tab gets.
 		const joinActiveProject = () =>
 			s.emit(SOCKET_EVENTS.JOIN_PROJECT, { projectId: $activeProjectId });
 		s.on('connect', joinActiveProject);
@@ -211,7 +213,7 @@
 		}
 
 		function upsertBgRun(runId, { projectId, projectName, kind, label, meta }, status) {
-			// Keep only label + project for a run the viewer can't open — drop the
+			// Keep only label + project for a run the viewer can't open, drop the
 			// tag / who-started-it that the socket broadcast still carries.
 			const safeMeta = canOpenRun({ projectId }) ? meta : undefined;
 			backgroundRuns.update((r) => ({
@@ -246,7 +248,7 @@
 			);
 		});
 
-		// Upsert the lane — a tab that connected mid-run (or after a refresh)
+		// Upsert the lane, a tab that connected mid-run (or after a refresh)
 		// missed bg-run-lanes-init, so create the lane on first sight rather than
 		// dropping its logs.
 		function patchLane(run, laneId, patch) {
@@ -326,7 +328,7 @@
 	);
 	// A run is openable only when it belongs to the project the viewer is currently
 	// in. Runs from other projects still show in the bar for awareness, but you
-	// have to switch to that project to open one — even if you're a member.
+	// have to switch to that project to open one, even if you're a member.
 	$: canOpenRun = (run) => run.projectId == null || run.projectId === $activeProjectId;
 	$: runningCount = activeRunEntries.filter(([, r]) => r.status === 'running').length;
 	$: queuedCount = activeRunEntries.filter(([, r]) => r.status === 'queued').length;
@@ -353,8 +355,6 @@
 		queued: queuedCount,
 		verdict: lastFinished?.verdict
 	});
-
-	$: currentBrowser = BROWSERS.find((b) => b.id === cfg.browser) ?? BROWSERS[0];
 
 	$: runnerSummary = computeRunnerSummary(cfg, availableRunners);
 
@@ -408,7 +408,7 @@
 			const set = new Set(c.selectedRunners);
 			if (set.has(id)) {
 				set.delete(id);
-				// Never leave the selection empty — fall back to the built-in runner
+				// Never leave the selection empty, fall back to the built-in runner
 				// when it's available, otherwise keep this one selected.
 				if (set.size === 0) {
 					if ($builtInEnabled) set.add(BUILTIN_RUNNER_ID);
@@ -425,7 +425,7 @@
 		return $runnerConfig.selectedRunners.includes(id);
 	}
 
-	// A checkbox's `checked={isRunnerSelected(id)}` isn't reactive — Svelte can't
+	// A checkbox's `checked={isRunnerSelected(id)}` isn't reactive, Svelte can't
 	// see the `$runnerConfig` read hidden in the call. Bind to this set instead so
 	// the picker always mirrors the model, including a sibling flipped by a toggle.
 	$: selectedRunnerSet = new Set($runnerConfig.selectedRunners);
@@ -645,50 +645,14 @@
 			<!-- Browser -->
 			<div class="ctrl-group">
 				<span class="ctrl-label">{BROWSER_LABEL}</span>
-				<div class="dropdown-wrap" use:clickOutside on:clickoutside={() => (browserOpen = false)}>
-					<button
-						class="dropdown-trigger"
-						class:open={browserOpen}
-						on:click={() => {
-							browserOpen = !browserOpen;
-						}}
-					>
-						<span class="browser-trigger-label">
-							<ServiceIcon service={currentBrowser.id} size={13} />
-							{currentBrowser.label}
-						</span>
-						<svg
-							width="10"
-							height="10"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							class="trigger-chevron"
-							class:open={browserOpen}
-						>
-							<polyline points="6 9 12 15 18 9" />
-						</svg>
-					</button>
-					{#if browserOpen}
-						<div class="dropdown-menu" transition:fly={{ y: 6, duration: 130 }}>
-							{#each BROWSERS as b}
-								<button
-									class="dropdown-item"
-									class:active={cfg.browser === b.id}
-									on:click={() => {
-										runnerConfig.update((c) => ({ ...c, browser: b.id }));
-										browserOpen = false;
-									}}
-								>
-									<ServiceIcon service={b.id} size={13} />
-									{b.label}
-								</button>
-							{/each}
-						</div>
-					{/if}
-				</div>
+				<IconSelect
+					variant="bar"
+					placement="top"
+					animate
+					options={BROWSERS}
+					value={cfg.browser}
+					on:change={(e) => runnerConfig.update((c) => ({ ...c, browser: e.detail }))}
+				/>
 			</div>
 
 			<!-- Runners (only when external runners exist) -->
@@ -796,7 +760,7 @@
 
 			<div class="ctrl-divider"></div>
 
-			<!-- Run button — a run while one is active just queues another -->
+			<!-- Run button, a run while one is active just queues another -->
 			<button
 				class="run-btn"
 				on:click={handleRunClick}
@@ -863,6 +827,11 @@
 						<div class="run-card-info">
 							<span class="run-card-label">{run.label || MANUAL_RUN_LABEL}</span>
 							<span class="run-card-meta">
+								{#if !openable}
+									<!-- A locked row is otherwise indistinguishable from a clickable
+									     one, so clicking it looked like nothing happened. -->
+									<span class="run-card-lock"><LockIcon size={11} strokeWidth={2.5} /></span>
+								{/if}
 								{#if run.projectName}
 									<span class="run-card-project">{run.projectName}</span>
 									<span class="meta-dot">·</span>
@@ -1192,12 +1161,6 @@
 		position: relative;
 	}
 
-	.browser-trigger-label {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-	}
-
 	.dropdown-trigger {
 		display: inline-flex;
 		align-items: center;
@@ -1325,7 +1288,7 @@
 	.runner-dot.built-in {
 		background: var(--accent);
 	}
-	/* Remote node health — grey until a ping lands, then pass/fail. */
+	/* Remote node health, grey until a ping lands, then pass/fail. */
 	.runner-dot.remote {
 		background: var(--border);
 	}
@@ -1503,7 +1466,15 @@
 		color: inherit;
 	}
 	.run-card-main.locked {
-		cursor: default;
+		cursor: not-allowed;
+	}
+	.run-card-main.locked .run-card-label {
+		color: var(--text-muted);
+	}
+	.run-card-lock {
+		color: var(--warn);
+		flex-shrink: 0;
+		vertical-align: -1px;
 	}
 
 	.run-card-project {
@@ -1694,7 +1665,7 @@
 		opacity: 0.7;
 	}
 
-	/* Mobile: the control row reuses the drawer — hidden until the bar is expanded. */
+	/* Mobile: the control row reuses the drawer, hidden until the bar is expanded. */
 	@media (max-width: 640px) {
 		.bar {
 			flex-wrap: wrap;

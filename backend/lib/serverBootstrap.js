@@ -7,11 +7,14 @@ const fs = require('fs');
 const path = require('path');
 const { loadRegistry, saveRegistry } = require('./runnerProcess');
 const { SOCKET_EVENTS } = require('../constants/socketEvents');
+// The staging folder each lane writes its raw report into, under data/.
+const { REPORTS_DIR } = require('./reportFilename');
 
 const WATCH_OPTS = { usePolling: true, interval: 800, ignoreInitial: true };
 
-// Anchored to backend/, not cwd — see lib/appSecret.js.
-const REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
+// Anchored to backend/, not cwd: see lib/appSecret.js.
+// The pre-data/ location, kept only so an old install gets its screenshots swept.
+const LEGACY_REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
 
 function ensureTestsDir(testsDir, isNodeMode) {
 	if (fs.existsSync(testsDir)) {
@@ -19,7 +22,7 @@ function ensureTestsDir(testsDir, isNodeMode) {
 		return;
 	}
 	if (isNodeMode) {
-		console.warn('⚠️  No tests folder found — will be populated when a job is received');
+		console.warn('⚠️  No tests folder found: will be populated when a job is received');
 		return;
 	}
 	console.error('❌ No tests folder found at /app/tests');
@@ -28,7 +31,7 @@ function ensureTestsDir(testsDir, isNodeMode) {
 
 // A self-restart (POST /api/restart) spawns the replacement before this
 // process has released the port, so the first bind attempt can briefly hit
-// EADDRINUSE — retry instead of dying immediately.
+// EADDRINUSE: retry instead of dying immediately.
 function attachListenRetry(server, port) {
 	let retriesLeft = 20;
 	server.on('error', (err) => {
@@ -84,7 +87,7 @@ async function initCronServices(
 	if (reportRetentionService) await reportRetentionService.init();
 }
 
-// MCP keys are per-project now and resolved live from the DB in jwtAuth — the
+// MCP keys are per-project now and resolved live from the DB in jwtAuth, the
 // only global key is an optional PLUM_MCP_KEY env override (CI). Kept exported
 // so server.js's call site doesn't change.
 async function bootstrapMcpKey() {}
@@ -117,9 +120,9 @@ function handleNodeModeStartup(port) {
 		try {
 			const reg = loadRegistry();
 			// A self-restart already wrote the replacement's pid under this
-			// id before this process exits — only touch the entry if it's
+			// id before this process exits: only touch the entry if it's
 			// still ours, so we don't clobber the new process's registration.
-			// Keep the entry (with its port) rather than deleting it — that's
+			// Keep the entry (with its port) rather than deleting it, that's
 			// the only place a later manual Start can find the port this
 			// runner was last running on.
 			if (reg[runnerId]?.pid === process.pid) {
@@ -130,7 +133,7 @@ function handleNodeModeStartup(port) {
 	};
 
 	// Adding a SIGTERM/SIGINT listener suppresses Node's default
-	// "terminate immediately" behavior — the handler must exit itself,
+	// "terminate immediately" behavior: the handler must exit itself,
 	// or the process (and the port it's bound to) lives on forever
 	// after a plain `kill`/SIGTERM with nothing left to stop it short
 	// of SIGKILL.
@@ -163,7 +166,7 @@ async function handleFullModeStartup(io, testsDir) {
 // recordings), so any leftover files on disk are dead weight. Safe to run
 // every startup: a second pass on an already-gone directory is a no-op.
 function cleanupLegacyScreenshots() {
-	const screenshotsDir = path.join(REPORTS_DIR, 'screenshots');
+	const screenshotsDir = path.join(LEGACY_REPORTS_DIR, 'screenshots');
 	if (!fs.existsSync(screenshotsDir)) return;
 	fs.rm(screenshotsDir, { recursive: true, force: true }, (err) => {
 		if (!err) console.log('🧹 Removed legacy screenshots directory');
@@ -172,31 +175,38 @@ function cleanupLegacyScreenshots() {
 
 async function syncAutomatedFlags(projectId) {
 	const reportService = require('../services/reportService');
-	if (projectId != null) return reportService.syncAutomatedFromFeatures(projectId).catch(() => {});
+	if (projectId != null) return reportService.syncAutomatedFromTests(projectId).catch(() => {});
 	// startup: every project
 	try {
 		const prisma = require('../services/prisma');
 		const projects = await prisma.project.findMany({ select: { id: true } });
-		for (const p of projects) await reportService.syncAutomatedFromFeatures(p.id).catch(() => {});
+		for (const p of projects) await reportService.syncAutomatedFromTests(p.id).catch(() => {});
 	} catch {}
 }
 
 async function loadChokidar() {
-	// chokidar v5+ is ESM-only — use dynamic import to stay compatible with CJS
+	// chokidar v5+ is ESM-only: use dynamic import to stay compatible with CJS
 	try {
 		return (await import('chokidar')).default;
 	} catch {
-		console.warn('⚠️  chokidar unavailable — file watching disabled');
+		console.warn('⚠️  chokidar unavailable: file watching disabled');
 		return null;
 	}
 }
 
+// A change to any of these can add or remove a test id. Playwright's default
+// testMatch is **/*.@(spec|test).?(c|m)[jt]s?(x), so a project can legitimately
+// name its tests either way.
+const TEST_FILE_RE = /\.feature$|\.(spec|test)\.[cm]?[jt]sx?$/;
+
 function watchTestFiles(chokidar, testsDir) {
-	// chokidar v4+ has no globs and a custom testsPath puts features at any depth,
-	// so watch the whole projects/ tree and react only to `.feature` changes —
-	// skipping the node_modules/.git a checked-out repo brings.
+	// chokidar v4+ has no globs and a custom testsPath puts tests at any depth, so
+	// watch the whole projects/ tree and react only to test-file changes, skipping
+	// the node_modules/.git a checked-out repo brings.
 	const projectsDir = process.env.PROJECTS_DIR || path.join(path.dirname(testsDir), 'projects');
-	const targets = [path.join(testsDir, 'features'), projectsDir].filter(fs.existsSync);
+	// testsDir itself, not testsDir/features: a Playwright project has no features/
+	// folder, so watching only that missed every spec file.
+	const targets = [testsDir, projectsDir].filter(fs.existsSync);
 	if (targets.length === 0) return;
 
 	let debounce = null;
@@ -206,7 +216,7 @@ function watchTestFiles(chokidar, testsDir) {
 			ignored: (p) => /(^|[/\\])(node_modules|\.git)([/\\]|$)/.test(p)
 		})
 		.on('all', (event, filePath) => {
-			if (!filePath.endsWith('.feature')) return;
+			if (!TEST_FILE_RE.test(filePath)) return;
 			clearTimeout(debounce);
 			debounce = setTimeout(() => {
 				console.log(`📝 Tests changed (${event}: ${path.basename(filePath)})`);
@@ -222,7 +232,7 @@ function watchReports(chokidar, io) {
 	chokidar.watch(REPORTS_DIR, { ...WATCH_OPTS, interval: 1200 }).on('add', (filePath) => {
 		const name = path.basename(filePath);
 		if ((name.startsWith('PASS_') || name.startsWith('FAIL_')) && name.endsWith('.json')) {
-			console.log(`📊 New report: ${name} — notifying clients`);
+			console.log(`📊 New report: ${name}: notifying clients`);
 			io.emit(SOCKET_EVENTS.REPORT_READY);
 		}
 	});

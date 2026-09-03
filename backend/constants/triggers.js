@@ -14,7 +14,7 @@ const TRIGGER_TYPE = Object.freeze({
 	CLI: 'command-line-trigger',
 	MCP: 'mcp-trigger',
 	EXTERNAL: 'external-trigger',
-	// Not a Report.triggerType value (cron jobs store their taskName there instead) —
+	// Not a Report.triggerType value (cron jobs store their taskName there instead),
 	// only used as the `kind` tag on bg-run-* live-broadcast events, alongside the
 	// other TRIGGER_TYPE values reused for that same field.
 	CRON: 'cron'
@@ -23,7 +23,7 @@ const TRIGGER_TYPE = Object.freeze({
 /**
  * Sentinel written into partial node-mode report filenames (never stored in main DB).
  * Used by remote runner nodes and by the built-in lane when running as part of a
- * distributed job (PLUM_MODE=node blocks the DB write in generate-report.js).
+ * distributed job: the primary persists the one report for the whole run.
  */
 const TRIGGER_REMOTE = 'remote-trigger';
 
@@ -48,7 +48,7 @@ function isScheduledTrigger(triggerType) {
 	return !!triggerType && !NON_SCHEDULED_TRIGGERS.has(triggerType);
 }
 
-/** Normalises a raw TRIGGER env value for DB storage — falls back to CLI if blank. */
+/** Normalises a raw TRIGGER env value for DB storage, falls back to CLI if blank. */
 function normaliseTrigger(raw) {
 	return raw || TRIGGER_TYPE.CLI;
 }
