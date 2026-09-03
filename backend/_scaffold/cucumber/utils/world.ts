@@ -6,7 +6,8 @@ import { SessionRecorder } from './recorder';
 // one, so `this.page` is that scenario's own page and nothing is shared with
 // scenarios running alongside it.
 //
-// The four below are filled in by the Before hook in hooks.ts. Add your own
+// The four below are Plum's: the Before hook in hooks.ts fills them in and
+// reads them back, so leaving them alone keeps replay working. Add your own
 // state next to them: a signed-in user, an API client, an id one step hands to
 // the next.
 export class PlumWorld extends World {
