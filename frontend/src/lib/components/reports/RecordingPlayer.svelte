@@ -609,7 +609,7 @@
 					? [{ recordingId: recordings[0].id, from: 0, to: 0 }]
 					: [];
 
-		// Playwright reports when each step started (plumStepReporter); Cucumber marks
+		// Playwright reports when each step started (stepTimingsReporter); Cucumber marks
 		// its steps inside the page instead (see markStepStart in browser.ts), always
 		// on the main tab. Both are wall-clock epoch ms, so seeking is identical.
 		const reported = steps.filter((s) => s.startedAt !== undefined).map((s) => s.startedAt);

@@ -21,10 +21,10 @@ const { withAt } = require('./playwrightDiscovery');
 function toFeatures(pwJson) {
 	const byFile = new Map();
 	const attempts = {};
-	// Written by plumStepReporter and folded in by foldStepTimings, keyed by the
+	// Written by stepTimingsReporter and folded in by foldStepTimings, keyed by the
 	// spec id and attempt the JSON report exposes. Absent for a report produced
 	// outside Plum, which is why buildSteps still reads the JSON's own steps.
-	const plumSteps = pwJson.plumSteps ?? {};
+	const stepTimings = pwJson.stepTimings ?? {};
 
 	const walk = (node, file, titlePath) => {
 		const currentFile = node.file ?? file;
@@ -43,7 +43,7 @@ function toFeatures(pwJson) {
 			const results = test?.results ?? [];
 			const last = results[results.length - 1];
 
-			const recorded = last ? plumSteps[`${spec.id}:${last.retry ?? 0}`] : null;
+			const recorded = last ? stepTimings[`${spec.id}:${last.retry ?? 0}`] : null;
 			const steps = buildSteps(last, spec.title, recorded);
 			const recordingStep = buildRecordingStep(results);
 			if (recordingStep) steps.push(recordingStep);

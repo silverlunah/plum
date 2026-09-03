@@ -27,7 +27,7 @@ function isTopLevelAuthored(step) {
 	return true;
 }
 
-class PlumStepReporter {
+class StepTimingsReporter {
 	constructor() {
 		// test.id + retry: the same key the JSON report exposes as spec.id and
 		// result.retry, so a retried test's steps stay with the attempt that ran them.
@@ -67,4 +67,4 @@ class PlumStepReporter {
 	}
 }
 
-module.exports = PlumStepReporter;
+module.exports = StepTimingsReporter;
