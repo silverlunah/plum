@@ -20,19 +20,21 @@ app.use(
 		exposedHeaders: ['Content-Disposition']
 	})
 );
-app.use(express.json());
-
-// Routes
-
 // Node-only, these run caller-supplied test code; on the primary that's an
 // unauthenticated RCE. The primary never serves its own /api/*.
 //
-// The large body limit lives here rather than globally: only a dispatched job
-// uploads a whole tests folder, and a global limit would let an unauthenticated
-// request buffer half a gigabyte on the primary.
+// Registered before the default parser below, and with its own limit: a dispatched
+// job uploads a whole tests folder, and express.json() defaults to 100kb, so the
+// default parser reached the body first and answered 413. Scoping the large limit
+// to /api on a node still keeps an unauthenticated request on the primary from
+// buffering half a gigabyte, since the primary never mounts this.
 if (isNodeMode()) {
 	app.use('/api', express.json({ limit: '500mb' }), require('./routes/node.routes'));
 }
+
+app.use(express.json());
+
+// Routes
 
 // Primary-mode routes, skipped when running as a runner node (no DB available)
 if (!isNodeMode()) {

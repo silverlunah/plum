@@ -461,7 +461,7 @@ function buildTestsReadme(framework) {
 		'',
 		'## Test Repository',
 		'',
-		'Running `plum server start` adds a web UI with suites, test cases and manual test runs. Set a case’s **Automated tag** to match a tag above and Plum marks it automated when a run completes.',
+		'Running `plum server start` adds a web UI with suites, test cases and manual test runs. Name a case so its ID matches a tag above (case `TC-001` ↔ test `@TC-001`) and Plum marks it automated.',
 		'',
 		'## Reference',
 		'',
@@ -1389,10 +1389,22 @@ async function nodeReconfig({ name }) {
 function readNodeSecretFromPrimary() {
 	const { getInstalls } = globalRegistryLib();
 	for (const dir of getInstalls('server')) {
+		// The file first: reports/ is bind-mounted into the server's own directory, so
+		// this works whatever the install layout. `docker compose exec` cannot stand in
+		// for it, because the compose files live in the package directory, not the one
+		// the server was started from: on a global install those are different folders,
+		// and the exec failed with "no configuration file provided", leaving a node with
+		// no secret to register with.
+		try {
+			const cleaned = cleanSecret(
+				fs.readFileSync(path.join(dir, 'reports', '.plum-node-secret'), 'utf8')
+			);
+			if (cleaned) return cleaned;
+		} catch {}
 		try {
 			const secret = execSync(
 				'docker compose exec -T backend sh -c "printenv PLUM_NODE_SECRET || cat reports/.plum-node-secret"',
-				{ cwd: dir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 }
+				{ cwd: plumRoot, stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 }
 			)
 				.toString()
 				.trim();
