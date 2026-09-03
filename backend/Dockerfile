@@ -3,7 +3,7 @@
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 #
 
-FROM mcr.microsoft.com/playwright:v1.50.0
+FROM mcr.microsoft.com/playwright:v1.62.1
 WORKDIR /app
 
 COPY package.json package-lock.json ./
