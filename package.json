@@ -6,7 +6,7 @@
 		"url": "https://github.com/silverlunah/plum.git"
 	},
 	"engines": {
-		"node": ">=20.12.0"
+		"node": ">=22.22.1"
 	},
 	"description": "A ready-to-use E2E test automation environment built on Playwright + Cucumber. Write tests in Gherkin, run them from the CLI or UI, view reports, schedule jobs, manage your entire test case repository, and get notified on Discord or Slack — all in one place.",
 	"main": "index.js",

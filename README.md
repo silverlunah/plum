@@ -15,7 +15,7 @@ Each project picks Playwright or Cucumber when it's created. Run tests from the 
 
 ## Requirements
 
-- [Node.js](https://nodejs.org) **20.12+** (22 LTS recommended)
+- [Node.js](https://nodejs.org) **22.22.1+**
 - [Docker](https://www.docker.com), only for the web UI. Writing tests and running runner nodes need neither Docker nor the server.
 
 ---
