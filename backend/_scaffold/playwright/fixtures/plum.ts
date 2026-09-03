@@ -4,7 +4,7 @@
  */
 
 // Plum's session recording. Import `test` from here instead of @playwright/test
-// and your runs get report replay and step-by-step results.
+// and your runs get report replay.
 //
 // This file is Plum's: leave it alone. Add your own fixtures in fixtures/pages.ts,
 // which extends this test. `test` is the only import that changes, expect, Page
@@ -18,7 +18,6 @@ import * as zlib from 'zlib';
 
 const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
 const WORKER_META_MIME_TYPE = 'application/x-plum-worker+json';
-const STEPS_MIME_TYPE = 'application/x-plum-steps+json';
 
 // @rrweb/record only exports its main entry, so resolve that and take the sibling
 // bundle off disk.
@@ -28,10 +27,6 @@ const RECORD_BUNDLE_PATH = path.join(
 );
 
 const LIVE_FLUSH_INTERVAL_MS = 500;
-
-export type PlumStep = <T>(name: string, body: () => Promise<T> | T) => Promise<T>;
-
-type RecordedStep = { name: string; status: 'passed' | 'failed'; duration: number; error?: string };
 
 interface TabRecording {
 	tabId: string;
@@ -44,63 +39,9 @@ interface TabRecording {
 
 const tabIdForIndex = (index: number): string => (index === 0 ? 'main' : `tab-${index + 1}`);
 
-// Off the fixture type on purpose: a fixture named in `extend` shows up in every
-// test's autocomplete, and this accumulator is not API.
-const stepsByTest = new WeakMap<TestInfo, RecordedStep[]>();
-
-function stepsFor(testInfo: TestInfo): RecordedStep[] {
-	let steps = stepsByTest.get(testInfo);
-	if (!steps) {
-		steps = [];
-		stepsByTest.set(testInfo, steps);
-	}
-	return steps;
-}
-
-async function markStep(page: Page, name: string): Promise<void> {
-	try {
-		await page.evaluate((label) => {
-			// @ts-ignore: injected by the rrweb bundle
-			if (window.rrwebRecord?.record?.addCustomEvent) {
-				// @ts-ignore
-				window.rrwebRecord.record.addCustomEvent('step', { name: label });
-			}
-		}, name);
-	} catch {
-		// best-effort: a missing marker only costs a label on the replay timeline
-	}
-}
-
 export const test = base.extend<{
-	plumStep: PlumStep;
 	context: BrowserContext;
 }>({
-	// Reports a step and marks it on the replay timeline. Use this in place of
-	// `test.step`: Playwright's JSON report drops steps that run inside a hook, so
-	// plumStep keeps its own list, which is what lets a `beforeEach` show up in
-	// Plum alongside the steps in the test body.
-	plumStep: async ({ page }, use, testInfo) => {
-		const recorded = stepsFor(testInfo);
-		const plumStep = async <T>(name: string, body: () => Promise<T> | T): Promise<T> => {
-			await markStep(page, name);
-			const startedAt = Date.now();
-			try {
-				const value = await base.step(name, async () => await body());
-				recorded.push({ name, status: 'passed', duration: Date.now() - startedAt });
-				return value;
-			} catch (e: unknown) {
-				recorded.push({
-					name,
-					status: 'failed',
-					duration: Date.now() - startedAt,
-					error: e instanceof Error ? e.message : String(e)
-				});
-				throw e;
-			}
-		};
-		await use(plumStep);
-	},
-
 	// Overrides Playwright's own context fixture so every page in it is recorded,
 	// including popups and target=_blank tabs.
 	context: async ({ context }, use, testInfo) => {
@@ -126,8 +67,8 @@ export const test = base.extend<{
 			});
 		};
 
-		// Only what is new since the last tick, so a live viewer gets a trickle
-		// rather than an ever-growing buffer.
+		// Only what is new since the last tick, and named per worker because every
+		// worker writes to the same folder.
 		const flushLive = () => {
 			const ssDir = process.env.PLUM_SS_DIR;
 			if (!ssDir) return;
@@ -136,7 +77,6 @@ export const test = base.extend<{
 				if (newEvents.length === 0) continue;
 				recording.liveFlushedCount = recording.events.length;
 				try {
-					// The worker id is in the name because every worker writes here.
 					const seq = `${String(Date.now()).padStart(16, '0')}-w${workerId}-${String(++liveCounter).padStart(4, '0')}`;
 					fs.writeFileSync(
 						path.join(ssDir, `${seq}.rrweb.json`),
@@ -191,15 +131,14 @@ export const test = base.extend<{
 
 		if (liveTimer) clearInterval(liveTimer);
 		flushLive();
-		await attachResults(testInfo, workerId, tabs, stepsFor(testInfo));
+		await attachResults(testInfo, workerId, tabs);
 	}
 });
 
 async function attachResults(
 	testInfo: TestInfo,
 	workerId: number,
-	tabs: Map<Page, TabRecording>,
-	plumSteps: RecordedStep[]
+	tabs: Map<Page, TabRecording>
 ): Promise<void> {
 	const attach = async (name: string, body: Buffer, contentType: string) => {
 		try {
@@ -214,10 +153,6 @@ async function attachResults(
 		Buffer.from(JSON.stringify({ workerId }), 'utf8'),
 		WORKER_META_MIME_TYPE
 	);
-
-	if (plumSteps.length > 0) {
-		await attach('plum-steps', Buffer.from(JSON.stringify(plumSteps), 'utf8'), STEPS_MIME_TYPE);
-	}
 
 	const flushedAt = Date.now();
 	for (const recording of tabs.values()) {

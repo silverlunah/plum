@@ -63,6 +63,7 @@ Use `plum create-test` to scaffold a new test. It asks whether to add a page obj
 | Command                      | Description                                                                      |
 | ---------------------------- | -------------------------------------------------------------------------------- |
 | `plum init`                  | Scaffold a local `./tests/` folder. `--framework playwright\|cucumber`           |
+| `plum check`                 | Check a tests folder: duplicate ids, untagged tests, files the runner can't read |
 | `plum create-test`           | Scaffold a test. `--page` also adds a page object, `--name <Name>` skips prompts |
 | `plum create-step`           | Cucumber only: scaffold a step definition (page object optional)                 |
 | `plum server start`          | Start the UI stack via Docker                                                    |
@@ -114,7 +115,7 @@ Full documentation lives in the **[GitHub wiki](https://github.com/silverlunah/p
 | [Installation](https://github.com/silverlunah/plum/wiki/Installation)                             | Requirements, global install, CLI-only vs. server, first-user setup             |
 | [Setting Up the Server](https://github.com/silverlunah/plum/wiki/Setting-Up-the-Server)           | `plum server start`, ports, local vs. production, reverse proxy                 |
 | [Setting Up Nodes](https://github.com/silverlunah/plum/wiki/Setting-Up-Nodes)                     | Runner nodes, the registration secret, start-on-boot, managing nodes            |
-| [Writing Tests](https://github.com/silverlunah/plum/wiki/Writing-Tests)                           | The scaffold, `plumStep`, optional page objects, `create-test` / `create-step`  |
+| [Writing Tests](https://github.com/silverlunah/plum/wiki/Writing-Tests)                           | The scaffold, `test.step`, optional page objects, `create-test` / `create-step` |
 | [Migrating an Existing Repo](https://github.com/silverlunah/plum/wiki/Migrating-an-Existing-Repo) | Adopting a Playwright or Cucumber repo you already have                         |
 | [Running Tests Locally](https://github.com/silverlunah/plum/wiki/Running-Tests-Locally)           | `npx playwright test` / `npx cucumber-js`, tags, workers, browsers, debugging   |
 | [Projects](https://github.com/silverlunah/plum/wiki/Projects)                                     | One org, many projects, the framework choice, on-disk layout, tests folder      |

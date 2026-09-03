@@ -4,6 +4,7 @@
  */
 
 const { execFile } = require('child_process');
+const { declaredForFile } = require('./playwrightSteps');
 const { promisify } = require('util');
 const fs = require('fs');
 const path = require('path');
@@ -43,6 +44,22 @@ function newestMtime(dir) {
 
 const execFileAsync = promisify(execFile);
 
+// Playwright still prints its JSON when it refuses to list, with what went wrong
+// in `errors`; those messages name the file and line, which stderr does not.
+function listError(e) {
+	try {
+		const parsed = JSON.parse(e.stdout ?? '');
+		const messages = (parsed.errors ?? [])
+			.map((err) => (err.message ?? '').split('\n')[0].trim())
+			.filter(Boolean);
+		if (messages.length > 0) return messages.join('\n');
+	} catch {
+		// Not JSON: fall through to whatever the process said.
+	}
+	const stderr = (e.stderr ?? '').trim();
+	return stderr.split('\n').slice(0, 3).join('\n') || e.message;
+}
+
 // Loading every spec file costs about a second, so this must not block the event
 // loop: it runs inside HTTP handlers and once per project at boot.
 async function listSpecs(testsRoot) {
@@ -66,8 +83,9 @@ async function listSpecs(testsRoot) {
  *
  * A describe block becomes a suite and its tag becomes the suite id, which mirrors
  * how a .feature file's Feature-level tag does. A file with no describe becomes one
- * suite named after the file. `steps` is always empty: Playwright has no steps
- * until a test actually runs, and only if the author used test.step().
+ * suite named after the file. `steps` are the test.step() calls the spec declares,
+ * read from its source: Playwright's --list reports none, because a step is a
+ * runtime call rather than metadata.
  */
 async function getPlaywrightSuites(testsRoot) {
 	if (!fs.existsSync(testsRoot)) return { suites: [], projects: [] };
@@ -80,11 +98,29 @@ async function getPlaywrightSuites(testsRoot) {
 	try {
 		listed = await listSpecs(testsRoot);
 	} catch (e) {
-		// A spec that does not compile, or a missing config, surfaced as an empty
-		// list rather than a 500, the same way an unreadable feature file is.
+		// A spec that does not compile, a duplicate test title or a missing config
+		// surfaces as an empty list rather than a 500, the same way an unreadable
+		// feature file does. The reason is carried out with it: an empty list on its
+		// own is indistinguishable from having written no tests yet, and the reader
+		// has no way to know Playwright refused to load the files.
 		console.error(`[discovery] playwright --list failed in ${testsRoot}: ${e.message}`);
-		return { suites: [], projects: [] };
+		const value = { suites: [], projects: [], error: listError(e) };
+		cache.set(testsRoot, { stamp, value });
+		return value;
 	}
+
+	// One parse per spec file, shared by every spec in it. rootDir is the config's
+	// testDir, and a suite's `file` is relative to it.
+	const rootDir = listed.config?.rootDir || testsRoot;
+	const parsedFiles = new Map();
+	const EMPTY = { tests: new Map(), suites: new Map() };
+	const declaredIn = (relFile) => {
+		if (!relFile) return EMPTY;
+		if (!parsedFiles.has(relFile)) {
+			parsedFiles.set(relFile, declaredForFile(path.resolve(rootDir, relFile)));
+		}
+		return parsedFiles.get(relFile);
+	};
 
 	// Keyed by suite name so the same describe block seen under two browser
 	// projects collapses into one suite. `--list` repeats every spec once per
@@ -92,8 +128,8 @@ async function getPlaywrightSuites(testsRoot) {
 	// rather than the same test in two browsers.
 	const byName = new Map();
 
-	// A spec's `tags` already include everything inherited from its describes, so a
-	// suite's own tags are whatever every spec beneath it shares.
+	// A spec's `tags` already include everything inherited from its describes, so
+	// which of them belong to the describe is read from the source.
 	const collect = (node, describeTitle, file) => {
 		// One entry per (spec x configured project), so the same test title repeats
 		// once per browser. Collapse on title: the UI lists tests, not browsers.
@@ -104,37 +140,48 @@ async function getPlaywrightSuites(testsRoot) {
 			return true;
 		});
 		if (specs.length > 0) {
-			// The suite's own tags are the ones every spec beneath it carries, which
-			// is what a describe-level tag looks like once Playwright has pushed it
-			// down onto each spec. Intersecting a single spec proves nothing (its tags
-			// are all its own), so that case has no suite tag at all.
+			const declared = declaredIn(file);
+			// What the `test.describe(...)` itself declares. Read from the source
+			// because --list flattens it onto every spec: inferring it instead, as the
+			// tags every spec shares, cannot work for a describe holding one test,
+			// whose only spec shares everything with itself. That left a one-test file
+			// with no suite tag and its describe's tag shown on the test.
+			const declaredSuite = (declared.suites.get(node.line) ?? []).map(withAt);
+			// Falls back to the inference when the source could not answer: an
+			// unparseable file, or a tag passed as a variable.
 			const shared =
-				specs.length > 1
-					? specs
-							.map((s) => new Set((s.tags ?? []).map(withAt)))
-							.reduce(
-								(acc, set) => (acc === null ? set : new Set([...acc].filter((t) => set.has(t)))),
-								null
-							)
-					: new Set();
+				declaredSuite.length > 0
+					? new Set(declaredSuite)
+					: specs.length > 1
+						? specs
+								.map((s) => new Set((s.tags ?? []).map(withAt)))
+								.reduce(
+									(acc, set) => (acc === null ? set : new Set([...acc].filter((t) => set.has(t)))),
+									null
+								)
+						: new Set();
 			const suiteTags = [...(shared ?? [])];
 
-			// A test's own tags exclude the suite's. Playwright reports a spec's tags
-			// with everything inherited from its describes already merged in, whereas a
-			// .feature file keeps Feature-level tags separate from Scenario ones, so
+			// A test's own tags exclude the ones it inherited. Playwright reports a
+			// spec's tags with everything from its describes already merged in, whereas
+			// a .feature file keeps Feature-level tags separate from Scenario ones, so
 			// without this subtraction the suite tag is shown twice on every row.
 			const tests = specs.map((spec) => {
 				const all = (spec.tags ?? []).map(withAt);
-				const own = all.filter((t) => !shared?.has(t));
+				const declaredTest = declared.tests.get(spec.line);
+				const inherited = declaredTest ? declaredTest.inheritedTags.map(withAt) : null;
+				const own = inherited
+					? all.filter((t) => !inherited.includes(t))
+					: all.filter((t) => !shared?.has(t));
 				// Never subtract a test down to nothing: when every tag it carries is
-				// shared, that tag is still its id, and showing it twice beats being
+				// inherited, that tag is still its id, and showing it twice beats being
 				// unlinkable to a case and unrunnable by tag.
 				const tags = own.length > 0 ? own : all;
 				return {
 					id: tags.length > 1 ? tags : (tags[0] ?? null),
 					testCase: spec.title,
 					type: 'spec',
-					steps: []
+					steps: declaredTest?.steps ?? []
 				};
 			});
 			const suiteName = describeTitle || file;

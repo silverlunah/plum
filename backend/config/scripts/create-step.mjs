@@ -47,10 +47,12 @@ function toPageFileName(name) {
 /* ------------------------------------------------------------------ */
 
 function generatePageFile(pageClassName, methodName) {
-	return `import { page } from '../utils/browser';
+	return `import { Page } from '@playwright/test';
 
 export class ${pageClassName} {
-\tstatic async ${methodName}() {
+\tconstructor(private readonly page: Page) {}
+
+\tasync ${methodName}() {
 \t\t// TODO: implement
 \t}
 }
@@ -60,25 +62,27 @@ export class ${pageClassName} {
 function generateStepFile(stepType, stepText, methodName, pageClassName, pageBaseName) {
 	return `import { ${stepType} } from '@cucumber/cucumber';
 import { ${pageClassName} } from '../pages/${pageBaseName}';
+import { PlumWorld } from '../utils/world';
 
-${stepType}('${stepText}', async () => {
-\tawait ${pageClassName}.${methodName}();
+${stepType}('${stepText}', async function (this: PlumWorld) {
+\tawait new ${pageClassName}(this.page).${methodName}();
 });
 `;
 }
 
 function generateStepFileInline(stepType, stepText) {
 	return `import { ${stepType} } from '@cucumber/cucumber';
+import { PlumWorld } from '../utils/world';
 
-${stepType}('${stepText}', async () => {
-\t// TODO: implement
+${stepType}('${stepText}', async function (this: PlumWorld) {
+\t// TODO: implement, this.page is the scenario's page
 });
 `;
 }
 
 function appendMethodToPage(filePath, methodName) {
 	let content = fs.readFileSync(filePath, 'utf8');
-	const method = `\n\tstatic async ${methodName}() {\n\t\t// TODO: implement\n\t}\n`;
+	const method = `\n\tasync ${methodName}() {\n\t\t// TODO: implement\n\t}\n`;
 	const lastBrace = content.lastIndexOf('}');
 	content = content.slice(0, lastBrace) + method + content.slice(lastBrace);
 	fs.writeFileSync(filePath, content, 'utf8');
@@ -87,6 +91,7 @@ function appendMethodToPage(filePath, methodName) {
 function appendStepToFile(filePath, stepType, stepText, methodName, pageClassName, pageBaseName) {
 	let content = fs.readFileSync(filePath, 'utf8');
 	content = ensureCucumberImport(content, stepType);
+	content = ensureWorldImport(content);
 
 	// Add page import if missing, and call the page method. Passing a null
 	// pageClassName inlines a TODO body instead (the "None" choice).
@@ -98,12 +103,23 @@ function appendStepToFile(filePath, stepType, stepText, methodName, pageClassNam
 			const insertAt = content.indexOf('\n', lastImportIdx + 1) + 1;
 			content = content.slice(0, insertAt) + pageImportLine + '\n' + content.slice(insertAt);
 		}
-		body = `\tawait ${pageClassName}.${methodName}();`;
+		body = `\tawait new ${pageClassName}(this.page).${methodName}();`;
 	}
 
-	const stepBlock = `\n${stepType}('${stepText}', async () => {\n${body}\n});\n`;
+	const stepBlock = `\n${stepType}('${stepText}', async function (this: PlumWorld) {\n${body}\n});\n`;
 	content = content.trimEnd() + '\n' + stepBlock;
 	fs.writeFileSync(filePath, content, 'utf8');
+}
+
+// A step's body uses `this.page`, so the file needs the World's type. Appending
+// to a file that predates it would otherwise not typecheck.
+function ensureWorldImport(content) {
+	const line = "import { PlumWorld } from '../utils/world';";
+	if (content.includes(line)) return content;
+	const lastImportIdx = content.lastIndexOf('\nimport ');
+	if (lastImportIdx === -1) return `${line}\n${content}`;
+	const insertAt = content.indexOf('\n', lastImportIdx + 1) + 1;
+	return content.slice(0, insertAt) + line + '\n' + content.slice(insertAt);
 }
 
 function ensureCucumberImport(content, stepType) {

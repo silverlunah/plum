@@ -1,46 +1,42 @@
-import test from '@playwright/test';
-import { page } from '../utils/browser';
-import { Utils } from '../utils/utils';
+import { Page, expect } from '@playwright/test';
 
 export class LoginPage {
-	static async goToLoginPage() {
-		await Utils.goToPage(process.env.BASE_URL as string);
-		await page().waitForTimeout(3000);
+	constructor(private readonly page: Page) {}
+
+	async goToLoginPage() {
+		// Relative: baseURL is set on the context in utils/world.ts.
+		await this.page.goto('/');
 	}
 
-	static async skipTest() {
-		test.skip();
+	async iEnterUsername(username: string) {
+		await this.page.fill('#user-name', username);
 	}
 
-	static async iEnterUsername(username: string) {
-		await page().fill('#user-name', username);
+	async iEnterPassword(password: string) {
+		await this.page.fill('#password', password);
 	}
 
-	static async iEnterPassword(password: string) {
-		await page().fill('#password', password);
+	async iClickOnTheLoginButton() {
+		await this.page.click('#login-button');
 	}
 
-	static async iClickOnTheLoginButton() {
-		await page().click('#login-button');
-	}
-
-	static async fillLoginForm(fields: { field: string; value: string }[]) {
+	async fillLoginForm(fields: { field: string; value: string }[]) {
 		for (const { field, value } of fields) {
-			if (field === 'username') await page().fill('#user-name', value);
-			if (field === 'password') await page().fill('#password', value);
+			if (field === 'username') await this.page.fill('#user-name', value);
+			if (field === 'password') await this.page.fill('#password', value);
 		}
-		await page().click('#login-button');
+		await this.page.click('#login-button');
 	}
 
-	static async verifyLoginOutcome(outcome: string) {
+	async verifyLoginOutcome(outcome: string) {
 		if (outcome === 'success') {
-			await page().waitForSelector('.title');
+			await expect(this.page.locator('.title')).toBeVisible();
 		} else {
-			await page().waitForSelector('.error-message-container');
+			await expect(this.page.locator('.error-message-container')).toBeVisible();
 		}
 	}
 
-	static async verifyLoginFailed() {
-		await page().waitForSelector('.error-message-container');
+	async verifyLoginFailed() {
+		await expect(this.page.locator('.error-message-container')).toBeVisible();
 	}
 }

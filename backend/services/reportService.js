@@ -11,7 +11,7 @@ const { isScheduledTrigger, normaliseTrigger, TRIGGER_TYPE } = require('../const
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { REPORT_STATUS } = require('../constants/jobStatus');
 
-// Also declared in both scaffolds' recording code (_scaffold/*/utils/browser.ts and
+// Also declared in both scaffolds' recording code (_scaffold/cucumber/utils/recorder.ts and
 // _scaffold/playwright/fixtures/plum.ts). Those files are copied into user projects
 // and cannot import from the server, so the value is duplicated on purpose.
 const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
@@ -157,7 +157,7 @@ function scenarioFailed(scenario) {
 }
 
 /**
- * Reads the worker-id marker browser.ts attaches unconditionally in the After
+ * Reads the worker-id marker the recording attaches unconditionally in the After
  * hook (separate from rrweb recordings, which can legitimately be empty).
  */
 function extractWorkerId(scenario) {
@@ -288,6 +288,10 @@ function processCucumberJson(raw, attempts = {}) {
 					status,
 					duration: Math.round((step.result?.duration ?? 0) / 1_000_000),
 					error: step.result?.error_message ?? null,
+					// Playwright only: when the step reporter ran, this is when the step
+					// started, and the replay seeks by it instead of by a marker recorded
+					// inside the page. Cucumber marks its steps in the page and has none.
+					...(step.startedAt !== undefined && { startedAt: step.startedAt }),
 					dataTable: step.arguments?.[0]?.rows?.map((row) => row.cells) ?? null
 				};
 			});

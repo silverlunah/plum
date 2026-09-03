@@ -9,6 +9,9 @@ export const PAGE_TITLE = 'Automated Tests, Plum';
 export const HEADING = 'Automated Tests';
 export const SEARCH_PLACEHOLDER = 'Search suites or tests…';
 export const NO_SUITES_MESSAGE = 'No test suites found.';
+export const DISCOVERY_FAILED_HEADING = 'Your tests could not be read';
+export const DISCOVERY_FAILED_HINT =
+	'The runner refused to load the test files, so none can be listed or run. Fix the problem below and this page updates on its own.';
 export const REPO_MANAGED_NOTE =
 	'These tests are managed in your project’s test repository. When a code change is detected, it will update on its own.';
 export const RUN_SUITE_LABEL = 'Run suite';
