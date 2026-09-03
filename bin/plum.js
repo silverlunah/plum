@@ -837,6 +837,54 @@ async function serverReconfig() {
 	clack.outro(`UI: ${pc.cyan(cfg.uiUrl)}`);
 }
 
+async function migrateCommand() {
+	clack.intro(pc.bgMagenta(pc.white('  🟣 Plum, Migrate  ')));
+	const { migrateProject } = require(path.join(plumRoot, 'backend', 'lib', 'migrateProject'));
+	const args = process.argv.slice(3);
+	const write = args.includes('--write');
+	const given = args.find((a) => !a.startsWith('--'));
+
+	// A local `plum init` project keeps its tests in ./tests; a repo pointed at by
+	// Settings keeps them wherever its config lives, so accept a path either way.
+	const root = given
+		? path.resolve(process.cwd(), given)
+		: fs.existsSync(path.join(process.cwd(), 'tests'))
+			? path.join(process.cwd(), 'tests')
+			: process.cwd();
+
+	const result = migrateProject(root, { write });
+	if (result.error) {
+		clack.log.error(result.error);
+		clack.outro(pc.dim('Pass the folder that holds your runner config: plum migrate <path>'));
+		process.exitCode = 1;
+		return;
+	}
+
+	clack.log.info(`${pc.bold(result.framework)}  ${pc.dim(result.root)}`);
+	const mark = { ok: pc.green('✓'), todo: pc.yellow('!'), info: pc.cyan('·') };
+	for (const check of result.checks) {
+		console.log(`  ${mark[check.state]} ${check.title}`);
+		if (check.detail) console.log(pc.dim(`      ${check.detail}`));
+	}
+
+	if (result.applied.length > 0) {
+		console.log('');
+		for (const line of result.applied) clack.log.success(line);
+		clack.log.warn('Review with `git diff` before committing.');
+	}
+
+	// What --write just handled is no longer outstanding.
+	const todo = result.checks.filter((c) => c.state === 'todo' && !(write && (c.rewrite || c.copy)));
+	const automatable = result.checks.filter((c) => c.rewrite || c.copy);
+	if (todo.length === 0) {
+		clack.outro(pc.green('Nothing left to do.'));
+	} else if (!write && automatable.length > 0) {
+		clack.outro(pc.dim('Nothing written. Re-run with --write to apply what can be automated.'));
+	} else {
+		clack.outro(pc.dim(`${todo.length} item(s) need a hand, see above.`));
+	}
+}
+
 /* -----------------------------------------------------
  *                 Node flow
  * ------------------------------------------------------ */
@@ -1665,6 +1713,10 @@ switch (command) {
 		break;
 	}
 
+	case 'migrate':
+		await migrateCommand();
+		break;
+
 	case 'manage-nodes': {
 		const { listNodeNames, loadNodeByName } = nodeRegisterLib();
 		const firstNode = listNodeNames()
@@ -1797,6 +1849,8 @@ switch (command) {
 		console.log(
 			'  node reconfig [name] Re-enter a node’s settings and re-register, without starting'
 		);
+		console.log('  migrate [path]       Report what an existing test folder still needs for Plum');
+		console.log('    --write            Apply the parts that can be automated');
 		console.log('  manage-nodes         Open the node management menu');
 		console.log(
 			'    --primary <url>    Primary server URL (default: saved config or localhost:3001)'

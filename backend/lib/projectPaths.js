@@ -102,7 +102,16 @@ function scaffoldProject(slug, framework) {
 // to inject TS_NODE_TRANSPILE_ONLY into the spawn env instead, so a project run
 // by hand would fail on any pre-existing type error.
 const REQUIRED_FILES = {
-	[FRAMEWORK.CUCUMBER]: ['cucumber.js', 'package.json', 'tsconfig.json'],
+	// utils/hooks.ts and utils/browser.ts are what record the session for replay, the
+	// Cucumber equivalent of fixtures/plum.ts below. They stay inert until the
+	// project's cucumber.js requires them, so filling them in is safe either way.
+	[FRAMEWORK.CUCUMBER]: [
+		'cucumber.js',
+		'package.json',
+		'tsconfig.json',
+		'utils/browser.ts',
+		'utils/hooks.ts'
+	],
 	// fixtures/plum.ts is what records the session for report replay, so a project
 	// without it produces reports that silently have no video.
 	[FRAMEWORK.PLAYWRIGHT]: [
