@@ -123,9 +123,23 @@ function splitRetries(framework, maxRetries) {
 // Both runners exit 0 when a selection matches nothing, so a run that verified
 // nothing would otherwise look like a clean pass in the log. saveReport marks the
 // report failed; this is what tells the person watching the run bar why.
-function warnIfNothingRan(rawJson, tag, onLog) {
+function warnIfNothingRan(rawJson, tag, onLog, framework, hadReport = true) {
 	const scenarios = rawJson.reduce((n, f) => n + (f.elements ?? []).length, 0);
 	if (scenarios > 0) return;
+	// An empty selection and a missing report file both arrive here with nothing to
+	// show, but they are opposite problems: the second usually means the tests passed
+	// and Plum could not see them, which the tag advice sends people away from.
+	if (!hadReport) {
+		const how =
+			framework === FRAMEWORK.PLAYWRIGHT
+				? 'playwright.config.ts needs a json reporter writing to process.env.PLUM_REPORT_FILE'
+				: 'cucumber.js needs a json:<PLUM_REPORT_FILE> entry in its format list';
+		onLog(
+			`[ERROR] The runner wrote no report file, so this run is marked failed even if tests ` +
+				`passed above. ${how}.\n`
+		);
+		return;
+	}
 	onLog(
 		`[ERROR] No tests matched ${tag ? `"${tag}"` : 'this run'}, nothing was executed, ` +
 			`so this run is marked failed. Check the tag, or that the tests still exist.\n`
@@ -273,7 +287,7 @@ async function runBuiltIn(run, io, emit) {
 			});
 			const parsed = parseLaneReport(framework, raw);
 			if (parsed.attempts) nativeAttempts = parsed.attempts;
-			warnIfNothingRan(parsed.rawJson, tagOverride ?? run.tag, onLog);
+			warnIfNothingRan(parsed.rawJson, tagOverride ?? run.tag, onLog, framework, !!raw);
 			return { code, rawJson: parsed.rawJson };
 		},
 		onLog
@@ -449,7 +463,7 @@ function runLane(run, io, emit, lane, plan, retrySplit, framework, laneLogs) {
 							ids: plan.ids,
 							reason: 'process exited with error'
 						});
-						warnIfNothingRan(parsed.rawJson, currentTag, onLog);
+						warnIfNothingRan(parsed.rawJson, currentTag, onLog, framework, !!raw);
 						return { code, rawJson: parsed.rawJson, attempts: parsed.attempts };
 					})
 			: (currentTag) =>

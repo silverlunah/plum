@@ -106,13 +106,17 @@ async function getPlaywrightSuites(testsRoot) {
 		if (specs.length > 0) {
 			// The suite's own tags are the ones every spec beneath it carries, which
 			// is what a describe-level tag looks like once Playwright has pushed it
-			// down onto each spec.
-			const shared = specs
-				.map((s) => new Set((s.tags ?? []).map(withAt)))
-				.reduce(
-					(acc, set) => (acc === null ? set : new Set([...acc].filter((t) => set.has(t)))),
-					null
-				);
+			// down onto each spec. Intersecting a single spec proves nothing (its tags
+			// are all its own), so that case has no suite tag at all.
+			const shared =
+				specs.length > 1
+					? specs
+							.map((s) => new Set((s.tags ?? []).map(withAt)))
+							.reduce(
+								(acc, set) => (acc === null ? set : new Set([...acc].filter((t) => set.has(t)))),
+								null
+							)
+					: new Set();
 			const suiteTags = [...(shared ?? [])];
 
 			// A test's own tags exclude the suite's. Playwright reports a spec's tags
@@ -120,7 +124,12 @@ async function getPlaywrightSuites(testsRoot) {
 			// .feature file keeps Feature-level tags separate from Scenario ones, so
 			// without this subtraction the suite tag is shown twice on every row.
 			const tests = specs.map((spec) => {
-				const tags = (spec.tags ?? []).map(withAt).filter((t) => !shared?.has(t));
+				const all = (spec.tags ?? []).map(withAt);
+				const own = all.filter((t) => !shared?.has(t));
+				// Never subtract a test down to nothing: when every tag it carries is
+				// shared, that tag is still its id, and showing it twice beats being
+				// unlinkable to a case and unrunnable by tag.
+				const tags = own.length > 0 ? own : all;
 				return {
 					id: tags.length > 1 ? tags : (tags[0] ?? null),
 					testCase: spec.title,

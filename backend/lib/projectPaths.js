@@ -114,14 +114,33 @@ const REQUIRED_FILES = {
 };
 
 // Never overwrites: a project that has edited its own cucumber.js keeps it.
+// A relocated tests folder usually sits inside a repo that already declares these
+// higher up (a monorepo root). Writing our own copy there shadows that install and
+// duplicates node_modules, so these two are only filled in when nothing above the
+// folder provides them. Anything the tree above lacks is still added.
+const INHERITABLE = new Set(['package.json', 'tsconfig.json']);
+
+function providedAbove(projectRoot, dest, file) {
+	let dir = path.dirname(dest);
+	for (;;) {
+		if (fs.existsSync(path.join(dir, file))) return true;
+		if (dir === projectRoot || !dir.startsWith(projectRoot)) return false;
+		const parent = path.dirname(dir);
+		if (parent === dir) return false;
+		dir = parent;
+	}
+}
+
 function ensureRunnerConfig(slug, framework, testsPath = DEFAULT_TESTS_PATH) {
 	const src = scaffoldDirFor(framework);
-	const dest = path.join(PROJECTS_DIR, slug, testsPath);
+	const projectRoot = path.join(PROJECTS_DIR, slug);
+	const dest = path.join(projectRoot, testsPath);
 	if (!fs.existsSync(src) || !fs.existsSync(dest)) return [];
 	const added = [];
 	for (const file of REQUIRED_FILES[framework] ?? []) {
 		const target = path.join(dest, file);
 		if (fs.existsSync(target)) continue;
+		if (INHERITABLE.has(file) && providedAbove(projectRoot, dest, file)) continue;
 		try {
 			fs.mkdirSync(path.dirname(target), { recursive: true });
 			fs.copyFileSync(path.join(src, file), target);
