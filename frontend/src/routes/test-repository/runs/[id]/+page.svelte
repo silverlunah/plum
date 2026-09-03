@@ -170,7 +170,7 @@
 				fetchMembers()
 			]);
 			expandedSuites = new Set(suites.map((s) => s.id));
-			if (run.status === 'in-progress') mode = 'execute';
+			if (run.status === 'in-progress' || run.status === 'complete') mode = 'execute';
 		} catch (e) {
 			notify('error', FAILED_TO_LOAD_DATA);
 		} finally {
@@ -186,7 +186,8 @@
 			const prevStatus = run.status;
 			fetchRun(runId).then((r) => {
 				run = r;
-				if (prevStatus !== r.status) mode = r.status === 'in-progress' ? 'execute' : 'build';
+				if (prevStatus !== r.status)
+					mode = r.status === 'in-progress' || r.status === 'complete' ? 'execute' : 'build';
 			});
 			return;
 		}
@@ -354,6 +355,7 @@
 		try {
 			await updateRun(runId, { status: 'complete' });
 			run = { ...run, status: 'complete' };
+			mode = 'execute';
 			runsVersion.update((v) => v + 1);
 			notify('success', RUN_MARKED_COMPLETE_TOAST);
 		} catch (e) {
