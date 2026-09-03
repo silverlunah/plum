@@ -32,6 +32,15 @@ if (isNodeMode()) {
 	app.use('/api', express.json({ limit: '500mb' }), require('./routes/node.routes'));
 }
 
+// Same ordering problem, same fix: restoring a backup uploads the instance, and
+// with reports included every rrweb recording is base64'd into that one body, so
+// it is megabytes at minimum. The default parser answered 413 before the route
+// ever ran. Only the two restore endpoints get the large limit, and both are
+// owner-only inside the router.
+if (!isNodeMode()) {
+	app.use(['/backup/import', '/backup/s3-restore'], express.json({ limit: '500mb' }));
+}
+
 app.use(express.json());
 
 // Routes

@@ -878,14 +878,11 @@ async function configureNode({ force, name: nameArg }) {
 	const args = process.argv.slice(3);
 
 	let name = nameArg ?? getFlag(args, '--name') ?? null;
-	const interactive =
-		force ||
-		(interactiveAllowed() &&
-			!name &&
-			!anyFlags(args, ['--primary', '--url', '--port', '--token', '--browser']));
+	const flagDriven = anyFlags(args, ['--primary', '--url', '--port', '--token', '--browser']);
+	const canAsk = force || (interactiveAllowed() && !flagDriven);
 
 	// Name first, the saved config for that name seeds the other defaults.
-	if (!name && interactive) {
+	if (!name && canAsk) {
 		const v = await clack.text({
 			message: 'Node name or alias, call it whatever you like',
 			placeholder: 'node-1',
@@ -898,6 +895,12 @@ async function configureNode({ force, name: nameArg }) {
 
 	const saved = loadNodeByName(name);
 	const preexisting = Object.keys(saved).length > 0;
+
+	// A name on its own carries no connection details, so it must not stand in for
+	// the answers: `plum node start node-2` is the documented way to register a node
+	// on a second machine, and it has to ask where the server is. Only a config that
+	// already knows its primary can skip the questions and just start.
+	const interactive = canAsk && !(preexisting && saved.primary);
 
 	let mode = getFlag(args, '--mode') ?? saved.mode ?? 'local';
 	let primary = getFlag(args, '--primary') ?? process.env.PRIMARY_URL ?? saved.primary ?? '';

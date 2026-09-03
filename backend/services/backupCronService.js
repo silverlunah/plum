@@ -9,7 +9,10 @@ const backupService = require('./backupService');
 
 let scheduledJob = null;
 
-const runBackup = async () => {
+// force: the "Back up now" button. The schedule being off means "don't run this
+// on a timer", not "refuse to run at all", and returning early there made the
+// button report success while uploading nothing.
+const runBackup = async ({ force = false } = {}) => {
 	let org;
 	try {
 		org = await prisma.organization.findFirst({ orderBy: { id: 'asc' } });
@@ -18,7 +21,7 @@ const runBackup = async () => {
 		return;
 	}
 
-	if (!org?.backupEnabled) return;
+	if (!force && !org?.backupEnabled) return;
 
 	try {
 		const data = await backupService.exportAll(org.backupIncludeReports);
