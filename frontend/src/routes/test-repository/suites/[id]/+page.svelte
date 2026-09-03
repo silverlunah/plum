@@ -938,8 +938,8 @@
 										<div class="steps-table-row">
 											<span class="col-num">{i + 1}</span>
 											<span class="col-action">{step.action}</span>
-											<span class="col-data">{step.testData || ','}</span>
-											<span class="col-expected">{step.expectedOutput || ','}</span>
+											<span class="col-data">{step.testData || '—'}</span>
+											<span class="col-expected">{step.expectedOutput || '—'}</span>
 										</div>
 									{/each}
 								</div>
