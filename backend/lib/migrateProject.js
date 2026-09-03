@@ -268,7 +268,10 @@ function analyseCucumber(root, checks) {
 		checks.push({
 			state: TODO,
 			title: 'No cucumber.js in this folder',
-			detail: 'Added automatically by `plum server restart`.'
+			detail:
+				'Cucumber runs without one, but only a config can load the recording hooks. Create it:\n' +
+				"      module.exports = { default: { require: ['features/**/*.js', 'utils/hooks.ts'] } };",
+			manual: true
 		});
 	}
 

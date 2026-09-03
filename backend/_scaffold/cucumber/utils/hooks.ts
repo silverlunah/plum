@@ -13,7 +13,6 @@ import {
 	ITestCaseHookParameter
 } from '@cucumber/cucumber';
 import { setup, teardown, flushRecordings, markStepStart } from './browser';
-import { WELCOME_MESSAGE } from './constants';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -70,8 +69,3 @@ After(async function () {
 // recording: leave it as-is. Add your own Before/After/BeforeStep hooks
 // here; Cucumber runs every registered hook, so yours run alongside Plum's.
 // ---------------------------------------------------------------------------
-
-// Example of using a shared constant. Runs once per scenario.
-Before(async () => {
-	console.log(WELCOME_MESSAGE);
-});

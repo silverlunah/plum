@@ -125,24 +125,18 @@ function scaffoldProject(slug, framework) {
 // to inject TS_NODE_TRANSPILE_ONLY into the spawn env instead, so a project run
 // by hand would fail on any pre-existing type error.
 const REQUIRED_FILES = {
+	// The runner config is deliberately absent. A scaffolded project gets one from the
+	// scaffold copy, while an adopted repo either has its own or runs on its runner's
+	// defaults, and writing ours into it broke both: a JS Cucumber repo that worked
+	// with zero config got one requiring ts-node and pointing at step_definitions/*.ts.
+	//
 	// utils/hooks.ts and utils/browser.ts are what record the session for replay, the
 	// Cucumber equivalent of fixtures/plum.ts below. They stay inert until the
-	// project's cucumber.js requires them, so filling them in is safe either way.
-	[FRAMEWORK.CUCUMBER]: [
-		'cucumber.js',
-		'package.json',
-		'tsconfig.json',
-		'utils/browser.ts',
-		'utils/hooks.ts'
-	],
+	// project's own config requires them, so filling them in is safe either way.
+	[FRAMEWORK.CUCUMBER]: ['package.json', 'tsconfig.json', 'utils/browser.ts', 'utils/hooks.ts'],
 	// fixtures/plum.ts is what records the session for report replay, so a project
 	// without it produces reports that silently have no video.
-	[FRAMEWORK.PLAYWRIGHT]: [
-		'playwright.config.ts',
-		'package.json',
-		'tsconfig.json',
-		'fixtures/plum.ts'
-	]
+	[FRAMEWORK.PLAYWRIGHT]: ['package.json', 'tsconfig.json', 'fixtures/plum.ts']
 };
 
 // Never overwrites: a project that has edited its own cucumber.js keeps it.
@@ -150,15 +144,7 @@ const REQUIRED_FILES = {
 // higher up (a monorepo root). Writing our own copy there shadows that install and
 // duplicates node_modules, so these two are only filled in when nothing above the
 // folder provides them. Anything the tree above lacks is still added.
-// The runner config is inheritable too: injecting a second one into a tests folder
-// whose repo already has one above it gives the run a config the team never wrote,
-// and it wins because a run executes from the tests folder.
-const INHERITABLE = new Set([
-	'package.json',
-	'tsconfig.json',
-	'playwright.config.ts',
-	'cucumber.js'
-]);
+const INHERITABLE = new Set(['package.json', 'tsconfig.json']);
 
 function providedAbove(projectRoot, dest, file) {
 	let dir = path.dirname(dest);
