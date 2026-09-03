@@ -142,6 +142,11 @@ npm run docker:down  # stop it
 
 Rebuild with `npm run docker:up` after any backend dependency or schema change.
 
+`docker:up` bind-mounts `projects/` into the container, so each project's tests folder
+appears in your checkout and you can edit it directly. Note that Compose takes its
+project name from the directory, so two checkouts both called `plum` share one
+database; clone into a differently named folder if you want an isolated one.
+
 ### Frontend hot reload
 
 The container serves a production build, so run Vite outside Docker while working on the UI:
@@ -181,13 +186,22 @@ npx playwright test --grep @TC-001     # or: npx cucumber-js --tags @TC-001
 npx playwright test --workers 4        # or: npx cucumber-js --parallel 4
 ```
 
-Generators and the node menu live in `backend`:
+### Generators
+
+Run these from the project you are adding to, so the files land in its tests folder.
+Run them from `backend` and they write into `backend/tests/`, a legacy folder no
+project reads:
 
 ```bash
-cd backend
-npm run create-test
-npm run create-step
-npm run manage-nodes
+cd projects/<slug>
+node ../../bin/plum.js create-test     # --page also adds a page object
+node ../../bin/plum.js create-step     # Cucumber only
+```
+
+The node menu is not path-dependent:
+
+```bash
+cd backend && npm run manage-nodes
 ```
 
 ---

@@ -34,7 +34,13 @@ services:
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     volumes:
+      # Both are remapped to absolute cwd paths by docker-compose.override.yml when
+      # the stack is started through `plum server start`. They matter here for a
+      # contributor running `npm run docker:up`, which writes no override: without
+      # the projects mount the test folders only exist inside the container, so they
+      # cannot be edited from the checkout and are lost on the next rebuild.
       - ./backend/reports:/app/reports
+      - ./projects:/app/projects
     depends_on:
       postgres:
         condition: service_healthy
