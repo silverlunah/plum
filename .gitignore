@@ -89,3 +89,6 @@ docker-compose.override.yml
 # Vite
 /frontend/vite.config.js.timestamp-*
 /frontend/vite.config.ts.timestamp-*
+
+# npm pack output, never committed
+*.tgz
