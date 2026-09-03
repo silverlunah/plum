@@ -54,15 +54,13 @@ const test = base.extend<{ ${fixture}: ${base}Page }>({
 });
 
 test.describe('${pascal}', { tag: '${suiteTag}' }, () => {
-	test.describe.configure({ mode: 'parallel' });
-
-	test.beforeEach(async ({ ${fixture}, plumStep }) => {
-		await plumStep('I am on the ${pascal} page', () => ${fixture}.goTo());
+	test.beforeEach(async ({ ${fixture} }) => {
+		await test.step('I am on the ${pascal} page', () => ${fixture}.goTo());
 	});
 
-	test('Example test', { tag: '${testTag}' }, async ({ ${fixture}, plumStep }) => {
-		await plumStep('I perform an action', () => ${fixture}.performAction());
-		await plumStep('I should see the expected result', () => ${fixture}.verifyResult());
+	test('Example test', { tag: '${testTag}' }, async ({ ${fixture} }) => {
+		await test.step('I perform an action', () => ${fixture}.performAction());
+		await test.step('I should see the expected result', () => ${fixture}.verifyResult());
 	});
 });
 `;
@@ -72,17 +70,15 @@ function generateSpecNoPage(pascal, suiteTag, testTag) {
 	return `import { test } from '../fixtures/plum';
 
 test.describe('${pascal}', { tag: '${suiteTag}' }, () => {
-	test.describe.configure({ mode: 'parallel' });
-
-	test('Example test', { tag: '${testTag}' }, async ({ page, plumStep }) => {
-		await plumStep('I am on the ${pascal} page', async () => {
+	test('Example test', { tag: '${testTag}' }, async ({ page }) => {
+		await test.step('I am on the ${pascal} page', async () => {
 			// Relative: baseURL comes from playwright.config.ts.
 			await page.goto('/');
 		});
-		await plumStep('I perform an action', async () => {
+		await test.step('I perform an action', async () => {
 			// TODO: implement
 		});
-		await plumStep('I should see the expected result', async () => {
+		await test.step('I should see the expected result', async () => {
 			// TODO: implement
 		});
 	});

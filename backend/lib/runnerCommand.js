@@ -5,6 +5,7 @@
 
 const path = require('path');
 const { FRAMEWORK, isBrowser } = require('../constants/defaults');
+const STEP_REPORTER = require.resolve('./plumStepReporter.cjs');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
 
@@ -61,7 +62,10 @@ function buildRunCommand({
 		// priority over a config outputFile, so a scaffolded project lands in the same
 		// place it always did. `list` is kept so the run still streams to the log.
 		env.PLAYWRIGHT_JSON_OUTPUT_FILE = reportFile;
-		const args = [cli, 'test', '--reporter=list,json'];
+		// Plum's own reporter rides along by absolute path, so it works the same in a
+		// scaffolded project and in an adopted repo that has never heard of Plum. It
+		// supplies the step start times and the in-hook steps the JSON report leaves out.
+		const args = [cli, 'test', `--reporter=list,json,${STEP_REPORTER}`];
 		const grep = tagsToGrep(tag);
 		if (grep) args.push('--grep', grep);
 		// Validated rather than trusted: it arrives from a run request, and an

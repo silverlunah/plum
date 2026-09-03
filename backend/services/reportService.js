@@ -288,6 +288,10 @@ function processCucumberJson(raw, attempts = {}) {
 					status,
 					duration: Math.round((step.result?.duration ?? 0) / 1_000_000),
 					error: step.result?.error_message ?? null,
+					// Playwright only: when the step reporter ran, this is when the step
+					// started, and the replay seeks by it instead of by a marker recorded
+					// inside the page. Cucumber marks its steps in the page and has none.
+					...(step.startedAt !== undefined && { startedAt: step.startedAt }),
 					dataTable: step.arguments?.[0]?.rows?.map((row) => row.cells) ?? null
 				};
 			});

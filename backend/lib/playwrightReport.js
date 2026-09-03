@@ -21,6 +21,10 @@ const { withAt } = require('./playwrightDiscovery');
 function toFeatures(pwJson) {
 	const byFile = new Map();
 	const attempts = {};
+	// Written by plumStepReporter and folded in by foldStepTimings, keyed by the
+	// spec id and attempt the JSON report exposes. Absent for a report produced
+	// outside Plum, which is why buildSteps still reads the JSON's own steps.
+	const plumSteps = pwJson.plumSteps ?? {};
 
 	const walk = (node, file, titlePath) => {
 		const currentFile = node.file ?? file;
@@ -39,7 +43,8 @@ function toFeatures(pwJson) {
 			const results = test?.results ?? [];
 			const last = results[results.length - 1];
 
-			const steps = buildSteps(last, spec.title);
+			const recorded = last ? plumSteps[`${spec.id}:${last.retry ?? 0}`] : null;
+			const steps = buildSteps(last, spec.title, recorded);
 			const recordingStep = buildRecordingStep(results);
 			if (recordingStep) steps.push(recordingStep);
 			const idTag = tags.find((t) => /^@tc-?\d+/i.test(t) || /^@test[\w-]*/i.test(t));
@@ -82,27 +87,7 @@ function toFeatures(pwJson) {
 
 const RRWEB_MIME_TYPE = 'application/x-plum-rrweb+json';
 const WORKER_META_MIME_TYPE = 'application/x-plum-worker+json';
-const STEPS_MIME_TYPE = 'application/x-plum-steps+json';
 const RECORDING_MIME_TYPES = new Set([RRWEB_MIME_TYPE, WORKER_META_MIME_TYPE]);
-
-/**
- * Steps the Plum fixture recorded itself, or null when it wasn't used.
- *
- * Preferred over `results[].steps` because Playwright's JSON drops steps that ran
- * inside a hook: a `beforeEach` would otherwise be missing from the report.
- */
-function attachedSteps(result) {
-	const found = (result?.attachments ?? []).find(
-		(a) => a.contentType === STEPS_MIME_TYPE && a.body
-	);
-	if (!found) return null;
-	try {
-		const parsed = JSON.parse(Buffer.from(found.body, 'base64').toString('utf8'));
-		return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
-	} catch {
-		return null;
-	}
-}
 
 /**
  * Plum's own attachments, re-shaped as a hidden step carrying Cucumber-style
@@ -145,7 +130,7 @@ function stepStatus(status) {
  * `keyword` is deliberately empty: Given/When/Then is Gherkin vocabulary and a
  * Playwright step has no equivalent. The report hides the chip when it is blank.
  */
-function buildSteps(result, title) {
+function buildSteps(result, title, recorded) {
 	if (!result) {
 		return [
 			{
@@ -158,17 +143,27 @@ function buildSteps(result, title) {
 
 	const errorMessage = (result.errors ?? []).map((e) => e.message).join('\n\n') || null;
 
-	const recorded = attachedSteps(result);
-	if (recorded) {
-		return recorded.map((step) => ({
-			keyword: '',
-			name: step.name,
-			result: {
-				status: step.status === 'passed' ? 'passed' : 'failed',
-				duration: (step.duration ?? 0) * 1_000_000,
-				...((step.error || errorMessage) && { error_message: step.error ?? errorMessage })
-			}
-		}));
+	if (recorded?.length > 0) {
+		// The test's own error belongs to one step, not to every step: the one that
+		// failed, or the last one when the test died outside a step (a timeout, say).
+		// Attaching it everywhere put a red error on steps the report shows as passed.
+		const failedIndex = recorded.findIndex((step) => step.status === 'failed');
+		return recorded.map((step, i) => {
+			const ownsTestError = failedIndex === -1 ? i === recorded.length - 1 : i === failedIndex;
+			const error = step.error ?? (ownsTestError ? errorMessage : null);
+			return {
+				keyword: '',
+				name: step.name,
+				// Wall-clock epoch ms, the same clock the rrweb events carry, which is what
+				// lets the replay seek to a step without a marker inside the page.
+				...(step.startedAt !== undefined && { startedAt: step.startedAt }),
+				result: {
+					status: step.status === 'failed' ? 'failed' : 'passed',
+					duration: (step.duration ?? 0) * 1_000_000,
+					...(error && { error_message: error })
+				}
+			};
+		});
 	}
 
 	const authored = (result.steps ?? []).filter(

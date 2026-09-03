@@ -403,7 +403,7 @@ function buildTestsReadme(framework) {
 	const tagExample = pw
 		? [
 				'```ts',
-				"test('User can log in', { tag: '@TC-001' }, async ({ page, plumStep }) => {",
+				"test('User can log in', { tag: '@TC-001' }, async ({ page }) => {",
 				'\t// ...',
 				'});',
 				'```'
