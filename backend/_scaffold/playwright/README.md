@@ -11,6 +11,8 @@ This folder is yours: git-manage it and merge new tests straight in. Plum mounts
 
 Take `test` from the fixtures, not from `@playwright/test`, because that is what records the session for report replay. It is the only import that changes: `expect`, `Page`, `Locator` and everything else come from `@playwright/test` as usual, and you never edit a fixture to use a new Playwright API.
 
+It is also the only thing Plum asks of a spec. Import `test` from `@playwright/test` instead and the test still runs and still reports, with a row and a duration per `test.step` — it just has no replay.
+
 ```ts
 import { expect, type Page } from '@playwright/test';
 import { test } from '../fixtures/pages';
