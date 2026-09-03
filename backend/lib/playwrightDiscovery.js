@@ -166,7 +166,10 @@ async function getPlaywrightSuites(testsRoot) {
 		// The config's own project names. Plum passes --project=<browser>, and an
 		// adopted repo may name its projects anything at all, which Playwright
 		// rejects outright rather than ignoring.
-		projects: (listed.config?.projects ?? []).map((p) => p.name).filter(Boolean)
+		// Names are kept verbatim, including the empty one a config-less run reports.
+		// Filtering it out left an empty array, which buildRunCommand reads as "unknown"
+		// and passes --project anyway, which is the one case that cannot accept it.
+		projects: (listed.config?.projects ?? []).map((p) => p.name ?? '')
 	};
 	cache.set(testsRoot, { stamp, value });
 	return value;

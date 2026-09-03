@@ -844,13 +844,20 @@ async function migrateCommand() {
 	const write = args.includes('--write');
 	const given = args.find((a) => !a.startsWith('--'));
 
-	// A local `plum init` project keeps its tests in ./tests; a repo pointed at by
-	// Settings keeps them wherever its config lives, so accept a path either way.
+	// The folder that holds the runner config, which is the one a run executes from.
+	// A stock Playwright repo keeps it at the root with tests/ as the testDir, while
+	// `plum init` puts everything under tests/, so guessing ./tests first analysed the
+	// testDir of a normal repo and reported its config as missing.
+	const CONFIGS = ['playwright.config.ts', 'playwright.config.js', 'cucumber.js'];
+	const holdsConfig = (dir) => CONFIGS.some((f) => fs.existsSync(path.join(dir, f)));
 	const root = given
 		? path.resolve(process.cwd(), given)
-		: fs.existsSync(path.join(process.cwd(), 'tests'))
-			? path.join(process.cwd(), 'tests')
-			: process.cwd();
+		: ([process.cwd(), path.join(process.cwd(), 'tests'), path.join(process.cwd(), 'e2e')].find(
+				holdsConfig
+			) ??
+			(fs.existsSync(path.join(process.cwd(), 'tests'))
+				? path.join(process.cwd(), 'tests')
+				: process.cwd()));
 
 	const result = migrateProject(root, { write });
 	if (result.error) {

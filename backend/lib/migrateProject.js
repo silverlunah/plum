@@ -115,7 +115,41 @@ function ownTestModule(root, specs) {
 	return null;
 }
 
+// Plum's own runner version, whose browser builds are the only ones in the image.
+function plumRunnerVersion(pkg) {
+	try {
+		return require(`${pkg}/package.json`).version;
+	} catch {
+		return null;
+	}
+}
+
+// A project pinning a different minor fails at launch with "Executable doesn't
+// exist at .../chromium_headless_shell-<build>", because browser builds are tied
+// to the runner version and the image only carries Plum's.
+function versionCheck(root, pkg, checks) {
+	const mine = plumRunnerVersion(pkg);
+	let declared = null;
+	try {
+		const own = JSON.parse(read(path.join(root, 'package.json')));
+		declared = own.devDependencies?.[pkg] ?? own.dependencies?.[pkg] ?? null;
+	} catch {}
+	if (!declared || !mine) return;
+	const wanted = declared.replace(/^[^0-9]*/, '');
+	const sameMinor =
+		wanted.split('.').slice(0, 2).join('.') === mine.split('.').slice(0, 2).join('.');
+	checks.push({
+		state: sameMinor ? OK : TODO,
+		title: `${pkg}: your ${declared} vs Plum's ${mine}`,
+		detail: sameMinor
+			? null
+			: `Browser builds are tied to the runner version and the image only ships Plum's, so a run fails at launch. Pin ${pkg} to ${mine}, or run the tests on a node that has your own browsers.`,
+		manual: true
+	});
+}
+
 function analysePlaywright(root, checks) {
+	versionCheck(root, '@playwright/test', checks);
 	const fixture = path.join(root, 'fixtures', 'plum.ts');
 	const hasFixture = fs.existsSync(fixture);
 	checks.push({
@@ -127,7 +161,14 @@ function analysePlaywright(root, checks) {
 	const configFile = ['playwright.config.ts', 'playwright.config.js']
 		.map((f) => path.join(root, f))
 		.find(fs.existsSync);
-	const config = configFile ? read(configFile) : '';
+	// Comments stripped: the official initializer ships its extra browser projects
+	// commented out, and matching inside them listed webkit and Mobile Safari as
+	// declared when a run cannot select them.
+	const config = configFile
+		? read(configFile)
+				.replace(/\/\*[\s\S]*?\*\//g, '')
+				.replace(/^\s*\/\/.*$/gm, '')
+		: '';
 	const projectNames = [...config.matchAll(/name:\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
 	if (projectNames.length === 0) {
 		checks.push({
@@ -201,7 +242,14 @@ function analysePlaywright(root, checks) {
 		});
 	}
 
-	const tagged = specs.filter((f) => /\{\s*tag\s*:|@[A-Za-z]/.test(read(f))).length;
+	// Imports are stripped first: '@playwright/test' is not a tag, and counting it
+	// reported every stock repo as fully tagged.
+	const tagged = specs.filter((f) => {
+		const body = read(f)
+			.replace(/^\s*import[^;]*;?$/gm, '')
+			.replace(/require\([^)]*\)/g, '');
+		return /\{\s*tag\s*:/.test(body) || /@[A-Za-z][\w-]*/.test(body);
+	}).length;
 	checks.push({
 		state: tagged > 0 ? OK : INFO,
 		title: `Tags found in ${tagged} of ${specs.length} spec files`,
@@ -213,6 +261,7 @@ function analysePlaywright(root, checks) {
 }
 
 function analyseCucumber(root, checks) {
+	versionCheck(root, 'playwright', checks);
 	const configFile = path.join(root, 'cucumber.js');
 	const config = fs.existsSync(configFile) ? read(configFile) : '';
 	if (!config) {

@@ -29,6 +29,29 @@ const scaffoldDirFor = (framework) => path.join(SCAFFOLD_DIR, framework);
 const UNCOPYABLE = new Set(['node_modules', 'test-results', 'playwright-report', 'blob-report']);
 const copyable = (src) => !UNCOPYABLE.has(path.basename(src));
 
+// Does this folder already hold somebody's tests? The scaffold sentinel alone was
+// not enough: an adopted repo keeps its config at its own root, so a tests folder
+// full of specs looked unscaffolded and got the whole scaffold written into it,
+// after which Plum's config governed and the repo's own tests never ran.
+const TEST_FILE = /\.(spec|test)\.(ts|js|mts|mjs|tsx|jsx)$|\.feature$/;
+function holdsTests(dir) {
+	let entries;
+	try {
+		entries = fs.readdirSync(dir, { withFileTypes: true });
+	} catch {
+		return false;
+	}
+	for (const entry of entries) {
+		if (entry.isDirectory()) {
+			if (UNCOPYABLE.has(entry.name) || entry.name === '.git') continue;
+			if (holdsTests(path.join(dir, entry.name))) return true;
+		} else if (TEST_FILE.test(entry.name)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 // id → slug / tests subpath, so the sync path helpers in testsRoot.js don't need
 // a DB round trip. Kept fresh by refresh() on startup and after any project
 // create / delete / settings save.
@@ -127,7 +150,15 @@ const REQUIRED_FILES = {
 // higher up (a monorepo root). Writing our own copy there shadows that install and
 // duplicates node_modules, so these two are only filled in when nothing above the
 // folder provides them. Anything the tree above lacks is still added.
-const INHERITABLE = new Set(['package.json', 'tsconfig.json']);
+// The runner config is inheritable too: injecting a second one into a tests folder
+// whose repo already has one above it gives the run a config the team never wrote,
+// and it wins because a run executes from the tests folder.
+const INHERITABLE = new Set([
+	'package.json',
+	'tsconfig.json',
+	'playwright.config.ts',
+	'cucumber.js'
+]);
 
 function providedAbove(projectRoot, dest, file) {
 	let dir = path.dirname(dest);
@@ -188,7 +219,8 @@ async function reconcile() {
 		const relative = sanitizeTestsPath(testsPath);
 		if (relative === DEFAULT_TESTS_PATH) {
 			const sentinel = SCAFFOLD_SENTINEL[framework];
-			if (sentinel && !fs.existsSync(path.join(target, relative, sentinel))) {
+			const testsDir = path.join(target, relative);
+			if (sentinel && !fs.existsSync(path.join(testsDir, sentinel)) && !holdsTests(testsDir)) {
 				scaffoldProject(slug, framework);
 			}
 		}
