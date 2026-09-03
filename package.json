@@ -8,7 +8,7 @@
 	"engines": {
 		"node": ">=22.22.1"
 	},
-	"description": "A ready-to-use E2E test automation environment built on Playwright + Cucumber. Write tests in Gherkin, run them from the CLI or UI, view reports, schedule jobs, manage your entire test case repository, and get notified on Discord or Slack — all in one place.",
+	"description": "Self-hosted QA platform for teams doing manual and automated testing. Comes with a full test-case repository alongside a ready-to-use Playwright or Cucumber test automation environment.",
 	"main": "index.js",
 	"scripts": {
 		"init": "npm install && npm --prefix backend install && npm --prefix backend run init && npm --prefix frontend install && node bin/scaffold-tests.js",
