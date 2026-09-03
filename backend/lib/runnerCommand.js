@@ -56,7 +56,12 @@ function buildRunCommand({
 	const workerCount = Math.max(1, Number(workers) || 1);
 
 	if (framework === FRAMEWORK.PLAYWRIGHT) {
-		const args = [cli, 'test'];
+		// The report format is supplied here, not required of the project's config, so an
+		// adopted repo needs no edit to be runnable. PLAYWRIGHT_JSON_OUTPUT_FILE takes
+		// priority over a config outputFile, so a scaffolded project lands in the same
+		// place it always did. `list` is kept so the run still streams to the log.
+		env.PLAYWRIGHT_JSON_OUTPUT_FILE = reportFile;
+		const args = [cli, 'test', '--reporter=list,json'];
 		const grep = tagsToGrep(tag);
 		if (grep) args.push('--grep', grep);
 		// Validated rather than trusted: it arrives from a run request, and an
@@ -78,6 +83,9 @@ function buildRunCommand({
 	}
 
 	const args = [cli];
+	// Same reasoning as Playwright above: --format is repeatable, so Plum's json goes
+	// on the command line and the project's cucumber.js needs nothing added to it.
+	args.push('--format', 'progress', '--format', `json:${reportFile}`);
 	if (tag) args.push('--tags', tag);
 	// Only above 1: cucumber-js runs in the main process without the flag, which is
 	// what one worker means.
