@@ -508,7 +508,7 @@ function applyServerConfig(cfg) {
 		overrideFilePath,
 		buildOverrideYaml({
 			testsAbs,
-			reportsAbs: path.resolve(cwd, 'reports').replace(/\\/g, '/'),
+			dataAbs: path.resolve(cwd, 'data').replace(/\\/g, '/'),
 			projectsAbs: path.join(cwd, 'projects').replace(/\\/g, '/'),
 			backendPort: cfg.backendPort,
 			framework: cfg.framework,
@@ -1336,12 +1336,12 @@ async function nodeReconfig({ name }) {
 }
 
 // Reads PLUM_NODE_SECRET from the primary's container (env override, else the
-// generated reports/.plum-node-secret) so a co-located node and the menu need no
+// generated data/.plum-node-secret) so a co-located node and the menu need no
 // setup. null on a node-only box, the caller then needs --node-secret.
 function readNodeSecretFromPrimary() {
 	const { getInstalls } = globalRegistryLib();
 	for (const dir of getInstalls('server')) {
-		// The file first: reports/ is bind-mounted into the server's own directory, so
+		// The file first: data/ is bind-mounted into the server's own directory, so
 		// this works whatever the install layout. `docker compose exec` cannot stand in
 		// for it, because the compose files live in the package directory, not the one
 		// the server was started from: on a global install those are different folders,
@@ -1349,13 +1349,13 @@ function readNodeSecretFromPrimary() {
 		// no secret to register with.
 		try {
 			const cleaned = cleanSecret(
-				fs.readFileSync(path.join(dir, 'reports', '.plum-node-secret'), 'utf8')
+				fs.readFileSync(path.join(dir, 'data', '.plum-node-secret'), 'utf8')
 			);
 			if (cleaned) return cleaned;
 		} catch {}
 		try {
 			const secret = execSync(
-				'docker compose exec -T backend sh -c "printenv PLUM_NODE_SECRET || cat reports/.plum-node-secret"',
+				'docker compose exec -T backend sh -c "printenv PLUM_NODE_SECRET || cat data/.plum-node-secret"',
 				{ cwd: plumRoot, stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 }
 			)
 				.toString()

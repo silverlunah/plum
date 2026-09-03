@@ -8,9 +8,11 @@ const path = require('path');
 const crypto = require('crypto');
 
 const DEFAULT_JWT_SECRET = 'plum-dev-secret-change-in-production';
-// Anchored to backend/, not cwd: a process started from the repo root must not
-// scatter a second reports/ (and its secrets) there.
-const REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
+// Everything the backend must keep across a container rebuild lives here, and
+// this is the one path docker-compose bind-mounts for it. Anchored to backend/,
+// not cwd: a process started from the repo root must not scatter a second data/
+// (and its secrets) there.
+const DATA_DIR = path.resolve(__dirname, '..', 'data');
 
 // Env value wins; otherwise a random secret persisted under the reports volume
 // so it survives a restart. `envKey` equal to `defaultValue` counts as unset.
@@ -18,7 +20,7 @@ function ensureSecret(envKey, fileName, { defaultValue = null, bytes = 48 } = {}
 	const fromEnv = process.env[envKey];
 	if (fromEnv && fromEnv !== defaultValue) return fromEnv;
 
-	const file = path.join(REPORTS_DIR, fileName);
+	const file = path.join(DATA_DIR, fileName);
 	try {
 		// The real secret is one line. Take the last non-blank line so a stray
 		// license header (see license-config.json) prepended to the file doesn't
@@ -37,7 +39,7 @@ function ensureSecret(envKey, fileName, { defaultValue = null, bytes = 48 } = {}
 
 	const generated = crypto.randomBytes(bytes).toString('hex');
 	try {
-		fs.mkdirSync(REPORTS_DIR, { recursive: true });
+		fs.mkdirSync(DATA_DIR, { recursive: true });
 		fs.writeFileSync(file, generated, { mode: 0o600 });
 	} catch (e) {
 		console.warn(`⚠️  Could not persist ${envKey}: it will change on restart:`, e.message);
@@ -51,8 +53,8 @@ function ensureSecret(envKey, fileName, { defaultValue = null, bytes = 48 } = {}
 // logging everyone out.
 function regenerateSecret(envKey, fileName, { bytes = 48 } = {}) {
 	const generated = crypto.randomBytes(bytes).toString('hex');
-	fs.mkdirSync(REPORTS_DIR, { recursive: true });
-	fs.writeFileSync(path.join(REPORTS_DIR, fileName), generated, { mode: 0o600 });
+	fs.mkdirSync(DATA_DIR, { recursive: true });
+	fs.writeFileSync(path.join(DATA_DIR, fileName), generated, { mode: 0o600 });
 	process.env[envKey] = generated;
 	return generated;
 }

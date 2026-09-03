@@ -46,7 +46,7 @@ docker-compose.override.yml
 # Legacy single-project test folder (scaffolded by `plum init`)
 /tests/
 # Run outputs written at the repo root when the server runs from here
-/reports/
+/data/
 
 #-----------------------#
 #   Backend .gitignore  #
@@ -55,7 +55,7 @@ docker-compose.override.yml
 # Playwright tests, test results and reports
 /backend/tests/
 /backend/test-results/
-/backend/reports/
+/backend/data/
 /backend/node_modules/
 # Uploaded test payloads for in-flight dispatched jobs — deleted when each finishes.
 

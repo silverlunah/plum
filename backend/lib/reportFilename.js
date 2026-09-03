@@ -6,8 +6,10 @@
 const path = require('path');
 const fs = require('fs');
 
-// Anchored to backend/, not cwd: see appSecret.js.
-const REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
+// Under data/ because that is the mounted, persistent path: see appSecret.js. Each
+// lane writes its raw report here and the backend deletes it once ingested, so the
+// folder is a staging area, not a store.
+const REPORTS_DIR = path.resolve(__dirname, '..', 'data', 'reports');
 
 /**
  * Reads a run's own report file and removes it. Each lane writes to its own path

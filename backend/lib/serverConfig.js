@@ -85,7 +85,7 @@ function writeEnvFile(dir) {
 // multi-project): a fresh install has none.
 function buildOverrideYaml({
 	testsAbs,
-	reportsAbs,
+	dataAbs,
 	projectsAbs,
 	backendPort,
 	apiUrl,
@@ -102,7 +102,7 @@ function buildOverrideYaml({
 			// itself lives on the host, outside the container.
 			`      PLUM_DEFAULT_FRAMEWORK: "${framework || ''}"`,
 			'    volumes:',
-			`      - "${reportsAbs}:/app/reports"`,
+			`      - "${dataAbs}:/app/data"`,
 			`      - "${projectsAbs}:/app/projects"`,
 			...(testsAbs ? [`      - "${testsAbs}:/app/tests"`] : []),
 			'  frontend:',

@@ -39,7 +39,7 @@ services:
       # contributor running `npm run docker:up`, which writes no override: without
       # the projects mount the test folders only exist inside the container, so they
       # cannot be edited from the checkout and are lost on the next rebuild.
-      - ./backend/reports:/app/reports
+      - ./backend/data:/app/data
       - ./projects:/app/projects
     depends_on:
       postgres:

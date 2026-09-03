@@ -7,11 +7,14 @@ const fs = require('fs');
 const path = require('path');
 const { loadRegistry, saveRegistry } = require('./runnerProcess');
 const { SOCKET_EVENTS } = require('../constants/socketEvents');
+// The staging folder each lane writes its raw report into, under data/.
+const { REPORTS_DIR } = require('./reportFilename');
 
 const WATCH_OPTS = { usePolling: true, interval: 800, ignoreInitial: true };
 
 // Anchored to backend/, not cwd: see lib/appSecret.js.
-const REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
+// The pre-data/ location, kept only so an old install gets its screenshots swept.
+const LEGACY_REPORTS_DIR = path.resolve(__dirname, '..', 'reports');
 
 function ensureTestsDir(testsDir, isNodeMode) {
 	if (fs.existsSync(testsDir)) {
@@ -163,7 +166,7 @@ async function handleFullModeStartup(io, testsDir) {
 // recordings), so any leftover files on disk are dead weight. Safe to run
 // every startup: a second pass on an already-gone directory is a no-op.
 function cleanupLegacyScreenshots() {
-	const screenshotsDir = path.join(REPORTS_DIR, 'screenshots');
+	const screenshotsDir = path.join(LEGACY_REPORTS_DIR, 'screenshots');
 	if (!fs.existsSync(screenshotsDir)) return;
 	fs.rm(screenshotsDir, { recursive: true, force: true }, (err) => {
 		if (!err) console.log('🧹 Removed legacy screenshots directory');

@@ -15,7 +15,7 @@ NATIVE_RUNNER_SPLIT.md
 # Local runtime artifacts. Anchored to the root: the same names exist inside
 # backend/_scaffold/, where they are part of what gets copied into a project.
 /.env
-/reports/
+/data/
 /projects/
 /tests/
 /scripts/
@@ -25,7 +25,7 @@ NATIVE_RUNNER_SPLIT.md
 .plum-server.json
 .runners.local.json
 docker-compose.override.yml
-backend/reports/
+backend/data/
 backend/tests/
 backend/.env
 

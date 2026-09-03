@@ -6,7 +6,7 @@
 node_modules
 tests
 projects
-reports
+data
 logs
 .plum-jobs
 .env
