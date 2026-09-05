@@ -31,6 +31,7 @@ export async function checkNeedsSetup() {
 export async function setup({
 	organizationName,
 	projectName,
+	framework,
 	name,
 	email,
 	password,
@@ -39,7 +40,15 @@ export async function setup({
 	const res = await fetchWithTimeout(`${API_BASE}/auth/setup`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ organizationName, projectName, name, email, password, termsAccepted })
+		body: JSON.stringify({
+			organizationName,
+			projectName,
+			framework,
+			name,
+			email,
+			password,
+			termsAccepted
+		})
 	});
 	const data = await res.json();
 	if (!res.ok) throw new Error(data.error ?? 'Setup failed');

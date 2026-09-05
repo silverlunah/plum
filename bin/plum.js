@@ -117,11 +117,6 @@ function cancelAndExit() {
 
 const VALID_BROWSERS = ['chromium', 'firefox'];
 
-const FRAMEWORK_HINTS = {
-	playwright: 'spec files, native runner, recommended',
-	cucumber: 'Gherkin .feature files and step definitions'
-};
-
 // A bare host:port silently breaks link generation and CORS, so require a scheme.
 async function promptPublicUrl(message, initial) {
 	for (;;) {
@@ -251,22 +246,6 @@ async function configureServer({ force }) {
 	const interactive = force || (interactiveAllowed() && !hasFlags);
 
 	if (interactive) {
-		const framework = await clack.select({
-			message: 'Which test framework should new projects on this server use?',
-			options: FRAMEWORKS.map((id) => ({
-				value: id,
-				label: frameworkLabel(id),
-				hint: FRAMEWORK_HINTS[id]
-			})),
-			initialValue: isFramework(cfg.framework) ? cfg.framework : DEFAULT_FRAMEWORK
-		});
-		if (clack.isCancel(framework)) cancelAndExit();
-		cfg.framework = framework;
-		clack.log.info(
-			`Each project picks its framework when it is created, and cannot change afterwards. ` +
-				`${frameworkLabel(framework)} will be pre-selected.`
-		);
-
 		const mode = await clack.select({
 			message: 'Where are you setting up Plum?',
 			options: [
@@ -320,11 +299,13 @@ async function configureServer({ force }) {
 			cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
 		}
 	} else {
-		if (!isFramework(cfg.framework)) cfg.framework = DEFAULT_FRAMEWORK;
 		// No URL given and none saved means local, which is loopback on the chosen ports.
 		if (!cfg.apiUrl) cfg.apiUrl = `http://localhost:${cfg.backendPort}`;
 		if (!cfg.uiUrl) cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
 	}
+	// No question asks for this anymore (see the first-run setup page instead), only
+	// `--framework` or a saved config can set it, so guard whatever that left behind.
+	if (!isFramework(cfg.framework)) cfg.framework = DEFAULT_FRAMEWORK;
 
 	const urlProblem = serverUrlProblem(cfg.apiUrl, cfg.uiUrl);
 	if (urlProblem) {

@@ -9,6 +9,7 @@ const userService = require('../services/userService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { rateLimit } = require('../middleware/rateLimit');
 const { slugify } = require('../lib/slugify');
+const { FRAMEWORKS, isFramework } = require('../constants/defaults');
 
 const loginLimiter = rateLimit({
 	windowMs: 15 * 60_000,
@@ -30,7 +31,8 @@ router.post('/setup', async (req, res, next) => {
 		if (!(await userService.needsSetup())) {
 			return res.status(403).json({ error: 'Setup already complete' });
 		}
-		const { organizationName, projectName, name, email, password, termsAccepted } = req.body;
+		const { organizationName, projectName, name, email, password, termsAccepted, framework } =
+			req.body;
 		if (!organizationName || !projectName || !name || !email || !password) {
 			return res.status(400).json({
 				error: 'organizationName, projectName, name, email and password are required'
@@ -44,7 +46,17 @@ router.post('/setup', async (req, res, next) => {
 				.status(400)
 				.json({ error: 'Project name needs at least one letter or number (a–z, 0–9)' });
 		}
-		await userService.bootstrap({ organizationName, projectName, name, email, password });
+		if (framework !== undefined && !isFramework(framework)) {
+			return res.status(400).json({ error: `framework must be one of: ${FRAMEWORKS.join(', ')}` });
+		}
+		await userService.bootstrap({
+			organizationName,
+			projectName,
+			name,
+			email,
+			password,
+			framework
+		});
 		res.status(201).json(await userService.login({ email, password }));
 	} catch (e) {
 		next(e);
