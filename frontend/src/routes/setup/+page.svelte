@@ -7,6 +7,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { setup, checkNeedsSetup } from '$lib/api/auth';
+	import { importBackup } from '$lib/api/settings';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { FRAMEWORKS } from '$lib/constants';
@@ -36,7 +37,15 @@
 		SETUP_CONTINUE_LABEL,
 		SETUP_BACK_LABEL,
 		setupStepLabel,
-		createAccountLabel
+		createAccountLabel,
+		RESTORE_INSTEAD_LABEL,
+		RESTORE_TITLE,
+		RESTORE_SUBTITLE,
+		RESTORE_FILE_LABEL,
+		RESTORE_FILE_REQUIRED_ERROR,
+		INVALID_BACKUP_FILE_ERROR,
+		RESTORE_FAILED_FALLBACK,
+		restoreButtonLabel
 	} from '$lib/copy/auth';
 	import {
 		TERMS_HEADING,
@@ -58,6 +67,11 @@
 	let error = '';
 	let loading = false;
 	let checking = true;
+
+	let mode = 'setup'; // 'setup' | 'restore'
+	let restoreFile = null;
+	let restoreError = '';
+	let restoring = false;
 
 	$: step1Ready = organizationName.trim() && projectName.trim();
 	$: step2Ready = name.trim() && email.trim() && password && termsAccepted;
@@ -111,6 +125,31 @@
 			loading = false;
 		}
 	}
+
+	async function handleRestore() {
+		if (!restoreFile) {
+			restoreError = RESTORE_FILE_REQUIRED_ERROR;
+			return;
+		}
+		restoreError = '';
+		restoring = true;
+		try {
+			let data;
+			try {
+				data = JSON.parse(await restoreFile.text());
+			} catch {
+				throw new Error(INVALID_BACKUP_FILE_ERROR);
+			}
+			const result = await importBackup(data);
+			if (result?.error) throw new Error(result.error);
+			// The file's own owner account exists now, this page 404s from here.
+			window.location.href = '/login';
+		} catch (e) {
+			restoreError = e.message || RESTORE_FAILED_FALLBACK;
+		} finally {
+			restoring = false;
+		}
+	}
 </script>
 
 <svelte:head><title>{SETUP_PAGE_TITLE}</title></svelte:head>
@@ -125,12 +164,57 @@
 			</div>
 
 			<div class="heading">
-				<span class="step-label">{setupStepLabel(step, 2)}</span>
-				<h1 class="title">{step === 1 ? SETUP_STEP_ORG_TITLE : SETUP_STEP_ADMIN_TITLE}</h1>
-				<p class="subtitle">{step === 1 ? SETUP_STEP_ORG_SUBTITLE : SETUP_STEP_ADMIN_SUBTITLE}</p>
+				{#if mode !== 'restore'}
+					<span class="step-label">{setupStepLabel(step, 2)}</span>
+				{/if}
+				<h1 class="title">
+					{mode === 'restore'
+						? RESTORE_TITLE
+						: step === 1
+							? SETUP_STEP_ORG_TITLE
+							: SETUP_STEP_ADMIN_TITLE}
+				</h1>
+				<p class="subtitle">
+					{mode === 'restore'
+						? RESTORE_SUBTITLE
+						: step === 1
+							? SETUP_STEP_ORG_SUBTITLE
+							: SETUP_STEP_ADMIN_SUBTITLE}
+				</p>
 			</div>
 
-			{#if step === 1}
+			{#if mode === 'restore'}
+				<div class="fields">
+					<div class="field">
+						<label class="label" for="restore-file">{RESTORE_FILE_LABEL}</label>
+						<input
+							id="restore-file"
+							type="file"
+							accept="application/json"
+							class="file-input"
+							on:change={(e) => (restoreFile = e.currentTarget.files?.[0] ?? null)}
+						/>
+					</div>
+				</div>
+
+				{#if restoreError}<p class="error">{restoreError}</p>{/if}
+
+				<div class="actions">
+					<button
+						class="ghost-btn"
+						on:click={() => {
+							mode = 'setup';
+							restoreError = '';
+						}}
+						disabled={restoring}
+					>
+						{SETUP_BACK_LABEL}
+					</button>
+					<button class="submit-btn" on:click={handleRestore} disabled={restoring || !restoreFile}>
+						{restoreButtonLabel(restoring)}
+					</button>
+				</div>
+			{:else if step === 1}
 				<div class="fields">
 					<div class="field">
 						<label class="label" for="org">{ORG_NAME_LABEL}</label>
@@ -167,6 +251,9 @@
 
 				<button class="submit-btn" on:click={next} disabled={!step1Ready}>
 					{SETUP_CONTINUE_LABEL}
+				</button>
+				<button class="link-btn" type="button" on:click={() => (mode = 'restore')}>
+					{RESTORE_INSTEAD_LABEL}
 				</button>
 			{:else}
 				<div class="fields">
@@ -336,6 +423,11 @@
 	.input:focus {
 		border-color: var(--accent);
 	}
+	.file-input {
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		color: var(--text);
+	}
 
 	.error {
 		font-size: 0.8125rem;
@@ -430,5 +522,21 @@
 	.ghost-btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	.link-btn {
+		background: none;
+		border: none;
+		padding: 0;
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		cursor: pointer;
+		text-align: center;
+	}
+	.link-btn:hover {
+		color: var(--text);
 	}
 </style>
