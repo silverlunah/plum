@@ -156,6 +156,7 @@
 							options={frameworkOptions}
 							value={framework}
 							ariaLabel={SETUP_FRAMEWORK_LABEL}
+							fullWidth
 							on:change={(e) => (framework = e.detail)}
 						/>
 						<p class="hint">{SETUP_FRAMEWORK_HINT}</p>
