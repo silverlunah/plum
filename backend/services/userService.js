@@ -12,6 +12,7 @@ const { slugify } = require('../lib/slugify');
 const { ROLE } = require('../constants/roles');
 const { isFramework } = require('../constants/defaults');
 const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
+const { accessibleProjectIds } = require('../lib/projectContext');
 
 const { DEFAULT_JWT_SECRET } = require('../lib/appSecret');
 const SALT_ROUNDS = 10;
@@ -20,7 +21,14 @@ const TOKEN_TTL = '30d';
 // Read at call time: server.js resolves the real secret into the env at boot.
 const jwtSecret = () => process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
 
-const userSelect = { id: true, name: true, email: true, role: true, createdAt: true };
+const userSelect = {
+	id: true,
+	name: true,
+	email: true,
+	role: true,
+	createdAt: true,
+	defaultProjectId: true
+};
 
 async function needsSetup() {
 	const count = await prisma.organization.count();
@@ -79,7 +87,16 @@ async function login({ email, password }) {
 		jwtSecret(),
 		{ expiresIn: TOKEN_TTL }
 	);
-	return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+	return {
+		token,
+		user: {
+			id: user.id,
+			name: user.name,
+			email: user.email,
+			role: user.role,
+			defaultProjectId: user.defaultProjectId
+		}
+	};
 }
 
 function verifyToken(token) {
@@ -138,16 +155,26 @@ async function getById(id) {
 	return prisma.user.findUnique({ where: { id }, select: userSelect });
 }
 
-async function updateProfile(id, { name, email }) {
+// `requester` is req.user (the JWT payload), needed only to check defaultProjectId
+// is somewhere the caller can actually reach, an owner or admin's own choice, not
+// enforced against other members.
+async function updateProfile(id, { name, email, defaultProjectId }, requester) {
 	if (email) {
 		const conflict = await prisma.user.findFirst({ where: { email, NOT: { id } } });
 		if (conflict) return { ok: false, error: 'Email already in use' };
+	}
+	if (defaultProjectId !== undefined && defaultProjectId !== null) {
+		const allowed = await accessibleProjectIds(requester);
+		if (!allowed.includes(defaultProjectId)) {
+			return { ok: false, error: 'You do not have access to that project' };
+		}
 	}
 	const user = await prisma.user.update({
 		where: { id },
 		data: {
 			...(name !== undefined && { name }),
-			...(email !== undefined && { email })
+			...(email !== undefined && { email }),
+			...(defaultProjectId !== undefined && { defaultProjectId })
 		},
 		select: userSelect
 	});

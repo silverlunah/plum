@@ -231,6 +231,9 @@ export const copyMcpSnippetLabel = (copied) => (copied ? COPIED_LABEL : COPY_CON
 
 // ── Account ──
 export const PROFILE_CARD_TITLE = 'Profile';
+export const DEFAULT_PROJECT_LABEL = 'Default project';
+export const DEFAULT_PROJECT_HINT = 'Which project you land on right after signing in.';
+export const NO_DEFAULT_PROJECT_LABEL = 'No preference';
 export const CHANGE_PASSWORD_CARD_TITLE = 'Change password';
 export const CURRENT_PASSWORD_LABEL = 'Current password';
 export const NEW_PASSWORD_LABEL = 'New password';

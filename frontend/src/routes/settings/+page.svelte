@@ -28,7 +28,7 @@
 	import LockIcon from '$lib/components/icons/LockIcon.svelte';
 	import { updateProfile, changePassword } from '$lib/api/auth';
 	import { fetchProjects } from '$lib/api/projects';
-	import { setProjects, activeProject, activeFramework } from '$lib/stores/project';
+	import { setProjects, activeProject, activeFramework, projects } from '$lib/stores/project';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { isMobile } from '$lib/stores/viewport';
@@ -43,6 +43,7 @@
 	} from '$lib/constants';
 	import { copyText } from '$lib/utils/clipboard';
 	import Button from '$lib/components/ui/Button.svelte';
+	import IconSelect from '$lib/components/ui/IconSelect.svelte';
 	import ProjectAccess from '$lib/components/settings/ProjectAccess.svelte';
 	import UpdateBanner from '$lib/components/settings/UpdateBanner.svelte';
 	import ActivityLog from '$lib/components/settings/ActivityLog.svelte';
@@ -179,6 +180,9 @@
 		regenerateKeyLabel,
 		copyMcpSnippetLabel,
 		PROFILE_CARD_TITLE,
+		DEFAULT_PROJECT_LABEL,
+		DEFAULT_PROJECT_HINT,
+		NO_DEFAULT_PROJECT_LABEL,
 		CHANGE_PASSWORD_CARD_TITLE,
 		CURRENT_PASSWORD_LABEL,
 		NEW_PASSWORD_LABEL,
@@ -252,11 +256,17 @@
 		(migrateForm.testCasePrefix !== prefixes.testCasePrefix ||
 			migrateForm.testSuitePrefix !== prefixes.testSuitePrefix);
 
-	let profileForm = { name: '', email: '' };
+	let profileForm = { name: '', email: '', defaultProjectId: '' };
 	let profileSaving = false;
 	let profileError = '';
 	let profilePristine = snapshot(profileForm);
 	$: profileDirty = snapshot(profileForm) !== profilePristine;
+	// '' means no preference (defaultProjectId: null); IconSelect needs one type
+	// for both the sentinel and every real (numeric) project id.
+	$: defaultProjectOptions = [
+		{ id: '', label: NO_DEFAULT_PROJECT_LABEL },
+		...$projects.map((p) => ({ id: p.id, label: p.name, icon: p.framework }))
+	];
 
 	let pwForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
 	let pwSaving = false;
@@ -303,7 +313,11 @@
 			mcpKey = mcp.mcpKey;
 		} catch {}
 		if ($auth.user) {
-			profileForm = { name: $auth.user.name, email: $auth.user.email };
+			profileForm = {
+				name: $auth.user.name,
+				email: $auth.user.email,
+				defaultProjectId: $auth.user.defaultProjectId ?? ''
+			};
 			profilePristine = snapshot(profileForm);
 		}
 	});
@@ -401,7 +415,8 @@
 			const { user } = await updateProfile({
 				token: $auth.token,
 				name: profileForm.name,
-				email: profileForm.email
+				email: profileForm.email,
+				defaultProjectId: profileForm.defaultProjectId || null
 			});
 			auth.login($auth.token, { ...$auth.user, ...user });
 			profilePristine = snapshot(profileForm);
@@ -1188,6 +1203,21 @@
 							bind:value={profileForm.email}
 						/>
 					</div>
+					{#if $projects.length > 1}
+						<div class="field">
+							<span class="field-label">
+								<span>{DEFAULT_PROJECT_LABEL}</span>
+								<span class="field-hint">{DEFAULT_PROJECT_HINT}</span>
+							</span>
+							<IconSelect
+								options={defaultProjectOptions}
+								value={profileForm.defaultProjectId}
+								ariaLabel={DEFAULT_PROJECT_LABEL}
+								fullWidth
+								on:change={(e) => (profileForm = { ...profileForm, defaultProjectId: e.detail })}
+							/>
+						</div>
+					{/if}
 					{#if profileError}<p class="form-error">{profileError}</p>{/if}
 					<div class="card-footer">
 						<Button

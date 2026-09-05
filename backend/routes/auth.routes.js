@@ -104,8 +104,12 @@ router.post('/change-password', jwtAuth, async (req, res, next) => {
 
 router.put('/update-profile', jwtAuth, async (req, res, next) => {
 	try {
-		const { name, email } = req.body;
-		const result = await userService.updateProfile(req.user.userId, { name, email });
+		const { name, email, defaultProjectId } = req.body;
+		const result = await userService.updateProfile(
+			req.user.userId,
+			{ name, email, defaultProjectId },
+			req.user
+		);
 		if (!result.ok) return res.status(400).json({ error: result.error });
 		res.json({ user: result.user });
 	} catch (e) {

@@ -65,6 +65,17 @@ export function fmtDuration(ms) {
 	return ms + 'ms';
 }
 
+// Only for a report's overall duration; a single step/scenario still wants
+// fmtDuration's sub-second precision, not h:m:s.
+export function fmtTotalDuration(ms) {
+	const totalSeconds = Math.floor(ms / 1000);
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+	const pad = (n) => String(n).padStart(2, '0');
+	return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
+}
+
 /**
  * Trims a Cucumber feature URI to a readable suffix. Dispatched runs report an
  * absolute temp path on the node (…/plum-job-<uuid>/features/Login.feature); show
