@@ -329,6 +329,14 @@
 		justify-content: center;
 		padding: 1rem;
 	}
+	/* Otherwise native chrome (the file input's own button, checkboxes) renders
+	   for the OS's scheme regardless of the theme this page is actually showing. */
+	.page[data-theme='dark'] {
+		color-scheme: dark;
+	}
+	.page[data-theme='light'] {
+		color-scheme: light;
+	}
 
 	.checking {
 		color: var(--text-muted);
