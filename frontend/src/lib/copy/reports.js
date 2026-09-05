@@ -18,6 +18,7 @@ export const RECENT_LABEL = 'Recent';
 export const TREND_HINT = '← older · newer →';
 export const NO_REPORTS_MESSAGE = 'No reports yet. Run a test to generate one.';
 export const SELECT_ALL_TITLE = 'Select all on this page';
+export const SELECT_ALL_LABEL = 'Select all';
 export const SELECT_ROW_TITLE = 'Select';
 export const DELETE_REPORT_TITLE = 'Delete report';
 
@@ -47,6 +48,11 @@ export const FLAKY_LABEL = 'flaky';
 export const FLAKY_TITLE = 'Failed at least once, then passed on a retry';
 export const WATCH_REPLAY_TITLE = 'Watch replay';
 export const REPLAY_LABEL = 'Replay';
+export const FLAKY_GROUP_TITLE = 'Flaky';
+export const JUMP_TO_SCENARIO_TITLE = 'Jump to this scenario';
+export const BACK_TO_TOP_LABEL = 'Back to top';
+
+export const failuresGroupTitle = (n) => `${n} ${pluralize(n, 'failure')}`;
 
 export const runnersBadge = (count) => `${count} runners`;
 export const casesCountLabel = (count) => `${count} cases`;

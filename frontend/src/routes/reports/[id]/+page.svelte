@@ -5,7 +5,7 @@
 
 <script>
 	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { fetchReportDetail, fetchRecordings, downloadReportExport } from '$lib/api/reports';
 	import {
@@ -40,6 +40,10 @@
 		FLAKY_TITLE,
 		WATCH_REPLAY_TITLE,
 		REPLAY_LABEL,
+		FLAKY_GROUP_TITLE,
+		JUMP_TO_SCENARIO_TITLE,
+		BACK_TO_TOP_LABEL,
+		failuresGroupTitle,
 		runnersBadge,
 		casesCountLabel,
 		attemptsLabel,
@@ -154,9 +158,47 @@
 	// asynchronously after `detail`, and without this the {@const groupHasReplay}
 	// checks inside the each-block tree below never re-evaluate once they arrive.
 	$: runnerGroups = detail && allRecordings ? groupScenariosByRunnerAndWorker(detail.features) : [];
+
+	// A scenario name can carry spaces/punctuation `id` doesn't tolerate; the
+	// scenId itself still keys expandedScenarios, this is only for the DOM anchor.
+	const domId = (scenId) => `scenario-${scenId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+
+	// Mirrors the template's own grouping loop below so scenId lines up with each
+	// rendered .scenario row. Failures first, flaky always last.
+	$: reportIssues = runnerGroups
+		.flatMap((runnerGroup, ri) =>
+			runnerGroup.workers.flatMap((workerGroup, wi) =>
+				workerGroup.features.flatMap((feature, fi) =>
+					feature.scenarioGroups.map((group) => {
+						const flakyGroup = group.status === 'passed' && group.scenarios.some(isFlaky);
+						if (group.status !== 'failed' && !flakyGroup) return null;
+						const errorStep = group.scenarios.flatMap((s) => s.steps ?? []).find((s) => s.error);
+						return {
+							scenId: `${ri}-${wi}-${fi}-${group.key}`,
+							name: group.name,
+							flaky: flakyGroup,
+							error: errorStep?.error?.split('\n')[0] ?? null
+						};
+					})
+				)
+			)
+		)
+		.filter(Boolean)
+		.sort((a, b) => Number(a.flaky) - Number(b.flaky));
+	$: failureIssues = reportIssues.filter((r) => !r.flaky);
+	$: flakyIssues = reportIssues.filter((r) => r.flaky);
+
+	async function scrollToScenario(scenId) {
+		expandedScenarios.add(scenId);
+		expandedScenarios = expandedScenarios;
+		await tick();
+		document.getElementById(domId(scenId))?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+	}
+
+	let scrollY = 0;
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window on:keydown={handleKeydown} bind:scrollY />
 
 <svelte:head><title>{DETAIL_PAGE_TITLE}</title></svelte:head>
 
@@ -434,6 +476,54 @@
 		</details>
 	{/if}
 
+	{#if reportIssues.length > 0}
+		<div class="issues-summary">
+			{#if failureIssues.length > 0}
+				<div class="issues-group">
+					<p class="issues-group-title issues-group-title-fail">
+						{failuresGroupTitle(failureIssues.length)}
+					</p>
+					<ul class="issues-list">
+						{#each failureIssues as issue}
+							<li>
+								<button
+									class="issue-row"
+									title={JUMP_TO_SCENARIO_TITLE}
+									on:click={() => scrollToScenario(issue.scenId)}
+								>
+									<StatusDot status="failed" />
+									<span class="issue-name">{issue.name}</span>
+									{#if issue.error}
+										<span class="issue-error">{issue.error}</span>
+									{/if}
+								</button>
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
+			{#if flakyIssues.length > 0}
+				<div class="issues-group issues-group-flaky">
+					<p class="issues-group-title">{FLAKY_GROUP_TITLE} ({flakyIssues.length})</p>
+					<ul class="issues-list">
+						{#each flakyIssues as issue}
+							<li>
+								<button
+									class="issue-row"
+									title={JUMP_TO_SCENARIO_TITLE}
+									on:click={() => scrollToScenario(issue.scenId)}
+								>
+									<StatusDot status="passed" flaky={true} />
+									<span class="issue-name">{issue.name}</span>
+								</button>
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
+		</div>
+	{/if}
+
 	{#if allScenarios.length === 0}
 		<EmptyState title={NO_TESTS_MATCHED_HEADING} description={noTestsMatchedBody(detail?.tags)} />
 	{/if}
@@ -522,6 +612,7 @@
 							{@const groupHasReplay = group.scenarios.some(scenarioHasRecording)}
 							{@const groupFlaky = group.status === 'passed' && group.scenarios.some(isFlaky)}
 							<div
+								id={domId(scenId)}
 								class="scenario"
 								class:scenario-fail={group.status === 'failed'}
 								style={stagger(fi * 5 + si, 40)}
@@ -658,6 +749,29 @@
 			{/each}
 		{/each}
 	{/each}
+{/if}
+
+{#if detail && scrollY > 400}
+	<button
+		class="back-to-top"
+		aria-label={BACK_TO_TOP_LABEL}
+		title={BACK_TO_TOP_LABEL}
+		on:click={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+	>
+		<svg
+			width="16"
+			height="16"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2.5"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+		>
+			<line x1="12" y1="19" x2="12" y2="5" />
+			<polyline points="5 12 12 5 19 12" />
+		</svg>
+	</button>
 {/if}
 
 {#if replayOpen && replayScenario}
@@ -1328,6 +1442,105 @@
 	.logs-body::-webkit-scrollbar-thumb {
 		background: rgba(255, 255, 255, 0.1);
 		border-radius: 2px;
+	}
+
+	/* ── Failures & flaky summary ── */
+	.issues-summary {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		margin-bottom: 1.25rem;
+	}
+
+	.issues-group {
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		overflow: hidden;
+		animation: fadeUp 0.35s var(--ease-out) both;
+	}
+
+	.issues-group-title {
+		margin: 0;
+		padding: 0.75rem 1.25rem;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--text-muted);
+		border-bottom: 1px solid var(--border);
+	}
+	.issues-group-title-fail {
+		color: var(--fail);
+	}
+	/* Flaky is informational, not urgent: quieter card, no tinted heading. */
+	.issues-group-flaky {
+		opacity: 0.85;
+	}
+
+	.issues-list {
+		list-style: none;
+		margin: 0;
+		padding: 0.25rem;
+	}
+
+	.issue-row {
+		display: flex;
+		align-items: baseline;
+		gap: 0.6rem;
+		width: 100%;
+		padding: 0.5rem 0.75rem;
+		background: none;
+		border: none;
+		border-radius: var(--radius-sm);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+		color: var(--text);
+		transition: background var(--duration-fast) var(--ease-out);
+	}
+	.issue-row:hover {
+		background: var(--bg-subtle);
+	}
+
+	.issue-name {
+		font-size: 0.85rem;
+		font-weight: 500;
+		flex-shrink: 0;
+	}
+
+	.issue-error {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		min-width: 0;
+	}
+
+	.back-to-top {
+		position: fixed;
+		right: 1.5rem;
+		/* Clears the fixed run bar (RunnerPanel's .panel, 52px+ and taller once
+		   wrapped on mobile) and sits above it, or its own clicks get eaten. */
+		bottom: calc(52px + 1.5rem);
+		width: 40px;
+		height: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: 50%;
+		color: var(--text);
+		cursor: pointer;
+		box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+		z-index: 210;
+		animation: fadeUp 0.2s var(--ease-out) both;
+	}
+	.back-to-top:hover {
+		background: var(--bg-subtle);
+		border-color: var(--accent);
+		color: var(--accent);
 	}
 
 	/* ── Replay modal ── */

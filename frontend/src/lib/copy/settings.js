@@ -182,10 +182,10 @@ export const runMigrationLabel = (migrating) => (migrating ? 'Migrating…' : 'R
 // ── Integrations ──
 export const WEBHOOKS_CARD_TITLE = 'Webhooks';
 export const DISCORD_WEBHOOK_LABEL = 'Discord Webhook URL';
-export const DISCORD_WEBHOOK_HINT = 'Leave blank to disable Discord notifications';
+export const DISCORD_WEBHOOK_HINT = 'Only sends when a run opts in to Discord notifications';
 export const DISCORD_WEBHOOK_PLACEHOLDER = 'https://discord.com/api/webhooks/…';
 export const SLACK_WEBHOOK_LABEL = 'Slack Webhook URL';
-export const SLACK_WEBHOOK_HINT = 'Leave blank to disable Slack notifications';
+export const SLACK_WEBHOOK_HINT = 'Only sends when a run opts in to Slack notifications';
 export const SLACK_WEBHOOK_PLACEHOLDER = 'https://hooks.slack.com/services/…';
 export const INTEGRATIONS_SAVED_TOAST = 'Integration settings saved.';
 export const INTEGRATIONS_SAVE_FAILED = 'Failed to save integration settings.';
