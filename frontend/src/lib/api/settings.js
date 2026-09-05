@@ -140,15 +140,15 @@ export async function restoreFromS3(key) {
 
 export async function fetchIntegrations() {
 	const res = await fetch(`${API_BASE}/settings/integrations`, { headers: authHeaders() });
-	if (!res.ok) return { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
+	if (!res.ok) return { discordWebhookUrl: '', slackWebhookUrl: '' };
 	return res.json();
 }
 
-export async function saveIntegrations({ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl }) {
+export async function saveIntegrations({ discordWebhookUrl, slackWebhookUrl }) {
 	const res = await fetch(`${API_BASE}/settings/integrations`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', ...authHeaders() },
-		body: JSON.stringify({ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl })
+		body: JSON.stringify({ discordWebhookUrl, slackWebhookUrl })
 	});
 	return res.json();
 }

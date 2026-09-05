@@ -89,16 +89,14 @@ router.get('/integrations', scopedAdmin, async (req, res, next) => {
 
 router.post('/integrations', scopedAdmin, async (req, res, next) => {
 	try {
-		const { discordWebhookUrl, slackWebhookUrl, notifyPublicUrl } = req.body;
+		const { discordWebhookUrl, slackWebhookUrl } = req.body;
 		const project = await settingsService.updateWebhooks(req.projectId, {
 			discordWebhookUrl,
-			slackWebhookUrl,
-			notifyPublicUrl
+			slackWebhookUrl
 		});
 		res.json({
 			discordWebhookUrl: project.discordWebhookUrl,
-			slackWebhookUrl: project.slackWebhookUrl,
-			notifyPublicUrl: project.notifyPublicUrl
+			slackWebhookUrl: project.slackWebhookUrl
 		});
 	} catch (e) {
 		next(e);

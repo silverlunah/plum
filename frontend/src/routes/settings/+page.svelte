@@ -149,9 +149,6 @@
 		SLACK_WEBHOOK_LABEL,
 		SLACK_WEBHOOK_HINT,
 		SLACK_WEBHOOK_PLACEHOLDER,
-		PUBLIC_URL_LABEL,
-		PUBLIC_URL_HINT,
-		PUBLIC_URL_PLACEHOLDER,
 		INTEGRATIONS_SAVED_TOAST,
 		INTEGRATIONS_SAVE_FAILED,
 		CI_TRIGGERS_CARD_TITLE,
@@ -270,7 +267,7 @@
 	let tcFileInput;
 	let tcImportResult = null;
 
-	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
+	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '' };
 	let integrationsSaving = false;
 	let integrationsPristine = snapshot(integrations);
 	$: integrationsDirty = snapshot(integrations) !== integrationsPristine;
@@ -997,20 +994,6 @@
 							class="field-input"
 							bind:value={integrations.slackWebhookUrl}
 							placeholder={SLACK_WEBHOOK_PLACEHOLDER}
-						/>
-					</div>
-
-					<div class="field">
-						<label class="field-label" for="public-url">
-							<span>{PUBLIC_URL_LABEL}</span>
-							<span class="field-hint">{PUBLIC_URL_HINT}</span>
-						</label>
-						<input
-							id="public-url"
-							type="url"
-							class="field-input"
-							bind:value={integrations.notifyPublicUrl}
-							placeholder={PUBLIC_URL_PLACEHOLDER}
 						/>
 					</div>
 

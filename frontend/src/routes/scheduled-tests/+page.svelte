@@ -104,7 +104,7 @@
 
 	let cronJobs = [];
 	let availableRunners = [];
-	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
+	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '' };
 
 	let modalOpen = false;
 	let deleteModalOpen = false;
@@ -266,11 +266,7 @@
 		[cronJobs, availableRunners, integrations] = await Promise.all([
 			fetchCronJobs(),
 			fetchRunners().catch(() => []),
-			fetchIntegrations().catch(() => ({
-				discordWebhookUrl: '',
-				slackWebhookUrl: '',
-				notifyPublicUrl: ''
-			}))
+			fetchIntegrations().catch(() => ({ discordWebhookUrl: '', slackWebhookUrl: '' }))
 		]);
 		fetchBuiltInEnabled()
 			.then(({ builtInRunnerEnabled }) => builtInEnabled.set(builtInRunnerEnabled))

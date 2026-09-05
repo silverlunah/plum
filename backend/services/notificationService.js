@@ -116,19 +116,19 @@ async function send({
 }) {
 	if (!notifyDiscord && !notifySlack) return;
 
-	let discordWebhookUrl, slackWebhookUrl, notifyPublicUrl;
+	let discordWebhookUrl, slackWebhookUrl;
 	try {
-		({ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl } =
-			await settingsService.getWebhooks(projectId));
+		({ discordWebhookUrl, slackWebhookUrl } = await settingsService.getWebhooks(projectId));
 	} catch (e) {
 		console.error(`[notify] Could not load webhook settings: ${e.message}`);
 		return;
 	}
 
+	// Same URL collected once at `plum server start`, every project's notifications
+	// share the one instance, so this is instance-wide rather than per-project.
+	const publicUrl = process.env.PLUM_PUBLIC_URL;
 	const reportUrl =
-		notifyPublicUrl && reportId
-			? `${notifyPublicUrl.replace(/\/$/, '')}/reports/${reportId}`
-			: null;
+		publicUrl && reportId ? `${publicUrl.replace(/\/$/, '')}/reports/${reportId}` : null;
 
 	const counts = countScenarios(content);
 	const data = { jobName, status, counts, browser, tags, reportUrl };

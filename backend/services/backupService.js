@@ -49,7 +49,6 @@ const PROJECT_FIELDS = [
 	'suiteSeqNext',
 	'discordWebhookUrl',
 	'slackWebhookUrl',
-	'notifyPublicUrl',
 	'maxRetries',
 	'defaultHome',
 	'manualRepositoryOnly',
