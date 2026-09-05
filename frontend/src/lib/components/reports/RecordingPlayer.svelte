@@ -615,7 +615,7 @@
 			return;
 		}
 
-		const computed = computeRecordingSegments(recordings);
+		const computed = computeRecordingSegments(recordings, eventsByRecordingId);
 		// Older recordings lack startedAt/endedAt; fall back to the first tab's own
 		// event bounds rather than a literal 0/0 — buildPlayer treats `to` as an upper
 		// bound on real (huge) epoch timestamps, so 0 would strip almost every event.
