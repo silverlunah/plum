@@ -5,6 +5,7 @@
 
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
+import { auth } from './auth';
 
 const KEY = 'plum:project';
 
@@ -42,7 +43,12 @@ export function setProjects(list) {
 	projects.set(list);
 	const current = get(activeProjectId);
 	if (!list.some((p) => p.id === current)) {
-		activeProjectId.set(list[0]?.id ?? null);
+		// No remembered project for this browser (new device, cleared storage):
+		// land on the user's own default if it's still one they can reach,
+		// otherwise fall back to the first project as before.
+		const defaultId = get(auth).user?.defaultProjectId;
+		const fallback = list.some((p) => p.id === defaultId) ? defaultId : (list[0]?.id ?? null);
+		activeProjectId.set(fallback);
 	}
 }
 

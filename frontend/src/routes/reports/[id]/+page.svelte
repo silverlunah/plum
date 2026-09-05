@@ -13,6 +13,7 @@
 		triggerLabel,
 		mcpName,
 		fmtDuration,
+		fmtTotalDuration,
 		stagger,
 		featureFile,
 		groupScenariosByRunnerAndWorker,
@@ -364,7 +365,7 @@
 					</div>
 				{/if}
 				<div class="stat">
-					<span class="stat-num">{fmtDuration(totalDuration)}</span>
+					<span class="stat-num">{fmtTotalDuration(totalDuration)}</span>
 					<span class="stat-label">
 						<svg
 							width="10"

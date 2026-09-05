@@ -203,15 +203,16 @@ model Project {
   // The default is what a NEW project gets; existing rows keep their own value.
   framework            String       @default("playwright")
 
-  members  ProjectMember[]
-  suites   TestSuite[]
-  cases    TestCase[]
-  runs     TestRun[]
-  reports  Report[]
-  cronJobs CronJob[]
-  runQueue RunQueue[]
-  mcpKeys  McpKey[]
-  activity ActivityLog[]
+  members         ProjectMember[]
+  suites          TestSuite[]
+  cases           TestCase[]
+  runs            TestRun[]
+  reports         Report[]
+  cronJobs        CronJob[]
+  runQueue        RunQueue[]
+  mcpKeys         McpKey[]
+  activity        ActivityLog[]
+  defaultForUsers User[]          @relation("UserDefaultProject")
 }
 
 // One per (project, member). Each person mints their own key for a project they
@@ -244,13 +245,17 @@ model ProjectMember {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      String   @default("user")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(cuid())
+  name             String
+  email            String   @unique
+  password         String
+  role             String   @default("user")
+  // Not enforced if the user later loses access to it; the frontend falls
+  // back to its own default when this doesn't resolve to a reachable project.
+  defaultProjectId Int?
+  defaultProject   Project? @relation("UserDefaultProject", fields: [defaultProjectId], references: [id], onDelete: SetNull)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   suites             TestSuite[]
   cases              TestCase[]
