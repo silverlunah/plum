@@ -41,3 +41,14 @@ export const SETUP_BACK_LABEL = 'Back';
 export const setupStepLabel = (n, total) => `Step ${n} of ${total}`;
 
 export const createAccountLabel = (loading) => (loading ? 'Creating account…' : 'Finish setup');
+
+// ── Restore instead ──
+export const RESTORE_INSTEAD_LABEL = 'Recovering a lost server? Restore from a backup instead.';
+export const RESTORE_TITLE = 'Restore from a backup';
+export const RESTORE_SUBTITLE =
+	'Upload the JSON file from Settings → Backup → Download. Your original owner, projects and data come back as they were, skipping the setup above.';
+export const RESTORE_FILE_LABEL = 'Backup file';
+export const RESTORE_FILE_REQUIRED_ERROR = 'Choose a backup file first.';
+export const INVALID_BACKUP_FILE_ERROR = "That file isn't a valid backup.";
+export const RESTORE_FAILED_FALLBACK = 'Restore failed';
+export const restoreButtonLabel = (loading) => (loading ? 'Restoring…' : 'Restore');

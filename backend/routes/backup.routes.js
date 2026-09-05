@@ -9,13 +9,24 @@ const backupService = require('../services/backupService');
 const settingsService = require('../services/settingsService');
 const cronService = require('../services/cronService');
 const backupCronService = require('../services/backupCronService');
+const userService = require('../services/userService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireOwner } = require('../middleware/requireOwner');
 
-// DB backup is instance-level (one database); its config lives on the org.
-router.use(jwtAuth, requireOwner);
+// A server that lost its data has no owner to authenticate as, so restoring
+// its own backup can't require one. Open only in the same no-users-yet window
+// /auth/setup uses; locks back to owner-only the moment any user exists.
+function restoreGate(req, res, next) {
+	userService
+		.needsSetup()
+		.then((needsSetup) => {
+			if (needsSetup) return next();
+			jwtAuth(req, res, () => requireOwner(req, res, next));
+		})
+		.catch(next);
+}
 
-router.get('/export', async (req, res) => {
+router.get('/export', jwtAuth, requireOwner, async (req, res) => {
 	try {
 		const { backupIncludeReports } = await settingsService.getBackupConfig();
 		const data = await backupService.exportAll(backupIncludeReports);
@@ -29,7 +40,7 @@ router.get('/export', async (req, res) => {
 	}
 });
 
-router.post('/import', async (req, res) => {
+router.post('/import', restoreGate, async (req, res) => {
 	try {
 		// Handed to the service whole. Picking fields out here is what silently
 		// dropped `reports` from every restore: the export wrote them, the
@@ -53,7 +64,7 @@ router.post('/import', async (req, res) => {
 	}
 });
 
-router.get('/config', async (req, res) => {
+router.get('/config', jwtAuth, requireOwner, async (req, res) => {
 	try {
 		const config = await settingsService.getBackupConfig();
 		res.json(config);
@@ -63,7 +74,7 @@ router.get('/config', async (req, res) => {
 	}
 });
 
-router.post('/config', async (req, res) => {
+router.post('/config', jwtAuth, requireOwner, async (req, res) => {
 	try {
 		await settingsService.updateBackupConfig(req.body);
 		await backupCronService.reload();
@@ -75,7 +86,7 @@ router.post('/config', async (req, res) => {
 	}
 });
 
-router.get('/report-retention', async (req, res) => {
+router.get('/report-retention', jwtAuth, requireOwner, async (req, res) => {
 	try {
 		res.json(await settingsService.getReportRetention());
 	} catch (error) {
@@ -84,7 +95,7 @@ router.get('/report-retention', async (req, res) => {
 	}
 });
 
-router.put('/report-retention', async (req, res) => {
+router.put('/report-retention', jwtAuth, requireOwner, async (req, res) => {
 	try {
 		res.json(await settingsService.updateReportRetention(req.body?.days));
 	} catch (error) {
@@ -93,7 +104,7 @@ router.put('/report-retention', async (req, res) => {
 	}
 });
 
-router.post('/test-s3', async (req, res) => {
+router.post('/test-s3', jwtAuth, requireOwner, async (req, res) => {
 	try {
 		// If no secret key provided in the request, fall back to the stored one
 		let config = { ...req.body };
@@ -115,7 +126,7 @@ router.post('/test-s3', async (req, res) => {
 	}
 });
 
-router.get('/s3-backups', async (req, res) => {
+router.get('/s3-backups', jwtAuth, requireOwner, async (req, res) => {
 	try {
 		const config = await settingsService.getOrgRaw();
 		const required = ['backupS3Bucket', 'backupS3AccessKey', 'backupS3SecretKey'];
@@ -133,12 +144,14 @@ router.get('/s3-backups', async (req, res) => {
 	}
 });
 
-router.post('/s3-restore', async (req, res) => {
+router.post('/s3-restore', restoreGate, async (req, res) => {
 	try {
 		const { key } = req.body;
 		if (!key) return res.status(400).json({ error: 'Missing backup key' });
 
-		const config = await settingsService.getOrgRaw();
+		// A from-scratch restore has no org row yet, so no stored S3 target either;
+		// accept it inline in the request, the same fallback /test-s3 already allows.
+		const config = (await settingsService.getOrgRaw()) ?? { ...req.body };
 		const required = ['backupS3Bucket', 'backupS3AccessKey', 'backupS3SecretKey'];
 		const missing = required.filter((k) => !config[k]);
 		if (missing.length > 0) {
@@ -156,7 +169,7 @@ router.post('/s3-restore', async (req, res) => {
 	}
 });
 
-router.post('/run-now', async (req, res) => {
+router.post('/run-now', jwtAuth, requireOwner, async (req, res) => {
 	try {
 		const config = await settingsService.getOrgRaw();
 		const missing = ['backupS3Bucket', 'backupS3AccessKey', 'backupS3SecretKey'].filter(
