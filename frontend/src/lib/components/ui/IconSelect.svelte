@@ -19,6 +19,9 @@
 	/** 'top' opens the menu upward, for triggers pinned near the bottom of the viewport. */
 	export let placement = 'bottom';
 	export let animate = false;
+	/** Stretch the trigger to fill its container, chevron pinned to the far edge,
+	 * matching a full-width text input beside it. */
+	export let fullWidth = false;
 
 	const dispatch = createEventDispatcher();
 	let open = false;
@@ -31,7 +34,12 @@
 	}
 </script>
 
-<div class="dropdown-wrap {variant}" use:clickOutside on:clickoutside={() => (open = false)}>
+<div
+	class="dropdown-wrap {variant}"
+	class:full-width={fullWidth}
+	use:clickOutside
+	on:clickoutside={() => (open = false)}
+>
 	<button
 		type="button"
 		class="dropdown-trigger"
@@ -89,6 +97,16 @@
 	}
 	.field.dropdown-wrap {
 		flex: 0 0 auto;
+	}
+	.dropdown-wrap.full-width {
+		width: 100%;
+	}
+	.full-width .dropdown-trigger {
+		width: 100%;
+		justify-content: space-between;
+	}
+	.full-width .dropdown-menu {
+		width: 100%;
 	}
 
 	.dropdown-trigger {
