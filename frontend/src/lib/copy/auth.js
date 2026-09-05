@@ -34,6 +34,8 @@ export const ORG_NAME_LABEL = 'Organization name';
 export const ORG_NAME_PLACEHOLDER = 'Acme Inc.';
 export const PROJECT_NAME_LABEL = 'First project name';
 export const PROJECT_NAME_PLACEHOLDER = 'Checkout';
+export const SETUP_FRAMEWORK_LABEL = 'Test framework';
+export const SETUP_FRAMEWORK_HINT = "Permanent once this project is created, can't switch later.";
 export const SETUP_CONTINUE_LABEL = 'Continue';
 export const SETUP_BACK_LABEL = 'Back';
 export const setupStepLabel = (n, total) => `Step ${n} of ${total}`;

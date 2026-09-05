@@ -9,6 +9,9 @@
 	import { setup, checkNeedsSetup } from '$lib/api/auth';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
+	import { FRAMEWORKS } from '$lib/constants';
+	import { frameworkLabel } from '$lib/copy/settings';
+	import IconSelect from '$lib/components/ui/IconSelect.svelte';
 	import { EMAIL_LABEL, PASSWORD_LABEL } from '$lib/copy/common';
 	import {
 		CHECKING_SERVER,
@@ -28,6 +31,8 @@
 		ORG_NAME_PLACEHOLDER,
 		PROJECT_NAME_LABEL,
 		PROJECT_NAME_PLACEHOLDER,
+		SETUP_FRAMEWORK_LABEL,
+		SETUP_FRAMEWORK_HINT,
 		SETUP_CONTINUE_LABEL,
 		SETUP_BACK_LABEL,
 		setupStepLabel,
@@ -44,6 +49,8 @@
 	let step = 1;
 	let organizationName = '';
 	let projectName = '';
+	let framework = FRAMEWORKS[0];
+	const frameworkOptions = FRAMEWORKS.map((id) => ({ id, label: frameworkLabel(id) }));
 	let name = '';
 	let email = '';
 	let password = '';
@@ -90,6 +97,7 @@
 			const { token, user } = await setup({
 				organizationName,
 				projectName,
+				framework,
 				name,
 				email,
 				password,
@@ -141,6 +149,16 @@
 							bind:value={projectName}
 							placeholder={PROJECT_NAME_PLACEHOLDER}
 						/>
+					</div>
+					<div class="field">
+						<span class="label">{SETUP_FRAMEWORK_LABEL}</span>
+						<IconSelect
+							options={frameworkOptions}
+							value={framework}
+							ariaLabel={SETUP_FRAMEWORK_LABEL}
+							on:change={(e) => (framework = e.detail)}
+						/>
+						<p class="hint">{SETUP_FRAMEWORK_HINT}</p>
 					</div>
 				</div>
 
@@ -295,6 +313,12 @@
 		font-size: 0.8125rem;
 		font-weight: 500;
 		color: var(--text);
+	}
+	.hint {
+		margin: 0;
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		line-height: 1.5;
 	}
 	.input {
 		height: 38px;

@@ -10,6 +10,7 @@ const activityService = require('./activityService');
 const projectPaths = require('../lib/projectPaths');
 const { slugify } = require('../lib/slugify');
 const { ROLE } = require('../constants/roles');
+const { isFramework } = require('../constants/defaults');
 const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 
 const { DEFAULT_JWT_SECRET } = require('../lib/appSecret');
@@ -47,7 +48,7 @@ async function createUser({ name, email, password, role = 'user' }) {
 
 // First boot: the organisation, its first project, and the owner, all or
 // nothing. The owner reaches every project implicitly, so no ProjectMember row.
-async function bootstrap({ organizationName, projectName, name, email, password }) {
+async function bootstrap({ organizationName, projectName, name, email, password, framework }) {
 	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 	const slug = slugify(projectName);
 	const result = await prisma.$transaction(async (tx) => {
@@ -55,7 +56,7 @@ async function bootstrap({ organizationName, projectName, name, email, password 
 			data: { name: organizationName, termsAcceptedAt: new Date() }
 		});
 		const project = await tx.project.create({
-			data: { orgId: org.id, name: projectName, slug }
+			data: { orgId: org.id, name: projectName, slug, ...(isFramework(framework) && { framework }) }
 		});
 		const user = await tx.user.create({
 			data: { name, email, password: hashed, role: ROLE.OWNER },

@@ -34,7 +34,7 @@ Run this on one machine for your team. It sets up the server and its UI: the Tes
 
 ```bash
 mkdir plum-server && cd plum-server
-plum server start            # Choose between Playwright or Cucumber project
+plum server start
 ```
 
 - Each project picks **Playwright or Cucumber** when it is created, and that choice is permanent.
