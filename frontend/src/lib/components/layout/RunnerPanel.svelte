@@ -95,7 +95,7 @@
 	let runnersOpen = false;
 	let runPickOpen = false;
 	let runAllModalOpen = false;
-	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
+	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '' };
 	let notifyDiscord = false;
 	let notifySlack = false;
 

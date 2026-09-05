@@ -495,6 +495,7 @@ function applyServerConfig(cfg) {
 			backendPort: cfg.backendPort,
 			framework: cfg.framework,
 			apiUrl: cfg.apiUrl,
+			uiUrl: cfg.uiUrl,
 			plumVersion: readPlumVersion()
 		}),
 		'utf8'

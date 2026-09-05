@@ -184,7 +184,6 @@ model Project {
   suiteSeqNext         Int          @default(0)
   discordWebhookUrl    String       @default("")
   slackWebhookUrl      String       @default("")
-  notifyPublicUrl      String       @default("")
   maxRetries           Int          @default(0)
   // Which page members land on: "automated" (Automated Tests) or "repository"
   // (Test Repository). Purely presentational: reorders the nav, no route changes.

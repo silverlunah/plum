@@ -112,21 +112,16 @@ const getWebhooks = async (projectId) => {
 	const project = await getProjectRaw(projectId);
 	return {
 		discordWebhookUrl: project.discordWebhookUrl ?? '',
-		slackWebhookUrl: project.slackWebhookUrl ?? '',
-		notifyPublicUrl: project.notifyPublicUrl ?? ''
+		slackWebhookUrl: project.slackWebhookUrl ?? ''
 	};
 };
 
-const updateWebhooks = async (
-	projectId,
-	{ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl }
-) => {
+const updateWebhooks = async (projectId, { discordWebhookUrl, slackWebhookUrl }) => {
 	const project = await prisma.project.update({
 		where: { id: projectId },
 		data: {
 			discordWebhookUrl: discordWebhookUrl ?? '',
-			slackWebhookUrl: slackWebhookUrl ?? '',
-			notifyPublicUrl: notifyPublicUrl ?? ''
+			slackWebhookUrl: slackWebhookUrl ?? ''
 		}
 	});
 	await activityService.record(ACTIVITY_ACTION.INTEGRATIONS_UPDATE, {
@@ -134,8 +129,7 @@ const updateWebhooks = async (
 		target: { type: 'project', id: projectId, label: project.name },
 		metadata: {
 			discord: (discordWebhookUrl ?? '').length > 0,
-			slack: (slackWebhookUrl ?? '').length > 0,
-			ci: (notifyPublicUrl ?? '').length > 0
+			slack: (slackWebhookUrl ?? '').length > 0
 		}
 	});
 	return project;

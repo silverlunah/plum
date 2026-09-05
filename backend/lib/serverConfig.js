@@ -89,6 +89,7 @@ function buildOverrideYaml({
 	projectsAbs,
 	backendPort,
 	apiUrl,
+	uiUrl,
 	plumVersion,
 	framework
 }) {
@@ -101,6 +102,9 @@ function buildOverrideYaml({
 			// Which framework the project-create form should pre-select. The config file
 			// itself lives on the host, outside the container.
 			`      PLUM_DEFAULT_FRAMEWORK: "${framework || ''}"`,
+			// Already collected here, so notification report links don't ask again in
+			// Settings → Integrations for the same URL.
+			`      PLUM_PUBLIC_URL: "${uiUrl || ''}"`,
 			'    volumes:',
 			`      - "${dataAbs}:/app/data"`,
 			`      - "${projectsAbs}:/app/projects"`,
