@@ -116,7 +116,11 @@ const ORG_FIELDS = [
 	'sessionMaxHours',
 	'passwordLoginEnabled',
 	'googleLoginEnabled',
-	'googleClientId'
+	'googleClientId',
+	'builtInRunnerEnabled',
+	'activityRetentionDays',
+	'reportRetentionDays',
+	'termsAcceptedAt'
 ];
 
 const exportAll = async (includeReports = false) => {
@@ -379,13 +383,15 @@ const importAll = async (data, cronService) => {
 			}
 
 			// Users and runners are instance-level and every project entry below
-			// may reference them, so they land first.
+			// may reference them, so they land first. defaultProjectId is deferred:
+			// it's a FK to a project that doesn't exist yet.
 			const usersByEmail = new Map();
 			for (const user of users) {
+				const { defaultProjectId: _, ...u } = user;
 				const row = await tx.user.upsert({
-					where: { email: user.email },
-					create: user,
-					update: { name: user.name, role: user.role }
+					where: { email: u.email },
+					create: u,
+					update: { name: u.name, role: u.role }
 				});
 				usersByEmail.set(row.email, row.id);
 			}
@@ -406,6 +412,22 @@ const importAll = async (data, cronService) => {
 
 			for (const entry of projects) {
 				await importProject(tx, entry, usersByEmail);
+			}
+
+			// Now the projects exist, restore each user's default project — but only
+			// if that id still resolves (a cross-instance restore renumbers them).
+			for (const user of users) {
+				if (user.defaultProjectId == null) continue;
+				const stillThere = await tx.project.findUnique({
+					where: { id: user.defaultProjectId },
+					select: { id: true }
+				});
+				if (stillThere) {
+					await tx.user.update({
+						where: { email: user.email },
+						data: { defaultProjectId: user.defaultProjectId }
+					});
+				}
 			}
 		},
 		{ timeout: 120000 }
