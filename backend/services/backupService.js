@@ -197,9 +197,11 @@ async function resolveProject(tx, entry) {
 		}
 	}
 
+	// A nameless org, not a "Default"-named one: an empty name is what the login
+	// screen treats as "not configured" (it shows just the Plum wordmark then).
 	const org =
 		(await tx.organization.findFirst({ orderBy: { id: 'asc' } })) ??
-		(await tx.organization.create({ data: { name: 'Default' } }));
+		(await tx.organization.create({ data: {} }));
 	const created = await tx.project.create({
 		data: {
 			orgId: org.id,
@@ -362,7 +364,7 @@ const importAll = async (data, cronService) => {
 	await prisma.$transaction(
 		async (tx) => {
 			// The single org row carries the instance name/logo — restore it before
-			// resolveProject falls back to creating a nameless "Default" one.
+			// resolveProject falls back to creating a nameless one.
 			if (organization) {
 				const existing = await tx.organization.findFirst({ orderBy: { id: 'asc' } });
 				// Backups don't carry googleClientSecret; without one, Google sign-in

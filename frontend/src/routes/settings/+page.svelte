@@ -211,10 +211,13 @@
 	]);
 
 	const querySection = $page.url.searchParams.get('section');
+	// Owners land on Organization (the first tab); everyone else on Project,
+	// their first reachable tab.
+	const defaultSection = $auth.user?.role === 'owner' ? 'organization' : 'project';
 	let section =
 		(VALID_SECTIONS.has(querySection) && querySection) ||
 		(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('plum:settings:section')) ||
-		'project';
+		defaultSection;
 
 	// On mobile the sidebar and content are separate views (a drill-down), so
 	// picking a section swaps to the content; the back control returns to the list.
