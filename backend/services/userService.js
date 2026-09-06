@@ -3,6 +3,7 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('./prisma');
@@ -15,8 +16,8 @@ const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 const { accessibleProjectIds } = require('../lib/projectContext');
 
 const { DEFAULT_JWT_SECRET } = require('../lib/appSecret');
+const { DEFAULT_SESSION_MAX_HOURS } = require('../constants/session');
 const SALT_ROUNDS = 10;
-const TOKEN_TTL = '30d';
 
 // Read at call time: server.js resolves the real secret into the env at boot.
 const jwtSecret = () => process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
@@ -29,6 +30,14 @@ const userSelect = {
 	createdAt: true,
 	defaultProjectId: true
 };
+
+// Which roles each role may reset a password for. Deliberately role-based, not
+// project-scoped: an admin can reset any plain user, not only those sharing a
+// project. No entry (e.g. a plain user) means "may reset nobody".
+const RESETTABLE_BY = Object.freeze({
+	[ROLE.OWNER]: [ROLE.ADMIN, ROLE.USER],
+	[ROLE.ADMIN]: [ROLE.USER]
+});
 
 async function needsSetup() {
 	const count = await prisma.organization.count();
@@ -82,10 +91,14 @@ async function login({ email, password }) {
 	if (!user) return null;
 	const match = await bcrypt.compare(password, user.password);
 	if (!match) return null;
+	const org = await prisma.organization.findFirst({
+		orderBy: { id: 'asc' },
+		select: { sessionMaxHours: true }
+	});
 	const token = jwt.sign(
 		{ userId: user.id, email: user.email, name: user.name, role: user.role },
 		jwtSecret(),
-		{ expiresIn: TOKEN_TTL }
+		{ expiresIn: (org?.sessionMaxHours ?? DEFAULT_SESSION_MAX_HOURS) * 3600 }
 	);
 	return {
 		token,
@@ -191,6 +204,36 @@ async function updatePassword(id, { currentPassword, newPassword }) {
 	return { ok: true };
 }
 
+async function getResettableUsers(actorRole) {
+	const roles = RESETTABLE_BY[actorRole] ?? [];
+	if (roles.length === 0) return [];
+	return prisma.user.findMany({
+		where: { role: { in: roles } },
+		select: { id: true, name: true, email: true, role: true },
+		orderBy: { name: 'asc' }
+	});
+}
+
+// Sets a fresh random password and returns it once, in the clear, for the
+// owner/admin to hand over, it is never stored or shown again.
+async function resetPassword(actor, targetId) {
+	const target = await prisma.user.findUnique({ where: { id: targetId } });
+	if (!target) return { ok: false, status: 404, error: 'User not found' };
+	if (!(RESETTABLE_BY[actor.role] ?? []).includes(target.role)) {
+		return { ok: false, status: 403, error: 'You cannot reset this user’s password' };
+	}
+	const tempPassword = crypto.randomBytes(12).toString('base64url');
+	await prisma.user.update({
+		where: { id: targetId },
+		data: { password: await bcrypt.hash(tempPassword, SALT_ROUNDS) }
+	});
+	await activityService.record(ACTIVITY_ACTION.USER_PASSWORD_RESET, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'user', id: targetId, label: target.name }
+	});
+	return { ok: true, tempPassword };
+}
+
 // Refuses to demote the last owner: the instance must always have one.
 async function updateUser(id, { name, email, role }) {
 	const user = await prisma.user.findUnique({ where: { id } });
@@ -256,6 +299,8 @@ module.exports = {
 	getById,
 	updateProfile,
 	updatePassword,
+	getResettableUsers,
+	resetPassword,
 	updateUser,
 	deleteUser
 };

@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const userService = require('../services/userService');
+const settingsService = require('../services/settingsService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { rateLimit } = require('../middleware/rateLimit');
 const { slugify } = require('../lib/slugify');
@@ -21,6 +22,15 @@ router.get('/needs-setup', async (req, res, next) => {
 	try {
 		const setup = await userService.needsSetup();
 		res.json({ needsSetup: setup });
+	} catch (e) {
+		next(e);
+	}
+});
+
+// Public: the org name and logo the login screen renders before anyone signs in.
+router.get('/branding', async (req, res, next) => {
+	try {
+		res.json(await settingsService.getPublicBranding());
 	} catch (e) {
 		next(e);
 	}

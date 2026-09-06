@@ -7,19 +7,26 @@
 	import { onMount, createEventDispatcher } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import { notify } from '$lib/stores/notifications';
+	import { copyText } from '$lib/utils/clipboard';
+	import { COPY_TIMEOUT_MS, SESSION_TIMEOUT_OPTIONS } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Paginator from '$lib/components/ui/Paginator.svelte';
 	import {
 		fetchUsers,
+		fetchResettableUsers,
 		createUser as createUserApi,
+		resetUserPassword as resetUserPasswordApi,
 		deleteUser as deleteUserApi
 	} from '$lib/api/users';
+	import { fetchOrganization, saveOrganization } from '$lib/api/settings';
 	import { EMAIL_LABEL, SEARCH_PLACEHOLDER } from '$lib/copy/common';
 	import {
 		NAME_LABEL,
 		USERS_LABEL,
 		USERS_DESC,
+		USERS_ADMIN_DESC,
 		MANAGE_PROJECTS_LINK_LABEL,
 		REMOVE_USER_MODAL_TITLE,
 		REMOVE_USER_LABEL,
@@ -27,6 +34,7 @@
 		REMOVE_USER_BODY_SUFFIX,
 		ADD_USER_CARD_TITLE,
 		ALL_USERS_CARD_TITLE,
+		USERS_ADMIN_CARD_TITLE,
 		USER_NAME_PLACEHOLDER,
 		USER_EMAIL_PLACEHOLDER,
 		PASSWORD_LABEL,
@@ -35,18 +43,45 @@
 		ADMIN_ROLE_OPTION,
 		OWNER_ROLE_OPTION,
 		REMOVE_USER_ICON_TITLE,
+		RESET_PASSWORD_ICON_TITLE,
+		RESET_PASSWORD_MODAL_TITLE,
+		RESET_PASSWORD_BODY_PREFIX,
+		RESET_PASSWORD_BODY_SUFFIX,
+		RESET_PASSWORD_RESULT_TITLE,
+		RESET_PASSWORD_RESULT_DESC,
+		RESET_PASSWORD_COPY_TITLE,
+		RESET_PASSWORD_COPIED_TITLE,
+		RESET_PASSWORD_DONE_LABEL,
 		YOU_CHIP_LABEL,
 		USER_FORM_REQUIRED_ERROR,
 		USER_PROJECTS_LABEL,
 		USER_NO_PROJECTS,
 		USER_ALL_PROJECTS,
+		ORG_CARD_TITLE,
+		ORG_NAME_LABEL,
+		ORG_NAME_PLACEHOLDER,
+		ORG_LOGO_URL_LABEL,
+		ORG_LOGO_URL_PLACEHOLDER,
+		SESSION_TIMEOUT_LABEL,
+		SESSION_TIMEOUT_HINT,
+		ORG_SAVED_TOAST,
 		addUserLabel,
+		resetPasswordLabel,
+		passwordResetToast,
+		saveOrgLabel,
+		sessionTimeoutOptionLabel,
 		userAddedToast,
 		userRemovedToast
 	} from '$lib/copy/settings';
 
 	const dispatch = createEventDispatcher();
 	const USERS_PER_PAGE = 20;
+
+	$: role = $auth.user?.role;
+	$: isOwner = role === 'owner';
+	// owner may reset admins and users; admin may reset users only.
+	const RESETTABLE_BY = { owner: ['admin', 'user'], admin: ['user'] };
+	$: canReset = (targetRole) => (RESETTABLE_BY[role] ?? []).includes(targetRole);
 
 	let allUsers = [];
 	let userQuery = '';
@@ -57,6 +92,17 @@
 	let userFormError = '';
 	let confirmDeleteUser = null;
 	let confirmDeleteUserOpen = false;
+	let confirmResetUser = null;
+	let confirmResetOpen = false;
+	let resetting = false;
+	let resetResult = null;
+	let resetResultOpen = false;
+	let tempPasswordCopied = false;
+
+	let orgForm = { name: '', logoUrl: '', sessionMaxHours: SESSION_TIMEOUT_OPTIONS.at(-1) };
+	let orgSaving = false;
+
+	$: if (!resetResultOpen) resetResult = null;
 
 	$: filteredUsers = allUsers.filter(
 		(u) =>
@@ -67,9 +113,26 @@
 
 	onMount(async () => {
 		try {
-			allUsers = await fetchUsers();
+			allUsers = isOwner ? await fetchUsers() : await fetchResettableUsers();
 		} catch {}
+		if (isOwner) {
+			try {
+				orgForm = await fetchOrganization();
+			} catch {}
+		}
 	});
+
+	async function handleSaveOrg() {
+		orgSaving = true;
+		try {
+			orgForm = await saveOrganization(orgForm);
+			notify('success', ORG_SAVED_TOAST);
+		} catch (e) {
+			notify('error', e.message);
+		} finally {
+			orgSaving = false;
+		}
+	}
 
 	async function handleCreateUser() {
 		userFormError = '';
@@ -90,6 +153,30 @@
 		}
 	}
 
+	async function handleResetPassword(user) {
+		resetting = true;
+		try {
+			const tempPassword = await resetUserPasswordApi(user.id);
+			resetResult = { name: user.name, tempPassword };
+			resetResultOpen = true;
+			tempPasswordCopied = false;
+			notify('success', passwordResetToast(user.name));
+		} catch (e) {
+			notify('error', e.message);
+		} finally {
+			resetting = false;
+			confirmResetUser = null;
+			confirmResetOpen = false;
+		}
+	}
+
+	async function copyTempPassword() {
+		if (!resetResult) return;
+		await copyText(resetResult.tempPassword);
+		tempPasswordCopied = true;
+		setTimeout(() => (tempPasswordCopied = false), COPY_TIMEOUT_MS);
+	}
+
 	async function handleDeleteUser(id, name) {
 		try {
 			await deleteUserApi(id);
@@ -105,10 +192,12 @@
 
 <div class="content-header">
 	<h2>{USERS_LABEL}</h2>
-	<p class="content-desc">{USERS_DESC}</p>
-	<button class="content-link" on:click={() => dispatch('navigate', 'project')}>
-		{MANAGE_PROJECTS_LINK_LABEL}
-	</button>
+	<p class="content-desc">{isOwner ? USERS_DESC : USERS_ADMIN_DESC}</p>
+	{#if isOwner}
+		<button class="content-link" on:click={() => dispatch('navigate', 'project')}>
+			{MANAGE_PROJECTS_LINK_LABEL}
+		</button>
+	{/if}
 </div>
 
 <ConfirmModal
@@ -123,67 +212,137 @@
 	{/if}
 </ConfirmModal>
 
-<div class="card settings-card">
-	<p class="card-title">{ADD_USER_CARD_TITLE}</p>
-	<div class="field-row">
-		<div class="field">
-			<label class="field-label" for="u-name">{NAME_LABEL}</label>
-			<input
-				id="u-name"
-				type="text"
-				class="field-input"
-				bind:value={userForm.name}
-				placeholder={USER_NAME_PLACEHOLDER}
-			/>
+<ConfirmModal
+	bind:open={confirmResetOpen}
+	title={RESET_PASSWORD_MODAL_TITLE}
+	confirmLabel={resetPasswordLabel(resetting)}
+	loading={resetting}
+	on:confirm={() => confirmResetUser && handleResetPassword(confirmResetUser)}
+>
+	{#if confirmResetUser}
+		{RESET_PASSWORD_BODY_PREFIX}
+		<strong>{confirmResetUser.name}</strong>{RESET_PASSWORD_BODY_SUFFIX}
+	{/if}
+</ConfirmModal>
+
+<Modal bind:open={resetResultOpen} title={RESET_PASSWORD_RESULT_TITLE}>
+	{#if resetResult}
+		<p class="reset-result-desc">{RESET_PASSWORD_RESULT_DESC}</p>
+		<div class="reset-result-row">
+			<input class="field-input" value={resetResult.tempPassword} readonly spellcheck="false" />
+			<button class="reset-copy-btn" on:click={copyTempPassword}>
+				{tempPasswordCopied ? RESET_PASSWORD_COPIED_TITLE : RESET_PASSWORD_COPY_TITLE}
+			</button>
 		</div>
-		<div class="field">
-			<label class="field-label" for="u-email">{EMAIL_LABEL}</label>
-			<input
-				id="u-email"
-				type="email"
-				class="field-input"
-				bind:value={userForm.email}
-				placeholder={USER_EMAIL_PLACEHOLDER}
-			/>
+		<div class="reset-result-actions">
+			<Button on:click={() => (resetResultOpen = false)}>{RESET_PASSWORD_DONE_LABEL}</Button>
 		</div>
-	</div>
-	<div class="field-row">
-		<div class="field">
-			<label class="field-label" for="u-pw">{PASSWORD_LABEL}</label>
-			<input
-				id="u-pw"
-				type="password"
-				class="field-input"
-				bind:value={userForm.password}
-				autocomplete="new-password"
-			/>
+	{/if}
+</Modal>
+
+{#if isOwner}
+	<div class="card settings-card">
+		<p class="card-title">{ORG_CARD_TITLE}</p>
+		<div class="field-row">
+			<div class="field">
+				<label class="field-label" for="org-name">{ORG_NAME_LABEL}</label>
+				<input
+					id="org-name"
+					type="text"
+					class="field-input"
+					bind:value={orgForm.name}
+					placeholder={ORG_NAME_PLACEHOLDER}
+				/>
+			</div>
+			<div class="field">
+				<label class="field-label" for="org-logo">{ORG_LOGO_URL_LABEL}</label>
+				<input
+					id="org-logo"
+					type="url"
+					class="field-input"
+					bind:value={orgForm.logoUrl}
+					placeholder={ORG_LOGO_URL_PLACEHOLDER}
+				/>
+			</div>
 		</div>
-		<div class="field">
-			<label class="field-label" for="u-role">{ROLE_LABEL}</label>
-			<select id="u-role" class="field-input" bind:value={userForm.role}>
-				<option value="user">{USER_ROLE_OPTION}</option>
-				<option value="admin">{ADMIN_ROLE_OPTION}</option>
-				<option value="owner">{OWNER_ROLE_OPTION}</option>
+		<div class="field field-sm">
+			<label class="field-label" for="org-session">{SESSION_TIMEOUT_LABEL}</label>
+			<select id="org-session" class="field-input" bind:value={orgForm.sessionMaxHours}>
+				{#each SESSION_TIMEOUT_OPTIONS as hours (hours)}
+					<option value={hours}>{sessionTimeoutOptionLabel(hours)}</option>
+				{/each}
 			</select>
+			<p class="field-hint">{SESSION_TIMEOUT_HINT}</p>
+		</div>
+		<div class="card-footer">
+			<Button on:click={handleSaveOrg} disabled={orgSaving}>
+				{saveOrgLabel(orgSaving)}
+			</Button>
 		</div>
 	</div>
-	{#if userFormError}<p class="form-error">{userFormError}</p>{/if}
-	<div class="card-footer">
-		<Button
-			on:click={handleCreateUser}
-			disabled={userFormSaving ||
-				!userForm.name.trim() ||
-				!userForm.email.trim() ||
-				!userForm.password}
-		>
-			{addUserLabel(userFormSaving)}
-		</Button>
+
+	<div class="card settings-card">
+		<p class="card-title">{ADD_USER_CARD_TITLE}</p>
+		<div class="field-row">
+			<div class="field">
+				<label class="field-label" for="u-name">{NAME_LABEL}</label>
+				<input
+					id="u-name"
+					type="text"
+					class="field-input"
+					bind:value={userForm.name}
+					placeholder={USER_NAME_PLACEHOLDER}
+				/>
+			</div>
+			<div class="field">
+				<label class="field-label" for="u-email">{EMAIL_LABEL}</label>
+				<input
+					id="u-email"
+					type="email"
+					class="field-input"
+					bind:value={userForm.email}
+					placeholder={USER_EMAIL_PLACEHOLDER}
+				/>
+			</div>
+		</div>
+		<div class="field-row">
+			<div class="field">
+				<label class="field-label" for="u-pw">{PASSWORD_LABEL}</label>
+				<input
+					id="u-pw"
+					type="password"
+					class="field-input"
+					bind:value={userForm.password}
+					autocomplete="new-password"
+				/>
+			</div>
+			<div class="field">
+				<label class="field-label" for="u-role">{ROLE_LABEL}</label>
+				<select id="u-role" class="field-input" bind:value={userForm.role}>
+					<option value="user">{USER_ROLE_OPTION}</option>
+					<option value="admin">{ADMIN_ROLE_OPTION}</option>
+					<option value="owner">{OWNER_ROLE_OPTION}</option>
+				</select>
+			</div>
+		</div>
+		{#if userFormError}<p class="form-error">{userFormError}</p>{/if}
+		<div class="card-footer">
+			<Button
+				on:click={handleCreateUser}
+				disabled={userFormSaving ||
+					!userForm.name.trim() ||
+					!userForm.email.trim() ||
+					!userForm.password}
+			>
+				{addUserLabel(userFormSaving)}
+			</Button>
+		</div>
 	</div>
-</div>
+{/if}
 
 {#if allUsers.length > 0}
 	<div class="card settings-card">
-		<p class="card-title">{ALL_USERS_CARD_TITLE}</p>
+		<p class="card-title">{isOwner ? ALL_USERS_CARD_TITLE : USERS_ADMIN_CARD_TITLE}</p>
 		{#if allUsers.length > 1}
 			<input
 				class="field-input user-search"
@@ -194,24 +353,31 @@
 		{/if}
 		<div class="users-table">
 			{#each pagedUsers as u (u.id)}
-				<div class="user-row" class:expanded={expandedUserId === u.id}>
+				<div class="user-row" class:expanded={isOwner && expandedUserId === u.id}>
 					<div class="user-row-head">
-						<button
-							class="user-info"
-							aria-expanded={expandedUserId === u.id}
-							on:click={() => (expandedUserId = expandedUserId === u.id ? null : u.id)}
-						>
-							<span class="user-name">{u.name}</span>
-							<span class="user-email">{u.email}</span>
-						</button>
-						<span class="role-chip {u.role}">{u.role}</span>
-						{#if u.id !== $auth.user?.id}
+						{#if isOwner}
 							<button
-								class="icon-btn danger"
-								title={REMOVE_USER_ICON_TITLE}
+								class="user-info"
+								aria-expanded={expandedUserId === u.id}
+								on:click={() => (expandedUserId = expandedUserId === u.id ? null : u.id)}
+							>
+								<span class="user-name">{u.name}</span>
+								<span class="user-email">{u.email}</span>
+							</button>
+						{:else}
+							<div class="user-info">
+								<span class="user-name">{u.name}</span>
+								<span class="user-email">{u.email}</span>
+							</div>
+						{/if}
+						<span class="role-chip {u.role}">{u.role}</span>
+						{#if canReset(u.role)}
+							<button
+								class="icon-btn"
+								title={RESET_PASSWORD_ICON_TITLE}
 								on:click={() => {
-									confirmDeleteUser = { id: u.id, name: u.name };
-									confirmDeleteUserOpen = true;
+									confirmResetUser = u;
+									confirmResetOpen = true;
 								}}
 							>
 								<svg
@@ -224,16 +390,43 @@
 									stroke-linecap="round"
 									stroke-linejoin="round"
 								>
-									<polyline points="3 6 5 6 21 6" /><path
-										d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
-									/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+									<path
+										d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"
+									/><circle cx="16.5" cy="7.5" r="1.25" fill="currentColor" stroke="none" />
 								</svg>
 							</button>
-						{:else}
-							<span class="you-chip">{YOU_CHIP_LABEL}</span>
+						{/if}
+						{#if isOwner}
+							{#if u.id !== $auth.user?.id}
+								<button
+									class="icon-btn danger"
+									title={REMOVE_USER_ICON_TITLE}
+									on:click={() => {
+										confirmDeleteUser = { id: u.id, name: u.name };
+										confirmDeleteUserOpen = true;
+									}}
+								>
+									<svg
+										width="13"
+										height="13"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<polyline points="3 6 5 6 21 6" /><path
+											d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+										/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+									</svg>
+								</button>
+							{:else}
+								<span class="you-chip">{YOU_CHIP_LABEL}</span>
+							{/if}
 						{/if}
 					</div>
-					{#if expandedUserId === u.id}
+					{#if isOwner && expandedUserId === u.id}
 						<div class="user-projects">
 							<p class="user-projects-label">{USER_PROJECTS_LABEL}</p>
 							{#if u.role === 'owner'}
@@ -289,6 +482,13 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 0.75rem;
+	}
+	.field-sm {
+		max-width: 220px;
+	}
+	.field-hint {
+		margin: 0.125rem 0 0;
+		line-height: 1.5;
 	}
 	.card-footer {
 		padding-top: 0.5rem;
@@ -443,9 +643,47 @@
 			color var(--duration-fast);
 		flex-shrink: 0;
 	}
+	.icon-btn:hover {
+		background: var(--bg-subtle);
+		color: var(--text);
+	}
 	.icon-btn.danger:hover {
 		background: var(--fail-soft);
 		color: var(--fail);
+	}
+
+	.reset-result-desc {
+		margin: 0;
+		font-size: 0.85rem;
+		color: var(--text-muted);
+		line-height: 1.5;
+	}
+	.reset-result-row {
+		display: flex;
+		gap: 0.5rem;
+	}
+	.reset-result-row .field-input {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.85rem;
+	}
+	.reset-copy-btn {
+		flex-shrink: 0;
+		padding: 0 0.85rem;
+		font: inherit;
+		font-size: 0.8125rem;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		color: var(--text);
+		cursor: pointer;
+		transition: background var(--duration-fast);
+	}
+	.reset-copy-btn:hover {
+		background: var(--bg-elevated);
+	}
+	.reset-result-actions {
+		display: flex;
+		justify-content: flex-end;
 	}
 
 	@media (max-width: 640px) {

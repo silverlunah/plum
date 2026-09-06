@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const prisma = require('./prisma');
 const activityService = require('./activityService');
 const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
+const { isSessionMaxHours } = require('../constants/session');
 const { sanitizeTestsPath } = require('../lib/sanitizeTestsPath');
 
 const getProjectRaw = async (projectId) => {
@@ -270,6 +271,42 @@ const updateActivityRetention = async (days) => {
 	return { activityRetentionDays: updated.activityRetentionDays };
 };
 
+const getOrganization = async () => {
+	const org = await getOrgRaw();
+	return { name: org.name, logoUrl: org.logoUrl, sessionMaxHours: org.sessionMaxHours };
+};
+
+// Unauthenticated: only the two fields the login screen renders.
+const getPublicBranding = async () => {
+	const org = await prisma.organization.findFirst({
+		orderBy: { id: 'asc' },
+		select: { name: true, logoUrl: true }
+	});
+	return { name: org?.name ?? '', logoUrl: org?.logoUrl ?? '' };
+};
+
+const updateOrganization = async ({ name, logoUrl, sessionMaxHours }) => {
+	const org = await getOrgRaw();
+	const data = {};
+	if (name !== undefined) data.name = String(name).trim();
+	if (logoUrl !== undefined) data.logoUrl = String(logoUrl).trim();
+	if (sessionMaxHours !== undefined) {
+		if (!isSessionMaxHours(sessionMaxHours)) {
+			const e = new Error('sessionMaxHours must be one of 6, 12, 18 or 24');
+			e.status = 400;
+			throw e;
+		}
+		data.sessionMaxHours = Number(sessionMaxHours);
+	}
+	const updated = await prisma.organization.update({ where: { id: org.id }, data });
+	await activityService.record(ACTIVITY_ACTION.ORG_SETTINGS_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'organization', label: updated.name || 'Organization' },
+		metadata: { changed: Object.keys(data) }
+	});
+	return { name: updated.name, logoUrl: updated.logoUrl, sessionMaxHours: updated.sessionMaxHours };
+};
+
 const revokeMcpKey = async (projectId, userId) => {
 	const { count } = await prisma.mcpKey.deleteMany({ where: { projectId, userId } });
 	if (count > 0) {
@@ -284,6 +321,9 @@ module.exports = {
 	getProject,
 	getProjectRaw,
 	getOrgRaw,
+	getOrganization,
+	getPublicBranding,
+	updateOrganization,
 	updateProject,
 	getTestPrefixes,
 	updateTestPrefixes,

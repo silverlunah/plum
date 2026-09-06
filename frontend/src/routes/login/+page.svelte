@@ -7,7 +7,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/stores/auth';
-	import { login, checkNeedsSetup } from '$lib/api/auth';
+	import { login, checkNeedsSetup, fetchBranding } from '$lib/api/auth';
 	import { theme } from '$lib/stores/theme';
 	import { EMAIL_LABEL, PASSWORD_LABEL } from '$lib/copy/common';
 	import {
@@ -18,6 +18,7 @@
 		SIGN_IN_SUBTITLE,
 		PASSWORD_PLACEHOLDER,
 		LOGIN_FAILED_FALLBACK,
+		POWERED_BY_LABEL,
 		signInLabel
 	} from '$lib/copy/auth';
 
@@ -26,6 +27,7 @@
 	let error = '';
 	let loading = false;
 	let checking = true;
+	let branding = null;
 
 	onMount(async () => {
 		try {
@@ -34,6 +36,7 @@
 				return;
 			}
 		} catch {}
+		branding = await fetchBranding();
 		checking = false;
 	});
 
@@ -63,10 +66,14 @@
 		<p class="checking">{CHECKING_SERVER}</p>
 	{:else}
 		<div class="card">
-			<div class="brand">
-				<span class="brand-serif">Pl</span><span class="brand-sans">um</span>
-			</div>
-			<h1 class="title">{SIGN_IN_TITLE}</h1>
+			{#if branding?.logoUrl}
+				<img class="org-logo" src={branding.logoUrl} alt={branding.name || 'Organization logo'} />
+			{:else}
+				<div class="brand">
+					<span class="brand-serif">Pl</span><span class="brand-sans">um</span>
+				</div>
+			{/if}
+			<h1 class="title">{branding?.name || SIGN_IN_TITLE}</h1>
 			<p class="subtitle">{SIGN_IN_SUBTITLE}</p>
 
 			<div class="fields">
@@ -103,6 +110,13 @@
 			<button class="submit-btn" on:click={handleSubmit} disabled={loading || !email || !password}>
 				{signInLabel(loading)}
 			</button>
+
+			{#if branding?.logoUrl}
+				<p class="powered-by">
+					{POWERED_BY_LABEL}
+					<span class="brand-serif">Pl</span><span class="brand-sans">um</span>
+				</p>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -138,6 +152,25 @@
 		font-size: 1.5rem;
 		letter-spacing: -0.02em;
 		margin-bottom: -0.25rem;
+	}
+
+	.org-logo {
+		align-self: center;
+		max-height: 44px;
+		max-width: 200px;
+		object-fit: contain;
+		margin-bottom: -0.25rem;
+	}
+
+	.powered-by {
+		margin: -0.25rem 0 0;
+		font-size: 0.75rem;
+		letter-spacing: -0.01em;
+		color: var(--text-muted);
+	}
+	.powered-by .brand-serif,
+	.powered-by .brand-sans {
+		font-size: 0.8125rem;
 	}
 
 	.brand-serif {
