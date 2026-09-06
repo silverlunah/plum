@@ -13,6 +13,7 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Paginator from '$lib/components/ui/Paginator.svelte';
+	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 	import {
 		fetchUsers,
 		fetchResettableUsers,
@@ -32,9 +33,9 @@
 		REMOVE_USER_LABEL,
 		REMOVE_USER_BODY_PREFIX,
 		REMOVE_USER_BODY_SUFFIX,
+		USER_MANAGEMENT_CARD_TITLE,
 		ADD_USER_CARD_TITLE,
 		ALL_USERS_CARD_TITLE,
-		USERS_ADMIN_CARD_TITLE,
 		USER_NAME_PLACEHOLDER,
 		USER_EMAIL_PLACEHOLDER,
 		PASSWORD_LABEL,
@@ -313,279 +314,293 @@
 	{/if}
 </Modal>
 
-{#if isOwner}
+{#if isOwner || allUsers.length > 0}
 	<div class="card settings-card">
-		<p class="card-title">{ADD_USER_CARD_TITLE}</p>
-		<div class="field-row">
-			<div class="field">
-				<label class="field-label" for="u-name">{NAME_LABEL}</label>
-				<input
-					id="u-name"
-					type="text"
-					class="field-input"
-					bind:value={userForm.name}
-					placeholder={USER_NAME_PLACEHOLDER}
-				/>
-			</div>
-			<div class="field">
-				<label class="field-label" for="u-email">{EMAIL_LABEL}</label>
-				<input
-					id="u-email"
-					type="email"
-					class="field-input"
-					bind:value={userForm.email}
-					placeholder={USER_EMAIL_PLACEHOLDER}
-				/>
-			</div>
-		</div>
-		<div class="field-row">
-			<div class="field">
-				<label class="field-label" for="u-pw">{PASSWORD_LABEL}</label>
-				<input
-					id="u-pw"
-					type="password"
-					class="field-input"
-					bind:value={userForm.password}
-					autocomplete="new-password"
-				/>
-			</div>
-			<div class="field">
-				<label class="field-label" for="u-role">{ROLE_LABEL}</label>
-				<select id="u-role" class="field-input" bind:value={userForm.role}>
-					<option value="user">{USER_ROLE_OPTION}</option>
-					<option value="admin">{ADMIN_ROLE_OPTION}</option>
-					<option value="owner">{OWNER_ROLE_OPTION}</option>
-				</select>
-			</div>
-		</div>
-		{#if userFormError}<p class="form-error">{userFormError}</p>{/if}
-		<div class="card-footer">
-			<Button
-				on:click={handleCreateUser}
-				disabled={userFormSaving ||
-					!userForm.name.trim() ||
-					!userForm.email.trim() ||
-					!userForm.password}
-			>
-				{addUserLabel(userFormSaving)}
-			</Button>
-		</div>
-	</div>
+		<p class="card-title">{USER_MANAGEMENT_CARD_TITLE}</p>
 
-	<div class="card settings-card">
-		<p class="card-title">{SIGN_IN_CARD_TITLE}</p>
-
-		<div class="toggle-row">
-			<div class="toggle-info">
-				<span class="toggle-label">{SIGN_IN_PASSWORD_LABEL}</span>
-				<span class="toggle-desc">{SIGN_IN_PASSWORD_DESC}</span>
-			</div>
-			<button
-				class="toggle-switch"
-				class:on={signIn.passwordLoginEnabled}
-				role="switch"
-				aria-checked={signIn.passwordLoginEnabled}
-				on:click={() => toggleMethod('passwordLoginEnabled')}
-			>
-				<span class="toggle-thumb"></span>
-			</button>
-		</div>
-
-		<div class="toggle-row">
-			<div class="toggle-info">
-				<span class="toggle-label">{SIGN_IN_GOOGLE_LABEL}</span>
-				<span class="toggle-desc">{SIGN_IN_GOOGLE_DESC}</span>
-			</div>
-			<button
-				class="toggle-switch"
-				class:on={signIn.googleLoginEnabled}
-				role="switch"
-				aria-checked={signIn.googleLoginEnabled}
-				disabled={!signIn.googleLoginEnabled && !canEnableGoogle}
-				on:click={() => toggleMethod('googleLoginEnabled')}
-			>
-				<span class="toggle-thumb"></span>
-			</button>
-		</div>
-
-		<div class="field">
-			<label class="field-label" for="google-client-id">{GOOGLE_CLIENT_ID_LABEL}</label>
-			<input
-				id="google-client-id"
-				type="text"
-				class="field-input"
-				bind:value={signIn.googleClientId}
-				placeholder={GOOGLE_CLIENT_ID_PLACEHOLDER}
-				autocomplete="off"
-				spellcheck="false"
-			/>
-		</div>
-		<div class="field">
-			<label class="field-label" for="google-client-secret">{GOOGLE_CLIENT_SECRET_LABEL}</label>
-			<input
-				id="google-client-secret"
-				type="password"
-				class="field-input"
-				bind:value={googleClientSecret}
-				placeholder={signIn.googleClientSecretSet
-					? GOOGLE_CLIENT_SECRET_KEEP_PLACEHOLDER
-					: GOOGLE_CLIENT_SECRET_PLACEHOLDER}
-				autocomplete="off"
-				spellcheck="false"
-			/>
-		</div>
-		<div class="field">
-			<label class="field-label" for="google-redirect-uri">
-				<span>{GOOGLE_REDIRECT_URI_LABEL}</span>
-				<span class="field-hint">{GOOGLE_REDIRECT_URI_HINT}</span>
-			</label>
-			<div class="redirect-row">
-				<input
-					id="google-redirect-uri"
-					class="field-input"
-					value={redirectUri}
-					readonly
-					spellcheck="false"
-				/>
-				<button class="redirect-copy-btn" on:click={copyRedirectUri}>
-					{redirectUriCopied ? COPIED_LABEL_UI : COPY_LABEL}
-				</button>
-			</div>
-		</div>
-
-		<div class="card-footer">
-			<Button on:click={handleSaveSignIn} disabled={signInSaving}>
-				{saveSignInLabel(signInSaving)}
-			</Button>
-		</div>
-	</div>
-
-	<div class="card settings-card">
-		<p class="card-title">{SESSION_CARD_TITLE}</p>
-		<div class="field field-sm">
-			<label class="field-label" for="org-session">{SESSION_TIMEOUT_LABEL}</label>
-			<select id="org-session" class="field-input" bind:value={sessionMaxHours}>
-				{#each SESSION_TIMEOUT_OPTIONS as hours (hours)}
-					<option value={hours}>{sessionTimeoutOptionLabel(hours)}</option>
-				{/each}
-			</select>
-			<p class="field-hint">{SESSION_TIMEOUT_HINT}</p>
-		</div>
-		<div class="card-footer">
-			<Button on:click={handleSaveSession} disabled={sessionSaving}>
-				{saveSessionLabel(sessionSaving)}
-			</Button>
-		</div>
-	</div>
-{/if}
-
-{#if allUsers.length > 0}
-	<div class="card settings-card">
-		<p class="card-title">{isOwner ? ALL_USERS_CARD_TITLE : USERS_ADMIN_CARD_TITLE}</p>
-		{#if allUsers.length > 1}
-			<input
-				class="field-input user-search"
-				bind:value={userQuery}
-				placeholder={SEARCH_PLACEHOLDER}
-				on:input={() => (userPage = 0)}
-			/>
-		{/if}
-		<div class="users-table">
-			{#each pagedUsers as u (u.id)}
-				<div class="user-row" class:expanded={isOwner && expandedUserId === u.id}>
-					<div class="user-row-head">
-						{#if isOwner}
-							<button
-								class="user-info"
-								aria-expanded={expandedUserId === u.id}
-								on:click={() => (expandedUserId = expandedUserId === u.id ? null : u.id)}
-							>
-								<span class="user-name">{u.name}</span>
-								<span class="user-email">{u.email}</span>
-							</button>
-						{:else}
-							<div class="user-info">
-								<span class="user-name">{u.name}</span>
-								<span class="user-email">{u.email}</span>
-							</div>
-						{/if}
-						<span class="role-chip {u.role}">{u.role}</span>
-						{#if canReset(u.role)}
-							<button
-								class="icon-btn"
-								title={RESET_PASSWORD_ICON_TITLE}
-								on:click={() => {
-									confirmResetUser = u;
-									confirmResetOpen = true;
-								}}
-							>
-								<svg
-									width="13"
-									height="13"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<path
-										d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"
-									/><circle cx="16.5" cy="7.5" r="1.25" fill="currentColor" stroke="none" />
-								</svg>
-							</button>
-						{/if}
-						{#if isOwner}
-							{#if u.id !== $auth.user?.id}
-								<button
-									class="icon-btn danger"
-									title={REMOVE_USER_ICON_TITLE}
-									on:click={() => {
-										confirmDeleteUser = { id: u.id, name: u.name };
-										confirmDeleteUserOpen = true;
-									}}
-								>
-									<svg
-										width="13"
-										height="13"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<polyline points="3 6 5 6 21 6" /><path
-											d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
-										/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
-									</svg>
-								</button>
-							{:else}
-								<span class="you-chip">{YOU_CHIP_LABEL}</span>
-							{/if}
-						{/if}
+		{#if isOwner}
+			<div class="subsection">
+				<p class="subsection-title">{ADD_USER_CARD_TITLE}</p>
+				<div class="field-row">
+					<div class="field">
+						<label class="field-label" for="u-name">{NAME_LABEL}</label>
+						<input
+							id="u-name"
+							type="text"
+							class="field-input"
+							bind:value={userForm.name}
+							placeholder={USER_NAME_PLACEHOLDER}
+						/>
 					</div>
-					{#if isOwner && expandedUserId === u.id}
-						<div class="user-projects">
-							<p class="user-projects-label">{USER_PROJECTS_LABEL}</p>
-							{#if u.role === 'owner'}
-								<p class="user-projects-hint">{USER_ALL_PROJECTS}</p>
-							{:else if (u.projects ?? []).length === 0}
-								<p class="user-projects-hint">{USER_NO_PROJECTS}</p>
-							{:else}
-								<ul class="user-project-list">
-									{#each u.projects as p (p.id)}
-										<li><span>{p.name}</span><span class="slug">{p.slug}</span></li>
-									{/each}
-								</ul>
+					<div class="field">
+						<label class="field-label" for="u-email">{EMAIL_LABEL}</label>
+						<input
+							id="u-email"
+							type="email"
+							class="field-input"
+							bind:value={userForm.email}
+							placeholder={USER_EMAIL_PLACEHOLDER}
+						/>
+					</div>
+				</div>
+				<div class="field-row">
+					<div class="field">
+						<label class="field-label" for="u-pw">{PASSWORD_LABEL}</label>
+						<input
+							id="u-pw"
+							type="password"
+							class="field-input"
+							bind:value={userForm.password}
+							autocomplete="new-password"
+						/>
+					</div>
+					<div class="field">
+						<label class="field-label" for="u-role">{ROLE_LABEL}</label>
+						<select id="u-role" class="field-input" bind:value={userForm.role}>
+							<option value="user">{USER_ROLE_OPTION}</option>
+							<option value="admin">{ADMIN_ROLE_OPTION}</option>
+							<option value="owner">{OWNER_ROLE_OPTION}</option>
+						</select>
+					</div>
+				</div>
+				{#if userFormError}<p class="form-error">{userFormError}</p>{/if}
+				<div class="card-footer">
+					<Button
+						on:click={handleCreateUser}
+						disabled={userFormSaving ||
+							!userForm.name.trim() ||
+							!userForm.email.trim() ||
+							!userForm.password}
+					>
+						{addUserLabel(userFormSaving)}
+					</Button>
+				</div>
+			</div>
+		{/if}
+
+		{#if allUsers.length > 0}
+			<div class="subsection">
+				<p class="subsection-title">{ALL_USERS_CARD_TITLE}</p>
+				{#if allUsers.length > 1}
+					<input
+						class="field-input user-search"
+						bind:value={userQuery}
+						placeholder={SEARCH_PLACEHOLDER}
+						on:input={() => (userPage = 0)}
+					/>
+				{/if}
+				<div class="users-table">
+					{#each pagedUsers as u (u.id)}
+						<div class="user-row" class:expanded={isOwner && expandedUserId === u.id}>
+							<div class="user-row-head">
+								{#if isOwner}
+									<button
+										class="user-info"
+										aria-expanded={expandedUserId === u.id}
+										on:click={() => (expandedUserId = expandedUserId === u.id ? null : u.id)}
+									>
+										<span class="user-name">{u.name}</span>
+										<span class="user-email">{u.email}</span>
+									</button>
+								{:else}
+									<div class="user-info">
+										<span class="user-name">{u.name}</span>
+										<span class="user-email">{u.email}</span>
+									</div>
+								{/if}
+								<span class="role-chip {u.role}">{u.role}</span>
+								{#if canReset(u.role)}
+									<button
+										class="icon-btn"
+										title={RESET_PASSWORD_ICON_TITLE}
+										on:click={() => {
+											confirmResetUser = u;
+											confirmResetOpen = true;
+										}}
+									>
+										<svg
+											width="13"
+											height="13"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<path
+												d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"
+											/><circle cx="16.5" cy="7.5" r="1.25" fill="currentColor" stroke="none" />
+										</svg>
+									</button>
+								{/if}
+								{#if isOwner}
+									{#if u.id !== $auth.user?.id}
+										<button
+											class="icon-btn danger"
+											title={REMOVE_USER_ICON_TITLE}
+											on:click={() => {
+												confirmDeleteUser = { id: u.id, name: u.name };
+												confirmDeleteUserOpen = true;
+											}}
+										>
+											<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<polyline points="3 6 5 6 21 6" /><path
+													d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+												/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+											</svg>
+										</button>
+									{:else}
+										<span class="you-chip">{YOU_CHIP_LABEL}</span>
+									{/if}
+								{/if}
+							</div>
+							{#if isOwner && expandedUserId === u.id}
+								<div class="user-projects">
+									<p class="user-projects-label">{USER_PROJECTS_LABEL}</p>
+									{#if u.role === 'owner'}
+										<p class="user-projects-hint">{USER_ALL_PROJECTS}</p>
+									{:else if (u.projects ?? []).length === 0}
+										<p class="user-projects-hint">{USER_NO_PROJECTS}</p>
+									{:else}
+										<ul class="user-project-list">
+											{#each u.projects as p (p.id)}
+												<li><span>{p.name}</span><span class="slug">{p.slug}</span></li>
+											{/each}
+										</ul>
+									{/if}
+								</div>
 							{/if}
 						</div>
-					{/if}
+					{/each}
 				</div>
-			{/each}
-		</div>
-		<Paginator bind:page={userPage} total={filteredUsers.length} perPage={USERS_PER_PAGE} />
+				<Paginator bind:page={userPage} total={filteredUsers.length} perPage={USERS_PER_PAGE} />
+			</div>
+		{/if}
 	</div>
+
+	{#if isOwner}
+		<div class="card settings-card">
+			<p class="card-title">{SIGN_IN_CARD_TITLE}</p>
+
+			<div class="toggle-row">
+				<div class="toggle-left">
+					<ServiceIcon service="email" size={20} />
+					<div class="toggle-info">
+						<span class="toggle-label">{SIGN_IN_PASSWORD_LABEL}</span>
+						<span class="toggle-desc">{SIGN_IN_PASSWORD_DESC}</span>
+					</div>
+				</div>
+				<button
+					class="toggle-switch"
+					class:on={signIn.passwordLoginEnabled}
+					role="switch"
+					aria-checked={signIn.passwordLoginEnabled}
+					on:click={() => toggleMethod('passwordLoginEnabled')}
+				>
+					<span class="toggle-thumb"></span>
+				</button>
+			</div>
+
+			<div class="toggle-row">
+				<div class="toggle-left">
+					<ServiceIcon service="google" size={20} />
+					<div class="toggle-info">
+						<span class="toggle-label">{SIGN_IN_GOOGLE_LABEL}</span>
+						<span class="toggle-desc">{SIGN_IN_GOOGLE_DESC}</span>
+					</div>
+				</div>
+				<button
+					class="toggle-switch"
+					class:on={signIn.googleLoginEnabled}
+					role="switch"
+					aria-checked={signIn.googleLoginEnabled}
+					disabled={!signIn.googleLoginEnabled && !canEnableGoogle}
+					on:click={() => toggleMethod('googleLoginEnabled')}
+				>
+					<span class="toggle-thumb"></span>
+				</button>
+			</div>
+
+			<div class="field">
+				<label class="field-label" for="google-client-id">{GOOGLE_CLIENT_ID_LABEL}</label>
+				<input
+					id="google-client-id"
+					type="text"
+					class="field-input"
+					bind:value={signIn.googleClientId}
+					placeholder={GOOGLE_CLIENT_ID_PLACEHOLDER}
+					autocomplete="off"
+					spellcheck="false"
+				/>
+			</div>
+			<div class="field">
+				<label class="field-label" for="google-client-secret">{GOOGLE_CLIENT_SECRET_LABEL}</label>
+				<input
+					id="google-client-secret"
+					type="password"
+					class="field-input"
+					bind:value={googleClientSecret}
+					placeholder={signIn.googleClientSecretSet
+						? GOOGLE_CLIENT_SECRET_KEEP_PLACEHOLDER
+						: GOOGLE_CLIENT_SECRET_PLACEHOLDER}
+					autocomplete="off"
+					spellcheck="false"
+				/>
+			</div>
+			<div class="field">
+				<label class="field-label" for="google-redirect-uri">
+					<span>{GOOGLE_REDIRECT_URI_LABEL}</span>
+					<span class="field-hint">{GOOGLE_REDIRECT_URI_HINT}</span>
+				</label>
+				<div class="redirect-row">
+					<input
+						id="google-redirect-uri"
+						class="field-input"
+						value={redirectUri}
+						readonly
+						spellcheck="false"
+					/>
+					<button class="redirect-copy-btn" on:click={copyRedirectUri}>
+						{redirectUriCopied ? COPIED_LABEL_UI : COPY_LABEL}
+					</button>
+				</div>
+			</div>
+
+			<div class="card-footer">
+				<Button on:click={handleSaveSignIn} disabled={signInSaving}>
+					{saveSignInLabel(signInSaving)}
+				</Button>
+			</div>
+		</div>
+
+		<div class="card settings-card">
+			<p class="card-title">{SESSION_CARD_TITLE}</p>
+			<div class="field field-sm">
+				<label class="field-label" for="org-session">{SESSION_TIMEOUT_LABEL}</label>
+				<select id="org-session" class="field-input" bind:value={sessionMaxHours}>
+					{#each SESSION_TIMEOUT_OPTIONS as hours (hours)}
+						<option value={hours}>{sessionTimeoutOptionLabel(hours)}</option>
+					{/each}
+				</select>
+				<p class="field-hint">{SESSION_TIMEOUT_HINT}</p>
+			</div>
+			<div class="card-footer">
+				<Button on:click={handleSaveSession} disabled={sessionSaving}>
+					{saveSessionLabel(sessionSaving)}
+				</Button>
+			</div>
+		</div>
+	{/if}
 {/if}
 
 <style>
@@ -608,6 +623,23 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1.25rem;
+	}
+	.subsection {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+	.subsection + .subsection {
+		border-top: 1px solid var(--border);
+		padding-top: 1.5rem;
+	}
+	.subsection-title {
+		margin: 0;
+		font-size: 0.8rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--text-muted);
 	}
 	.field-label {
 		display: flex;
@@ -835,10 +867,17 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
 	}
+	.toggle-left {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		min-width: 0;
+	}
 	.toggle-info {
 		display: flex;
 		flex-direction: column;
 		gap: 0.2rem;
+		min-width: 0;
 	}
 	.toggle-label {
 		font-size: 0.875rem;

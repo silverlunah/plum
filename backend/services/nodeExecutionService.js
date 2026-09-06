@@ -102,6 +102,9 @@ function startJob({
 	tags,
 	browser = DEFAULT_BROWSER,
 	workers = 1,
+	// Playwright's --retries for this lane, decided by the primary. 0 for Cucumber
+	// (the primary re-dispatches) and for a primary too old to send it.
+	retries = 0,
 	framework,
 	shard = null,
 	tests = null,
@@ -159,9 +162,7 @@ function startJob({
 		tag: tags || '',
 		browser,
 		workers,
-		// The primary owns retries: for Cucumber it re-dispatches, and for Playwright
-		// it passes its own --retries on the lane that needs them.
-		retries: 0,
+		retries,
 		projectNames,
 		// Which slice of the selection this lane runs, when the primary sharded
 		// rather than splitting by tag.
