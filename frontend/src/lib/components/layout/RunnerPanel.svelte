@@ -102,7 +102,23 @@
 	let _unsubConfig, _unsubExpanded, _unsubBuiltIn, _unsubActiveProject, _socket;
 	let lastFinished = null; // { reportId, verdict }, most recent completed run, for the bar's View Report shortcut
 
+	// The panel is fixed to the bottom; publish its live height as
+	// --bottom-bar-height so anything else pinned to the bottom (the report
+	// page's back-to-top button) can sit clear of it as it expands/collapses.
+	let panelEl;
+	let _panelResize;
+
 	onMount(() => {
+		if (typeof ResizeObserver !== 'undefined' && panelEl) {
+			_panelResize = new ResizeObserver(() => {
+				document.documentElement.style.setProperty(
+					'--bottom-bar-height',
+					`${panelEl.offsetHeight}px`
+				);
+			});
+			_panelResize.observe(panelEl);
+		}
+
 		try {
 			const saved = localStorage.getItem('plum:runnerConfig');
 			if (saved) runnerConfig.update((c) => ({ ...c, ...JSON.parse(saved) }));
@@ -319,6 +335,8 @@
 		_unsubBuiltIn?.();
 		_unsubActiveProject?.();
 		_socket?.disconnect();
+		_panelResize?.disconnect();
+		document.documentElement.style.removeProperty('--bottom-bar-height');
 	});
 
 	$: cfg = $runnerConfig;
@@ -461,7 +479,7 @@
 	{RUN_ALL_BODY_SUFFIX}
 </ConfirmModal>
 
-<div class="panel" class:expanded={$panelExpanded}>
+<div class="panel" class:expanded={$panelExpanded} bind:this={panelEl}>
 	<div
 		class="scan-line"
 		class:scanning={runningCount > 0}
