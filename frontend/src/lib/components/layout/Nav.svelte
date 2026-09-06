@@ -9,12 +9,11 @@
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import { fetchProjects } from '$lib/api/projects';
-	import { fetchBranding } from '$lib/api/auth';
+	import { branding, loadBranding } from '$lib/stores/branding';
 	import { activeProjectId, activeProject, projects, setProjects } from '$lib/stores/project';
 
 	let menuOpen = false;
 	let projectMenuOpen = false;
-	let branding = null;
 
 	// Shared store, so a project created or deleted in Settings shows here without a reload.
 	$: projectList = $projects;
@@ -23,7 +22,7 @@
 		try {
 			setProjects(await fetchProjects());
 		} catch {}
-		branding = await fetchBranding();
+		loadBranding();
 	});
 
 	function switchProject(id) {
@@ -60,11 +59,11 @@
 <nav class="nav">
 	<div class="inner">
 		<a href="/" class="brand" on:click={closeMenu}>
-			{#if branding?.logoUrl}
+			{#if $branding?.logoUrl}
 				<img
 					class="brand-logo"
-					src={branding.logoUrl}
-					alt={branding.name || 'Home'}
+					src={$branding.logoUrl}
+					alt={$branding.name || 'Home'}
 					on:error={(e) => (e.currentTarget.hidden = true)}
 					on:load={(e) => (e.currentTarget.hidden = false)}
 				/>
@@ -246,7 +245,7 @@
 		height: 56px;
 		display: flex;
 		align-items: center;
-		gap: 2rem;
+		gap: 1.25rem;
 	}
 
 	/* Brand */

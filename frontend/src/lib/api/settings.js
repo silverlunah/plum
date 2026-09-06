@@ -56,11 +56,12 @@ export async function fetchOrganization() {
 	return res.json();
 }
 
-export async function saveOrganization({ name, logoUrl, sessionMaxHours }) {
+// `patch` is a subset of the org fields; the backend applies only what's present.
+export async function saveOrganization(patch) {
 	const res = await fetch(`${API_BASE}/settings/organization`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', ...authHeaders() },
-		body: JSON.stringify({ name, logoUrl, sessionMaxHours })
+		body: JSON.stringify(patch)
 	});
 	const data = await res.json();
 	if (!res.ok) throw new Error(data.error ?? 'Failed to save organization settings');

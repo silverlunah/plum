@@ -105,10 +105,19 @@ async function exportProject(project, includeReports) {
 	};
 }
 
-// Instance identity that isn't project-scoped. Backup config (S3 creds, cron)
-// is deliberately left out: it points at wherever this backup is being written
-// to and shouldn't travel with the file.
-const ORG_FIELDS = ['name', 'logoUrl', 'timezone', 'sessionMaxHours'];
+// Instance identity that isn't project-scoped. Left out on purpose: backup
+// config (S3 creds, cron), which points at wherever this file is written, and
+// googleClientSecret, a live secret — the owner re-enters it after a restore
+// (importAll drops googleLoginEnabled if the secret is missing).
+const ORG_FIELDS = [
+	'name',
+	'logoUrl',
+	'timezone',
+	'sessionMaxHours',
+	'passwordLoginEnabled',
+	'googleLoginEnabled',
+	'googleClientId'
+];
 
 const exportAll = async (includeReports = false) => {
 	const [org, projects, users, runners] = await Promise.all([
@@ -356,6 +365,10 @@ const importAll = async (data, cronService) => {
 			// resolveProject falls back to creating a nameless "Default" one.
 			if (organization) {
 				const existing = await tx.organization.findFirst({ orderBy: { id: 'asc' } });
+				// Backups don't carry googleClientSecret; without one, Google sign-in
+				// can't work, so don't leave it switched on.
+				const secret = existing?.googleClientSecret || '';
+				if (organization.googleLoginEnabled && !secret) organization.googleLoginEnabled = false;
 				if (existing) {
 					await tx.organization.update({ where: { id: existing.id }, data: organization });
 				} else {

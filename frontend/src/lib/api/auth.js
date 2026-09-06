@@ -21,6 +21,14 @@ async function fetchWithTimeout(url, options = {}) {
 	}
 }
 
+export async function fetchMe(token) {
+	const res = await fetchWithTimeout(`${API_BASE}/auth/me`, {
+		headers: { Authorization: `Bearer ${token}` }
+	});
+	if (!res.ok) throw new Error('Session is not valid');
+	return (await res.json()).user;
+}
+
 export async function checkNeedsSetup() {
 	const res = await fetchWithTimeout(`${API_BASE}/auth/needs-setup`);
 	if (!res.ok) return false;

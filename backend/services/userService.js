@@ -86,11 +86,7 @@ async function bootstrap({ organizationName, projectName, name, email, password,
 	return result;
 }
 
-async function login({ email, password }) {
-	const user = await prisma.user.findUnique({ where: { email } });
-	if (!user) return null;
-	const match = await bcrypt.compare(password, user.password);
-	if (!match) return null;
+async function issueSession(user) {
 	const org = await prisma.organization.findFirst({
 		orderBy: { id: 'asc' },
 		select: { sessionMaxHours: true }
@@ -110,6 +106,39 @@ async function login({ email, password }) {
 			defaultProjectId: user.defaultProjectId
 		}
 	};
+}
+
+async function login({ email, password }) {
+	const user = await prisma.user.findUnique({ where: { email } });
+	if (!user) return null;
+	const match = await bcrypt.compare(password, user.password);
+	if (!match) return null;
+	return issueSession(user);
+}
+
+// Google has already vetted the account; we only sign in an email that an owner
+// has already added to Plum. The `sub` is linked to that row on first use.
+async function loginWithGoogle({ googleId, email, emailVerified, name }) {
+	if (!emailVerified) return { ok: false, error: 'Your Google email is not verified.' };
+
+	let user = await prisma.user.findUnique({ where: { googleId } });
+	if (!user) {
+		user = await prisma.user.findUnique({ where: { email } });
+		if (!user) {
+			return {
+				ok: false,
+				error: `No Plum account for ${email}. Ask an owner to add you first.`
+			};
+		}
+		if (user.googleId && user.googleId !== googleId) {
+			return { ok: false, error: 'This account is linked to a different Google identity.' };
+		}
+		user = await prisma.user.update({
+			where: { id: user.id },
+			data: { googleId, ...(name && user.name !== name && { name }) }
+		});
+	}
+	return { ok: true, ...(await issueSession(user)) };
 }
 
 function verifyToken(token) {
@@ -292,6 +321,7 @@ module.exports = {
 	createUser,
 	bootstrap,
 	login,
+	loginWithGoogle,
 	verifyToken,
 	getAll,
 	getAssignablePool,

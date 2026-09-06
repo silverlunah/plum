@@ -8,7 +8,7 @@
 	import { auth } from '$lib/stores/auth';
 	import { notify } from '$lib/stores/notifications';
 	import { copyText } from '$lib/utils/clipboard';
-	import { COPY_TIMEOUT_MS, SESSION_TIMEOUT_OPTIONS } from '$lib/constants';
+	import { API_BASE, COPY_TIMEOUT_MS, SESSION_TIMEOUT_OPTIONS } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
@@ -61,10 +61,27 @@
 		SESSION_TIMEOUT_LABEL,
 		SESSION_TIMEOUT_HINT,
 		SESSION_SAVED_TOAST,
+		SIGN_IN_CARD_TITLE,
+		SIGN_IN_PASSWORD_LABEL,
+		SIGN_IN_PASSWORD_DESC,
+		SIGN_IN_GOOGLE_LABEL,
+		SIGN_IN_GOOGLE_DESC,
+		SIGN_IN_LAST_METHOD_ERROR,
+		GOOGLE_CLIENT_ID_LABEL,
+		GOOGLE_CLIENT_ID_PLACEHOLDER,
+		GOOGLE_CLIENT_SECRET_LABEL,
+		GOOGLE_CLIENT_SECRET_PLACEHOLDER,
+		GOOGLE_CLIENT_SECRET_KEEP_PLACEHOLDER,
+		GOOGLE_REDIRECT_URI_LABEL,
+		GOOGLE_REDIRECT_URI_HINT,
+		SIGN_IN_SAVED_TOAST,
+		COPY_LABEL,
+		COPIED_LABEL_UI,
 		addUserLabel,
 		resetPasswordLabel,
 		passwordResetToast,
 		saveSessionLabel,
+		saveSignInLabel,
 		sessionTimeoutOptionLabel,
 		userAddedToast,
 		userRemovedToast
@@ -98,6 +115,19 @@
 	let sessionMaxHours = SESSION_TIMEOUT_OPTIONS.at(-1);
 	let sessionSaving = false;
 
+	let signIn = {
+		passwordLoginEnabled: true,
+		googleLoginEnabled: false,
+		googleClientId: '',
+		googleClientSecretSet: false
+	};
+	let googleClientSecret = ''; // input only; blank on save = keep the stored one
+	let signInSaving = false;
+	let redirectUriCopied = false;
+	const redirectUri = `${API_BASE}/auth/google/callback`;
+	$: canEnableGoogle =
+		signIn.googleClientId.trim() && (signIn.googleClientSecretSet || googleClientSecret.trim());
+
 	$: if (!resetResultOpen) resetResult = null;
 
 	$: filteredUsers = allUsers.filter(
@@ -113,7 +143,14 @@
 		} catch {}
 		if (isOwner) {
 			try {
-				sessionMaxHours = (await fetchOrganization()).sessionMaxHours;
+				const org = await fetchOrganization();
+				sessionMaxHours = org.sessionMaxHours;
+				signIn = {
+					passwordLoginEnabled: org.passwordLoginEnabled,
+					googleLoginEnabled: org.googleLoginEnabled,
+					googleClientId: org.googleClientId,
+					googleClientSecretSet: org.googleClientSecretSet
+				};
 			} catch {}
 		}
 	});
@@ -128,6 +165,46 @@
 		} finally {
 			sessionSaving = false;
 		}
+	}
+
+	function toggleMethod(key) {
+		const other = key === 'passwordLoginEnabled' ? 'googleLoginEnabled' : 'passwordLoginEnabled';
+		if (signIn[key] && !signIn[other]) {
+			notify('error', SIGN_IN_LAST_METHOD_ERROR);
+			return;
+		}
+		if (key === 'googleLoginEnabled' && !signIn.googleLoginEnabled && !canEnableGoogle) return;
+		signIn = { ...signIn, [key]: !signIn[key] };
+	}
+
+	async function handleSaveSignIn() {
+		signInSaving = true;
+		try {
+			const org = await saveOrganization({
+				passwordLoginEnabled: signIn.passwordLoginEnabled,
+				googleLoginEnabled: signIn.googleLoginEnabled,
+				googleClientId: signIn.googleClientId,
+				...(googleClientSecret.trim() && { googleClientSecret: googleClientSecret.trim() })
+			});
+			signIn = {
+				passwordLoginEnabled: org.passwordLoginEnabled,
+				googleLoginEnabled: org.googleLoginEnabled,
+				googleClientId: org.googleClientId,
+				googleClientSecretSet: org.googleClientSecretSet
+			};
+			googleClientSecret = '';
+			notify('success', SIGN_IN_SAVED_TOAST);
+		} catch (e) {
+			notify('error', e.message);
+		} finally {
+			signInSaving = false;
+		}
+	}
+
+	async function copyRedirectUri() {
+		await copyText(redirectUri);
+		redirectUriCopied = true;
+		setTimeout(() => (redirectUriCopied = false), COPY_TIMEOUT_MS);
 	}
 
 	async function handleCreateUser() {
@@ -238,24 +315,6 @@
 
 {#if isOwner}
 	<div class="card settings-card">
-		<p class="card-title">{SESSION_CARD_TITLE}</p>
-		<div class="field field-sm">
-			<label class="field-label" for="org-session">{SESSION_TIMEOUT_LABEL}</label>
-			<select id="org-session" class="field-input" bind:value={sessionMaxHours}>
-				{#each SESSION_TIMEOUT_OPTIONS as hours (hours)}
-					<option value={hours}>{sessionTimeoutOptionLabel(hours)}</option>
-				{/each}
-			</select>
-			<p class="field-hint">{SESSION_TIMEOUT_HINT}</p>
-		</div>
-		<div class="card-footer">
-			<Button on:click={handleSaveSession} disabled={sessionSaving}>
-				{saveSessionLabel(sessionSaving)}
-			</Button>
-		</div>
-	</div>
-
-	<div class="card settings-card">
 		<p class="card-title">{ADD_USER_CARD_TITLE}</p>
 		<div class="field-row">
 			<div class="field">
@@ -309,6 +368,112 @@
 					!userForm.password}
 			>
 				{addUserLabel(userFormSaving)}
+			</Button>
+		</div>
+	</div>
+
+	<div class="card settings-card">
+		<p class="card-title">{SIGN_IN_CARD_TITLE}</p>
+
+		<div class="toggle-row">
+			<div class="toggle-info">
+				<span class="toggle-label">{SIGN_IN_PASSWORD_LABEL}</span>
+				<span class="toggle-desc">{SIGN_IN_PASSWORD_DESC}</span>
+			</div>
+			<button
+				class="toggle-switch"
+				class:on={signIn.passwordLoginEnabled}
+				role="switch"
+				aria-checked={signIn.passwordLoginEnabled}
+				on:click={() => toggleMethod('passwordLoginEnabled')}
+			>
+				<span class="toggle-thumb"></span>
+			</button>
+		</div>
+
+		<div class="toggle-row">
+			<div class="toggle-info">
+				<span class="toggle-label">{SIGN_IN_GOOGLE_LABEL}</span>
+				<span class="toggle-desc">{SIGN_IN_GOOGLE_DESC}</span>
+			</div>
+			<button
+				class="toggle-switch"
+				class:on={signIn.googleLoginEnabled}
+				role="switch"
+				aria-checked={signIn.googleLoginEnabled}
+				disabled={!signIn.googleLoginEnabled && !canEnableGoogle}
+				on:click={() => toggleMethod('googleLoginEnabled')}
+			>
+				<span class="toggle-thumb"></span>
+			</button>
+		</div>
+
+		<div class="field">
+			<label class="field-label" for="google-client-id">{GOOGLE_CLIENT_ID_LABEL}</label>
+			<input
+				id="google-client-id"
+				type="text"
+				class="field-input"
+				bind:value={signIn.googleClientId}
+				placeholder={GOOGLE_CLIENT_ID_PLACEHOLDER}
+				autocomplete="off"
+				spellcheck="false"
+			/>
+		</div>
+		<div class="field">
+			<label class="field-label" for="google-client-secret">{GOOGLE_CLIENT_SECRET_LABEL}</label>
+			<input
+				id="google-client-secret"
+				type="password"
+				class="field-input"
+				bind:value={googleClientSecret}
+				placeholder={signIn.googleClientSecretSet
+					? GOOGLE_CLIENT_SECRET_KEEP_PLACEHOLDER
+					: GOOGLE_CLIENT_SECRET_PLACEHOLDER}
+				autocomplete="off"
+				spellcheck="false"
+			/>
+		</div>
+		<div class="field">
+			<label class="field-label" for="google-redirect-uri">
+				<span>{GOOGLE_REDIRECT_URI_LABEL}</span>
+				<span class="field-hint">{GOOGLE_REDIRECT_URI_HINT}</span>
+			</label>
+			<div class="redirect-row">
+				<input
+					id="google-redirect-uri"
+					class="field-input"
+					value={redirectUri}
+					readonly
+					spellcheck="false"
+				/>
+				<button class="redirect-copy-btn" on:click={copyRedirectUri}>
+					{redirectUriCopied ? COPIED_LABEL_UI : COPY_LABEL}
+				</button>
+			</div>
+		</div>
+
+		<div class="card-footer">
+			<Button on:click={handleSaveSignIn} disabled={signInSaving}>
+				{saveSignInLabel(signInSaving)}
+			</Button>
+		</div>
+	</div>
+
+	<div class="card settings-card">
+		<p class="card-title">{SESSION_CARD_TITLE}</p>
+		<div class="field field-sm">
+			<label class="field-label" for="org-session">{SESSION_TIMEOUT_LABEL}</label>
+			<select id="org-session" class="field-input" bind:value={sessionMaxHours}>
+				{#each SESSION_TIMEOUT_OPTIONS as hours (hours)}
+					<option value={hours}>{sessionTimeoutOptionLabel(hours)}</option>
+				{/each}
+			</select>
+			<p class="field-hint">{SESSION_TIMEOUT_HINT}</p>
+		</div>
+		<div class="card-footer">
+			<Button on:click={handleSaveSession} disabled={sessionSaving}>
+				{saveSessionLabel(sessionSaving)}
 			</Button>
 		</div>
 	</div>
@@ -658,6 +823,88 @@
 	.reset-result-actions {
 		display: flex;
 		justify-content: flex-end;
+	}
+
+	.toggle-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1.5rem;
+		padding: 0.875rem 1rem;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+	}
+	.toggle-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+	.toggle-label {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--text);
+	}
+	.toggle-desc {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		line-height: 1.4;
+	}
+	.toggle-switch {
+		flex-shrink: 0;
+		width: 40px;
+		height: 22px;
+		border-radius: var(--radius-pill);
+		border: none;
+		background: var(--border);
+		cursor: pointer;
+		position: relative;
+		transition: background 0.2s var(--ease-out);
+	}
+	.toggle-switch.on {
+		background: var(--accent);
+	}
+	.toggle-switch:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.toggle-thumb {
+		position: absolute;
+		top: 3px;
+		left: 3px;
+		width: 16px;
+		height: 16px;
+		border-radius: 50%;
+		background: white;
+		transition: transform 0.2s var(--ease-out);
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+	}
+	.toggle-switch.on .toggle-thumb {
+		transform: translateX(18px);
+	}
+
+	.redirect-row {
+		display: flex;
+		gap: 0.5rem;
+	}
+	.redirect-row .field-input {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.8rem;
+	}
+	.redirect-copy-btn {
+		flex-shrink: 0;
+		padding: 0 0.85rem;
+		font: inherit;
+		font-size: 0.8125rem;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		color: var(--text);
+		cursor: pointer;
+		transition: background var(--duration-fast);
+	}
+	.redirect-copy-btn:hover {
+		background: var(--bg-elevated);
 	}
 
 	@media (max-width: 640px) {

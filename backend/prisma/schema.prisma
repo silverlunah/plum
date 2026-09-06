@@ -142,6 +142,12 @@ model Organization {
   // login screen. Baked into each JWT's expiry at login, so a change only
   // affects sessions started afterwards.
   sessionMaxHours       Int       @default(24)
+  // Sign-in methods. At least one is always enabled (enforced in the service).
+  // Google needs googleClientId + googleClientSecret set before it can be on.
+  passwordLoginEnabled  Boolean   @default(true)
+  googleLoginEnabled    Boolean   @default(false)
+  googleClientId        String    @default("")
+  googleClientSecret    String    @default("")
   // When the operator accepted the first-run notice. Null only on instances
   // created before the notice existed.
   termsAcceptedAt       DateTime?
@@ -255,6 +261,9 @@ model User {
   name             String
   email            String   @unique
   password         String
+  // Google account `sub`, linked on the user's first Google sign-in (matched to
+  // this row by email). Null until then.
+  googleId         String?  @unique
   role             String   @default("user")
   // Not enforced if the user later loses access to it; the frontend falls
   // back to its own default when this doesn't resolve to a reachable project.
