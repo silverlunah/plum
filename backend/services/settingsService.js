@@ -271,21 +271,60 @@ const updateActivityRetention = async (days) => {
 	return { activityRetentionDays: updated.activityRetentionDays };
 };
 
+// Owner view. Never returns googleClientSecret, only whether one is set.
 const getOrganization = async () => {
 	const org = await getOrgRaw();
-	return { name: org.name, logoUrl: org.logoUrl, sessionMaxHours: org.sessionMaxHours };
+	return {
+		name: org.name,
+		logoUrl: org.logoUrl,
+		sessionMaxHours: org.sessionMaxHours,
+		passwordLoginEnabled: org.passwordLoginEnabled,
+		googleLoginEnabled: org.googleLoginEnabled,
+		googleClientId: org.googleClientId,
+		googleClientSecretSet: org.googleClientSecret !== ''
+	};
 };
 
-// Unauthenticated: only the two fields the login screen renders.
+// Unauthenticated: what the login screen needs to render itself, and nothing
+// that would help an attacker (no client id/secret).
 const getPublicBranding = async () => {
 	const org = await prisma.organization.findFirst({
 		orderBy: { id: 'asc' },
-		select: { name: true, logoUrl: true }
+		select: {
+			name: true,
+			logoUrl: true,
+			passwordLoginEnabled: true,
+			googleLoginEnabled: true
+		}
 	});
-	return { name: org?.name ?? '', logoUrl: org?.logoUrl ?? '' };
+	return {
+		name: org?.name ?? '',
+		logoUrl: org?.logoUrl ?? '',
+		// No org row yet (first-run) → only password login, so setup can proceed.
+		passwordLoginEnabled: org?.passwordLoginEnabled ?? true,
+		googleLoginEnabled: org?.googleLoginEnabled ?? false
+	};
 };
 
-const updateOrganization = async ({ name, logoUrl, sessionMaxHours }) => {
+// The raw Google OAuth credentials, for the auth flow only. Never goes near a route.
+const getGoogleOAuthConfig = async () => {
+	const org = await getOrgRaw();
+	return {
+		enabled: org.googleLoginEnabled,
+		clientId: org.googleClientId,
+		clientSecret: org.googleClientSecret
+	};
+};
+
+const updateOrganization = async ({
+	name,
+	logoUrl,
+	sessionMaxHours,
+	passwordLoginEnabled,
+	googleLoginEnabled,
+	googleClientId,
+	googleClientSecret
+}) => {
 	const org = await getOrgRaw();
 	const data = {};
 	if (name !== undefined) data.name = String(name).trim();
@@ -298,13 +337,31 @@ const updateOrganization = async ({ name, logoUrl, sessionMaxHours }) => {
 		}
 		data.sessionMaxHours = Number(sessionMaxHours);
 	}
+	if (googleClientId !== undefined) data.googleClientId = String(googleClientId).trim();
+	// Blank means "leave the stored secret alone", matching the UI's placeholder.
+	if (googleClientSecret) data.googleClientSecret = String(googleClientSecret).trim();
+	if (passwordLoginEnabled !== undefined) data.passwordLoginEnabled = Boolean(passwordLoginEnabled);
+	if (googleLoginEnabled !== undefined) data.googleLoginEnabled = Boolean(googleLoginEnabled);
+
+	const next = { ...org, ...data };
+	if (!next.passwordLoginEnabled && !next.googleLoginEnabled) {
+		const e = new Error('At least one sign-in method must stay enabled.');
+		e.status = 400;
+		throw e;
+	}
+	if (next.googleLoginEnabled && !(next.googleClientId && next.googleClientSecret)) {
+		const e = new Error('Add a Google client ID and secret before enabling Google sign-in.');
+		e.status = 400;
+		throw e;
+	}
+
 	const updated = await prisma.organization.update({ where: { id: org.id }, data });
 	await activityService.record(ACTIVITY_ACTION.ORG_SETTINGS_UPDATE, {
 		scope: ACTIVITY_SCOPE.ORG,
 		target: { type: 'organization', label: updated.name || 'Organization' },
 		metadata: { changed: Object.keys(data) }
 	});
-	return { name: updated.name, logoUrl: updated.logoUrl, sessionMaxHours: updated.sessionMaxHours };
+	return getOrganization();
 };
 
 const revokeMcpKey = async (projectId, userId) => {
@@ -323,6 +380,7 @@ module.exports = {
 	getOrgRaw,
 	getOrganization,
 	getPublicBranding,
+	getGoogleOAuthConfig,
 	updateOrganization,
 	updateProject,
 	getTestPrefixes,

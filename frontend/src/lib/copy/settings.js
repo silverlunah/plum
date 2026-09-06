@@ -261,7 +261,27 @@ export const ORG_LOGO_PREVIEW_ALT = 'Organization logo preview';
 export const ORG_SAVED_TOAST = 'Organization saved.';
 export const saveOrgLabel = (saving) => (saving ? SAVING_LABEL : 'Save');
 
-// ── Auto-logout (owner only, top of the Users tab) ──
+// ── Sign-in options (owner only, Users tab) ──
+export const SIGN_IN_CARD_TITLE = 'Sign-in options';
+export const SIGN_IN_PASSWORD_LABEL = 'Email & password';
+export const SIGN_IN_PASSWORD_DESC = 'The built-in sign-in form.';
+export const SIGN_IN_GOOGLE_LABEL = 'Sign in with Google';
+export const SIGN_IN_GOOGLE_DESC =
+	'Google accounts whose email already belongs to a Plum user. Needs a client ID and secret below.';
+export const SIGN_IN_LAST_METHOD_ERROR = 'At least one sign-in method must stay enabled.';
+export const GOOGLE_CLIENT_ID_LABEL = 'Google client ID';
+export const GOOGLE_CLIENT_ID_PLACEHOLDER = '1234567890-abc.apps.googleusercontent.com';
+export const GOOGLE_CLIENT_SECRET_LABEL = 'Google client secret';
+export const GOOGLE_CLIENT_SECRET_PLACEHOLDER = 'GOCSPX-…';
+export const GOOGLE_CLIENT_SECRET_KEEP_PLACEHOLDER = 'Leave blank to keep the current secret';
+export const GOOGLE_REDIRECT_URI_LABEL = 'Authorized redirect URI';
+export const GOOGLE_REDIRECT_URI_HINT = "Add this to your OAuth client's redirect URIs";
+export const SIGN_IN_SAVED_TOAST = 'Sign-in options saved.';
+export const COPY_LABEL = 'Copy';
+export const COPIED_LABEL_UI = 'Copied';
+export const saveSignInLabel = (saving) => (saving ? SAVING_LABEL : 'Save');
+
+// ── Auto-logout (owner only, Users tab) ──
 export const SESSION_CARD_TITLE = 'Auto-logout';
 export const SESSION_TIMEOUT_LABEL = 'End sessions after';
 export const SESSION_TIMEOUT_HINT =

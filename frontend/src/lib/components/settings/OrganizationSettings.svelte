@@ -6,6 +6,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { notify } from '$lib/stores/notifications';
+	import { patchBranding } from '$lib/stores/branding';
 	import Button from '$lib/components/ui/Button.svelte';
 	import { fetchOrganization, saveOrganization } from '$lib/api/settings';
 	import {
@@ -37,6 +38,7 @@
 		try {
 			const org = await saveOrganization({ name: form.name, logoUrl: form.logoUrl });
 			form = { name: org.name ?? '', logoUrl: org.logoUrl ?? '' };
+			patchBranding({ name: form.name, logoUrl: form.logoUrl });
 			notify('success', ORG_SAVED_TOAST);
 		} catch (e) {
 			notify('error', e.message);

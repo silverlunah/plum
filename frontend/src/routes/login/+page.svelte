@@ -7,7 +7,8 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/stores/auth';
-	import { login, checkNeedsSetup, fetchBranding } from '$lib/api/auth';
+	import { login, checkNeedsSetup, fetchBranding, fetchMe } from '$lib/api/auth';
+	import { API_BASE } from '$lib/constants';
 	import { theme } from '$lib/stores/theme';
 	import { EMAIL_LABEL, PASSWORD_LABEL } from '$lib/copy/common';
 	import {
@@ -18,6 +19,8 @@
 		SIGN_IN_SUBTITLE,
 		PASSWORD_PLACEHOLDER,
 		LOGIN_FAILED_FALLBACK,
+		LOGIN_METHOD_DIVIDER,
+		GOOGLE_SIGN_IN_LABEL,
 		POWERED_BY_LABEL,
 		signInLabel
 	} from '$lib/copy/auth';
@@ -29,7 +32,38 @@
 	let checking = true;
 	let branding = null;
 
+	$: passwordLogin = branding?.passwordLoginEnabled ?? true;
+	$: googleLogin = branding?.googleLoginEnabled ?? false;
+	$: googleHref = `${API_BASE}/auth/google?origin=${encodeURIComponent(
+		typeof location !== 'undefined' ? location.origin : ''
+	)}`;
+
+	// The Google callback bounces back here with the result in the URL fragment.
+	async function consumeOAuthResult() {
+		const hash = new URLSearchParams(location.hash.slice(1));
+		const token = hash.get('token');
+		const oauthError = hash.get('error');
+		history.replaceState(null, '', location.pathname);
+		if (oauthError) {
+			error = oauthError;
+			return false;
+		}
+		if (!token) return false;
+		try {
+			const user = await fetchMe(token);
+			auth.login(token, user);
+			window.location.href = '/';
+			return true;
+		} catch {
+			error = LOGIN_FAILED_FALLBACK;
+			return false;
+		}
+	}
+
 	onMount(async () => {
+		if (location.hash.includes('token=') || location.hash.includes('error=')) {
+			if (await consumeOAuthResult()) return;
+		}
 		try {
 			if (await checkNeedsSetup()) {
 				goto('/setup');
@@ -76,40 +110,74 @@
 			<h1 class="title">{branding?.name || SIGN_IN_TITLE}</h1>
 			<p class="subtitle">{SIGN_IN_SUBTITLE}</p>
 
-			<div class="fields">
-				<div class="field">
-					<label class="label" for="email">{EMAIL_LABEL}</label>
-					<input
-						id="email"
-						type="email"
-						class="input"
-						bind:value={email}
-						placeholder={EMAIL_PLACEHOLDER}
-						autocomplete="email"
-						on:keydown={onKeydown}
-					/>
-				</div>
-				<div class="field">
-					<label class="label" for="password">{PASSWORD_LABEL}</label>
-					<input
-						id="password"
-						type="password"
-						class="input"
-						bind:value={password}
-						placeholder={PASSWORD_PLACEHOLDER}
-						autocomplete="current-password"
-						on:keydown={onKeydown}
-					/>
-				</div>
-			</div>
-
 			{#if error}
 				<p class="error">{error}</p>
 			{/if}
 
-			<button class="submit-btn" on:click={handleSubmit} disabled={loading || !email || !password}>
-				{signInLabel(loading)}
-			</button>
+			{#if passwordLogin}
+				<div class="fields">
+					<div class="field">
+						<label class="label" for="email">{EMAIL_LABEL}</label>
+						<input
+							id="email"
+							type="email"
+							class="input"
+							bind:value={email}
+							placeholder={EMAIL_PLACEHOLDER}
+							autocomplete="email"
+							on:keydown={onKeydown}
+						/>
+					</div>
+					<div class="field">
+						<label class="label" for="password">{PASSWORD_LABEL}</label>
+						<input
+							id="password"
+							type="password"
+							class="input"
+							bind:value={password}
+							placeholder={PASSWORD_PLACEHOLDER}
+							autocomplete="current-password"
+							on:keydown={onKeydown}
+						/>
+					</div>
+				</div>
+
+				<button
+					class="submit-btn"
+					on:click={handleSubmit}
+					disabled={loading || !email || !password}
+				>
+					{signInLabel(loading)}
+				</button>
+			{/if}
+
+			{#if passwordLogin && googleLogin}
+				<div class="divider"><span>{LOGIN_METHOD_DIVIDER}</span></div>
+			{/if}
+
+			{#if googleLogin}
+				<a class="google-btn" href={googleHref}>
+					<svg class="google-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+						<path
+							fill="#4285F4"
+							d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.76h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+						/>
+						<path
+							fill="#34A853"
+							d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.76c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.15-4.53H2.18v2.84A11 11 0 0 0 12 23z"
+						/>
+						<path
+							fill="#FBBC05"
+							d="M5.85 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.67-2.84z"
+						/>
+						<path
+							fill="#EA4335"
+							d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.67 2.84C6.71 7.3 9.14 5.38 12 5.38z"
+						/>
+					</svg>
+					{GOOGLE_SIGN_IN_LABEL}
+				</a>
+			{/if}
 
 			{#if branding?.logoUrl}
 				<p class="powered-by">
@@ -259,5 +327,46 @@
 
 	.submit-btn:not(:disabled):hover {
 		opacity: 0.88;
+	}
+
+	.divider {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin: -0.25rem 0;
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+	}
+	.divider::before,
+	.divider::after {
+		content: '';
+		flex: 1;
+		height: 1px;
+		background: var(--border);
+	}
+
+	.google-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.625rem;
+		height: 40px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--bg);
+		color: var(--text);
+		font-family: var(--font-body);
+		font-size: 0.875rem;
+		font-weight: 500;
+		text-decoration: none;
+		transition: background var(--duration-fast);
+	}
+	.google-btn:hover {
+		background: var(--bg-subtle);
+	}
+	.google-icon {
+		flex-shrink: 0;
 	}
 </style>

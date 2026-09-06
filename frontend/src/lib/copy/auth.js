@@ -14,6 +14,8 @@ export const PASSWORD_PLACEHOLDER = '••••••••';
 export const LOGIN_FAILED_FALLBACK = 'Login failed';
 
 export const POWERED_BY_LABEL = 'Powered by';
+export const LOGIN_METHOD_DIVIDER = 'or';
+export const GOOGLE_SIGN_IN_LABEL = 'Sign in with Google';
 
 export const signInLabel = (loading) => (loading ? 'Signing in…' : 'Sign in');
 

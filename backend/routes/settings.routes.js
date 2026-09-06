@@ -27,8 +27,26 @@ router.get('/organization', orgOnly, async (req, res, next) => {
 
 router.post('/organization', orgOnly, async (req, res, next) => {
 	try {
-		const { name, logoUrl, sessionMaxHours } = req.body;
-		res.json(await settingsService.updateOrganization({ name, logoUrl, sessionMaxHours }));
+		const {
+			name,
+			logoUrl,
+			sessionMaxHours,
+			passwordLoginEnabled,
+			googleLoginEnabled,
+			googleClientId,
+			googleClientSecret
+		} = req.body;
+		res.json(
+			await settingsService.updateOrganization({
+				name,
+				logoUrl,
+				sessionMaxHours,
+				passwordLoginEnabled,
+				googleLoginEnabled,
+				googleClientId,
+				googleClientSecret
+			})
+		);
 	} catch (e) {
 		next(e);
 	}
