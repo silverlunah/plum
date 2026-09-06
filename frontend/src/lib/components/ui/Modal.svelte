@@ -70,15 +70,14 @@
 <style>
 	.backdrop {
 		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: var(--bottom-bar-height);
+		inset: 0;
 		background: rgba(0, 0, 0, 0.45);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		z-index: 50;
+		/* Above the runner panel (200) and its dropdown (300) so the dialog is
+		   never trapped behind the bottom bar. */
+		z-index: 400;
 		padding: 1rem;
 		backdrop-filter: blur(2px);
 		overflow-y: auto;
@@ -140,16 +139,9 @@
 	}
 
 	@media (max-width: 640px) {
-		.backdrop {
-			align-items: flex-end;
-			padding: 0;
-		}
-
 		.panel {
-			max-width: none;
-			max-height: 88vh;
-			border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-			padding: 1.25rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+			max-height: 85vh;
+			padding: 1.5rem;
 		}
 
 		.header {

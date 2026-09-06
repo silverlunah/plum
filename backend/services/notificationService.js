@@ -27,11 +27,12 @@ function countScenarios(content) {
 	}
 }
 
-function buildDiscordPayload({ jobName, status, counts, browser, tags, reportUrl }) {
+function buildDiscordPayload({ projectName, jobName, status, counts, browser, tags, reportUrl }) {
 	const isPass = status === REPORT_STATUS.PASS;
 	// Discord colour integers: green 3066993, red 15158332
 	const color = isPass ? 3066993 : 15158332;
 	const fields = [
+		...(projectName ? [{ name: 'Project', value: projectName, inline: true }] : []),
 		{ name: 'Status', value: isPass ? '✅  PASS' : '❌  FAIL', inline: true },
 		{
 			name: 'Results',
@@ -50,7 +51,7 @@ function buildDiscordPayload({ jobName, status, counts, browser, tags, reportUrl
 	return { embeds: [embed] };
 }
 
-function buildSlackPayload({ jobName, status, counts, browser, tags, reportUrl }) {
+function buildSlackPayload({ projectName, jobName, status, counts, browser, tags, reportUrl }) {
 	const isPass = status === REPORT_STATUS.PASS;
 	const icon = isPass ? '✅' : '❌';
 	const blocks = [
@@ -64,6 +65,7 @@ function buildSlackPayload({ jobName, status, counts, browser, tags, reportUrl }
 		{
 			type: 'section',
 			fields: [
+				...(projectName ? [{ type: 'mrkdwn', text: `*Project:*\n${projectName}` }] : []),
 				{ type: 'mrkdwn', text: `*Browser:*\n${browserLabel(browser ?? DEFAULT_BROWSER)}` },
 				{ type: 'mrkdwn', text: `*Tags:*\n${tags || '(all tests)'}` }
 			]
@@ -116,9 +118,12 @@ async function send({
 }) {
 	if (!notifyDiscord && !notifySlack) return;
 
-	let discordWebhookUrl, slackWebhookUrl;
+	let discordWebhookUrl, slackWebhookUrl, projectName;
 	try {
-		({ discordWebhookUrl, slackWebhookUrl } = await settingsService.getWebhooks(projectId));
+		[{ discordWebhookUrl, slackWebhookUrl }, { name: projectName } = {}] = await Promise.all([
+			settingsService.getWebhooks(projectId),
+			settingsService.getProject(projectId)
+		]);
 	} catch (e) {
 		console.error(`[notify] Could not load webhook settings: ${e.message}`);
 		return;
@@ -131,7 +136,7 @@ async function send({
 		publicUrl && reportId ? `${publicUrl.replace(/\/$/, '')}/reports/${reportId}` : null;
 
 	const counts = countScenarios(content);
-	const data = { jobName, status, counts, browser, tags, reportUrl };
+	const data = { projectName, jobName, status, counts, browser, tags, reportUrl };
 
 	const tasks = [];
 	if (notifyDiscord && discordWebhookUrl) {
