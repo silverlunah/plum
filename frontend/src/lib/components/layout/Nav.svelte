@@ -251,8 +251,6 @@
 
 	/* Brand */
 	.brand {
-		display: flex;
-		align-items: center;
 		font-size: 1.2rem;
 		letter-spacing: -0.02em;
 		flex-shrink: 0;
@@ -260,6 +258,7 @@
 	}
 
 	.brand-logo {
+		display: block;
 		max-height: 24px;
 		max-width: 140px;
 		object-fit: contain;
