@@ -10,10 +10,29 @@ const testSuiteService = require('../services/testSuiteService');
 const testCaseService = require('../services/testCaseService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireAdmin } = require('../middleware/requireAdmin');
+const { requireOwner } = require('../middleware/requireOwner');
 const { requireProjectAccess } = require('../middleware/requireProjectAccess');
 
 const scoped = [jwtAuth, requireProjectAccess];
 const scopedAdmin = [jwtAuth, requireProjectAccess, requireAdmin];
+const orgOnly = [jwtAuth, requireOwner];
+
+router.get('/organization', orgOnly, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getOrganization());
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/organization', orgOnly, async (req, res, next) => {
+	try {
+		const { name, logoUrl, sessionMaxHours } = req.body;
+		res.json(await settingsService.updateOrganization({ name, logoUrl, sessionMaxHours }));
+	} catch (e) {
+		next(e);
+	}
+});
 
 router.get('/project', scopedAdmin, async (req, res, next) => {
 	try {

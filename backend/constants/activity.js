@@ -44,7 +44,10 @@ const ACTIVITY_ACTION = Object.freeze({
 	USER_CREATE: 'user.create',
 	USER_UPDATE: 'user.update',
 	USER_ROLE_CHANGE: 'user.role_change',
+	USER_PASSWORD_RESET: 'user.password_reset',
 	USER_DELETE: 'user.delete',
+
+	ORG_SETTINGS_UPDATE: 'org.settings_update',
 
 	NODE_CREATE: 'node.create',
 	NODE_UPDATE: 'node.update',

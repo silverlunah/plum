@@ -35,6 +35,22 @@ export async function createUser({ name, email, password, role = 'user' }) {
 	return data.user;
 }
 
+export async function fetchResettableUsers() {
+	const res = await fetch(`${API_BASE}/users/resettable`, { headers: authHeaders() });
+	if (!res.ok) throw new Error('Failed to fetch users');
+	return (await res.json()).users;
+}
+
+export async function resetUserPassword(id) {
+	const res = await fetch(`${API_BASE}/users/${id}/reset-password`, {
+		method: 'POST',
+		headers: authHeaders()
+	});
+	const data = await res.json();
+	if (!res.ok) throw new Error(data.error ?? 'Failed to reset password');
+	return data.tempPassword;
+}
+
 export async function deleteUser(id) {
 	const res = await fetch(`${API_BASE}/users/${id}`, {
 		method: 'DELETE',

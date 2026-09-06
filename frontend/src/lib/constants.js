@@ -37,6 +37,10 @@ export const ACTIVITY_RETENTION_DAYS = [0, 30, 90, 180, 365];
 // Mirrors backend/constants/activity.js REPORT_RETENTION_DAYS.
 export const REPORT_RETENTION_DAYS = [0, 30, 60, 90];
 
+// Session-timeout choices (hours) offered in Settings → Users (owner only).
+// Mirrors backend/constants/session.js SESSION_MAX_HOURS_OPTIONS.
+export const SESSION_TIMEOUT_OPTIONS = [6, 12, 18, 24];
+
 export const COPY_TIMEOUT_MS = 1400;
 export const TOAST_TIMEOUT_MS = 8000;
 

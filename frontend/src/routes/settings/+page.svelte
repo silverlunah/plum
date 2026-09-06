@@ -547,10 +547,11 @@
 		'      -d \'{"tag": "@smoke", "baseUrl": "https://your-pr-preview-url"}\''
 	].join('\n');
 
-	// Per-project settings, the owner and an admin of the active project.
-	const ELEVATED_SECTIONS = new Set(['project', 'testcases', 'integrations', 'activity']);
+	// Visible to the owner and to an admin. Some show a reduced view for an admin
+	// ('activity' hides org events, 'users' allows password resets only).
+	const ELEVATED_SECTIONS = new Set(['project', 'testcases', 'integrations', 'activity', 'users']);
 	// Account-wide settings, the owner only.
-	const OWNER_SECTIONS = new Set(['runners', 'users', 'backup']);
+	const OWNER_SECTIONS = new Set(['runners', 'backup']);
 
 	$: isOwner = $auth.user?.role === 'owner';
 	$: isElevated = $auth.user?.role === 'owner' || $auth.user?.role === 'admin';
@@ -572,12 +573,8 @@
 		...(isElevated ? [{ id: 'activity', label: ACTIVITY_LABEL }] : []),
 		{ id: 'account', label: ACCOUNT_LABEL },
 		{ id: 'mcp', label: MCP_NAV_LABEL },
-		...(isOwner
-			? [
-					{ id: 'users', label: USERS_LABEL },
-					{ id: 'backup', label: BACKUP_LABEL }
-				]
-			: [])
+		...(isElevated ? [{ id: 'users', label: USERS_LABEL }] : []),
+		...(isOwner ? [{ id: 'backup', label: BACKUP_LABEL }] : [])
 	];
 </script>
 

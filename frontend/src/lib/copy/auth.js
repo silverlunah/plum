@@ -13,6 +13,8 @@ export const SIGN_IN_SUBTITLE = 'Access your test workspace';
 export const PASSWORD_PLACEHOLDER = '••••••••';
 export const LOGIN_FAILED_FALLBACK = 'Login failed';
 
+export const POWERED_BY_LABEL = 'Powered by';
+
 export const signInLabel = (loading) => (loading ? 'Signing in…' : 'Sign in');
 
 // ── Setup ──

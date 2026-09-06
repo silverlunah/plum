@@ -50,6 +50,23 @@ export async function saveProject({
 	return res.json();
 }
 
+export async function fetchOrganization() {
+	const res = await fetch(`${API_BASE}/settings/organization`, { headers: authHeaders() });
+	if (!res.ok) throw new Error('Failed to load organization settings');
+	return res.json();
+}
+
+export async function saveOrganization({ name, logoUrl, sessionMaxHours }) {
+	const res = await fetch(`${API_BASE}/settings/organization`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', ...authHeaders() },
+		body: JSON.stringify({ name, logoUrl, sessionMaxHours })
+	});
+	const data = await res.json();
+	if (!res.ok) throw new Error(data.error ?? 'Failed to save organization settings');
+	return data;
+}
+
 export async function exportBackup() {
 	const res = await fetch(`${API_BASE}/backup/export`, { headers: authHeaders() });
 	if (!res.ok) throw new Error('Export failed');

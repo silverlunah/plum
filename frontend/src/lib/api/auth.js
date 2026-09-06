@@ -28,6 +28,18 @@ export async function checkNeedsSetup() {
 	return data.needsSetup;
 }
 
+// Public. Returns null on any failure, the login screen just falls back to the
+// plain Plum wordmark.
+export async function fetchBranding() {
+	try {
+		const res = await fetchWithTimeout(`${API_BASE}/auth/branding`);
+		if (!res.ok) return null;
+		return await res.json();
+	} catch {
+		return null;
+	}
+}
+
 export async function setup({
 	organizationName,
 	projectName,

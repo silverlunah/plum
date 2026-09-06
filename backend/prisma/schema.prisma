@@ -136,6 +136,12 @@ model Organization {
   // Whether the primary server runs tests itself. Instance-wide: an owner's
   // toggle applies to every member's run bar and every cron job.
   builtInRunnerEnabled  Boolean   @default(true)
+  // Shown on the login screen alongside the org name when set.
+  logoUrl               String    @default("")
+  // Hours a login session stays valid before the user is forced back to the
+  // login screen. Baked into each JWT's expiry at login, so a change only
+  // affects sessions started afterwards.
+  sessionMaxHours       Int       @default(24)
   // When the operator accepted the first-run notice. Null only on instances
   // created before the notice existed.
   termsAcceptedAt       DateTime?

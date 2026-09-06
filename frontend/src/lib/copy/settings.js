@@ -60,6 +60,7 @@ export const MCP_DESC =
 	'Your personal API key for this project. It authenticates the REST API and an MCP client alike, acting as you with your role, so treat it like your password. Anything it creates or runs is tagged “(MCP)”.';
 export const ACCOUNT_DESC = 'Manage your profile, credentials and session.';
 export const USERS_DESC = 'Add and manage who can access Plum.';
+export const USERS_ADMIN_DESC = 'Reset the password of a user who is locked out.';
 export const BACKUP_DESC =
 	'Export your test cases, schedules, users, and project settings. Automate uploads to any S3-compatible storage, Cloudflare R2, Backblaze B2, AWS S3, or MinIO.';
 
@@ -247,6 +248,19 @@ export const PASSWORD_CHANGED_TOAST = 'Password changed.';
 export const saveProfileLabel = (saving) => (saving ? SAVING_LABEL : 'Save Profile');
 export const changePasswordLabel = (saving) => (saving ? SAVING_LABEL : 'Change Password');
 
+// ── Organization (owner, on the Users tab) ──
+export const ORG_CARD_TITLE = 'Organization';
+export const ORG_NAME_LABEL = 'Organization name';
+export const ORG_NAME_PLACEHOLDER = 'Acme Inc.';
+export const ORG_LOGO_URL_LABEL = 'Logo URL';
+export const ORG_LOGO_URL_PLACEHOLDER = 'https://example.com/logo.png';
+export const SESSION_TIMEOUT_LABEL = 'Auto-logout after';
+export const SESSION_TIMEOUT_HINT =
+	'Applies to sessions started after you save. People are returned to the login screen once the limit is reached.';
+export const ORG_SAVED_TOAST = 'Organization settings saved.';
+export const saveOrgLabel = (saving) => (saving ? SAVING_LABEL : 'Save');
+export const sessionTimeoutOptionLabel = (hours) => `${hours} hours`;
+
 // ── Users ──
 export const REMOVE_USER_MODAL_TITLE = 'Remove User';
 export const REMOVE_USER_LABEL = 'Remove';
@@ -267,6 +281,21 @@ export const USER_FORM_REQUIRED_ERROR = 'Name, email and password are required.'
 export const USER_PROJECTS_LABEL = 'Assigned projects';
 export const USER_NO_PROJECTS = 'Not assigned to any project.';
 export const USER_ALL_PROJECTS = 'Every project (owner).';
+
+export const RESET_PASSWORD_ICON_TITLE = 'Reset password';
+export const RESET_PASSWORD_MODAL_TITLE = 'Reset Password';
+export const RESET_PASSWORD_BODY_PREFIX = 'Generate a new temporary password for';
+export const RESET_PASSWORD_BODY_SUFFIX =
+	'? Their current password stops working immediately, and the new one is shown only once.';
+export const RESET_PASSWORD_RESULT_TITLE = 'Temporary Password';
+export const RESET_PASSWORD_RESULT_DESC =
+	'Copy this now and hand it over securely. It will not be shown again.';
+export const RESET_PASSWORD_COPY_TITLE = 'Copy';
+export const RESET_PASSWORD_COPIED_TITLE = 'Copied';
+export const RESET_PASSWORD_DONE_LABEL = 'Done';
+export const USERS_ADMIN_CARD_TITLE = 'Users';
+export const resetPasswordLabel = (saving) => (saving ? 'Resetting…' : 'Reset password');
+export const passwordResetToast = (name) => `Password reset for "${name}".`;
 
 export const addUserLabel = (saving) => (saving ? 'Adding…' : 'Add User');
 export const userAddedToast = (name) => `User "${name}" added.`;
@@ -438,7 +467,9 @@ const ACTIVITY_ACTION_META = {
 	'user.create': { verb: 'added user', tone: 'create' },
 	'user.update': { verb: 'edited user', tone: 'update' },
 	'user.role_change': { verb: 'changed the role of', tone: 'update' },
+	'user.password_reset': { verb: 'reset the password of', tone: 'update' },
 	'user.delete': { verb: 'deleted user', tone: 'delete' },
+	'org.settings_update': { verb: 'updated', tone: 'update' },
 	'node.create': { verb: 'registered node', tone: 'create' },
 	'node.update': { verb: 'updated node', tone: 'update' },
 	'node.delete': { verb: 'removed node', tone: 'delete' },
