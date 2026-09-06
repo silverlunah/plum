@@ -224,7 +224,7 @@ async function fetchReportContent(runner, jobId, onLog) {
  * Dispatches a test job to a remote runner node and polls until it finishes.
  *
  * @param {string} runnerId
- * @param {{ tags: string, browser: string, workers: number }} jobParams
+ * @param {{ tags: string, browser: string, workers: number, retries: number }} jobParams
  * @param {(log: string) => void} onLog   Called with each new log chunk
  * @param {(exitCode: number, reportContent: string|null) => void} onDone
  */
@@ -241,7 +241,7 @@ async function playwrightProjectNames(projectId) {
 
 async function dispatchAndPoll(
 	runnerId,
-	{ projectId, tags, browser, workers, shard = null, baseUrl },
+	{ projectId, tags, browser, workers, retries = 0, shard = null, baseUrl },
 	onLog,
 	onDone,
 	onRRwebBatch = null,
@@ -277,6 +277,8 @@ async function dispatchAndPoll(
 				tags,
 				browser,
 				workers,
+				// 0 for Cucumber; the primary re-dispatches its failures itself.
+				retries,
 				framework: frameworkFor(projectId),
 				// The primary has the tests folder and the cached --list, so it resolves the
 				// config's project names once here instead of every node paying for it.

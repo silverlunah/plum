@@ -487,6 +487,7 @@ function runLane(run, io, emit, lane, plan, retrySplit, framework, laneLogs) {
 								tags: currentTag,
 								browser: run.browser,
 								workers: run.workers,
+								retries: retrySplit.nativeRetries,
 								shard: plan.shard,
 								baseUrl: run.baseUrl
 							},

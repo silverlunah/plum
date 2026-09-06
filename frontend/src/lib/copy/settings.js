@@ -295,6 +295,7 @@ export const REMOVE_USER_MODAL_TITLE = 'Remove User';
 export const REMOVE_USER_LABEL = 'Remove';
 export const REMOVE_USER_BODY_PREFIX = 'Remove';
 export const REMOVE_USER_BODY_SUFFIX = '? They will lose access immediately.';
+export const USER_MANAGEMENT_CARD_TITLE = 'User Management';
 export const ADD_USER_CARD_TITLE = 'Add User';
 export const ALL_USERS_CARD_TITLE = 'All Users';
 export const USER_NAME_PLACEHOLDER = 'Jane Smith';
@@ -322,7 +323,6 @@ export const RESET_PASSWORD_RESULT_DESC =
 export const RESET_PASSWORD_COPY_TITLE = 'Copy';
 export const RESET_PASSWORD_COPIED_TITLE = 'Copied';
 export const RESET_PASSWORD_DONE_LABEL = 'Done';
-export const USERS_ADMIN_CARD_TITLE = 'Users';
 export const resetPasswordLabel = (saving) => (saving ? 'Resetting…' : 'Reset password');
 export const passwordResetToast = (name) => `Password reset for "${name}".`;
 
