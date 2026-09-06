@@ -52,6 +52,8 @@
 
 	--white: #ffffff;
 
+	/* Collapsed fallback; RunnerPanel overrides this on <html> with the bar's
+	   live height while it is mounted. */
 	--bottom-bar-height: 55px;
 }
 

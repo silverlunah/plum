@@ -23,6 +23,7 @@
 		browserLabel
 	} from '$lib/utils/format';
 	import { BROWSERS } from '$lib/constants';
+	import { panelExpanded } from '$lib/stores/runner';
 	import { pluralize } from '$lib/copy/common';
 	import {
 		DETAIL_PAGE_TITLE,
@@ -122,6 +123,14 @@
 	}
 
 	onMount(async () => {
+		// This page is long: collapse the run bar so it and the back-to-top
+		// button read as one small group in the corner. The localStorage write
+		// is not redundant, on a hard load RunnerPanel's own onMount restores the
+		// flag from there and would re-expand right after this.
+		panelExpanded.set(false);
+		try {
+			localStorage.setItem('plum:panelExpanded', 'false');
+		} catch {}
 		try {
 			detail = await fetchReportDetail(reportId);
 			allRecordings = await fetchRecordings(reportId);
@@ -765,7 +774,7 @@
 			viewBox="0 0 24 24"
 			fill="none"
 			stroke="currentColor"
-			stroke-width="2.5"
+			stroke-width="2"
 			stroke-linecap="round"
 			stroke-linejoin="round"
 		>
@@ -1521,9 +1530,10 @@
 	.back-to-top {
 		position: fixed;
 		right: 1.5rem;
-		/* Clears the fixed run bar (RunnerPanel's .panel, 52px+ and taller once
-		   wrapped on mobile) and sits above it, or its own clicks get eaten. */
-		bottom: calc(52px + 1.5rem);
+		/* --bottom-bar-height tracks the run bar's live height (RunnerPanel keeps
+		   it current), so this stays clear of the bar whether it's collapsed or
+		   expanded; z-index clears the bar too or its own clicks get eaten. */
+		bottom: calc(var(--bottom-bar-height) + 1.5rem);
 		width: 40px;
 		height: 40px;
 		display: flex;
@@ -1532,7 +1542,7 @@
 		background: var(--bg-elevated);
 		border: 1px solid var(--border);
 		border-radius: 50%;
-		color: var(--text);
+		color: var(--text-muted);
 		cursor: pointer;
 		box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
 		z-index: 210;
