@@ -105,8 +105,14 @@ async function exportProject(project, includeReports) {
 	};
 }
 
+// Instance identity that isn't project-scoped. Backup config (S3 creds, cron)
+// is deliberately left out: it points at wherever this backup is being written
+// to and shouldn't travel with the file.
+const ORG_FIELDS = ['name', 'logoUrl', 'timezone', 'sessionMaxHours'];
+
 const exportAll = async (includeReports = false) => {
-	const [projects, users, runners] = await Promise.all([
+	const [org, projects, users, runners] = await Promise.all([
+		prisma.organization.findFirst({ orderBy: { id: 'asc' } }),
 		prisma.project.findMany({ orderBy: { id: 'asc' } }),
 		prisma.user.findMany({ orderBy: { createdAt: 'asc' } }),
 		prisma.runner.findMany({ orderBy: { createdAt: 'asc' } })
@@ -115,6 +121,7 @@ const exportAll = async (includeReports = false) => {
 	return {
 		version: '4',
 		exportedAt: new Date().toISOString(),
+		...(org && { organization: pick(org, ORG_FIELDS) }),
 		disclaimer: includeReports
 			? 'Reports and recordings are included in this backup.'
 			: 'Reports are not included in this backup. Enable "Include reports" in Settings → Backup, or use pg_dump on the PostgreSQL volume, to back up report history.',
@@ -339,10 +346,23 @@ async function importProject(tx, entry, usersByEmail) {
 }
 
 const importAll = async (data, cronService) => {
-	const { users = [], runners = [], projects = [] } = normalize(data ?? {});
+	const normalized = normalize(data ?? {});
+	const { users = [], runners = [], projects = [] } = normalized;
+	const organization = normalized.organization ?? null;
 
 	await prisma.$transaction(
 		async (tx) => {
+			// The single org row carries the instance name/logo — restore it before
+			// resolveProject falls back to creating a nameless "Default" one.
+			if (organization) {
+				const existing = await tx.organization.findFirst({ orderBy: { id: 'asc' } });
+				if (existing) {
+					await tx.organization.update({ where: { id: existing.id }, data: organization });
+				} else {
+					await tx.organization.create({ data: organization });
+				}
+			}
+
 			// Users and runners are instance-level and every project entry below
 			// may reference them, so they land first.
 			const usersByEmail = new Map();

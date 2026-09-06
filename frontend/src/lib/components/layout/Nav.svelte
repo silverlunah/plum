@@ -9,10 +9,12 @@
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import { fetchProjects } from '$lib/api/projects';
+	import { fetchBranding } from '$lib/api/auth';
 	import { activeProjectId, activeProject, projects, setProjects } from '$lib/stores/project';
 
 	let menuOpen = false;
 	let projectMenuOpen = false;
+	let branding = null;
 
 	// Shared store, so a project created or deleted in Settings shows here without a reload.
 	$: projectList = $projects;
@@ -21,6 +23,7 @@
 		try {
 			setProjects(await fetchProjects());
 		} catch {}
+		branding = await fetchBranding();
 	});
 
 	function switchProject(id) {
@@ -57,7 +60,17 @@
 <nav class="nav">
 	<div class="inner">
 		<a href="/" class="brand" on:click={closeMenu}>
-			<span class="brand-serif">Pl</span><span class="brand-sans">um</span>
+			{#if branding?.logoUrl}
+				<img
+					class="brand-logo"
+					src={branding.logoUrl}
+					alt={branding.name || 'Home'}
+					on:error={(e) => (e.currentTarget.hidden = true)}
+					on:load={(e) => (e.currentTarget.hidden = false)}
+				/>
+			{:else}
+				<span class="brand-serif">Pl</span><span class="brand-sans">um</span>
+			{/if}
 		</a>
 
 		<div class="links">
@@ -238,10 +251,18 @@
 
 	/* Brand */
 	.brand {
+		display: flex;
+		align-items: center;
 		font-size: 1.2rem;
 		letter-spacing: -0.02em;
 		flex-shrink: 0;
 		text-decoration: none;
+	}
+
+	.brand-logo {
+		max-height: 24px;
+		max-width: 140px;
+		object-fit: contain;
 	}
 
 	.brand-serif {

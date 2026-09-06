@@ -83,7 +83,6 @@ export const PROJECT_NAME_PLACEHOLDER = 'My Test Suite';
 export const LOGO_URL_LABEL = 'Logo URL (optional)';
 export const LOGO_URL_HINT = 'Direct link to an image (PNG, SVG, JPG)';
 export const LOGO_URL_PLACEHOLDER = 'https://example.com/logo.png';
-export const PREVIEW_LABEL = 'Preview';
 export const LOGO_PREVIEW_ALT = 'Project logo preview';
 export const TIMEZONE_LABEL = 'Timezone';
 export const TIMEZONE_HINT = 'Used to schedule this project’s cron test runs';
@@ -248,17 +247,27 @@ export const PASSWORD_CHANGED_TOAST = 'Password changed.';
 export const saveProfileLabel = (saving) => (saving ? SAVING_LABEL : 'Save Profile');
 export const changePasswordLabel = (saving) => (saving ? SAVING_LABEL : 'Change Password');
 
-// ── Organization (owner, on the Users tab) ──
-export const ORG_CARD_TITLE = 'Organization';
+// ── Organization (owner only, its own settings tab) ──
+export const ORGANIZATION_LABEL = 'Organization';
+export const ORGANIZATION_DESC =
+	'Your organization name and logo, first set when Plum was installed. Both show on the login screen.';
+export const ORG_IDENTITY_CARD_TITLE = 'Identity';
 export const ORG_NAME_LABEL = 'Organization name';
 export const ORG_NAME_PLACEHOLDER = 'Acme Inc.';
 export const ORG_LOGO_URL_LABEL = 'Logo URL';
+export const ORG_LOGO_URL_HINT = 'Direct link to an image (PNG, SVG, JPG)';
 export const ORG_LOGO_URL_PLACEHOLDER = 'https://example.com/logo.png';
-export const SESSION_TIMEOUT_LABEL = 'Auto-logout after';
+export const ORG_LOGO_PREVIEW_ALT = 'Organization logo preview';
+export const ORG_SAVED_TOAST = 'Organization saved.';
+export const saveOrgLabel = (saving) => (saving ? SAVING_LABEL : 'Save');
+
+// ── Auto-logout (owner only, top of the Users tab) ──
+export const SESSION_CARD_TITLE = 'Auto-logout';
+export const SESSION_TIMEOUT_LABEL = 'End sessions after';
 export const SESSION_TIMEOUT_HINT =
 	'Applies to sessions started after you save. People are returned to the login screen once the limit is reached.';
-export const ORG_SAVED_TOAST = 'Organization settings saved.';
-export const saveOrgLabel = (saving) => (saving ? SAVING_LABEL : 'Save');
+export const SESSION_SAVED_TOAST = 'Auto-logout updated.';
+export const saveSessionLabel = (saving) => (saving ? SAVING_LABEL : 'Save');
 export const sessionTimeoutOptionLabel = (hours) => `${hours} hours`;
 
 // ── Users ──
