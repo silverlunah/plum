@@ -49,6 +49,7 @@
 	import ActivityLog from '$lib/components/settings/ActivityLog.svelte';
 	import RunnersSettings from '$lib/components/settings/RunnersSettings.svelte';
 	import UsersSettings from '$lib/components/settings/UsersSettings.svelte';
+	import OrganizationSettings from '$lib/components/settings/OrganizationSettings.svelte';
 	import BackupSettings from '$lib/components/settings/BackupSettings.svelte';
 	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
@@ -84,6 +85,7 @@
 		MCP_HEADING,
 		ACCOUNT_LABEL,
 		USERS_LABEL,
+		ORGANIZATION_LABEL,
 		BACKUP_LABEL,
 		ACTIVITY_LABEL,
 		ACTIVITY_DESC,
@@ -100,7 +102,6 @@
 		LOGO_URL_LABEL,
 		LOGO_URL_HINT,
 		LOGO_URL_PLACEHOLDER,
-		PREVIEW_LABEL,
 		LOGO_PREVIEW_ALT,
 		TIMEZONE_LABEL,
 		TIMEZONE_HINT,
@@ -198,6 +199,7 @@
 	} from '$lib/copy/settings';
 
 	const VALID_SECTIONS = new Set([
+		'organization',
 		'project',
 		'runners',
 		'testcases',
@@ -551,7 +553,7 @@
 	// ('activity' hides org events, 'users' allows password resets only).
 	const ELEVATED_SECTIONS = new Set(['project', 'testcases', 'integrations', 'activity', 'users']);
 	// Account-wide settings, the owner only.
-	const OWNER_SECTIONS = new Set(['runners', 'backup']);
+	const OWNER_SECTIONS = new Set(['organization', 'runners', 'backup']);
 
 	$: isOwner = $auth.user?.role === 'owner';
 	$: isElevated = $auth.user?.role === 'owner' || $auth.user?.role === 'admin';
@@ -562,6 +564,7 @@
 	}
 
 	$: navItems = [
+		...(isOwner ? [{ id: 'organization', label: ORGANIZATION_LABEL }] : []),
 		...(isElevated
 			? [
 					{ id: 'project', label: PROJECT_LABEL },
@@ -702,15 +705,13 @@
 					</div>
 
 					{#if project.logoUrl}
-						<div class="logo-preview">
-							<span class="preview-label">{PREVIEW_LABEL}</span>
-							<img
-								src={project.logoUrl}
-								alt={LOGO_PREVIEW_ALT}
-								class="logo-img"
-								on:error={(e) => (e.target.style.display = 'none')}
-							/>
-						</div>
+						<img
+							class="logo-preview"
+							src={project.logoUrl}
+							alt={LOGO_PREVIEW_ALT}
+							on:error={(e) => (e.currentTarget.hidden = true)}
+							on:load={(e) => (e.currentTarget.hidden = false)}
+						/>
 					{/if}
 
 					<div class="field">
@@ -1279,6 +1280,12 @@
 				<UsersSettings on:navigate={(e) => setSection(e.detail)} />
 			</div>
 
+			<!-- ORGANIZATION (owner only) -->
+		{:else if section === 'organization'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<OrganizationSettings />
+			</div>
+
 			<!-- BACKUP -->
 		{:else if section === 'backup'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
@@ -1532,24 +1539,14 @@
 	}
 
 	.logo-preview {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.preview-label {
-		font-size: 0.75rem;
-		color: var(--text-muted);
-		font-weight: 500;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-	}
-
-	.logo-img {
-		max-height: 56px;
+		align-self: flex-start;
+		max-height: 44px;
 		max-width: 200px;
 		object-fit: contain;
+		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
+		padding: 0.4rem 0.6rem;
+		background: var(--bg-subtle);
 	}
 
 	.card-footer {

@@ -57,18 +57,14 @@
 		USER_PROJECTS_LABEL,
 		USER_NO_PROJECTS,
 		USER_ALL_PROJECTS,
-		ORG_CARD_TITLE,
-		ORG_NAME_LABEL,
-		ORG_NAME_PLACEHOLDER,
-		ORG_LOGO_URL_LABEL,
-		ORG_LOGO_URL_PLACEHOLDER,
+		SESSION_CARD_TITLE,
 		SESSION_TIMEOUT_LABEL,
 		SESSION_TIMEOUT_HINT,
-		ORG_SAVED_TOAST,
+		SESSION_SAVED_TOAST,
 		addUserLabel,
 		resetPasswordLabel,
 		passwordResetToast,
-		saveOrgLabel,
+		saveSessionLabel,
 		sessionTimeoutOptionLabel,
 		userAddedToast,
 		userRemovedToast
@@ -99,8 +95,8 @@
 	let resetResultOpen = false;
 	let tempPasswordCopied = false;
 
-	let orgForm = { name: '', logoUrl: '', sessionMaxHours: SESSION_TIMEOUT_OPTIONS.at(-1) };
-	let orgSaving = false;
+	let sessionMaxHours = SESSION_TIMEOUT_OPTIONS.at(-1);
+	let sessionSaving = false;
 
 	$: if (!resetResultOpen) resetResult = null;
 
@@ -117,20 +113,20 @@
 		} catch {}
 		if (isOwner) {
 			try {
-				orgForm = await fetchOrganization();
+				sessionMaxHours = (await fetchOrganization()).sessionMaxHours;
 			} catch {}
 		}
 	});
 
-	async function handleSaveOrg() {
-		orgSaving = true;
+	async function handleSaveSession() {
+		sessionSaving = true;
 		try {
-			orgForm = await saveOrganization(orgForm);
-			notify('success', ORG_SAVED_TOAST);
+			sessionMaxHours = (await saveOrganization({ sessionMaxHours })).sessionMaxHours;
+			notify('success', SESSION_SAVED_TOAST);
 		} catch (e) {
 			notify('error', e.message);
 		} finally {
-			orgSaving = false;
+			sessionSaving = false;
 		}
 	}
 
@@ -242,32 +238,10 @@
 
 {#if isOwner}
 	<div class="card settings-card">
-		<p class="card-title">{ORG_CARD_TITLE}</p>
-		<div class="field-row">
-			<div class="field">
-				<label class="field-label" for="org-name">{ORG_NAME_LABEL}</label>
-				<input
-					id="org-name"
-					type="text"
-					class="field-input"
-					bind:value={orgForm.name}
-					placeholder={ORG_NAME_PLACEHOLDER}
-				/>
-			</div>
-			<div class="field">
-				<label class="field-label" for="org-logo">{ORG_LOGO_URL_LABEL}</label>
-				<input
-					id="org-logo"
-					type="url"
-					class="field-input"
-					bind:value={orgForm.logoUrl}
-					placeholder={ORG_LOGO_URL_PLACEHOLDER}
-				/>
-			</div>
-		</div>
+		<p class="card-title">{SESSION_CARD_TITLE}</p>
 		<div class="field field-sm">
 			<label class="field-label" for="org-session">{SESSION_TIMEOUT_LABEL}</label>
-			<select id="org-session" class="field-input" bind:value={orgForm.sessionMaxHours}>
+			<select id="org-session" class="field-input" bind:value={sessionMaxHours}>
 				{#each SESSION_TIMEOUT_OPTIONS as hours (hours)}
 					<option value={hours}>{sessionTimeoutOptionLabel(hours)}</option>
 				{/each}
@@ -275,8 +249,8 @@
 			<p class="field-hint">{SESSION_TIMEOUT_HINT}</p>
 		</div>
 		<div class="card-footer">
-			<Button on:click={handleSaveOrg} disabled={orgSaving}>
-				{saveOrgLabel(orgSaving)}
+			<Button on:click={handleSaveSession} disabled={sessionSaving}>
+				{saveSessionLabel(sessionSaving)}
 			</Button>
 		</div>
 	</div>
