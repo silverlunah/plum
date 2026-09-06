@@ -515,16 +515,22 @@ function runLane(run, io, emit, lane, plan, retrySplit, framework, laneLogs) {
 						);
 					});
 
+	// Playwright's attempt counts come from its report, not Plum's re-run loop.
+	let nativeAttempts = null;
 	return runWithRetries({
 		// Zero for Playwright, whose own process already retried; the project's
 		// max-retries for Cucumber, which cannot report its attempts.
 		maxRetries: retrySplit.loopRetries,
-		spawnAttempt: (t) => attempt(t ?? chunkTag),
+		spawnAttempt: async (t) => {
+			const res = await attempt(t ?? chunkTag);
+			if (res.attempts) nativeAttempts = res.attempts;
+			return res;
+		},
 		onLog
 	}).then(({ code, rawJson, attempts }) => ({
 		code,
 		content: JSON.stringify(rawJson),
-		attempts
+		attempts: nativeAttempts ?? attempts
 	}));
 }
 
