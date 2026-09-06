@@ -13,10 +13,16 @@ const { slugify } = require('../lib/slugify');
 const { FRAMEWORKS, isFramework } = require('../constants/defaults');
 const { signState, verifyState, buildAuthUrl, identityFromCode } = require('../lib/googleOAuth');
 
-// Must match a redirect URI registered on the Google OAuth client. Honours a
-// reverse proxy's forwarded headers; PLUM_OAUTH_REDIRECT_URI overrides both.
+// Must match a redirect URI registered on the Google OAuth client.
+// PLUM_OAUTH_REDIRECT_URI wins; otherwise the backend's own public URL
+// (`plum server` writes PLUM_API_URL); otherwise the request, honouring a
+// reverse proxy's forwarded headers. The last path guesses the scheme, which
+// is why a proxy that omits X-Forwarded-Proto needs one of the first two.
 function googleRedirectUri(req) {
 	if (process.env.PLUM_OAUTH_REDIRECT_URI) return process.env.PLUM_OAUTH_REDIRECT_URI;
+	if (process.env.PLUM_API_URL) {
+		return `${process.env.PLUM_API_URL.replace(/\/+$/, '')}/auth/google/callback`;
+	}
 	const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http')
 		.split(',')[0]
 		.trim();

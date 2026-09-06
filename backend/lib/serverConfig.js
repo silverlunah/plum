@@ -105,6 +105,9 @@ function buildOverrideYaml({
 			// Already collected here, so notification report links don't ask again in
 			// Settings → Integrations for the same URL.
 			`      PLUM_PUBLIC_URL: "${uiUrl || ''}"`,
+			// The backend's own public URL, so it can build an exact OAuth redirect
+			// URI without guessing the scheme from proxy headers.
+			`      PLUM_API_URL: "${apiUrl || ''}"`,
 			'    volumes:',
 			`      - "${dataAbs}:/app/data"`,
 			`      - "${projectsAbs}:/app/projects"`,
