@@ -25,6 +25,9 @@ export const SOCKET_EVENTS = Object.freeze({
 	// Global notifications (any client, not tied to a specific run)
 	REPORT_READY: 'report-ready',
 
+	// Server → the recipient's own room: a new row landed in their notification bell.
+	NOTIFICATION_NEW: 'notification-new',
+
 	// Collaborative test-run execution, join a run's room, get changes live
 	TEST_RUN_JOIN: 'test-run-join',
 	TEST_RUN_LEAVE: 'test-run-leave',

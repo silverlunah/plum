@@ -23,6 +23,10 @@ async function canReachProject(socket, projectId) {
 
 const socketHandler = (io) => {
 	io.on('connection', (socket) => {
+		// The socket is already authenticated (io.use), so the notification bell's
+		// room can be joined immediately, no client round-trip needed.
+		if (socket.data.user?.userId) socket.join(`user:${socket.data.user.userId}`);
+
 		socket.on(SOCKET_EVENTS.JOIN_PROJECT, async ({ projectId } = {}) => {
 			for (const room of socket.rooms) {
 				if (room.startsWith('project:')) socket.leave(room);

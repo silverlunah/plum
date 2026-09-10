@@ -275,20 +275,23 @@ model ProjectMember {
 }
 
 model User {
-  id               String   @id @default(cuid())
-  name             String
-  email            String   @unique
-  password         String
+  id                   String    @id @default(cuid())
+  name                 String
+  email                String    @unique
+  password             String
   // Google account `sub`, linked on the user's first Google sign-in (matched to
   // this row by email). Null until then.
-  googleId         String?  @unique
-  role             String   @default("user")
+  googleId             String?   @unique
+  role                 String    @default("user")
   // Not enforced if the user later loses access to it; the frontend falls
   // back to its own default when this doesn't resolve to a reachable project.
-  defaultProjectId Int?
-  defaultProject   Project? @relation("UserDefaultProject", fields: [defaultProjectId], references: [id], onDelete: SetNull)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  defaultProjectId     Int?
+  defaultProject       Project?  @relation("UserDefaultProject", fields: [defaultProjectId], references: [id], onDelete: SetNull)
+  // Set the first time this user logs in, after seeding their two onboarding
+  // notifications. Null forever means they haven't logged in since this existed.
+  firstLoginNotifiedAt DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   suites             TestSuite[]
   cases              TestCase[]

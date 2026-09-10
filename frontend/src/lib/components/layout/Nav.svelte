@@ -11,9 +11,28 @@
 	import { fetchProjects } from '$lib/api/projects';
 	import { branding, loadBranding } from '$lib/stores/branding';
 	import { activeProjectId, activeProject, projects, setProjects } from '$lib/stores/project';
+	import {
+		notificationInbox,
+		unreadNotificationCount,
+		loadNotificationInbox,
+		markInboxRead,
+		markInboxAllRead
+	} from '$lib/stores/notificationInbox';
+	import {
+		NOTIFICATIONS_LABEL,
+		NO_NOTIFICATIONS_MESSAGE,
+		MARK_ALL_READ_LABEL,
+		unreadCountBadge
+	} from '$lib/copy/notifications';
 
 	let menuOpen = false;
 	let projectMenuOpen = false;
+	let notifOpen = false;
+
+	function handleNotificationClick(n) {
+		notifOpen = false;
+		if (!n.read) markInboxRead(n.id);
+	}
 
 	// Shared store, so a project created or deleted in Settings shows here without a reload.
 	$: projectList = $projects;
@@ -23,6 +42,7 @@
 			setProjects(await fetchProjects());
 		} catch {}
 		loadBranding();
+		loadNotificationInbox().catch(() => {});
 	});
 
 	function switchProject(id) {
@@ -160,6 +180,69 @@
 			{/if}
 			{#if $auth.user}
 				<span class="nav-user">{$auth.user.name}</span>
+				<div class="notif-wrap">
+					<button
+						class="notif-bell"
+						on:click={() => (notifOpen = !notifOpen)}
+						aria-label={NOTIFICATIONS_LABEL}
+						aria-haspopup="true"
+						aria-expanded={notifOpen}
+					>
+						<svg
+							width="16"
+							height="16"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+							<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+						</svg>
+						{#if $unreadNotificationCount > 0}
+							<span class="notif-badge">{unreadCountBadge($unreadNotificationCount)}</span>
+						{/if}
+					</button>
+					{#if notifOpen}
+						<button
+							class="notif-backdrop"
+							on:click={() => (notifOpen = false)}
+							tabindex="-1"
+							aria-label="Close"
+						></button>
+						<div class="notif-panel" transition:slide={{ duration: 120 }}>
+							<div class="notif-header">
+								<span>{NOTIFICATIONS_LABEL}</span>
+								{#if $unreadNotificationCount > 0}
+									<button class="notif-mark-all" on:click={markInboxAllRead}>
+										{MARK_ALL_READ_LABEL}
+									</button>
+								{/if}
+							</div>
+							{#if $notificationInbox.length === 0}
+								<p class="notif-empty">{NO_NOTIFICATIONS_MESSAGE}</p>
+							{:else}
+								<ul class="notif-list">
+									{#each $notificationInbox as n (n.id)}
+										<li>
+											<a
+												href={n.link || '#'}
+												class="notif-item"
+												class:unread={!n.read}
+												on:click={() => handleNotificationClick(n)}
+											>
+												<span class="notif-title">{n.title}</span>
+												{#if n.body}<span class="notif-body">{n.body}</span>{/if}
+											</a>
+										</li>
+									{/each}
+								</ul>
+							{/if}
+						</div>
+					{/if}
+				</div>
 			{/if}
 			<a
 				href="/settings"
@@ -442,6 +525,139 @@
 		.nav-user {
 			display: none;
 		}
+	}
+
+	.notif-wrap {
+		position: relative;
+	}
+	.notif-bell {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		color: var(--text-muted);
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+		transition:
+			color var(--duration-fast),
+			border-color var(--duration-fast);
+	}
+	.notif-bell:hover {
+		color: var(--text);
+		border-color: var(--border);
+	}
+	.notif-badge {
+		position: absolute;
+		top: 2px;
+		right: 2px;
+		min-width: 14px;
+		height: 14px;
+		padding: 0 3px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.6rem;
+		font-weight: 700;
+		line-height: 1;
+		color: var(--white);
+		background: var(--fail);
+		border-radius: var(--radius-pill);
+	}
+	.notif-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 50;
+		background: transparent;
+		border: none;
+		cursor: default;
+	}
+	.notif-panel {
+		position: absolute;
+		top: calc(100% + 6px);
+		right: 0;
+		z-index: 51;
+		width: 320px;
+		max-width: calc(100vw - 2rem);
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+		overflow: hidden;
+	}
+	.notif-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.6rem 0.75rem;
+		border-bottom: 1px solid var(--border);
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--text);
+	}
+	.notif-mark-all {
+		font: inherit;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--accent);
+		background: none;
+		border: none;
+		cursor: pointer;
+	}
+	.notif-mark-all:hover {
+		text-decoration: underline;
+	}
+	.notif-empty {
+		margin: 0;
+		padding: 1.25rem 0.75rem;
+		text-align: center;
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+	}
+	.notif-list {
+		margin: 0;
+		padding: 0.25rem;
+		list-style: none;
+		max-height: 320px;
+		overflow-y: auto;
+	}
+	.notif-item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		padding: 0.5rem 0.5rem;
+		border-radius: var(--radius-sm);
+		text-decoration: none;
+	}
+	.notif-item:hover {
+		background: var(--bg-subtle);
+	}
+	.notif-item.unread .notif-title {
+		font-weight: 600;
+	}
+	.notif-item.unread {
+		position: relative;
+	}
+	.notif-item.unread::before {
+		content: '';
+		position: absolute;
+		top: 0.75rem;
+		left: -0.05rem;
+		width: 5px;
+		height: 5px;
+		border-radius: 50%;
+		background: var(--accent);
+	}
+	.notif-title {
+		font-size: 0.8125rem;
+		color: var(--text);
+	}
+	.notif-body {
+		font-size: 0.75rem;
+		color: var(--text-muted);
 	}
 
 	/* Settings gear icon */
