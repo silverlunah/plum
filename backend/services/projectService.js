@@ -3,14 +3,59 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
+const path = require('path');
 const prisma = require('./prisma');
 const activityService = require('./activityService');
+const githubService = require('./githubService');
 const { accessibleProjectIds } = require('../lib/projectContext');
 const projectPaths = require('../lib/projectPaths');
 const { slugify } = require('../lib/slugify');
+const { sanitizeTestsPath } = require('../lib/sanitizeTestsPath');
 const { ROLE, ELEVATED_ROLES } = require('../constants/roles');
 const { isFramework } = require('../constants/defaults');
 const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
+
+// 'existing' clones the whole repo into projects/<slug>/ (testsPath then points
+// at wherever inside it the tests actually live, same field the manual Settings
+// flow already used). Anything else, including no repoMode, leaves the project
+// as a local-only scaffold, unchanged from before this existed.
+async function setupRepository(project, opts = {}) {
+	const { repoMode, githubOwner, githubRepo, githubDefaultBranch, testsPath, newRepoName } = opts;
+	const projectRoot = path.join(projectPaths.PROJECTS_DIR, project.slug);
+
+	if (repoMode === 'existing' && githubOwner && githubRepo) {
+		await githubService.cloneRepo({
+			owner: githubOwner,
+			repo: githubRepo,
+			destPath: projectRoot,
+			branch: githubDefaultBranch || undefined
+		});
+		const sanitizedTestsPath = sanitizeTestsPath(testsPath);
+		await prisma.project.update({
+			where: { id: project.id },
+			data: {
+				githubOwner,
+				githubRepo,
+				githubDefaultBranch: githubDefaultBranch || 'main',
+				testsPath: sanitizedTestsPath
+			}
+		});
+		await projectPaths.refresh();
+		projectPaths.ensureRunnerConfig(project.slug, project.framework, sanitizedTestsPath);
+	} else if (repoMode === 'new') {
+		await githubService.initRepo(projectRoot, { defaultBranch: 'main' });
+		if (newRepoName) {
+			const repo = await githubService.createPrivateRepo({ name: newRepoName });
+			await githubService.addRemote({ repoPath: projectRoot, owner: repo.owner, repo: repo.name });
+			await githubService.commitAll({ repoPath: projectRoot, message: 'Initial commit' });
+			await githubService.pushBranch({ repoPath: projectRoot, branch: 'main' });
+			await prisma.project.update({
+				where: { id: project.id },
+				data: { githubOwner: repo.owner, githubRepo: repo.name, githubDefaultBranch: 'main' }
+			});
+		}
+	}
+}
 
 // May this user manage a project's settings and membership? Owners: any project.
 // Admins: only the projects they're assigned to. Everyone else: no.
@@ -74,7 +119,7 @@ async function listAll() {
 // command and the report shape all follow from it, so there is no update path
 // for it anywhere. An unknown value falls back to the column default rather
 // than erroring: the choice comes from a fixed set in the UI, not free text.
-async function create({ name, framework }) {
+async function create({ name, framework, repo }) {
 	const org = await prisma.organization.findFirst({ orderBy: { id: 'asc' } });
 	const slug = await uniqueSlug(slugify(name));
 	const project = await prisma.project.create({
@@ -87,12 +132,27 @@ async function create({ name, framework }) {
 		select: { id: true, name: true, slug: true, framework: true }
 	});
 	await projectPaths.refresh();
-	projectPaths.scaffoldProject(slug, project.framework);
+	// An 'existing' repo brings its own content via clone; scaffolding first would
+	// leave the destination non-empty and the clone would refuse to run.
+	if (repo?.repoMode !== 'existing') projectPaths.scaffoldProject(slug, project.framework);
+	if (repo?.repoMode) await setupRepository(project, repo);
 	await activityService.record(ACTIVITY_ACTION.PROJECT_CREATE, {
 		scope: ACTIVITY_SCOPE.ORG,
 		target: { type: 'project', id: project.id, label: project.name }
 	});
-	return project;
+	return prisma.project.findUnique({
+		where: { id: project.id },
+		select: {
+			id: true,
+			name: true,
+			slug: true,
+			framework: true,
+			testsPath: true,
+			githubOwner: true,
+			githubRepo: true,
+			githubDefaultBranch: true
+		}
+	});
 }
 
 // Wipes a project and everything under it: suites, cases, runs, reports, cron,
@@ -193,4 +253,13 @@ async function setMembers(projectId, userIds) {
 	return getMembers(projectId);
 }
 
-module.exports = { listForUser, listAll, create, remove, getMembers, setMembers, canAdminister };
+module.exports = {
+	listForUser,
+	listAll,
+	create,
+	setupRepository,
+	remove,
+	getMembers,
+	setMembers,
+	canAdminister
+};

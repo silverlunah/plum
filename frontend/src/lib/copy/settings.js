@@ -621,6 +621,25 @@ const FRAMEWORK_LABELS = { playwright: 'Playwright', cucumber: 'Cucumber' };
 export const frameworkLabel = (id) => FRAMEWORK_LABELS[id] ?? id ?? '';
 export const FRAMEWORK_PERMANENT_HINT =
 	'Set once, when the project is created. A project cannot switch frameworks afterwards, its tests, run command and reports all depend on the choice.';
+
+export const REPO_MODE_SKIP_LABEL = "I'll do this later";
+export const REPO_MODE_EXISTING_LABEL = 'Existing GitHub repo';
+export const REPO_MODE_NEW_LABEL = 'New GitHub repo';
+export const REPO_NOT_CONNECTED_NOTE = 'Connect GitHub in Integrations first.';
+export const REPO_OWNER_LABEL = 'Owner';
+export const REPO_OWNER_PLACEHOLDER = 'silverlunah';
+export const REPO_NAME_LABEL = 'Repository';
+export const REPO_NAME_PLACEHOLDER = 'plum-tests';
+export const REPO_BRANCH_LABEL = 'Default branch';
+export const REPO_BRANCH_PLACEHOLDER = 'main';
+export const REPO_TESTS_SUBPATH_LABEL = 'Tests folder';
+export const REPO_TESTS_SUBPATH_HINT =
+	'Relative path inside the repo, e.g. apps/web/e2e for a monorepo.';
+export const REPO_TESTS_SUBPATH_PLACEHOLDER = 'tests';
+export const NEW_REPO_NAME_LABEL = 'New repository name';
+export const NEW_REPO_NAME_HINT =
+	'Created as a private repo and pushed with the scaffolded tests as its first commit. Leave blank to just set up git locally.';
+export const NEW_REPO_NAME_PLACEHOLDER = 'plum-tests';
 export const DELETE_PROJECT_MODAL_TITLE = 'Delete project';
 export const deleteProjectWarning = (name) =>
 	`Deleting “${name}” permanently removes every test case, run, report, schedule and its test folder. Users keep their accounts and their names stay on past runs, but the project itself cannot be recovered.`;

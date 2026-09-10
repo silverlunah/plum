@@ -50,7 +50,15 @@ router.post('/', jwtAuth, requireOwner, async (req, res, next) => {
 		if (framework !== undefined && !isFramework(framework)) {
 			return res.status(400).json({ error: `framework must be one of: ${FRAMEWORKS.join(', ')}` });
 		}
-		res.status(201).json({ project: await projectService.create({ name, framework }) });
+		const { repoMode, githubOwner, githubRepo, githubDefaultBranch, testsPath, newRepoName } =
+			req.body.repo || {};
+		res.status(201).json({
+			project: await projectService.create({
+				name,
+				framework,
+				repo: { repoMode, githubOwner, githubRepo, githubDefaultBranch, testsPath, newRepoName }
+			})
+		});
 	} catch (e) {
 		next(e);
 	}

@@ -26,6 +26,8 @@
 		SETUP_FAILED_FALLBACK,
 		SETUP_STEP_ORG_TITLE,
 		SETUP_STEP_ORG_SUBTITLE,
+		SETUP_STEP_REPO_TITLE,
+		SETUP_STEP_REPO_SUBTITLE,
 		SETUP_STEP_ADMIN_TITLE,
 		SETUP_STEP_ADMIN_SUBTITLE,
 		ORG_NAME_LABEL,
@@ -38,6 +40,24 @@
 		SETUP_BACK_LABEL,
 		setupStepLabel,
 		createAccountLabel,
+		REPO_MODE_SKIP_LABEL,
+		REPO_MODE_EXISTING_LABEL,
+		REPO_MODE_NEW_LABEL,
+		SETUP_GITHUB_TOKEN_LABEL,
+		SETUP_GITHUB_TOKEN_HINT,
+		SETUP_GITHUB_TOKEN_PLACEHOLDER,
+		REPO_OWNER_LABEL,
+		REPO_OWNER_PLACEHOLDER,
+		REPO_NAME_LABEL,
+		REPO_NAME_PLACEHOLDER,
+		REPO_BRANCH_LABEL,
+		REPO_BRANCH_PLACEHOLDER,
+		REPO_TESTS_SUBPATH_LABEL,
+		REPO_TESTS_SUBPATH_HINT,
+		REPO_TESTS_SUBPATH_PLACEHOLDER,
+		NEW_REPO_NAME_LABEL,
+		NEW_REPO_NAME_HINT,
+		NEW_REPO_NAME_PLACEHOLDER,
 		RESTORE_INSTEAD_LABEL,
 		RESTORE_TITLE,
 		RESTORE_SUBTITLE,
@@ -56,6 +76,7 @@
 	} from '$lib/copy/legal';
 
 	let step = 1;
+	const TOTAL_STEPS = 3;
 	let organizationName = '';
 	let projectName = '';
 	let framework = FRAMEWORKS[0];
@@ -73,8 +94,18 @@
 	let restoreError = '';
 	let restoring = false;
 
+	// 'skip' | 'existing' | 'new'. Blank until the operator picks one; blank
+	// behaves like 'skip', the project stays local-only until Settings.
+	let repoMode = '';
+	let githubToken = '';
+	let githubOwner = '';
+	let githubRepoName = '';
+	let githubDefaultBranch = 'main';
+	let testsSubpath = 'tests';
+	let newRepoName = '';
+
 	$: step1Ready = organizationName.trim() && projectName.trim();
-	$: step2Ready = name.trim() && email.trim() && password && termsAccepted;
+	$: step3Ready = name.trim() && email.trim() && password && termsAccepted;
 
 	onMount(async () => {
 		try {
@@ -115,7 +146,20 @@
 				name,
 				email,
 				password,
-				termsAccepted
+				termsAccepted,
+				githubToken: repoMode ? githubToken : undefined,
+				repo:
+					repoMode === 'existing'
+						? {
+								repoMode,
+								githubOwner,
+								githubRepo: githubRepoName,
+								githubDefaultBranch,
+								testsPath: testsSubpath
+							}
+						: repoMode === 'new'
+							? { repoMode, newRepoName }
+							: undefined
 			});
 			auth.login(token, user);
 			window.location.href = '/';
@@ -165,21 +209,25 @@
 
 			<div class="heading">
 				{#if mode !== 'restore'}
-					<span class="step-label">{setupStepLabel(step, 2)}</span>
+					<span class="step-label">{setupStepLabel(step, TOTAL_STEPS)}</span>
 				{/if}
 				<h1 class="title">
 					{mode === 'restore'
 						? RESTORE_TITLE
 						: step === 1
 							? SETUP_STEP_ORG_TITLE
-							: SETUP_STEP_ADMIN_TITLE}
+							: step === 2
+								? SETUP_STEP_REPO_TITLE
+								: SETUP_STEP_ADMIN_TITLE}
 				</h1>
 				<p class="subtitle">
 					{mode === 'restore'
 						? RESTORE_SUBTITLE
 						: step === 1
 							? SETUP_STEP_ORG_SUBTITLE
-							: SETUP_STEP_ADMIN_SUBTITLE}
+							: step === 2
+								? SETUP_STEP_REPO_SUBTITLE
+								: SETUP_STEP_ADMIN_SUBTITLE}
 				</p>
 			</div>
 
@@ -255,6 +303,110 @@
 				<button class="link-btn" type="button" on:click={() => (mode = 'restore')}>
 					{RESTORE_INSTEAD_LABEL}
 				</button>
+			{:else if step === 2}
+				<div class="fields">
+					<div class="mode-row">
+						<button
+							type="button"
+							class="mode-btn"
+							class:active={repoMode === ''}
+							on:click={() => (repoMode = '')}
+						>
+							{REPO_MODE_SKIP_LABEL}
+						</button>
+						<button
+							type="button"
+							class="mode-btn"
+							class:active={repoMode === 'existing'}
+							on:click={() => (repoMode = 'existing')}
+						>
+							{REPO_MODE_EXISTING_LABEL}
+						</button>
+						<button
+							type="button"
+							class="mode-btn"
+							class:active={repoMode === 'new'}
+							on:click={() => (repoMode = 'new')}
+						>
+							{REPO_MODE_NEW_LABEL}
+						</button>
+					</div>
+
+					{#if repoMode}
+						<div class="field">
+							<label class="label" for="gh-token">{SETUP_GITHUB_TOKEN_LABEL}</label>
+							<input
+								id="gh-token"
+								type="password"
+								class="input"
+								bind:value={githubToken}
+								placeholder={SETUP_GITHUB_TOKEN_PLACEHOLDER}
+								autocomplete="off"
+							/>
+							<p class="hint">{SETUP_GITHUB_TOKEN_HINT}</p>
+						</div>
+					{/if}
+
+					{#if repoMode === 'existing'}
+						<div class="field">
+							<label class="label" for="gh-owner">{REPO_OWNER_LABEL}</label>
+							<input
+								id="gh-owner"
+								class="input"
+								bind:value={githubOwner}
+								placeholder={REPO_OWNER_PLACEHOLDER}
+							/>
+						</div>
+						<div class="field">
+							<label class="label" for="gh-repo">{REPO_NAME_LABEL}</label>
+							<input
+								id="gh-repo"
+								class="input"
+								bind:value={githubRepoName}
+								placeholder={REPO_NAME_PLACEHOLDER}
+							/>
+						</div>
+						<div class="field">
+							<label class="label" for="gh-branch">{REPO_BRANCH_LABEL}</label>
+							<input
+								id="gh-branch"
+								class="input"
+								bind:value={githubDefaultBranch}
+								placeholder={REPO_BRANCH_PLACEHOLDER}
+							/>
+						</div>
+						<div class="field">
+							<label class="label" for="gh-subpath">{REPO_TESTS_SUBPATH_LABEL}</label>
+							<input
+								id="gh-subpath"
+								class="input"
+								bind:value={testsSubpath}
+								placeholder={REPO_TESTS_SUBPATH_PLACEHOLDER}
+							/>
+							<p class="hint">{REPO_TESTS_SUBPATH_HINT}</p>
+						</div>
+					{:else if repoMode === 'new'}
+						<div class="field">
+							<label class="label" for="new-repo-name">{NEW_REPO_NAME_LABEL}</label>
+							<input
+								id="new-repo-name"
+								class="input"
+								bind:value={newRepoName}
+								placeholder={NEW_REPO_NAME_PLACEHOLDER}
+							/>
+							<p class="hint">{NEW_REPO_NAME_HINT}</p>
+						</div>
+					{/if}
+				</div>
+
+				<div class="actions">
+					<button class="ghost-btn" type="button" on:click={() => (step = 1)}>
+						{SETUP_BACK_LABEL}
+					</button>
+					<button class="submit-btn" type="button" on:click={() => (step = 3)}>
+						{SETUP_CONTINUE_LABEL}
+					</button>
+				</div>
 			{:else}
 				<div class="fields">
 					<div class="field">
@@ -308,10 +460,10 @@
 				{#if error}<p class="error">{error}</p>{/if}
 
 				<div class="actions">
-					<button class="ghost-btn" on:click={() => (step = 1)} disabled={loading}>
+					<button class="ghost-btn" on:click={() => (step = 2)} disabled={loading}>
 						{SETUP_BACK_LABEL}
 					</button>
-					<button class="submit-btn" on:click={handleSubmit} disabled={loading || !step2Ready}>
+					<button class="submit-btn" on:click={handleSubmit} disabled={loading || !step3Ready}>
 						{createAccountLabel(loading)}
 					</button>
 				</div>
@@ -514,6 +666,31 @@
 	}
 	.submit-btn:not(:disabled):hover {
 		opacity: 0.88;
+	}
+
+	.mode-row {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+	.mode-btn {
+		flex: 1;
+		min-width: 100px;
+		padding: 0.5rem 0.75rem;
+		background: var(--bg);
+		color: var(--text-muted);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		cursor: pointer;
+		transition:
+			border-color var(--duration-fast),
+			color var(--duration-fast);
+	}
+	.mode-btn.active {
+		color: var(--accent);
+		border-color: var(--accent);
 	}
 
 	.ghost-btn {
