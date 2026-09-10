@@ -14,6 +14,7 @@ const TRIGGER_TYPE = Object.freeze({
 	CLI: 'command-line-trigger',
 	MCP: 'mcp-trigger',
 	EXTERNAL: 'external-trigger',
+	AI_AGENT: 'ai-agent-trigger',
 	// Not a Report.triggerType value (cron jobs store their taskName there instead),
 	// only used as the `kind` tag on bg-run-* live-broadcast events, alongside the
 	// other TRIGGER_TYPE values reused for that same field.
@@ -39,6 +40,7 @@ const NON_SCHEDULED_TRIGGERS = new Set([
 	TRIGGER_TYPE.CLI,
 	TRIGGER_TYPE.MCP,
 	TRIGGER_TYPE.EXTERNAL,
+	TRIGGER_TYPE.AI_AGENT,
 	TRIGGER_REMOTE,
 	'undefined'
 ]);

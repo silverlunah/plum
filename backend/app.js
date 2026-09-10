@@ -65,6 +65,8 @@ if (!isNodeMode()) {
 	app.use('/activity', require('./routes/activity.routes'));
 	app.use('/notifications', require('./routes/notifications.routes'));
 	app.use('/mcp', require('./routes/mcp.routes'));
+	app.use('/ai-sessions', require('./routes/aiSessions.routes'));
+	app.use('/ai-mcp', require('./routes/aiMcp.routes'));
 }
 
 // Global JSON error handler, Express's default sends HTML, which breaks JSON clients

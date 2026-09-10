@@ -60,7 +60,10 @@ const ACTIVITY_ACTION = Object.freeze({
 	REPORT_RETENTION_UPDATE: 'report.retention_update',
 
 	AI_CONFIG_UPDATE: 'ai.config_update',
-	GITHUB_CONFIG_UPDATE: 'github.config_update'
+	GITHUB_CONFIG_UPDATE: 'github.config_update',
+
+	AI_SESSION_CREATE: 'ai_session.create',
+	AI_SESSION_PR_OPENED: 'ai_session.pr_opened'
 });
 
 const ACTIVITY_SCOPE = Object.freeze({ PROJECT: 'project', ORG: 'org' });
