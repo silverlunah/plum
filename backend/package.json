@@ -7,7 +7,8 @@
 		"create-step": "node config/scripts/create-step.mjs",
 		"create-env": "node services/envService.js",
 		"manage-nodes": "node scripts/manage-nodes.mjs",
-		"create-test": "node config/scripts/create-test.mjs"
+		"create-test": "node config/scripts/create-test.mjs",
+		"ai-session-test": "node config/scripts/ai-session-test.mjs"
 	},
 	"keywords": [],
 	"author": "silverlunah",
@@ -20,10 +21,12 @@
 		"typescript": "^5.9.2"
 	},
 	"dependencies": {
+		"@anthropic-ai/claude-agent-sdk": "^0.3.267",
 		"@aws-sdk/client-s3": "^3.840.0",
 		"@clack/prompts": "^1.5.1",
 		"@cucumber/cucumber": "^11.2.0",
 		"@modelcontextprotocol/sdk": "^1.29.0",
+		"@playwright/mcp": "^0.0.80",
 		"@prisma/client": "^6.19.3",
 		"@rrweb/record": "^2.1.1",
 		"bcryptjs": "^2.4.3",
@@ -36,9 +39,11 @@
 		"google-auth-library": "^9.15.1",
 		"jsonwebtoken": "^9.0.2",
 		"node-cron": "^3.0.3",
+		"openai": "^7.13.0",
 		"picocolors": "^1.1.1",
 		"playwright": "1.62.1",
 		"simple-git": "^3.36.0",
-		"socket.io": "^4.8.1"
+		"socket.io": "^4.8.1",
+		"zod": "^4.4.3"
 	}
 }
