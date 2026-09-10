@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const settingsService = require('../services/settingsService');
+const githubService = require('../services/githubService');
 const testSuiteService = require('../services/testSuiteService');
 const testCaseService = require('../services/testCaseService');
 const { jwtAuth } = require('../middleware/jwtAuth');
@@ -88,6 +89,14 @@ router.post('/github', orgOnly, async (req, res, next) => {
 	try {
 		const { githubToken } = req.body;
 		res.json(await settingsService.updateGithubConfig({ githubToken }));
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/github/verify', orgOnly, async (req, res, next) => {
+	try {
+		res.json(await githubService.verifyConnection());
 	} catch (e) {
 		next(e);
 	}

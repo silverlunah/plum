@@ -54,8 +54,7 @@ export const PROJECT_DESC = 'Identity information shown across the UI';
 export const RUNNERS_DESC =
 	'Register self-hosted runner nodes to distribute tests across machines.';
 export const REPOSITORY_DESC = 'Configure ID prefixes for test suites and cases.';
-export const INTEGRATIONS_DESC =
-	'Connect Discord and Slack to receive run notifications with pass/fail results and report links.';
+export const INTEGRATIONS_DESC = 'Connect AI providers, GitHub, and notification webhooks.';
 export const MCP_DESC =
 	'Your personal API key for this project. It authenticates the REST API and an MCP client alike, acting as you with your role, so treat it like your password. Anything it creates or runs is tagged “(MCP)”.';
 export const ACCOUNT_DESC = 'Manage your profile, credentials and session.';
@@ -204,6 +203,66 @@ const COPY_WORKFLOW_STEP_LABEL = 'Copy Workflow Step';
 
 export const saveIntegrationsLabel = (saving) => (saving ? SAVING_LABEL : 'Save Integrations');
 export const copyCiSnippetLabel = (copied) => (copied ? COPIED_LABEL : COPY_WORKFLOW_STEP_LABEL);
+
+// ── Integrations: sub-tabs ──
+export const WEBHOOKS_TAB_LABEL = 'Webhooks';
+export const AI_TAB_LABEL = 'AI';
+export const GITHUB_TAB_LABEL = 'GitHub';
+
+// ── Integrations: AI ──
+export const AI_PROVIDER_CARD_TITLE = 'AI provider keys';
+export const AI_PROVIDER_CARD_DESC = 'Owner only. Instance-wide, every project shares these keys.';
+export const ANTHROPIC_API_KEY_LABEL = 'Anthropic API key';
+export const ANTHROPIC_API_KEY_PLACEHOLDER = 'sk-ant-…';
+export const ANTHROPIC_MODEL_LABEL = 'Anthropic model';
+export const ANTHROPIC_MODEL_PLACEHOLDER = 'claude-sonnet-5';
+export const OPENAI_API_KEY_LABEL = 'OpenAI API key';
+export const OPENAI_API_KEY_PLACEHOLDER = 'sk-…';
+export const OPENAI_MODEL_LABEL = 'OpenAI model';
+export const OPENAI_MODEL_PLACEHOLDER = 'gpt-5';
+export const AI_CONFIG_SAVED_TOAST = 'AI provider settings saved.';
+export const AI_CONFIG_SAVE_FAILED = 'Failed to save AI provider settings.';
+
+export const AI_BEHAVIOUR_CARD_TITLE = 'Agent behaviour';
+export const AI_BEHAVIOUR_CARD_DESC = 'How the AI agent should act in this project.';
+export const AI_SYSTEM_PROMPT_LABEL = 'Personality & tone';
+export const AI_SYSTEM_PROMPT_PLACEHOLDER = 'e.g. Be terse. Ask before deleting a test.';
+export const AI_CODE_PRACTICES_LABEL = 'Coding conventions';
+export const AI_CODE_PRACTICES_PLACEHOLDER =
+	'e.g. Use the Page Object Model. Prefer data-testid selectors.';
+export const AI_PROJECT_CONFIG_SAVED_TOAST = 'AI behaviour saved.';
+export const AI_PROJECT_CONFIG_SAVE_FAILED = 'Failed to save AI behaviour.';
+export const AI_OWNER_ONLY_NOTE = 'Ask an owner to connect provider keys before the agent can run.';
+
+export const saveAiKeysLabel = (saving) => (saving ? SAVING_LABEL : 'Save AI Keys');
+export const saveAiBehaviourLabel = (saving) => (saving ? SAVING_LABEL : 'Save Behaviour');
+
+// ── Integrations: GitHub ──
+export const GITHUB_CONNECTION_CARD_TITLE = 'GitHub connection';
+export const GITHUB_CONNECTION_CARD_DESC =
+	'Owner only. Instance-wide: a fine-grained personal access token with repo scope and "Administration: write" (to create private repos).';
+export const GITHUB_TOKEN_LABEL = 'Personal access token';
+export const GITHUB_TOKEN_PLACEHOLDER = 'github_pat_…';
+export const GITHUB_CONFIG_SAVED_TOAST = 'GitHub connection saved.';
+export const GITHUB_CONFIG_SAVE_FAILED = 'Failed to save GitHub connection.';
+
+export const GITHUB_REPO_CARD_TITLE = 'Repository';
+export const GITHUB_REPO_CARD_DESC = "Which GitHub repo this project's tests live in.";
+export const GITHUB_OWNER_LABEL = 'Owner';
+export const GITHUB_OWNER_PLACEHOLDER = 'silverlunah';
+export const GITHUB_REPO_LABEL = 'Repository';
+export const GITHUB_REPO_PLACEHOLDER = 'plum-tests';
+export const GITHUB_DEFAULT_BRANCH_LABEL = 'Default branch';
+export const GITHUB_DEFAULT_BRANCH_PLACEHOLDER = 'main';
+export const GITHUB_PROJECT_CONFIG_SAVED_TOAST = 'Repository settings saved.';
+export const GITHUB_PROJECT_CONFIG_SAVE_FAILED = 'Failed to save repository settings.';
+
+export const GITHUB_VERIFY_FAILED = 'Could not verify the GitHub connection.';
+export const githubConnectedAsLabel = (username) => `Connected as ${username}`;
+
+export const saveGithubConnectionLabel = (saving) => (saving ? SAVING_LABEL : 'Save Connection');
+export const verifyGithubConnectionLabel = (verifying) => (verifying ? 'Checking…' : 'Verify');
+export const saveGithubRepoLabel = (saving) => (saving ? SAVING_LABEL : 'Save Repository');
 
 // ── MCP ──
 export const API_KEY_CARD_TITLE = 'Your API Key';
