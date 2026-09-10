@@ -67,8 +67,17 @@ router.post('/setup', async (req, res, next) => {
 		if (!(await userService.needsSetup())) {
 			return res.status(403).json({ error: 'Setup already complete' });
 		}
-		const { organizationName, projectName, name, email, password, termsAccepted, framework } =
-			req.body;
+		const {
+			organizationName,
+			projectName,
+			name,
+			email,
+			password,
+			termsAccepted,
+			framework,
+			githubToken,
+			repo
+		} = req.body;
 		if (!organizationName || !projectName || !name || !email || !password) {
 			return res.status(400).json({
 				error: 'organizationName, projectName, name, email and password are required'
@@ -91,7 +100,9 @@ router.post('/setup', async (req, res, next) => {
 			name,
 			email,
 			password,
-			framework
+			framework,
+			githubToken,
+			repo
 		});
 		res.status(201).json(await userService.login({ email, password }));
 	} catch (e) {

@@ -17,6 +17,7 @@
 		fetchProjectMembers,
 		setProjectMembers
 	} from '$lib/api/projects';
+	import { fetchGithubConfig } from '$lib/api/settings';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Paginator from '$lib/components/ui/Paginator.svelte';
@@ -39,6 +40,22 @@
 		deleteProjectConfirmPrompt,
 		DELETE_CONTINUE_LABEL,
 		CONFIRM_DELETE_PROJECT_LABEL,
+		REPO_MODE_SKIP_LABEL,
+		REPO_MODE_EXISTING_LABEL,
+		REPO_MODE_NEW_LABEL,
+		REPO_NOT_CONNECTED_NOTE,
+		REPO_OWNER_LABEL,
+		REPO_OWNER_PLACEHOLDER,
+		REPO_NAME_LABEL,
+		REPO_NAME_PLACEHOLDER,
+		REPO_BRANCH_LABEL,
+		REPO_BRANCH_PLACEHOLDER,
+		REPO_TESTS_SUBPATH_LABEL,
+		REPO_TESTS_SUBPATH_HINT,
+		REPO_TESTS_SUBPATH_PLACEHOLDER,
+		NEW_REPO_NAME_LABEL,
+		NEW_REPO_NAME_HINT,
+		NEW_REPO_NAME_PLACEHOLDER,
 		PROJECT_MEMBERS_LABEL,
 		PROJECT_MEMBERS_HINT,
 		ROLE_PERMISSIONS_LINK,
@@ -121,6 +138,13 @@
 	const frameworkOptions = FRAMEWORKS.map((id) => ({ id, label: frameworkLabel(id) }));
 	let creating = false;
 	let createError = '';
+	let repoMode = '';
+	let githubOwner = '';
+	let githubRepoName = '';
+	let githubDefaultBranch = 'main';
+	let testsSubpath = 'tests';
+	let newRepoName = '';
+	let githubConnected = false;
 
 	let deleteTarget = null;
 	let deleteStep = 1; // 1 = irreversible warning, 2 = type the id
@@ -149,7 +173,12 @@
 		try {
 			assignable = await fetchAssignablePool();
 		} catch {}
-		if (isOwner) await loadAllProjects();
+		if (isOwner) {
+			await loadAllProjects();
+			try {
+				githubConnected = (await fetchGithubConfig()).githubTokenSet;
+			} catch {}
+		}
 	});
 
 	async function loadAllProjects() {
@@ -163,11 +192,32 @@
 		creating = true;
 		createError = '';
 		try {
-			await createProject({ name: newName.trim(), framework: newFramework });
+			await createProject({
+				name: newName.trim(),
+				framework: newFramework,
+				repo:
+					repoMode === 'existing'
+						? {
+								repoMode,
+								githubOwner,
+								githubRepo: githubRepoName,
+								githubDefaultBranch,
+								testsPath: testsSubpath
+							}
+						: repoMode === 'new'
+							? { repoMode, newRepoName }
+							: undefined
+			});
 			setProjects(await fetchProjects());
 			await loadAllProjects();
 			newName = '';
 			newFramework = defaultFramework;
+			repoMode = '';
+			githubOwner = '';
+			githubRepoName = '';
+			githubDefaultBranch = 'main';
+			testsSubpath = 'tests';
+			newRepoName = '';
 		} catch (e) {
 			createError = e.message;
 		} finally {
@@ -215,11 +265,64 @@
 					ariaLabel={PROJECT_FRAMEWORK_LABEL}
 					on:change={(e) => (newFramework = e.detail)}
 				/>
-				<Button on:click={handleCreate} disabled={creating || !newName.trim()}>
-					{CREATE_PROJECT_LABEL}
-				</Button>
 			</div>
 			<p class="hint">{FRAMEWORK_PERMANENT_HINT}</p>
+
+			<div class="mode-row">
+				<button
+					type="button"
+					class="mode-btn"
+					class:active={repoMode === ''}
+					on:click={() => (repoMode = '')}
+				>
+					{REPO_MODE_SKIP_LABEL}
+				</button>
+				<button
+					type="button"
+					class="mode-btn"
+					class:active={repoMode === 'existing'}
+					on:click={() => (repoMode = 'existing')}
+				>
+					{REPO_MODE_EXISTING_LABEL}
+				</button>
+				<button
+					type="button"
+					class="mode-btn"
+					class:active={repoMode === 'new'}
+					on:click={() => (repoMode = 'new')}
+				>
+					{REPO_MODE_NEW_LABEL}
+				</button>
+			</div>
+
+			{#if repoMode && !githubConnected}
+				<p class="hint">{REPO_NOT_CONNECTED_NOTE}</p>
+			{:else if repoMode === 'existing'}
+				<div class="repo-fields">
+					<input class="field-input" bind:value={githubOwner} placeholder={REPO_OWNER_LABEL} />
+					<input class="field-input" bind:value={githubRepoName} placeholder={REPO_NAME_LABEL} />
+					<input
+						class="field-input"
+						bind:value={githubDefaultBranch}
+						placeholder={REPO_BRANCH_LABEL}
+					/>
+					<input
+						class="field-input"
+						bind:value={testsSubpath}
+						placeholder={REPO_TESTS_SUBPATH_LABEL}
+					/>
+				</div>
+				<p class="hint">{REPO_TESTS_SUBPATH_HINT}</p>
+			{:else if repoMode === 'new'}
+				<div class="repo-fields">
+					<input class="field-input" bind:value={newRepoName} placeholder={NEW_REPO_NAME_LABEL} />
+				</div>
+				<p class="hint">{NEW_REPO_NAME_HINT}</p>
+			{/if}
+
+			<Button on:click={handleCreate} disabled={creating || !newName.trim()}>
+				{CREATE_PROJECT_LABEL}
+			</Button>
 			{#if createError}<p class="error">{createError}</p>{/if}
 		</section>
 
@@ -455,6 +558,37 @@
 	.new-row .field-input {
 		flex: 1;
 		min-width: 160px;
+	}
+	.mode-row {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+	.mode-btn {
+		padding: 0.4rem 0.7rem;
+		background: var(--bg);
+		color: var(--text-muted);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		font: inherit;
+		font-size: 0.8rem;
+		cursor: pointer;
+		transition:
+			border-color var(--duration-fast),
+			color var(--duration-fast);
+	}
+	.mode-btn.active {
+		color: var(--accent);
+		border-color: var(--accent);
+	}
+	.repo-fields {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+	.repo-fields .field-input {
+		flex: 1;
+		min-width: 140px;
 	}
 
 	.project-row {

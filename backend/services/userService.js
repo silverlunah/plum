@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const prisma = require('./prisma');
 const activityService = require('./activityService');
 const projectPaths = require('../lib/projectPaths');
+const projectService = require('./projectService');
 const { slugify } = require('../lib/slugify');
 const { ROLE } = require('../constants/roles');
 const { isFramework } = require('../constants/defaults');
@@ -65,12 +66,28 @@ async function createUser({ name, email, password, role = 'user' }) {
 
 // First boot: the organisation, its first project, and the owner, all or
 // nothing. The owner reaches every project implicitly, so no ProjectMember row.
-async function bootstrap({ organizationName, projectName, name, email, password, framework }) {
+// A GitHub token is accepted here (rather than requiring a later trip to
+// Integrations) only because it's the one moment a repo choice can be wired up
+// for the org's first project; every other org setting still lives in Settings.
+async function bootstrap({
+	organizationName,
+	projectName,
+	name,
+	email,
+	password,
+	framework,
+	githubToken,
+	repo
+}) {
 	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 	const slug = slugify(projectName);
 	const result = await prisma.$transaction(async (tx) => {
 		const org = await tx.organization.create({
-			data: { name: organizationName, termsAcceptedAt: new Date() }
+			data: {
+				name: organizationName,
+				termsAcceptedAt: new Date(),
+				...(githubToken && { githubToken })
+			}
 		});
 		const project = await tx.project.create({
 			data: { orgId: org.id, name: projectName, slug, ...(isFramework(framework) && { framework }) }
@@ -82,7 +99,10 @@ async function bootstrap({ organizationName, projectName, name, email, password,
 		return { org, project, user };
 	});
 	await projectPaths.refresh();
-	projectPaths.scaffoldProject(slug, result.project.framework);
+	if (repo?.repoMode !== 'existing') projectPaths.scaffoldProject(slug, result.project.framework);
+	if (githubToken && repo?.repoMode) {
+		await projectService.setupRepository(result.project, repo);
+	}
 	return result;
 }
 

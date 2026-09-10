@@ -64,12 +64,14 @@ async function listRepos({ page = 1, perPage = 50 } = {}) {
 	return repos.map(toPublicRepo);
 }
 
+// No auto_init: a caller pushing its own initial commit right after creating the
+// repo would otherwise collide with GitHub's own auto-generated first commit.
 async function createPrivateRepo({ name, description }) {
 	const token = await ownToken();
 	const repo = await githubRequest('/user/repos', {
 		method: 'POST',
 		token,
-		body: { name, description: description || '', private: true, auto_init: true }
+		body: { name, description: description || '', private: true, auto_init: false }
 	});
 	return toPublicRepo(repo);
 }
@@ -100,16 +102,20 @@ async function cloneRepo({ owner, repo, destPath, branch }) {
 	return destPath;
 }
 
-async function initRepo(destPath) {
-	await simpleGit(destPath).init();
+async function initRepo(destPath, { defaultBranch = 'main' } = {}) {
+	await simpleGit(destPath).init(['--initial-branch', defaultBranch]);
 }
 
 async function addRemote({ repoPath, owner, repo }) {
 	await simpleGit(repoPath).addRemote('origin', `https://github.com/${owner}/${repo}.git`);
 }
 
+// A freshly git-init'd worktree has no identity configured; scoped `local` so
+// it never touches the container's/host's global git config.
 async function commitAll({ repoPath, message }) {
 	const git = simpleGit(repoPath);
+	await git.addConfig('user.name', 'Plum', false, 'local');
+	await git.addConfig('user.email', 'plum@localhost', false, 'local');
 	await git.add('.');
 	await git.commit(message);
 }
