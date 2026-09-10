@@ -52,6 +52,92 @@ router.post('/organization', orgOnly, async (req, res, next) => {
 	}
 });
 
+router.get('/ai', orgOnly, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getAiConfig());
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/ai', orgOnly, async (req, res, next) => {
+	try {
+		const { anthropicApiKey, anthropicModel, openaiApiKey, openaiModel } = req.body;
+		res.json(
+			await settingsService.updateAiConfig({
+				anthropicApiKey,
+				anthropicModel,
+				openaiApiKey,
+				openaiModel
+			})
+		);
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/github', orgOnly, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getGithubConfig());
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/github', orgOnly, async (req, res, next) => {
+	try {
+		const { githubToken } = req.body;
+		res.json(await settingsService.updateGithubConfig({ githubToken }));
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/project/ai', scopedAdmin, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getProjectAiConfig(req.projectId));
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/project/ai', scopedAdmin, async (req, res, next) => {
+	try {
+		const { aiSystemPrompt, aiCodePractices } = req.body;
+		res.json(
+			await settingsService.updateProjectAiConfig(req.projectId, {
+				aiSystemPrompt,
+				aiCodePractices
+			})
+		);
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/project/github', scopedAdmin, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getProjectGithubConfig(req.projectId));
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/project/github', scopedAdmin, async (req, res, next) => {
+	try {
+		const { githubOwner, githubRepo, githubDefaultBranch } = req.body;
+		res.json(
+			await settingsService.updateProjectGithubConfig(req.projectId, {
+				githubOwner,
+				githubRepo,
+				githubDefaultBranch
+			})
+		);
+	} catch (e) {
+		next(e);
+	}
+});
+
 router.get('/project', scopedAdmin, async (req, res, next) => {
 	try {
 		res.json(await settingsService.getProject(req.projectId));

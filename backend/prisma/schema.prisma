@@ -80,6 +80,7 @@ model Report {
   createdAt   DateTime          @default(now())
   testHistory TestCaseHistory[]
   recordings  Recording[]
+  aiSessions  AiSession[]
 
   @@index([createdAt])
   @@index([status])
@@ -151,6 +152,14 @@ model Organization {
   // When the operator accepted the first-run notice. Null only on instances
   // created before the notice existed.
   termsAcceptedAt       DateTime?
+  // AI provider credentials, instance-wide like the Google OAuth secret above.
+  anthropicApiKey       String    @default("")
+  anthropicModel        String    @default("")
+  openaiApiKey          String    @default("")
+  openaiModel           String    @default("")
+  // Fine-grained GitHub PAT, not a registered GitHub App: self-hosted Plum is a
+  // single owner's org, so one connected identity for the whole instance is enough.
+  githubToken           String    @default("")
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
   projects              Project[]
@@ -214,6 +223,13 @@ model Project {
   // Deliberately absent from every update path; see settingsService.updateProject.
   // The default is what a NEW project gets; existing rows keep their own value.
   framework            String       @default("playwright")
+  // Per-project, unlike the instance-wide AI provider keys: different repos
+  // warrant different tone/conventions for the agent.
+  aiSystemPrompt       String       @default("")
+  aiCodePractices      String       @default("")
+  githubOwner          String       @default("")
+  githubRepo           String       @default("")
+  githubDefaultBranch  String       @default("main")
 
   members         ProjectMember[]
   suites          TestSuite[]
@@ -224,6 +240,8 @@ model Project {
   runQueue        RunQueue[]
   mcpKeys         McpKey[]
   activity        ActivityLog[]
+  aiSessions      AiSession[]
+  notifications   Notification[]
   defaultForUsers User[]          @relation("UserDefaultProject")
 }
 
@@ -281,6 +299,8 @@ model User {
   projectMemberships ProjectMember[]
   mcpKeys            McpKey[]
   activity           ActivityLog[]
+  aiSessions         AiSession[]
+  notifications      Notification[]
 }
 
 model TestSuite {
@@ -427,4 +447,47 @@ model TestCaseHistory {
   @@index([caseId])
   @@index([runId])
   @@index([reportId])
+}
+
+// One row per AI agent chat session (live-browser test authoring, or launched
+// from a report's "AI Analyze"). workspacePath is an isolated git worktree the
+// agent's tools are confined to: it never writes into the project's own
+// projects/<slug>/<testsPath> directly, only proposes changes via prUrl.
+model AiSession {
+  id            String   @id @default(cuid())
+  projectId     Int
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdById   String
+  createdBy     User     @relation(fields: [createdById], references: [id])
+  provider      String
+  status        String   @default("queued")
+  title         String   @default("")
+  workspacePath String   @default("")
+  reportId      Int?
+  report        Report?  @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  prUrl         String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([createdById])
+  @@index([reportId])
+}
+
+// In-app only, no email. projectId is null for an account-wide notification.
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId Int?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String   @default("")
+  link      String   @default("")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([projectId])
 }
