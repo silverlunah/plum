@@ -10,6 +10,7 @@ const prisma = require('./prisma');
 const activityService = require('./activityService');
 const projectPaths = require('../lib/projectPaths');
 const projectService = require('./projectService');
+const notificationInboxService = require('./notificationInboxService');
 const { slugify } = require('../lib/slugify');
 const { ROLE } = require('../constants/roles');
 const { isFramework } = require('../constants/defaults');
@@ -128,11 +129,39 @@ async function issueSession(user) {
 	};
 }
 
+// Fires once per user, the first time they ever log in (checked via a column
+// set right here, not "first ever" in some more general sense). Never allowed
+// to fail the login itself.
+async function seedFirstLoginNotifications(user) {
+	if (user.firstLoginNotifiedAt) return;
+	try {
+		await prisma.user.update({
+			where: { id: user.id },
+			data: { firstLoginNotifiedAt: new Date() }
+		});
+		await notificationInboxService.create({
+			userId: user.id,
+			type: 'setup_project',
+			title: 'Set up your project',
+			body: 'Add a name and logo for your first project.',
+			link: '/settings?section=project'
+		});
+		await notificationInboxService.create({
+			userId: user.id,
+			type: 'connect_integrations',
+			title: 'Connect GitHub & AI',
+			body: 'Add provider keys and a GitHub token to unlock the AI agent.',
+			link: '/settings?section=integrations'
+		});
+	} catch {}
+}
+
 async function login({ email, password }) {
 	const user = await prisma.user.findUnique({ where: { email } });
 	if (!user) return null;
 	const match = await bcrypt.compare(password, user.password);
 	if (!match) return null;
+	await seedFirstLoginNotifications(user);
 	return issueSession(user);
 }
 
@@ -158,6 +187,7 @@ async function loginWithGoogle({ googleId, email, emailVerified, name }) {
 			data: { googleId, ...(name && user.name !== name && { name }) }
 		});
 	}
+	await seedFirstLoginNotifications(user);
 	return { ok: true, ...(await issueSession(user)) };
 }
 

@@ -24,6 +24,7 @@
 	} from '$lib/stores/runner';
 	import { activeProjectId } from '$lib/stores/project';
 	import { auth } from '$lib/stores/auth';
+	import { pushNotification } from '$lib/stores/notificationInbox';
 	import { reportUrl } from '$lib/api/reports';
 	import { fetchRunners, fetchBuiltInEnabled, pingRunner } from '$lib/api/runners';
 	import { fetchRuns, fetchRun } from '$lib/api/repository';
@@ -216,6 +217,7 @@
 		_unsubActiveProject = activeProjectId.subscribe(() => s.connected && joinActiveProject());
 
 		s.on(SOCKET_EVENTS.REPORT_READY, () => reportsVersion.update((v) => v + 1));
+		s.on(SOCKET_EVENTS.NOTIFICATION_NEW, (notification) => pushNotification(notification));
 
 		function updateBgRun(runId, updater, { streamOnly = false } = {}) {
 			backgroundRuns.update((r) => {
