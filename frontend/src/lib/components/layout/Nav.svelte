@@ -59,17 +59,21 @@
 		{ href: '/scheduled-tests', label: 'Scheduled' }
 	];
 	const REPO_LINK = { href: '/test-repository', label: 'Test Repository' };
+	const AI_LINK = { href: '/ai', label: 'AI', sep: true };
 
 	// Manual-only hides the automation surface entirely. Otherwise `sep` just
 	// draws a divider between the Test Repository link and the automation group,
 	// on whichever side the repository sits.
 	$: manualOnly = $activeProject?.manualRepositoryOnly ?? false;
 	$: repoFirst = manualOnly || $activeProject?.defaultHome === 'repository';
-	$: links = manualOnly
-		? [REPO_LINK]
-		: repoFirst
-			? [REPO_LINK, { ...AUTOMATION_LINKS[0], sep: true }, ...AUTOMATION_LINKS.slice(1)]
-			: [...AUTOMATION_LINKS, { ...REPO_LINK, sep: true }];
+	$: links = [
+		...(manualOnly
+			? [REPO_LINK]
+			: repoFirst
+				? [REPO_LINK, { ...AUTOMATION_LINKS[0], sep: true }, ...AUTOMATION_LINKS.slice(1)]
+				: [...AUTOMATION_LINKS, { ...REPO_LINK, sep: true }]),
+		AI_LINK
+	];
 
 	function closeMenu() {
 		menuOpen = false;

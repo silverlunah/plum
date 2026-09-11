@@ -9,7 +9,8 @@ const prisma = require('./prisma');
 const githubService = require('./githubService');
 const activityService = require('./activityService');
 const { ACTIVITY_ACTION } = require('../constants/activity');
-const { workspacePathFor } = require('../lib/aiWorkspaces');
+const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
+const { workspacePathFor, browserProfilePathFor } = require('../lib/aiWorkspaces');
 
 const featureBranch = (sessionId) => `ai/${sessionId}`;
 
@@ -43,6 +44,9 @@ const select = {
 	workspacePath: true,
 	reportId: true,
 	prUrl: true,
+	providerSessionId: true,
+	transcript: true,
+	allowedRunnerIds: true,
 	createdAt: true,
 	updatedAt: true
 };
@@ -51,12 +55,23 @@ async function getSession(id) {
 	return prisma.aiSession.findUnique({ where: { id }, select });
 }
 
+// List view, excludes `transcript` for the same reason getReports() excludes
+// Report.content, it's the one field that grows with every turn.
+async function listSessions(projectId) {
+	const { transcript, ...listSelect } = select;
+	return prisma.aiSession.findMany({
+		where: { projectId },
+		select: listSelect,
+		orderBy: { updatedAt: 'desc' }
+	});
+}
+
 // A session's workspace is a fresh clone of the project's connected GitHub
 // repo, on its own branch, never the project's own tests folder. There is
 // deliberately no local-only fallback: without a GitHub repo there is nowhere
 // to open a PR, and "propose a change, never edit directly" is the one
 // non-negotiable constraint here.
-async function createSession({ projectId, userId, provider, title, reportId }) {
+async function createSession({ projectId, userId, provider, title, reportId, runnerIds }) {
 	const project = await prisma.project.findUnique({ where: { id: projectId } });
 	if (!project) {
 		const e = new Error('Project not found');
@@ -78,7 +93,8 @@ async function createSession({ projectId, userId, provider, title, reportId }) {
 			provider,
 			status: 'running',
 			title: title || '',
-			reportId: reportId ?? null
+			reportId: reportId ?? null,
+			allowedRunnerIds: runnerIds?.length ? runnerIds.join(',') : BUILT_IN_RUNNER_ID
 		},
 		select
 	});
@@ -125,6 +141,30 @@ async function removeWorkspace(session) {
 	if (session.workspacePath) {
 		await fs.promises.rm(session.workspacePath, { recursive: true, force: true });
 	}
+	await fs.promises.rm(browserProfilePathFor(session.id), { recursive: true, force: true });
+}
+
+// Read-modify-write: fine because a session's UI blocks the next send until
+// this turn's reply lands, so there is never a concurrent writer per session.
+async function appendTurn(id, { userMessage, normalizedMessages, providerSessionId }) {
+	const existing = await prisma.aiSession.findUnique({
+		where: { id },
+		select: { transcript: true }
+	});
+	const transcript = [
+		...existing.transcript,
+		{
+			role: 'user',
+			blocks: [{ type: 'text', text: userMessage }],
+			createdAt: new Date().toISOString()
+		},
+		...normalizedMessages.map((m) => ({ ...m, createdAt: new Date().toISOString() }))
+	];
+	return prisma.aiSession.update({
+		where: { id },
+		data: { transcript, providerSessionId: providerSessionId ?? undefined },
+		select
+	});
 }
 
 async function recordPullRequest(id, prUrl) {
@@ -143,8 +183,10 @@ module.exports = {
 	verifyMcpToken,
 	revokeMcpToken,
 	getSession,
+	listSessions,
 	createSession,
 	endSession,
 	removeWorkspace,
+	appendTurn,
 	recordPullRequest
 };
