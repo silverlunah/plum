@@ -457,20 +457,31 @@ model TestCaseHistory {
 // agent's tools are confined to: it never writes into the project's own
 // projects/<slug>/<testsPath> directly, only proposes changes via prUrl.
 model AiSession {
-  id            String   @id @default(cuid())
-  projectId     Int
-  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdById   String
-  createdBy     User     @relation(fields: [createdById], references: [id])
-  provider      String
-  status        String   @default("queued")
-  title         String   @default("")
-  workspacePath String   @default("")
-  reportId      Int?
-  report        Report?  @relation(fields: [reportId], references: [id], onDelete: SetNull)
-  prUrl         String   @default("")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                String   @id @default(cuid())
+  projectId         Int
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdById       String
+  createdBy         User     @relation(fields: [createdById], references: [id])
+  provider          String
+  status            String   @default("queued")
+  title             String   @default("")
+  workspacePath     String   @default("")
+  reportId          Int?
+  report            Report?  @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  prUrl             String   @default("")
+  // Anthropic: the Claude Agent SDK's own session_id, passed back as `resume`
+  // on the next turn. OpenAI: the previous Response's id, passed back as
+  // `previous_response_id`. Either way, this is how the provider keeps
+  // conversation continuity, we never replay full history ourselves.
+  providerSessionId String   @default("")
+  // Normalised turns for the chat UI, see lib/aiTranscript.js. Never
+  // reconstructed from provider state, this is the source of truth for replay.
+  transcript        Json     @default("[]")
+  // Comma-separated node ids, same encoding as CronJob.runnerIds. Default for
+  // the agent's own run_tests tool calls when it doesn't specify runnerIds.
+  allowedRunnerIds  String   @default("built-in")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([projectId])
   @@index([createdById])

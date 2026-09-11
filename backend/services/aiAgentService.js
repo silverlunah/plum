@@ -3,30 +3,11 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-const { query } = require('@anthropic-ai/claude-agent-sdk');
 const { OpenAI } = require('openai');
-const path = require('path');
 const settingsService = require('./settingsService');
 const aiSessionService = require('./aiSessionService');
 const prisma = require('./prisma');
-const { createWorkspaceSdkServer } = require('../mcp/workspaceSdkServer');
-
-// Claude Code's own built-in tools, unrelated to anything this session's MCP
-// server exposes. Left enabled, the agent could read or write anywhere on the
-// host's filesystem, or shell out, defeating the whole point of the isolated
-// workspace below, so they are blocked outright rather than trusted to go unused.
-const BUILT_IN_TOOLS_TO_BLOCK = [
-	'Bash',
-	'Read',
-	'Write',
-	'Edit',
-	'Glob',
-	'Grep',
-	'WebFetch',
-	'WebSearch',
-	'NotebookEdit',
-	'Task'
-];
+const liveAgentSessions = require('../lib/liveAgentSessions');
 
 function buildSystemPrompt(project) {
 	const parts = [
@@ -39,42 +20,12 @@ function buildSystemPrompt(project) {
 	return parts.join('\n\n');
 }
 
-// `@playwright/mcp`'s CLI, invoked via an absolute path + the node binary
-// rather than the npx/`.bin` wrapper, so this spawns identically on Windows
-// (see CLAUDE.md's spawn rules) regardless of how the SDK itself shells out.
-function playwrightMcpServerConfig() {
-	const cli = path.join(path.dirname(require.resolve('@playwright/mcp/package.json')), 'cli.js');
-	return { command: process.execPath, args: [cli] };
-}
-
+// Delegates to a long-lived, streaming-input query kept open for the whole
+// session (see liveAgentSessions), rather than a fresh one-shot query per
+// message: Playwright MCP spawns once per query, so a one-shot-per-message
+// call would hand the agent a brand-new, logged-out browser every turn.
 async function runAnthropicTurn(ctx, systemPrompt, message) {
-	const org = await settingsService.getOrgRaw();
-	if (!org.anthropicApiKey) {
-		const e = new Error('Anthropic is not connected. Add a key in Integrations.');
-		e.status = 400;
-		throw e;
-	}
-	// Safe only because Plum is single-org: this is instance-wide, not
-	// per-request, so every concurrent session sets the same value.
-	process.env.ANTHROPIC_API_KEY = org.anthropicApiKey;
-
-	const workspaceServer = createWorkspaceSdkServer(ctx);
-	const events = [];
-	for await (const msg of query({
-		prompt: message,
-		options: {
-			cwd: ctx.workspacePath,
-			model: org.anthropicModel || undefined,
-			systemPrompt,
-			mcpServers: { workspace: workspaceServer, playwright: playwrightMcpServerConfig() },
-			disallowedTools: BUILT_IN_TOOLS_TO_BLOCK,
-			permissionMode: 'bypassPermissions',
-			maxTurns: 30
-		}
-	})) {
-		events.push(msg);
-	}
-	return { events };
+	return liveAgentSessions.sendMessage(ctx, systemPrompt, message);
 }
 
 async function runOpenAiTurn(ctx, systemPrompt, message) {
@@ -99,6 +50,7 @@ async function runOpenAiTurn(ctx, systemPrompt, message) {
 		model: org.openaiModel || 'gpt-5',
 		instructions: systemPrompt,
 		input: message,
+		previous_response_id: ctx.session.providerSessionId || undefined,
 		tools: [
 			{
 				type: 'mcp',

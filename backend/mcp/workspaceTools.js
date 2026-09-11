@@ -144,9 +144,10 @@ const tools = [
 			runnerIds: z
 				.array(z.string())
 				.optional()
-				.describe('Specific node ids, defaults to the built-in runner')
+				.describe('Specific node ids, defaults to the nodes chosen for this session')
 		},
 		async handler(ctx, { tag, runnerIds }) {
+			const defaultRunnerIds = (ctx.session.allowedRunnerIds || BUILT_IN_RUNNER_ID).split(',');
 			const id = await runQueueService.enqueue({
 				projectId: ctx.project.id,
 				kind: TRIGGER_TYPE.AI_AGENT,
@@ -154,7 +155,7 @@ const tools = [
 				label: ctx.session.title || 'AI agent run',
 				tag: tag || '',
 				browser: DEFAULT_BROWSER,
-				runnerIds: runnerIds?.length ? runnerIds : [BUILT_IN_RUNNER_ID],
+				runnerIds: runnerIds?.length ? runnerIds : defaultRunnerIds,
 				startedBy: 'AI agent'
 			});
 			return text({ jobId: id });

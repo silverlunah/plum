@@ -7,6 +7,8 @@ const express = require('express');
 const router = express.Router();
 const aiSessionService = require('../services/aiSessionService');
 const aiAgentService = require('../services/aiAgentService');
+const { normalizeTurn, extractResumeKey } = require('../lib/aiTranscript');
+const liveAgentSessions = require('../lib/liveAgentSessions');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireProjectAccess } = require('../middleware/requireProjectAccess');
 const { ELEVATED_ROLES } = require('../constants/roles');
@@ -20,9 +22,18 @@ function canOpen(session, user) {
 	return session.createdById === user.userId || ELEVATED_ROLES.includes(user.role);
 }
 
+router.get('/', scoped, async (req, res, next) => {
+	try {
+		const sessions = await aiSessionService.listSessions(req.projectId);
+		res.json(sessions.filter((s) => canOpen(s, req.user)));
+	} catch (e) {
+		next(e);
+	}
+});
+
 router.post('/', scoped, async (req, res, next) => {
 	try {
-		const { provider, title, reportId } = req.body;
+		const { provider, title, reportId, runnerIds } = req.body;
 		if (provider !== 'anthropic' && provider !== 'openai') {
 			return res.status(400).json({ error: 'provider must be "anthropic" or "openai"' });
 		}
@@ -31,7 +42,8 @@ router.post('/', scoped, async (req, res, next) => {
 			userId: req.user.userId,
 			provider,
 			title,
-			reportId
+			reportId,
+			runnerIds
 		});
 		res.status(201).json(session);
 	} catch (e) {
@@ -61,7 +73,14 @@ router.post('/:id/message', scoped, async (req, res, next) => {
 		if (!canOpen(session, req.user)) return res.status(403).json({ error: 'Not your session' });
 		const { message } = req.body;
 		if (!message) return res.status(400).json({ error: 'message is required' });
-		res.json(await aiAgentService.runTurn(session, message));
+		const result = await aiAgentService.runTurn(session, message);
+		const { messages } = normalizeTurn(session.provider, result);
+		const updated = await aiSessionService.appendTurn(session.id, {
+			userMessage: message,
+			normalizedMessages: messages,
+			providerSessionId: extractResumeKey(session.provider, result)
+		});
+		res.json(updated);
 	} catch (e) {
 		next(e);
 	}
@@ -74,6 +93,7 @@ router.delete('/:id', scoped, async (req, res, next) => {
 			return res.status(404).json({ error: 'Session not found' });
 		}
 		if (!canOpen(session, req.user)) return res.status(403).json({ error: 'Not your session' });
+		liveAgentSessions.closeSession(session.id);
 		await aiSessionService.removeWorkspace(session);
 		await aiSessionService.endSession(session.id, 'done');
 		res.json({ ok: true });
