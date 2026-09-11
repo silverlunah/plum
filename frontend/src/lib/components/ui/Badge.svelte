@@ -4,7 +4,7 @@
  -->
 
 <script>
-	/** @type {'pass' | 'fail' | 'flaky' | 'tag' | 'schedule' | 'neutral' | 'node' | 'mcp' | 'external'} */
+	/** @type {'pass' | 'fail' | 'flaky' | 'tag' | 'schedule' | 'neutral' | 'node' | 'mcp' | 'external' | 'ai'} */
 	export let variant = 'neutral';
 </script>
 
@@ -68,5 +68,10 @@
 	.external {
 		background: var(--external-soft);
 		color: var(--external);
+	}
+
+	.ai {
+		background: var(--accent-soft);
+		color: var(--accent);
 	}
 </style>

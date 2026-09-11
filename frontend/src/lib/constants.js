@@ -21,9 +21,14 @@ export const TRIGGER_TYPES = Object.freeze({
 	CLI: 'command-line-trigger',
 	MCP: 'mcp-trigger',
 	EXTERNAL: 'external-trigger',
+	AI_AGENT: 'ai-agent-trigger',
 	// Not a Report.triggerType value, only used as the `kind` tag on bg-run-*
 	// live-broadcast events, alongside the other values reused for that field.
-	CRON: 'cron'
+	CRON: 'cron',
+	// Not a Report.triggerType or bg-run-* kind at all, the bottom bar's own tag
+	// for an AI chat session chip (see AI_SESSION_START/DONE), distinct from
+	// AI_AGENT above which tags a *test run* the agent dispatched.
+	AI_SESSION: 'ai-session'
 });
 
 export const REPORTS_PER_PAGE = 15;
@@ -62,6 +67,9 @@ export const MOBILE_MAX = 640;
 export const TABLET_MAX = 1024;
 
 export const BUILTIN_RUNNER_ID = 'built-in';
+
+// Mirrors backend/constants/roles.js ELEVATED_ROLES.
+export const ELEVATED_ROLES = ['owner', 'admin'];
 
 export const DOCS_URL = 'https://github.com/silverlunah/plum/wiki';
 export const PLAYWRIGHT_URL = 'https://playwright.dev';

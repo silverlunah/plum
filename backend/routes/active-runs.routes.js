@@ -6,18 +6,37 @@
 const express = require('express');
 const router = express.Router();
 const runQueueService = require('../services/runQueueService');
+const aiSessionService = require('../services/aiSessionService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { accessibleProjectIds } = require('../lib/projectContext');
+
+function aiSessionsAsRuns(sessions) {
+	return sessions.map((s) => ({
+		runId: s.sessionId,
+		projectId: s.projectId,
+		projectName: s.projectName,
+		status: 'running',
+		kind: 'ai-session',
+		label: s.title || 'AI session',
+		runnerIds: [],
+		position: 0,
+		meta: { startedBy: s.startedBy },
+		createdById: s.createdById,
+		startedAt: s.startedAt
+	}));
+}
 
 // Runs the caller can't reach are redacted to what the locked bottom-bar card
 // renders (label, project, status, position): the tag, runner list and who
 // started it are dropped.
 router.get('/', jwtAuth, async (req, res, next) => {
 	try {
-		const [runs, accessible] = await Promise.all([
+		const [queued, sessions, accessible] = await Promise.all([
 			runQueueService.listActive(),
+			aiSessionService.listActiveSessions(),
 			accessibleProjectIds(req.user)
 		]);
+		const runs = [...queued, ...aiSessionsAsRuns(sessions)];
 		const visible = runs.map((r) =>
 			accessible.includes(r.projectId)
 				? r

@@ -18,12 +18,23 @@ export const socket = writable(null);
 // RunnerPanel.
 export const backgroundRuns = writable({});
 
-export function makeRunEntry({ projectId = null, projectName = '', kind, label, meta, status }) {
+export function makeRunEntry({
+	projectId = null,
+	projectName = '',
+	kind,
+	label,
+	meta,
+	status,
+	createdById = null,
+	startedAt = null
+}) {
 	return {
 		projectId,
 		projectName,
 		kind,
 		label,
+		createdById,
+		startedAt,
 		status, // 'queued' | 'running' | 'done'
 		testCompleted: false,
 		latestReportId: null,
@@ -62,7 +73,10 @@ export const runnerConfig = writable({
 	workers: 1,
 	testID: '',
 	browser: BROWSERS[0].id,
-	selectedRunners: [BUILTIN_RUNNER_ID]
+	selectedRunners: [BUILTIN_RUNNER_ID],
+	// Raw KEY=VALUE-per-line text from the ENV override modal, parsed
+	// server-side (backend/lib/envText.js) right before a run dispatches.
+	envOverridesText: ''
 });
 
 export const panelExpanded = writable(false);
@@ -105,7 +119,7 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 	const s = get(socket);
 	if (!s) return null;
 
-	const { workers, testID, browser, selectedRunners } = get(runnerConfig);
+	const { workers, testID, browser, selectedRunners, envOverridesText } = get(runnerConfig);
 	const tag = (id !== undefined ? id : testID).trim().replace(/\sOR\s/gi, (m) => m.toLowerCase());
 	const runId = newRunId();
 	const startedBy = get(auth).user?.name ?? null;
@@ -120,7 +134,8 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 			kind: TRIGGER_TYPES.MANUAL,
 			label: runTitle || tag || MANUAL_RUN_LABEL,
 			meta: { tag, workers, browser, startedBy },
-			status: 'queued'
+			status: 'queued',
+			startedAt: Date.now()
 		})
 	}));
 	panelExpanded.set(true);
@@ -133,6 +148,7 @@ export function triggerRun(id, testRunId, notify = {}, runTitle = null) {
 		browser,
 		runners: selectedRunners,
 		testRunId: testRunId ?? null,
+		envOverridesText,
 		notifyDiscord: notify.notifyDiscord ?? false,
 		notifySlack: notify.notifySlack ?? false,
 		runTitle,
