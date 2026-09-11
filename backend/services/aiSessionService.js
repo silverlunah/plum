@@ -11,8 +11,14 @@ const activityService = require('./activityService');
 const { ACTIVITY_ACTION } = require('../constants/activity');
 const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { workspacePathFor, browserProfilePathFor } = require('../lib/aiWorkspaces');
+const { SOCKET_EVENTS } = require('../constants/socketEvents');
 
 const featureBranch = (sessionId) => `ai/${sessionId}`;
+
+let _io = null;
+function setSocketIO(io) {
+	_io = io;
+}
 
 // Ephemeral, in-memory only: authenticates a remote MCP client (OpenAI's
 // Responses API calling back into Plum) for the lifetime of one session. Never
@@ -48,7 +54,8 @@ const select = {
 	transcript: true,
 	allowedRunnerIds: true,
 	createdAt: true,
-	updatedAt: true
+	updatedAt: true,
+	createdBy: { select: { name: true } }
 };
 
 async function getSession(id) {
@@ -64,6 +71,25 @@ async function listSessions(projectId) {
 		select: listSelect,
 		orderBy: { updatedAt: 'desc' }
 	});
+}
+
+// Not filtered by project, same "awareness across projects, redacted by the
+// route for ones the caller can't reach" shape as runQueueService.listActive.
+async function listActiveSessions() {
+	const rows = await prisma.aiSession.findMany({
+		where: { status: 'running' },
+		include: { project: { select: { name: true } }, createdBy: { select: { name: true } } },
+		orderBy: { createdAt: 'asc' }
+	});
+	return rows.map((r) => ({
+		sessionId: r.id,
+		projectId: r.projectId,
+		projectName: r.project?.name ?? '',
+		createdById: r.createdById,
+		title: r.title,
+		startedBy: r.createdBy?.name ?? null,
+		startedAt: r.createdAt.getTime()
+	}));
 }
 
 // A session's workspace is a fresh clone of the project's connected GitHub
@@ -121,6 +147,19 @@ async function createSession({ projectId, userId, provider, title, reportId, run
 			projectId,
 			target: { type: 'ai_session', id: session.id, label: title || session.id }
 		});
+		// Coarse start signal stays global for the cross-project run bar, same
+		// precedent as BG_RUN_START, the client redacts/locks it as needed.
+		if (_io) {
+			_io.emit(SOCKET_EVENTS.AI_SESSION_START, {
+				sessionId: updated.id,
+				projectId,
+				projectName: project.name ?? '',
+				createdById: updated.createdById,
+				label: updated.title || 'AI session',
+				meta: { startedBy: updated.createdBy?.name ?? null },
+				startedAt: Date.now()
+			});
+		}
 		return updated;
 	} catch (e) {
 		await prisma.aiSession.update({ where: { id: session.id }, data: { status: 'error' } });
@@ -130,7 +169,9 @@ async function createSession({ projectId, userId, provider, title, reportId, run
 
 async function endSession(id, status) {
 	revokeMcpToken(id);
-	return prisma.aiSession.update({ where: { id }, data: { status }, select });
+	const session = await prisma.aiSession.update({ where: { id }, data: { status }, select });
+	if (_io) _io.emit(SOCKET_EVENTS.AI_SESSION_DONE, { sessionId: id });
+	return session;
 }
 
 // Deletes the isolated worktree from disk. The AiSession row (and its history)
@@ -179,11 +220,13 @@ async function recordPullRequest(id, prUrl) {
 
 module.exports = {
 	featureBranch,
+	setSocketIO,
 	issueMcpToken,
 	verifyMcpToken,
 	revokeMcpToken,
 	getSession,
 	listSessions,
+	listActiveSessions,
 	createSession,
 	endSession,
 	removeWorkspace,

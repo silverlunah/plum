@@ -144,9 +144,15 @@ const tools = [
 			runnerIds: z
 				.array(z.string())
 				.optional()
-				.describe('Specific node ids, defaults to the nodes chosen for this session')
+				.describe('Specific node ids, defaults to the nodes chosen for this session'),
+			envOverrides: z
+				.record(z.string(), z.string())
+				.optional()
+				.describe(
+					'Env vars to override for this run only, e.g. { "BASE_URL": "https://staging..." }'
+				)
 		},
-		async handler(ctx, { tag, runnerIds }) {
+		async handler(ctx, { tag, runnerIds, envOverrides }) {
 			const defaultRunnerIds = (ctx.session.allowedRunnerIds || BUILT_IN_RUNNER_ID).split(',');
 			const id = await runQueueService.enqueue({
 				projectId: ctx.project.id,
@@ -156,6 +162,7 @@ const tools = [
 				tag: tag || '',
 				browser: DEFAULT_BROWSER,
 				runnerIds: runnerIds?.length ? runnerIds : defaultRunnerIds,
+				envOverrides: envOverrides || {},
 				startedBy: 'AI agent'
 			});
 			return text({ jobId: id });

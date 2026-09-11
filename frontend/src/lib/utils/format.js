@@ -30,6 +30,7 @@ export function triggerLabel(type) {
 	if (type === TRIGGER_TYPES.CLI || type === 'undefined') return 'CLI';
 	if (type === TRIGGER_TYPES.MCP) return 'MCP';
 	if (type === TRIGGER_TYPES.EXTERNAL) return 'External';
+	if (type === TRIGGER_TYPES.AI_AGENT) return 'AI Agent';
 	return 'Scheduled';
 }
 
@@ -38,7 +39,15 @@ export function triggerVariant(type) {
 	if (type === TRIGGER_TYPES.CLI || type === 'undefined') return 'neutral';
 	if (type === TRIGGER_TYPES.MCP) return 'mcp';
 	if (type === TRIGGER_TYPES.EXTERNAL) return 'external';
+	if (type === TRIGGER_TYPES.AI_AGENT) return 'ai';
 	return 'schedule';
+}
+
+// Live "how long has this chip been in the bar" display, ticked by the
+// caller (elapsed changes every second, `now` isn't reactive on its own).
+export function elapsedLabel(startedAt, now = Date.now()) {
+	if (!startedAt) return '';
+	return fmtTotalDuration(Math.max(0, now - startedAt));
 }
 
 /** Returns an inline style string for staggered fadeUp animations. */

@@ -10,6 +10,7 @@ const { accessibleProjectIds } = require('../lib/projectContext');
 const { TRIGGER_TYPE, BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { SOCKET_EVENTS } = require('../constants/socketEvents');
+const { parseEnvText } = require('../lib/envText');
 
 // The socket is authenticated (io.use); these checks add per-project authz.
 async function canReachProject(socket, projectId) {
@@ -55,6 +56,8 @@ const socketHandler = (io) => {
 					browser: payload.browser ?? DEFAULT_BROWSER,
 					runnerIds: runners,
 					testRunId: payload.testRunId ?? null,
+					baseUrl: payload.baseUrl || undefined,
+					envOverrides: parseEnvText(payload.envOverridesText),
 					runTitle,
 					startedBy: payload.startedBy ?? null,
 					notifyDiscord: payload.notifyDiscord === true,

@@ -38,7 +38,8 @@
 		WORKERS_MAX,
 		RUN_PICKER_LIMIT,
 		REDIRECT_DELAY_MS,
-		TRIGGER_TYPES
+		TRIGGER_TYPES,
+		ELEVATED_ROLES
 	} from '$lib/constants';
 	import { BUILTIN_RUNNER_LABEL, CLEAR_LABEL, DISCORD_LABEL, SLACK_LABEL } from '$lib/copy/common';
 	import {
@@ -62,6 +63,12 @@
 		NO_TESTS_RUNNING,
 		QUEUED_LABEL,
 		CANCEL_RUN_LABEL,
+		AI_SESSION_LABEL,
+		ENV_OVERRIDE_LABEL,
+		ENV_OVERRIDE_MODAL_TITLE,
+		ENV_OVERRIDE_DESC,
+		ENV_OVERRIDE_PLACEHOLDER,
+		ENV_OVERRIDE_SAVE_LABEL,
 		automatedCaseCount,
 		discordNotifyTitle,
 		slackNotifyTitle,
@@ -70,12 +77,16 @@
 		collapseOrExpandLabel,
 		queuePositionLabel,
 		lockedRunTitle,
+		lockedAiSessionTitle,
+		envOverrideActiveLabel,
 		OFFLINE_LABEL,
 		statusLabel as computeStatusLabel,
 		runnerSummary as computeRunnerSummary
 	} from '$lib/copy/runners';
-	import { triggerLabel, triggerVariant, mcpName } from '$lib/utils/format';
+	import { triggerLabel, triggerVariant, mcpName, elapsedLabel } from '$lib/utils/format';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
+	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 	import LockIcon from '$lib/components/icons/LockIcon.svelte';
@@ -99,6 +110,13 @@
 	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '' };
 	let notifyDiscord = false;
 	let notifySlack = false;
+	let envModalOpen = false;
+	let envDraft = '';
+
+	// Ticked once a second so every chip's elapsed-time label stays live
+	// without each one running its own timer.
+	let now = Date.now();
+	let _elapsedTimer;
 
 	let _unsubConfig, _unsubExpanded, _unsubBuiltIn, _unsubActiveProject, _socket;
 	let lastFinished = null; // { reportId, verdict }, most recent completed run, for the bar's View Report shortcut
@@ -110,6 +128,8 @@
 	let _panelResize;
 
 	onMount(() => {
+		_elapsedTimer = setInterval(() => (now = Date.now()), 1000);
+
 		if (typeof ResizeObserver !== 'undefined' && panelEl) {
 			_panelResize = new ResizeObserver(() => {
 				document.documentElement.style.setProperty(
@@ -165,9 +185,28 @@
 				const activeIds = new Set(runs.map((r) => r.runId));
 				backgroundRuns.update((r) => {
 					const next = { ...r };
-					for (const { runId, projectId, projectName, kind, label, meta, status } of runs) {
+					for (const {
+						runId,
+						projectId,
+						projectName,
+						kind,
+						label,
+						meta,
+						status,
+						createdById,
+						startedAt
+					} of runs) {
 						if (!next[runId])
-							next[runId] = makeRunEntry({ projectId, projectName, kind, label, meta, status });
+							next[runId] = makeRunEntry({
+								projectId,
+								projectName,
+								kind,
+								label,
+								meta,
+								status,
+								createdById,
+								startedAt
+							});
 					}
 					// Drop a client-side run the server no longer tracks (its node died
 					// and a restart cleared it), but keep a freshly-`done` one so the
@@ -329,6 +368,34 @@
 				});
 			}, REDIRECT_DELAY_MS + 5000);
 		});
+
+		s.on(
+			SOCKET_EVENTS.AI_SESSION_START,
+			({ sessionId, projectId, projectName, createdById, label, meta, startedAt }) => {
+				backgroundRuns.update((r) => ({
+					...r,
+					[sessionId]: makeRunEntry({
+						projectId,
+						projectName,
+						kind: TRIGGER_TYPES.AI_SESSION,
+						label,
+						meta,
+						status: 'running',
+						createdById,
+						startedAt
+					})
+				}));
+				panelExpanded.set(true);
+			}
+		);
+
+		s.on(SOCKET_EVENTS.AI_SESSION_DONE, ({ sessionId }) => {
+			backgroundRuns.update((r) => {
+				const next = { ...r };
+				delete next[sessionId];
+				return next;
+			});
+		});
 	});
 
 	onDestroy(() => {
@@ -338,6 +405,7 @@
 		_unsubActiveProject?.();
 		_socket?.disconnect();
 		_panelResize?.disconnect();
+		clearInterval(_elapsedTimer);
 		document.documentElement.style.removeProperty('--bottom-bar-height');
 	});
 
@@ -349,7 +417,14 @@
 	// A run is openable only when it belongs to the project the viewer is currently
 	// in. Runs from other projects still show in the bar for awareness, but you
 	// have to switch to that project to open one, even if you're a member.
-	$: canOpenRun = (run) => run.projectId == null || run.projectId === $activeProjectId;
+	// An AI session chip has a second gate on top: the route itself only lets the
+	// creator (or an elevated role) in (see aiSessions.routes.js canOpen), this
+	// mirrors that here so the chip doesn't look clickable when it isn't.
+	$: canOpenRun = (run) => {
+		if (run.projectId != null && run.projectId !== $activeProjectId) return false;
+		if (run.kind !== TRIGGER_TYPES.AI_SESSION) return true;
+		return run.createdById === $auth.user?.userId || ELEVATED_ROLES.includes($auth.user?.role);
+	};
 	$: runningCount = activeRunEntries.filter(([, r]) => r.status === 'running').length;
 	$: queuedCount = activeRunEntries.filter(([, r]) => r.status === 'queued').length;
 	$: anyRunning = activeRunEntries.length > 0;
@@ -416,6 +491,21 @@
 		if (e.key === 'Enter' && !selectedRun) handleRunClick();
 	}
 
+	function openEnvModal() {
+		envDraft = $runnerConfig.envOverridesText;
+		envModalOpen = true;
+	}
+
+	function saveEnvOverrides() {
+		runnerConfig.update((c) => ({ ...c, envOverridesText: envDraft }));
+		envModalOpen = false;
+	}
+
+	function countEnvOverrides(text) {
+		return (text || '').split(/\r?\n/).filter((l) => /^\s*[A-Za-z_][A-Za-z0-9_]*\s*=/.test(l))
+			.length;
+	}
+
 	function adjustWorkers(delta) {
 		runnerConfig.update((c) => ({
 			...c,
@@ -480,6 +570,20 @@
 	{RUN_ALL_BODY_PREFIX} <strong>{RUN_ALL_BODY_STRONG}</strong>
 	{RUN_ALL_BODY_SUFFIX}
 </ConfirmModal>
+
+<Modal bind:open={envModalOpen} title={ENV_OVERRIDE_MODAL_TITLE}>
+	<p class="env-override-desc">{ENV_OVERRIDE_DESC}</p>
+	<textarea
+		class="env-override-textarea"
+		bind:value={envDraft}
+		placeholder={ENV_OVERRIDE_PLACEHOLDER}
+		rows="6"
+		spellcheck="false"
+	></textarea>
+	<div class="env-override-actions">
+		<Button on:click={saveEnvOverrides}>{ENV_OVERRIDE_SAVE_LABEL}</Button>
+	</div>
+</Modal>
 
 <div class="panel" class:expanded={$panelExpanded} bind:this={panelEl}>
 	<div
@@ -792,6 +896,30 @@
 				</svg>
 				{RUN_LABEL}
 			</button>
+
+			<button
+				class="env-override-btn"
+				class:active={countEnvOverrides(cfg.envOverridesText) > 0}
+				on:click={openEnvModal}
+				title={ENV_OVERRIDE_LABEL}
+			>
+				<svg
+					width="13"
+					height="13"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" />
+					<path d="M1 14h6M9 8h6M17 16h6" />
+				</svg>
+				{#if countEnvOverrides(cfg.envOverridesText) > 0}
+					{envOverrideActiveLabel(countEnvOverrides(cfg.envOverridesText))}
+				{/if}
+			</button>
 		</div>
 
 		<span class="flex-gap-sm"></span>
@@ -823,6 +951,8 @@
 		<div class="body" transition:slide={{ duration: 200 }}>
 			{#each activeRunEntries as [runId, run], i (runId)}
 				{@const openable = canOpenRun(run)}
+				{@const isAiSession = run.kind === TRIGGER_TYPES.AI_SESSION}
+				{@const crossProject = run.projectId != null && run.projectId !== $activeProjectId}
 				<div
 					class="run-card"
 					class:active-run={run.status === 'running'}
@@ -837,12 +967,25 @@
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<svelte:element
 						this={openable ? 'a' : 'div'}
-						href={openable ? `/live/${runId}` : undefined}
+						href={openable ? (isAiSession ? '/ai' : `/live/${runId}`) : undefined}
 						role={openable ? undefined : 'presentation'}
 						class="run-card-main"
 						class:locked={!openable}
-						title={openable ? undefined : lockedRunTitle(run.projectName)}
-						on:click={openable ? () => panelExpanded.set(false) : undefined}
+						title={openable
+							? undefined
+							: crossProject
+								? lockedRunTitle(run.projectName)
+								: lockedAiSessionTitle()}
+						on:click={openable
+							? () => {
+									if (isAiSession) {
+										try {
+											sessionStorage.setItem('plum:ai:sessionId', runId);
+										} catch {}
+									}
+									panelExpanded.set(false);
+								}
+							: undefined}
 					>
 						<div class="run-card-info">
 							<span class="run-card-label">{run.label || MANUAL_RUN_LABEL}</span>
@@ -861,7 +1004,13 @@
 											activeRunEntries.slice(0, i).filter(([, r]) => r.status === 'queued').length +
 												1
 										)
-									: runKindLabel(run.kind)}
+									: isAiSession
+										? AI_SESSION_LABEL
+										: runKindLabel(run.kind)}
+								{#if run.startedAt}
+									<span class="meta-dot">·</span>
+									<span class="run-card-elapsed">{elapsedLabel(run.startedAt, now)}</span>
+								{/if}
 								{#if run.currentRun?.startedBy}
 									<span class="meta-dot">·</span>
 									{startedByLabel(
@@ -870,8 +1019,18 @@
 								{/if}
 							</span>
 						</div>
-						<Badge variant={run.status === 'queued' ? 'tag' : triggerVariant(run.kind)}>
-							{run.status === 'queued' ? QUEUED_LABEL : triggerLabel(run.kind)}
+						<Badge
+							variant={run.status === 'queued'
+								? 'tag'
+								: isAiSession
+									? 'ai'
+									: triggerVariant(run.kind)}
+						>
+							{run.status === 'queued'
+								? QUEUED_LABEL
+								: isAiSession
+									? AI_SESSION_LABEL
+									: triggerLabel(run.kind)}
 						</Badge>
 						{#if openable}
 							<svg
@@ -888,7 +1047,7 @@
 							</svg>
 						{/if}
 					</svelte:element>
-					{#if openable}
+					{#if openable && !isAiSession}
 						<button
 							class="run-card-cancel"
 							title={CANCEL_RUN_LABEL}
@@ -1361,6 +1520,57 @@
 		cursor: default;
 	}
 
+	.env-override-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		height: 30px;
+		padding: 0 0.6rem;
+		background: var(--bg-elevated);
+		color: var(--text-muted);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		font-family: var(--font-body);
+		font-size: 0.75rem;
+		font-weight: 500;
+		cursor: pointer;
+		flex-shrink: 0;
+		transition:
+			color var(--duration-fast),
+			border-color var(--duration-fast);
+	}
+	.env-override-btn:hover {
+		color: var(--text);
+		border-color: var(--text-muted);
+	}
+	.env-override-btn.active {
+		color: var(--accent);
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+
+	.env-override-desc {
+		margin: 0 0 0.75rem;
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+	}
+	.env-override-textarea {
+		width: 100%;
+		font-family: var(--font-mono, monospace);
+		font-size: 0.8125rem;
+		padding: 0.6rem 0.7rem;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--border);
+		background: var(--bg-elevated);
+		color: var(--text);
+		resize: vertical;
+	}
+	.env-override-actions {
+		display: flex;
+		justify-content: flex-end;
+		margin-top: 0.75rem;
+	}
+
 	@keyframes spin {
 		to {
 			transform: rotate(360deg);
@@ -1500,6 +1710,10 @@
 	.run-card-project {
 		font-weight: 600;
 		color: var(--text);
+	}
+
+	.run-card-elapsed {
+		font-variant-numeric: tabular-nums;
 	}
 
 	.run-card-cancel {

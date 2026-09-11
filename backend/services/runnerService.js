@@ -241,7 +241,7 @@ async function playwrightProjectNames(projectId) {
 
 async function dispatchAndPoll(
 	runnerId,
-	{ projectId, tags, browser, workers, retries = 0, shard = null, baseUrl },
+	{ projectId, tags, browser, workers, retries = 0, shard = null, baseUrl, envOverrides },
 	onLog,
 	onDone,
 	onRRwebBatch = null,
@@ -289,7 +289,8 @@ async function dispatchAndPoll(
 					...loadTestEnv(process.cwd()),
 					...loadProjectEnv(projectId),
 					IS_HEADLESS: 'true', // node runs on a server have no display, never headed
-					...(baseUrl ? { BASE_URL: baseUrl } : {})
+					...(baseUrl ? { BASE_URL: baseUrl } : {}),
+					...envOverrides
 				}
 			}),
 			signal: AbortSignal.timeout(10000)

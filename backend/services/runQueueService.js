@@ -47,6 +47,7 @@ function rowToJob(row) {
 		runnerIds: parseRunnerIds(row.runnerIds),
 		testRunId: row.testRunId,
 		baseUrl: row.baseUrl,
+		envOverrides: row.envOverrides,
 		notifyDiscord: row.notifyDiscord,
 		notifySlack: row.notifySlack,
 		startedBy: row.startedBy
@@ -183,6 +184,7 @@ async function enqueue(job) {
 			runnerIds: runnerIds.join(','),
 			testRunId: job.testRunId ?? null,
 			baseUrl: job.baseUrl ?? null,
+			envOverrides: job.envOverrides ?? {},
 			runTitle: job.runTitle ?? null,
 			startedBy: job.startedBy ?? null,
 			notifyDiscord: job.notifyDiscord === true,
@@ -198,7 +200,8 @@ async function enqueue(job) {
 			kind: job.kind,
 			label: job.label ?? '',
 			meta: meta(job),
-			runnerIds
+			runnerIds,
+			startedAt: Date.now()
 		});
 	}
 
@@ -274,7 +277,8 @@ async function listActive() {
 		label: r.label,
 		runnerIds: parseRunnerIds(r.runnerIds),
 		position: r.status === QUEUED ? ++queuePos : 0,
-		meta: { tag: r.tag, workers: r.workers, browser: r.browser, startedBy: r.startedBy }
+		meta: { tag: r.tag, workers: r.workers, browser: r.browser, startedBy: r.startedBy },
+		startedAt: (r.startedAt ?? r.queuedAt).getTime()
 	}));
 }
 

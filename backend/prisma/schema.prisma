@@ -417,6 +417,9 @@ model RunQueue {
   runnerIds     String    @default("built-in")
   testRunId     String?
   baseUrl       String?
+  // Extra env vars merged in last, after loadTestEnv() and loadProjectEnv(),
+  // same "most specific wins" precedent baseUrl above already set.
+  envOverrides  Json      @default("{}")
   runTitle      String?
   startedBy     String?
   notifyDiscord Boolean   @default(false)

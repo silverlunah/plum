@@ -30,6 +30,11 @@ const SOCKET_EVENTS = Object.freeze({
 	// is attributable per worker instead of one flat interleaved stream.
 	BG_RUN_LANE_RRWEB_BATCH: 'bg-run-lane-rrweb-batch',
 
+	// Same "coarse start/done, global broadcast" shape as BG_RUN_START/DONE
+	// above, for an AI agent session's own lifecycle instead of a test run's.
+	AI_SESSION_START: 'ai-session-start',
+	AI_SESSION_DONE: 'ai-session-done',
+
 	// Global notifications (any client, not tied to a specific run)
 	REPORT_READY: 'report-ready',
 
