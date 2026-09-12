@@ -3,6 +3,7 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
+const fs = require('fs');
 const { withAt } = require('./playwrightDiscovery');
 
 /**
@@ -47,6 +48,8 @@ function toFeatures(pwJson) {
 			const steps = buildSteps(last, spec.title, recorded);
 			const recordingStep = buildRecordingStep(results);
 			if (recordingStep) steps.push(recordingStep);
+			const screenshotStep = buildScreenshotStep(results);
+			if (screenshotStep) steps.push(screenshotStep);
 			const idTag = tags.find((t) => /^@tc-?\d+/i.test(t) || /^@test[\w-]*/i.test(t));
 			if (idTag && results.length > 0) attempts[idTag] = results.length;
 
@@ -109,6 +112,42 @@ function buildRecordingStep(results) {
 		name: 'After',
 		hidden: true,
 		embeddings,
+		result: { status: 'passed', duration: 0 }
+	};
+}
+
+const SCREENSHOT_MIME_TYPE = 'image/png';
+
+/**
+ * Playwright's own `screenshot: 'only-on-failure'` attachment, not Plum's:
+ * shaped as a hidden step the same way buildRecordingStep does, so
+ * reportService.extractScreenshot can read it with the exact same pattern.
+ * Only the last attempt's screenshot is kept, a retry that eventually passed
+ * has nothing worth showing.
+ */
+function buildScreenshotStep(results) {
+	const last = results[results.length - 1];
+	const attachment = (last?.attachments ?? []).find(
+		(a) => a.name === 'screenshot' && a.contentType === SCREENSHOT_MIME_TYPE
+	);
+	if (!attachment) return null;
+	// Built-in runs still hold a bare `path` here (see inlineScreenshotAttachments
+	// in lib/screenshots.js, which only a remote node needs, its report already
+	// crossed the network by the time this runs): read it while it's still local.
+	let data = attachment.body;
+	if (!data && attachment.path) {
+		try {
+			data = fs.readFileSync(attachment.path).toString('base64');
+		} catch {
+			return null;
+		}
+	}
+	if (!data) return null;
+	return {
+		keyword: '',
+		name: 'Screenshot',
+		hidden: true,
+		embeddings: [{ mime_type: SCREENSHOT_MIME_TYPE, data }],
 		result: { status: 'passed', duration: 0 }
 	};
 }

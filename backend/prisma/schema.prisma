@@ -129,7 +129,6 @@ model Organization {
   backupS3Prefix        String    @default("")
   backupLastRunAt       DateTime?
   backupLastStatus      String    @default("")
-  backupIncludeReports  Boolean   @default(false)
   // Activity log entries older than this are pruned nightly. 0 keeps them forever.
   activityRetentionDays Int       @default(90)
   // Reports (and their recordings) older than this are pruned nightly. 0 keeps them forever.

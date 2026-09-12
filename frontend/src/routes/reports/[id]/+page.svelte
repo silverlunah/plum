@@ -8,7 +8,12 @@
 	import { goto } from '$app/navigation';
 	import { onMount, tick } from 'svelte';
 	import { slide } from 'svelte/transition';
-	import { fetchReportDetail, fetchRecordings, downloadReportExport } from '$lib/api/reports';
+	import {
+		fetchReportDetail,
+		fetchRecordings,
+		downloadReportExport,
+		screenshotUrl
+	} from '$lib/api/reports';
 	import { createAiSession } from '$lib/api/aiSessions';
 	import { fetchAiConfig } from '$lib/api/settings';
 	import {
@@ -45,6 +50,7 @@
 		FLAKY_TITLE,
 		WATCH_REPLAY_TITLE,
 		REPLAY_LABEL,
+		FAILURE_SCREENSHOT_ALT,
 		FLAKY_GROUP_TITLE,
 		JUMP_TO_SCENARIO_TITLE,
 		BACK_TO_TOP_LABEL,
@@ -787,6 +793,16 @@
 													{/if}
 												</div>
 											{/each}
+
+											{#if scenario.screenshot}
+												<img
+													class="failure-screenshot"
+													src={screenshotUrl(scenario.screenshot)}
+													alt={FAILURE_SCREENSHOT_ALT}
+													loading="lazy"
+													on:error={(e) => (e.currentTarget.hidden = true)}
+												/>
+											{/if}
 										{/each}
 									</div>
 								{/if}
@@ -1364,6 +1380,15 @@
 		font-size: 0.75rem;
 	}
 
+	.failure-screenshot {
+		display: block;
+		margin: 0.5rem 0 0.25rem 1.75rem;
+		max-width: 480px;
+		width: calc(100% - 1.75rem);
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--border);
+	}
+
 	.step-datatable td {
 		padding: 0.35rem 0.7rem;
 		border: 1px solid var(--border);
@@ -1765,8 +1790,13 @@
 		}
 
 		.step-error,
-		.step-datatable {
+		.step-datatable,
+		.failure-screenshot {
 			margin-left: 0.5rem;
+		}
+
+		.failure-screenshot {
+			width: calc(100% - 0.5rem);
 		}
 
 		.replay-modal-header {
