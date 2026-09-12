@@ -399,14 +399,8 @@ export const IMPORT_BLOCK_TITLE = 'Import';
 export const IMPORT_BLOCK_DESC =
 	'Restores all data from a previously exported backup. Existing records are overwritten. Cron jobs are re-scheduled after import.';
 export const CHOOSE_FILE_LABEL = 'Choose file…';
-export const INCLUDE_REPORTS_LABEL = 'Include reports & recordings';
-export const INCLUDE_REPORTS_HINT =
-	'Applies to both manual export and scheduled S3 backups. Can make backups significantly larger, recordings are session replays, not just screenshots.';
-export const includeReportsDisclaimer = (included) =>
-	included
-		? 'Reports and recordings are included in backups.'
-		: 'Reports are not included in backups, enable "Include reports & recordings" above, or run pg_dump directly on the PostgreSQL volume, to back up report history.';
-export const saveIncludeReportsLabel = (saving) => (saving ? SAVING_LABEL : SAVE_LABEL);
+export const BACKUP_NO_REPORTS_DISCLAIMER =
+	'Reports, recordings and screenshots are never included in a backup, run pg_dump directly on the PostgreSQL volume to back up report history.';
 
 export const S3_STORAGE_CARD_TITLE = 'S3 Storage';
 export const S3_STORAGE_DESC_PREFIX =

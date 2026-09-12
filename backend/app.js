@@ -6,6 +6,7 @@
 const express = require('express');
 const cors = require('cors');
 const { isNodeMode } = require('./constants/env');
+const { SCREENSHOTS_DIR } = require('./lib/screenshots');
 const app = express();
 
 // `*` is safe here, auth is a header token, not a cookie. Operators who still
@@ -32,13 +33,12 @@ if (isNodeMode()) {
 	app.use('/api', express.json({ limit: '500mb' }), require('./routes/node.routes'));
 }
 
-// Same ordering problem, same fix: restoring a backup uploads the instance, and
-// with reports included every rrweb recording is base64'd into that one body, so
-// it is megabytes at minimum. The default parser answered 413 before the route
-// ever ran. Only the two restore endpoints get the large limit, and both are
-// owner-only inside the router.
+// Same ordering problem, same fix: a large project's test suites/cases/runs can
+// still exceed the default 100kb parser limit even with reports never included.
+// Only the two restore endpoints get the larger limit, and both are owner-only
+// inside the router.
 if (!isNodeMode()) {
-	app.use(['/backup/import', '/backup/s3-restore'], express.json({ limit: '500mb' }));
+	app.use(['/backup/import', '/backup/s3-restore'], express.json({ limit: '20mb' }));
 }
 
 app.use(express.json());
@@ -47,6 +47,9 @@ app.use(express.json());
 
 // Primary-mode routes, skipped when running as a runner node (no DB available)
 if (!isNodeMode()) {
+	// DB stores only the filename (see reportService.js), the frontend builds
+	// the full URL from it, same convention as the report exporters.
+	app.use('/screenshots', express.static(SCREENSHOTS_DIR));
 	app.use('/tests', require('./routes/tests.routes'));
 	app.use('/reports', require('./routes/reports.routes'));
 	app.use('/cron-jobs', require('./routes/cron.routes'));

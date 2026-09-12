@@ -149,8 +149,7 @@ const getBackupConfig = async () => {
 		backupS3SecretKeySet: org.backupS3SecretKey.length > 0,
 		backupS3Prefix: org.backupS3Prefix,
 		backupLastRunAt: org.backupLastRunAt,
-		backupLastStatus: org.backupLastStatus,
-		backupIncludeReports: org.backupIncludeReports
+		backupLastStatus: org.backupLastStatus
 	};
 };
 
@@ -163,8 +162,7 @@ const updateBackupConfig = async ({
 	backupS3Bucket,
 	backupS3AccessKey,
 	backupS3SecretKey,
-	backupS3Prefix,
-	backupIncludeReports
+	backupS3Prefix
 }) => {
 	const org = await getOrgRaw();
 	const updated = await prisma.organization.update({
@@ -178,8 +176,7 @@ const updateBackupConfig = async ({
 			...(backupS3Bucket !== undefined && { backupS3Bucket }),
 			...(backupS3AccessKey !== undefined && { backupS3AccessKey }),
 			...(backupS3SecretKey && { backupS3SecretKey }),
-			...(backupS3Prefix !== undefined && { backupS3Prefix }),
-			...(backupIncludeReports !== undefined && { backupIncludeReports })
+			...(backupS3Prefix !== undefined && { backupS3Prefix })
 		}
 	});
 	await activityService.record(ACTIVITY_ACTION.BACKUP_CONFIG_UPDATE, {

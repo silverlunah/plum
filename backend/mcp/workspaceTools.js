@@ -32,6 +32,8 @@ const text = (value) => ({
 	]
 });
 
+const image = (base64, mimeType = 'image/png') => ({ type: 'image', data: base64, mimeType });
+
 // Large files would blow through the model's context for little benefit, this
 // is a guardrail, not a real editor, the agent should read the part it needs.
 const MAX_READ_BYTES = 200_000;
@@ -183,9 +185,9 @@ const tools = [
 		name: 'analyze_report',
 		description:
 			'Only works when this session was started from a report\'s "AI Analyze" button. Returns ' +
-			"that report's failing scenarios (name, tags, step error messages) plus each one's recent " +
-			'pass/fail history, to judge whether a failure is flaky or a real regression before deciding ' +
-			'whether to fix anything.',
+			"that report's failing scenarios (name, tags, step error messages, a failure screenshot " +
+			"when Playwright captured one) plus each one's recent pass/fail history, to judge whether " +
+			'a failure is flaky or a real regression before deciding whether to fix anything.',
 		schema: {},
 		async handler(ctx) {
 			if (!ctx.session.reportId) {
@@ -193,7 +195,26 @@ const tools = [
 			}
 			const analysis = await reportService.getReportAnalysis(ctx.project.id, ctx.session.reportId);
 			if (!analysis) return text({ error: 'Report not found.' });
-			return text(analysis);
+
+			// Raw base64 screenshots don't belong inside the JSON summary text, a
+			// transport/model that can't render `image` content blocks would just
+			// burn context on bytes it can't use, so they're pulled out into their
+			// own labeled blocks instead and the summary keeps a boolean flag.
+			const content = [];
+			const summary = {
+				...analysis,
+				failures: analysis.failures.map(({ screenshot, ...f }) => ({
+					...f,
+					hasScreenshot: !!screenshot
+				}))
+			};
+			content.push(text(summary).content[0]);
+			for (const f of analysis.failures) {
+				if (!f.screenshot) continue;
+				content.push({ type: 'text', text: `Screenshot for "${f.scenario}":` });
+				content.push(image(f.screenshot));
+			}
+			return { content };
 		}
 	}
 ];

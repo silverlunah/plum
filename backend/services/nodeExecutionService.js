@@ -13,6 +13,7 @@ const { DEFAULT_BROWSER, FRAMEWORK, isFramework } = require('../constants/defaul
 const { JOB_STATUS } = require('../constants/jobStatus');
 const { buildRunCommand, describeCommand } = require('../lib/runnerCommand');
 const { foldStepTimings } = require('../lib/reportFilename');
+const { inlineScreenshotAttachments } = require('../lib/screenshots');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
 
@@ -203,9 +204,8 @@ function startJob({
 
 		try {
 			if (fs.existsSync(reportFile)) {
-				jobs[jobId].reportContent = foldStepTimings(
-					reportFile,
-					fs.readFileSync(reportFile, 'utf8')
+				jobs[jobId].reportContent = inlineScreenshotAttachments(
+					foldStepTimings(reportFile, fs.readFileSync(reportFile, 'utf8'))
 				);
 			}
 		} catch {}

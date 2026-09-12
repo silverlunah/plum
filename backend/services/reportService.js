@@ -6,10 +6,12 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const crypto = require('crypto');
 const prisma = require('./prisma');
 const { isScheduledTrigger, normaliseTrigger, TRIGGER_TYPE } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { REPORT_STATUS } = require('../constants/jobStatus');
+const { writeScreenshot, deleteScreenshot, screenshotPathFor } = require('../lib/screenshots');
 
 // Also declared in both scaffolds' recording code (_scaffold/cucumber/utils/recorder.ts and
 // _scaffold/playwright/fixtures/plum.ts). Those files are copied into user projects
@@ -259,6 +261,33 @@ function extractRecordings(scenario) {
 		.filter(Boolean);
 }
 
+const SCREENSHOT_MIME_TYPE = 'image/png';
+
+/**
+ * Playwright's own on-failure screenshot (see lib/playwrightReport.js's
+ * buildScreenshotStep), written to disk under lib/screenshots.js's
+ * SCREENSHOTS_DIR rather than Postgres: a PNG gains nothing from living in a
+ * JSONB column, and this is the same disk-not-DB split rrweb recordings
+ * deliberately moved away from (see backupService.js's export/import removal).
+ * Returns the filename to store on the scenario, or null.
+ */
+function extractScreenshot(scenario) {
+	const embedding = (scenario.steps || [])
+		.filter((s) => s.hidden)
+		.flatMap(
+			(step) => step.embeddings?.filter((e) => e.mime_type === SCREENSHOT_MIME_TYPE) ?? []
+		)[0];
+	if (!embedding) return null;
+	try {
+		const filename = `${crypto.randomBytes(12).toString('hex')}.png`;
+		writeScreenshot(filename, Buffer.from(embedding.data, 'base64'));
+		return filename;
+	} catch (e) {
+		console.error(`[report] Failed to write failure screenshot: ${e.message}`);
+		return null;
+	}
+}
+
 /**
  * Transforms raw Cucumber JSON into our stored format:
  * - Resolves pass/fail status per step/scenario/feature
@@ -272,6 +301,7 @@ function processCucumberJson(raw, attempts = {}) {
 	const features = raw.map((feature) => {
 		const scenarios = (feature.elements || []).map((scenario) => {
 			recordings.push(...extractRecordings(scenario));
+			const screenshot = extractScreenshot(scenario);
 
 			const visibleSteps = (scenario.steps || []).filter((s) => !s.hidden);
 
@@ -316,6 +346,7 @@ function processCucumberJson(raw, attempts = {}) {
 				flaky: worstStatus === 'passed' && scenarioAttempts > 1,
 				workerId: extractWorkerId(scenario),
 				runnerName: scenario.__plumRunnerName ?? null,
+				...(screenshot && { screenshot }),
 				steps
 			};
 		});
@@ -432,6 +463,18 @@ const getReportDetail = async (projectId, id) => {
  * matching a scenario's own `@TC-xxx`-style tag to a TestCase.displayId, the
  * same join syncAutomatedTags() writes through.
  */
+// null when there's no screenshot, or the file's gone missing (deleted by
+// hand, or a report older than this feature) — the caller treats it the same
+// as "no screenshot" either way, never as an error.
+function readScreenshotBase64(filename) {
+	if (!filename) return null;
+	try {
+		return fs.readFileSync(screenshotPathFor(filename)).toString('base64');
+	} catch {
+		return null;
+	}
+}
+
 async function getReportAnalysis(projectId, reportId) {
 	const report = await getReportDetail(projectId, reportId);
 	if (!report) return null;
@@ -446,7 +489,8 @@ async function getReportAnalysis(projectId, reportId) {
 				tags: scenario.tags ?? [],
 				flaky: scenario.flaky ?? false,
 				status: scenario.status,
-				errors: (scenario.steps ?? []).filter((s) => s.error).map((s) => `${s.name}: ${s.error}`)
+				errors: (scenario.steps ?? []).filter((s) => s.error).map((s) => `${s.name}: ${s.error}`),
+				screenshot: readScreenshotBase64(scenario.screenshot)
 			});
 		}
 	}
@@ -731,12 +775,31 @@ const attachDurationToLatestReport = async ({ projectId, afterTimestamp, duratio
 // Delete operations
 // ---------------------------------------------------------------------------
 
+// Screenshots live on disk, not in a cascade-deleting child table, a report
+// row going away has to take its screenshot files with it explicitly.
+function screenshotFilenames(content) {
+	return (content?.features ?? [])
+		.flatMap((f) => f.scenarios ?? [])
+		.map((s) => s.screenshot)
+		.filter(Boolean);
+}
+
+async function deleteReportScreenshots(where) {
+	const reports = await prisma.report.findMany({ where, select: { content: true } });
+	for (const filename of reports.flatMap((r) => screenshotFilenames(r.content))) {
+		deleteScreenshot(filename);
+	}
+}
+
 const deleteReport = async (projectId, id) => {
+	await deleteReportScreenshots({ id, projectId });
 	await prisma.report.deleteMany({ where: { id, projectId } });
 };
 
 const deleteReports = async (projectId, ids) => {
-	await prisma.report.deleteMany({ where: { id: { in: ids }, projectId } });
+	const where = { id: { in: ids }, projectId };
+	await deleteReportScreenshots(where);
+	await prisma.report.deleteMany({ where });
 };
 
 // Instance-wide nightly prune. Recordings cascade-delete with their report;
@@ -744,8 +807,9 @@ const deleteReports = async (projectId, ids) => {
 const pruneOldReports = async (retentionDays) => {
 	const days = Number(retentionDays);
 	if (!Number.isFinite(days) || days <= 0) return { count: 0 };
-	const cutoff = new Date(Date.now() - days * 86_400_000);
-	return prisma.report.deleteMany({ where: { createdAt: { lt: cutoff } } });
+	const where = { createdAt: { lt: new Date(Date.now() - days * 86_400_000) } };
+	await deleteReportScreenshots(where);
+	return prisma.report.deleteMany({ where });
 };
 
 /**
