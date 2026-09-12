@@ -426,6 +426,72 @@ const getReportDetail = async (projectId, id) => {
 };
 
 /**
+ * A failing report's scenarios plus each one's recent pass/fail history, for
+ * the AI agent's "AI Analyze" flow to judge flaky vs. a real regression
+ * without re-deriving it from raw report JSON itself. History is looked up by
+ * matching a scenario's own `@TC-xxx`-style tag to a TestCase.displayId, the
+ * same join syncAutomatedTags() writes through.
+ */
+async function getReportAnalysis(projectId, reportId) {
+	const report = await getReportDetail(projectId, reportId);
+	if (!report) return null;
+
+	const failures = [];
+	for (const feature of report.features) {
+		for (const scenario of feature.scenarios ?? []) {
+			if (scenario.status === 'passed') continue;
+			failures.push({
+				feature: feature.name,
+				scenario: scenario.name,
+				tags: scenario.tags ?? [],
+				flaky: scenario.flaky ?? false,
+				status: scenario.status,
+				errors: (scenario.steps ?? []).filter((s) => s.error).map((s) => `${s.name}: ${s.error}`)
+			});
+		}
+	}
+
+	const displayIds = [...new Set(failures.flatMap((f) => f.tags.map((t) => t.replace(/^@/, ''))))];
+	const cases = displayIds.length
+		? await prisma.testCase.findMany({
+				where: { projectId, displayId: { in: displayIds } },
+				select: { id: true, displayId: true }
+			})
+		: [];
+
+	for (const f of failures) {
+		const testCase = cases.find((c) => f.tags.some((t) => t.replace(/^@/, '') === c.displayId));
+		const history = testCase
+			? await prisma.testCaseHistory.findMany({
+					where: { caseId: testCase.id },
+					orderBy: { executedAt: 'desc' },
+					take: 10,
+					select: { result: true }
+				})
+			: [];
+		const results = history.map((h) => h.result); // most recent first
+		const failCount = results.filter((r) => r === 'fail').length;
+		f.recentResults = results;
+		f.flakySignal =
+			results.length === 0
+				? 'no history for this test case yet'
+				: failCount === results.length
+					? 'failed every recent run, likely a real regression'
+					: failCount > 0
+						? 'mixed pass/fail recently, likely flaky'
+						: 'passed every recent run before this one';
+	}
+
+	return {
+		reportId: report.id,
+		status: report.status,
+		browser: report.browser,
+		createdAt: report.createdAt,
+		failures
+	};
+}
+
+/**
  * Metadata for every recording on a report: deliberately excludes `events`
  * (can be large) so the replay UI can work out tab timing/order before
  * fetching any actual event data.
@@ -705,6 +771,7 @@ module.exports = {
 	getReports,
 	getLatestReportId,
 	getReportDetail,
+	getReportAnalysis,
 	getRecordings,
 	getRecordingEvents,
 	saveReport,

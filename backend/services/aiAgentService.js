@@ -9,12 +9,20 @@ const aiSessionService = require('./aiSessionService');
 const prisma = require('./prisma');
 const liveAgentSessions = require('../lib/liveAgentSessions');
 
-function buildSystemPrompt(project) {
+function buildSystemPrompt(project, session) {
 	const parts = [
 		"You are Plum's AI test agent. You work only inside the isolated git worktree these tools " +
 			'give you access to, never the real project. Propose every change as a pull request, ' +
 			'you cannot push to the default branch or merge anything yourself.'
 	];
+	if (session.reportId) {
+		parts.push(
+			'This session was started from a failing report, call analyze_report first to see its ' +
+				"failures and each one's recent pass/fail history before doing anything else. If the " +
+				'history says a failure is flaky, say so rather than "fixing" a test that already works. ' +
+				'If it looks like a real regression and you can identify the cause, fix it and open a PR.'
+		);
+	}
 	if (project.aiSystemPrompt) parts.push(project.aiSystemPrompt);
 	if (project.aiCodePractices) parts.push(`Coding conventions:\n${project.aiCodePractices}`);
 	return parts.join('\n\n');
@@ -70,7 +78,7 @@ async function runOpenAiTurn(ctx, systemPrompt, message) {
 async function runTurn(session, message) {
 	const project = await prisma.project.findUnique({ where: { id: session.projectId } });
 	const ctx = { session, project, workspacePath: session.workspacePath };
-	const systemPrompt = buildSystemPrompt(project);
+	const systemPrompt = buildSystemPrompt(project, session);
 	return session.provider === 'openai'
 		? runOpenAiTurn(ctx, systemPrompt, message)
 		: runAnthropicTurn(ctx, systemPrompt, message);

@@ -132,17 +132,17 @@
 		}
 	}
 
-	async function send() {
-		const message = draft.trim();
+	async function send(override) {
+		const message = override ?? draft.trim();
 		if (!message || sending || !activeSession) return;
-		draft = '';
+		if (override === undefined) draft = '';
 		sending = true;
 		try {
 			activeSession = await sendAiMessage(activeSession.id, message);
 			stickToBottom = true;
 		} catch (e) {
 			notify('error', e.message || FAILED_TO_SEND_MESSAGE);
-			draft = message;
+			if (override === undefined) draft = message;
 		} finally {
 			sending = false;
 		}
@@ -200,11 +200,19 @@
 		form.provider = ai.anthropicApiKeySet ? 'anthropic' : ai.openaiApiKeySet ? 'openai' : '';
 
 		loadSessions();
-		let savedId;
+		let savedId, kickoffMessage;
 		try {
 			savedId = sessionStorage.getItem('plum:ai:sessionId');
+			kickoffMessage = sessionStorage.getItem('plum:ai:kickoffMessage');
+			sessionStorage.removeItem('plum:ai:kickoffMessage');
 		} catch {}
-		if (savedId) openSession(savedId);
+		if (savedId) {
+			await openSession(savedId);
+			// Only for a session that hasn't had a first message yet, e.g. one just
+			// created by a report's "AI Analyze" button, never re-fires on a reload
+			// of an existing conversation since the sessionStorage key is one-shot.
+			if (kickoffMessage && activeSession?.transcript.length === 0) send(kickoffMessage);
+		}
 	});
 </script>
 
@@ -342,7 +350,7 @@
 						</div>
 					{/each}
 				</div>
-				<form class="composer" on:submit|preventDefault={send}>
+				<form class="composer" on:submit|preventDefault={() => send()}>
 					<input
 						class="text-input"
 						placeholder={MESSAGE_PLACEHOLDER}

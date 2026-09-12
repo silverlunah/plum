@@ -5,9 +5,12 @@
 
 <script>
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { onMount, tick } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { fetchReportDetail, fetchRecordings, downloadReportExport } from '$lib/api/reports';
+	import { createAiSession } from '$lib/api/aiSessions';
+	import { fetchAiConfig } from '$lib/api/settings';
 	import {
 		isScheduled,
 		triggerLabel,
@@ -54,7 +57,12 @@
 		workerLabel,
 		REPORT_EXPORT_MENU_ITEMS,
 		NO_TESTS_MATCHED_HEADING,
-		noTestsMatchedBody
+		noTestsMatchedBody,
+		AI_ANALYZE_LABEL,
+		AI_ANALYZE_STARTING_LABEL,
+		AI_ANALYZE_FAILED,
+		aiAnalyzeSessionTitle,
+		aiAnalyzeKickoffMessage
 	} from '$lib/copy/reports';
 	import { exportFailedToast, exportedToast, exportingToast } from '$lib/copy/common';
 	import { notify, notifyProgress } from '$lib/stores/notifications';
@@ -94,6 +102,29 @@
 			settle('error', exportFailedToast('this report'));
 		} finally {
 			exporting = false;
+		}
+	}
+
+	let analyzing = false;
+	async function handleAiAnalyze() {
+		analyzing = true;
+		try {
+			const ai = await fetchAiConfig();
+			const provider = ai.anthropicApiKeySet ? 'anthropic' : ai.openaiApiKeySet ? 'openai' : null;
+			if (!provider) throw new Error(AI_ANALYZE_FAILED);
+			const session = await createAiSession({
+				provider,
+				reportId,
+				title: aiAnalyzeSessionTitle(reportId)
+			});
+			try {
+				sessionStorage.setItem('plum:ai:sessionId', session.id);
+				sessionStorage.setItem('plum:ai:kickoffMessage', aiAnalyzeKickoffMessage(reportId));
+			} catch {}
+			goto('/ai');
+		} catch (e) {
+			notify('error', e.message || AI_ANALYZE_FAILED);
+			analyzing = false;
 		}
 	}
 
@@ -215,11 +246,18 @@
 <div class="detail-top">
 	<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
 	{#if detail}
-		<ExportMenu
-			items={REPORT_EXPORT_MENU_ITEMS}
-			busy={exporting}
-			on:select={(e) => handleExport(e.detail)}
-		/>
+		<div class="detail-top-actions">
+			{#if !overallPass}
+				<button class="ai-analyze-btn" on:click={handleAiAnalyze} disabled={analyzing}>
+					{analyzing ? AI_ANALYZE_STARTING_LABEL : AI_ANALYZE_LABEL}
+				</button>
+			{/if}
+			<ExportMenu
+				items={REPORT_EXPORT_MENU_ITEMS}
+				busy={exporting}
+				on:select={(e) => handleExport(e.detail)}
+			/>
+		</div>
 	{/if}
 </div>
 
@@ -832,6 +870,35 @@
 		justify-content: space-between;
 		gap: 1rem;
 		margin-bottom: 1rem;
+	}
+
+	.detail-top-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+	}
+
+	.ai-analyze-btn {
+		display: inline-flex;
+		align-items: center;
+		height: 32px;
+		padding: 0 0.85rem;
+		background: var(--accent-soft);
+		color: var(--accent);
+		border: 1px solid var(--accent);
+		border-radius: var(--radius-sm);
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: opacity var(--duration-fast);
+	}
+	.ai-analyze-btn:hover:not(:disabled) {
+		opacity: 0.85;
+	}
+	.ai-analyze-btn:disabled {
+		opacity: 0.6;
+		cursor: default;
 	}
 
 	.report-header {

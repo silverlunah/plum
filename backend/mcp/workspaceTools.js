@@ -21,6 +21,7 @@ const simpleGit = require('simple-git');
 const githubService = require('../services/githubService');
 const aiSessionService = require('../services/aiSessionService');
 const runQueueService = require('../services/runQueueService');
+const reportService = require('../services/reportService');
 const { resolveInWorkspace } = require('../lib/aiWorkspaces');
 const { TRIGGER_TYPE, BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
@@ -176,6 +177,23 @@ const tools = [
 			const job = await runQueueService.getJob(jobId, ctx.project.id);
 			if (!job) throw new Error('No such run for this project');
 			return text(job);
+		}
+	},
+	{
+		name: 'analyze_report',
+		description:
+			'Only works when this session was started from a report\'s "AI Analyze" button. Returns ' +
+			"that report's failing scenarios (name, tags, step error messages) plus each one's recent " +
+			'pass/fail history, to judge whether a failure is flaky or a real regression before deciding ' +
+			'whether to fix anything.',
+		schema: {},
+		async handler(ctx) {
+			if (!ctx.session.reportId) {
+				return text({ error: 'This session was not launched from a report.' });
+			}
+			const analysis = await reportService.getReportAnalysis(ctx.project.id, ctx.session.reportId);
+			if (!analysis) return text({ error: 'Report not found.' });
+			return text(analysis);
 		}
 	}
 ];
