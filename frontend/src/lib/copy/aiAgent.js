@@ -33,9 +33,9 @@ export const OPEN_PR_LABEL = 'View Pull Request';
 
 export const BROWSER_PANEL_TITLE = 'Browser';
 export const BROWSER_PANEL_EMPTY =
-	'No browser activity yet. The agent shares a screenshot here when it drives the browser.';
+	'No screenshot yet. The agent shares one here when it drives the browser, or if you ask it to.';
 export const BROWSER_PANEL_UNAVAILABLE =
-	'Live browser control is available for Claude sessions only.';
+	'Browser screenshots are available for Claude sessions only.';
 
 export const NO_SESSIONS_YET_TITLE = 'No AI sessions yet';
 export const NO_SESSIONS_YET_DESC =
