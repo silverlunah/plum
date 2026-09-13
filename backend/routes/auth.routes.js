@@ -94,7 +94,7 @@ router.post('/setup', async (req, res, next) => {
 		if (framework !== undefined && !isFramework(framework)) {
 			return res.status(400).json({ error: `framework must be one of: ${FRAMEWORKS.join(', ')}` });
 		}
-		await userService.bootstrap({
+		const { repoSetupError } = await userService.bootstrap({
 			organizationName,
 			projectName,
 			name,
@@ -104,7 +104,7 @@ router.post('/setup', async (req, res, next) => {
 			githubToken,
 			repo
 		});
-		res.status(201).json(await userService.login({ email, password }));
+		res.status(201).json({ ...(await userService.login({ email, password })), repoSetupError });
 	} catch (e) {
 		next(e);
 	}

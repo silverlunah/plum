@@ -503,17 +503,27 @@ async function getReportAnalysis(projectId, reportId) {
 			})
 		: [];
 
+	// One query for every case's history instead of one per failure: Prisma has
+	// no "top 10 per group" clause, so the per-case cap is applied here in JS
+	// instead, walking rows already ordered newest-first across every case.
+	const caseIds = cases.map((c) => c.id);
+	const allHistory = caseIds.length
+		? await prisma.testCaseHistory.findMany({
+				where: { caseId: { in: caseIds } },
+				orderBy: { executedAt: 'desc' },
+				select: { caseId: true, result: true }
+			})
+		: [];
+	const historyByCase = new Map();
+	for (const h of allHistory) {
+		const list = historyByCase.get(h.caseId) ?? [];
+		if (list.length < 10) list.push(h.result);
+		historyByCase.set(h.caseId, list);
+	}
+
 	for (const f of failures) {
 		const testCase = cases.find((c) => f.tags.some((t) => t.replace(/^@/, '') === c.displayId));
-		const history = testCase
-			? await prisma.testCaseHistory.findMany({
-					where: { caseId: testCase.id },
-					orderBy: { executedAt: 'desc' },
-					take: 10,
-					select: { result: true }
-				})
-			: [];
-		const results = history.map((h) => h.result); // most recent first
+		const results = testCase ? (historyByCase.get(testCase.id) ?? []) : []; // most recent first
 		const failCount = results.filter((r) => r === 'fail').length;
 		f.recentResults = results;
 		f.flakySignal =

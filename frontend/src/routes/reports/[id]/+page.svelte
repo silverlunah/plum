@@ -30,7 +30,7 @@
 		visibleTags,
 		browserLabel
 	} from '$lib/utils/format';
-	import { BROWSERS } from '$lib/constants';
+	import { BROWSERS, AI_SESSION_ID_KEY, AI_KICKOFF_MESSAGE_KEY } from '$lib/constants';
 	import { panelExpanded } from '$lib/stores/runner';
 	import { pluralize } from '$lib/copy/common';
 	import {
@@ -124,8 +124,8 @@
 				title: aiAnalyzeSessionTitle(reportId)
 			});
 			try {
-				sessionStorage.setItem('plum:ai:sessionId', session.id);
-				sessionStorage.setItem('plum:ai:kickoffMessage', aiAnalyzeKickoffMessage(reportId));
+				sessionStorage.setItem(AI_SESSION_ID_KEY, session.id);
+				sessionStorage.setItem(AI_KICKOFF_MESSAGE_KEY, aiAnalyzeKickoffMessage(reportId));
 			} catch {}
 			goto('/ai');
 		} catch (e) {

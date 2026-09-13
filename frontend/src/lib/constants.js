@@ -68,6 +68,11 @@ export const TABLET_MAX = 1024;
 
 export const BUILTIN_RUNNER_ID = 'built-in';
 
+// sessionStorage keys for handing an AI session id (and, from Report AI
+// Analyze, its kickoff message) across a full page navigation into /ai.
+export const AI_SESSION_ID_KEY = 'plum:ai:sessionId';
+export const AI_KICKOFF_MESSAGE_KEY = 'plum:ai:kickoffMessage';
+
 // Mirrors backend/constants/roles.js ELEVATED_ROLES.
 export const ELEVATED_ROLES = ['owner', 'admin'];
 

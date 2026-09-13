@@ -21,18 +21,13 @@ const settingsService = require('../services/settingsService');
 const { createWorkspaceSdkServer } = require('../mcp/workspaceSdkServer');
 const { browserProfilePathFor } = require('./aiWorkspaces');
 
-const BUILT_IN_TOOLS_TO_BLOCK = [
-	'Bash',
-	'Read',
-	'Write',
-	'Edit',
-	'Glob',
-	'Grep',
-	'WebFetch',
-	'WebSearch',
-	'NotebookEdit',
-	'Task'
-];
+// `disallowedTools` only removes named tools from an otherwise-full built-in
+// set (defaulting to the whole `claude_code` preset — Bash, Read, Write, the
+// worktree/task/cron/artifact tools, and more) and offers no guarantee that
+// list stays complete as the SDK adds tools. `tools: []` below disables the
+// entire built-in set outright, the agent's only capabilities are the
+// `workspace`/`playwright` MCP servers explicitly wired in per session.
+const NO_BUILT_IN_TOOLS = [];
 
 // A generous ceiling against a runaway tool-call loop, not a session-length
 // limit, "turn" here counts every tool_result round trip too (see
@@ -123,12 +118,12 @@ async function startSession(ctx, systemPrompt) {
 				workspace: workspaceServer,
 				playwright: playwrightMcpServerConfig(profileDir)
 			},
-			disallowedTools: BUILT_IN_TOOLS_TO_BLOCK,
+			tools: NO_BUILT_IN_TOOLS,
 			// Not permissionMode: 'bypassPermissions', the underlying CLI refuses
 			// that outright when running as root (Plum's backend container does).
 			// canUseTool gets the same "never prompt" effect through the SDK's own
 			// host-side approval hook instead, which has no such guard, the real
-			// boundary is the workspace sandbox + disallowedTools above either way.
+			// boundary is the workspace sandbox + `tools: []` above either way.
 			canUseTool: async (_toolName, input) => ({ behavior: 'allow', updatedInput: input }),
 			maxTurns: MAX_TURNS,
 			resume: ctx.session.providerSessionId || undefined
@@ -197,7 +192,14 @@ async function sendMessage(ctx, systemPrompt, message) {
 	live.delete(ctx.session.id);
 	const fresh = await getEntry(ctx, systemPrompt);
 	const retried = await runOnEntry(ctx, fresh, message);
-	return { events: retried.events };
+	if (retried.events.length > 0) return { events: retried.events };
+
+	// Still nothing after a fresh session: surface this as a real error rather
+	// than a 200 with no new assistant message, the caller has no other signal
+	// that the message went nowhere.
+	const e = new Error('The AI agent produced no response. Try sending your message again.');
+	e.status = 502;
+	throw e;
 }
 
 function closeSession(sessionId) {

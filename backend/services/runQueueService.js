@@ -10,6 +10,7 @@ const { BUILT_IN_RUNNER_ID } = require('../constants/triggers');
 const { isBrowser, DEFAULT_BROWSER } = require('../constants/defaults');
 const { SOCKET_EVENTS } = require('../constants/socketEvents');
 const { JOB_STATUS, CANCEL_CODE } = require('../constants/jobStatus');
+const { assertSafeEnvOverrides } = require('../lib/envText');
 
 const QUEUED = 'queued';
 const RUNNING = 'running';
@@ -162,6 +163,7 @@ async function defaultProjectId() {
 }
 
 async function enqueue(job) {
+	assertSafeEnvOverrides(job.envOverrides);
 	const id = job.id || randomUUID();
 	const runnerIds = normaliseRunnerIds(job.runnerIds);
 	const projectId = job.projectId ?? (await defaultProjectId());

@@ -101,10 +101,21 @@ async function bootstrap({
 	});
 	await projectPaths.refresh();
 	if (repo?.repoMode !== 'existing') projectPaths.scaffoldProject(slug, result.project.framework);
+	// The org/project/user above are already committed: a bad token/repo name
+	// here must not throw, or needsSetup() wedges shut (an Organization row now
+	// exists) with no way back into the wizard, even though the account itself
+	// is real and usable. Connecting the repo later via Settings already works
+	// (Phase 3), so degrade to that instead of failing the whole first run.
+	let repoSetupError = null;
 	if (githubToken && repo?.repoMode) {
-		await projectService.setupRepository(result.project, repo);
+		try {
+			await projectService.setupRepository(result.project, repo);
+		} catch (e) {
+			console.error('[setup] Repo setup failed during bootstrap:', e.message);
+			repoSetupError = e.message;
+		}
 	}
-	return result;
+	return { ...result, repoSetupError };
 }
 
 async function issueSession(user) {
