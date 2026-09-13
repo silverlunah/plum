@@ -194,6 +194,7 @@ async function spawnBuiltInAttempt({
 	shard = null,
 	testRunId,
 	baseUrl,
+	envOverrides,
 	onLog,
 	io
 }) {
@@ -233,6 +234,7 @@ async function spawnBuiltInAttempt({
 			PLUM_SS_DIR: ssDir
 		};
 		if (baseUrl) env.BASE_URL = baseUrl;
+		Object.assign(env, envOverrides);
 
 		onLog(`> ${describeCommand(cmd)}\n`);
 		// No shell: the runner CLI is spawned as node + argv, so nothing in a tag or
@@ -294,6 +296,7 @@ async function runBuiltIn(run, io, emit) {
 				retries: nativeRetries,
 				testRunId: run.testRunId,
 				baseUrl: run.baseUrl,
+				envOverrides: run.envOverrides,
 				onLog,
 				io
 			});
@@ -466,6 +469,7 @@ function runLane(run, io, emit, lane, plan, retrySplit, framework, laneLogs) {
 						shard: plan.shard,
 						testRunId: run.testRunId,
 						baseUrl: run.baseUrl,
+						envOverrides: run.envOverrides,
 						onLog,
 						io
 					}).then(async ({ code, raw }) => {
@@ -489,7 +493,8 @@ function runLane(run, io, emit, lane, plan, retrySplit, framework, laneLogs) {
 								workers: run.workers,
 								retries: retrySplit.nativeRetries,
 								shard: plan.shard,
-								baseUrl: run.baseUrl
+								baseUrl: run.baseUrl,
+								envOverrides: run.envOverrides
 							},
 							onLog,
 							async (code, content) => {
@@ -594,7 +599,8 @@ async function execute(run, io) {
 				workers: run.workers,
 				browser: run.browser,
 				startedBy: run.startedBy ?? null
-			}
+			},
+			startedAt: Date.now()
 		});
 	}
 

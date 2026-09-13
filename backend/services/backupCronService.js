@@ -24,7 +24,7 @@ const runBackup = async ({ force = false } = {}) => {
 	if (!force && !org?.backupEnabled) return;
 
 	try {
-		const data = await backupService.exportAll(org.backupIncludeReports);
+		const data = await backupService.exportAll();
 		const key = await backupService.uploadToS3(data, org);
 
 		await prisma.organization.update({

@@ -12,29 +12,6 @@ const { slugify } = require('../lib/slugify');
 // Export
 // ---------------------------------------------------------------------------
 
-// Reports (with their rrweb recordings) are opt-in, they can be large, and
-// this used to be a hard no ("reports are too large, use pg_dump") back when
-// screenshots lived as external files on disk. Now everything lives in
-// Postgres, so it's just a size tradeoff the admin can choose. Recording.events
-// is gzip-compressed BYTEA: base64 it for JSON transport; startedAt/endedAt
-// are BigInt, which JSON.stringify can't serialize natively.
-async function exportReports(projectId) {
-	const reports = await prisma.report.findMany({
-		where: { projectId },
-		orderBy: { createdAt: 'asc' },
-		include: { recordings: true }
-	});
-	return reports.map(({ recordings, ...report }) => ({
-		...report,
-		recordings: recordings.map(({ events, startedAt, endedAt, ...rec }) => ({
-			...rec,
-			events: events.toString('base64'),
-			startedAt: startedAt?.toString() ?? null,
-			endedAt: endedAt?.toString() ?? null
-		}))
-	}));
-}
-
 // Everything about a project that isn't derivable and isn't an id. The two
 // seq counters matter: they issue the next TC-/TS- number, and a restore that
 // resets them to 0 hands out display ids that already exist.
@@ -59,8 +36,8 @@ const PROJECT_FIELDS = [
 const pick = (obj, fields) =>
 	Object.fromEntries(fields.filter((f) => obj?.[f] !== undefined).map((f) => [f, obj[f]]));
 
-async function exportProject(project, includeReports) {
-	const [cronJobs, testSuites, testRuns, members, reports] = await Promise.all([
+async function exportProject(project) {
+	const [cronJobs, testSuites, testRuns, members] = await Promise.all([
 		prisma.cronJob.findMany({ where: { projectId: project.id }, orderBy: { createdAt: 'asc' } }),
 		prisma.testSuite.findMany({
 			where: { projectId: project.id },
@@ -80,8 +57,7 @@ async function exportProject(project, includeReports) {
 		prisma.projectMember.findMany({
 			where: { projectId: project.id },
 			include: { user: { select: { email: true } } }
-		}),
-		includeReports ? exportReports(project.id) : Promise.resolve(null)
+		})
 	]);
 
 	return {
@@ -100,8 +76,7 @@ async function exportProject(project, includeReports) {
 		testRuns: testRuns.map(({ entries, projectId, history: _, ...run }) => ({
 			...run,
 			entries: entries.map(({ executedAt, ...entry }) => ({ ...entry, executedAt }))
-		})),
-		...(reports !== null && { reports })
+		}))
 	};
 }
 
@@ -123,7 +98,7 @@ const ORG_FIELDS = [
 	'termsAcceptedAt'
 ];
 
-const exportAll = async (includeReports = false) => {
+const exportAll = async () => {
 	const [org, projects, users, runners] = await Promise.all([
 		prisma.organization.findFirst({ orderBy: { id: 'asc' } }),
 		prisma.project.findMany({ orderBy: { id: 'asc' } }),
@@ -135,9 +110,9 @@ const exportAll = async (includeReports = false) => {
 		version: '4',
 		exportedAt: new Date().toISOString(),
 		...(org && { organization: pick(org, ORG_FIELDS) }),
-		disclaimer: includeReports
-			? 'Reports and recordings are included in this backup.'
-			: 'Reports are not included in this backup. Enable "Include reports" in Settings → Backup, or use pg_dump on the PostgreSQL volume, to back up report history.',
+		disclaimer:
+			'Reports and recordings are never included in a backup, use pg_dump on the PostgreSQL ' +
+			'volume if you need report history preserved.',
 		users: users.map(({ updatedAt: _, ...u }) => u),
 		// A backup file travels (S3, laptops); the node token is a live secret, so
 		// drop it: nodes re-register their token on the next `plum node start`.
@@ -145,7 +120,7 @@ const exportAll = async (includeReports = false) => {
 			...r,
 			token: ''
 		})),
-		projects: await Promise.all(projects.map((p) => exportProject(p, includeReports)))
+		projects: await Promise.all(projects.map((p) => exportProject(p)))
 	};
 };
 
@@ -159,20 +134,11 @@ const exportAll = async (includeReports = false) => {
 // "whatever project this database already has".
 function normalize(data) {
 	if (Array.isArray(data.projects)) return data;
-	const { cronJobs, testSuites, testRuns, reports, project } = data;
+	const { cronJobs, testSuites, testRuns, project } = data;
 	return {
 		users: data.users,
 		runners: data.runners,
-		projects: [
-			{
-				...(project ?? {}),
-				legacy: true,
-				cronJobs,
-				testSuites,
-				testRuns,
-				...(reports !== undefined && { reports })
-			}
-		]
+		projects: [{ ...(project ?? {}), legacy: true, cronJobs, testSuites, testRuns }]
 	};
 }
 
@@ -218,7 +184,7 @@ async function resolveProject(tx, entry) {
 
 async function importProject(tx, entry, usersByEmail) {
 	const projectId = await resolveProject(tx, entry);
-	const { cronJobs = [], testSuites = [], testRuns = [], reports = [], members = [] } = entry;
+	const { cronJobs = [], testSuites = [], testRuns = [], members = [] } = entry;
 
 	for (const m of members) {
 		const userId = usersByEmail.get(m.email);
@@ -300,7 +266,6 @@ async function importProject(tx, entry, usersByEmail) {
 		}
 	}
 
-	const runIds = new Map();
 	for (const run of testRuns) {
 		const { entries = [], ...runData } = run;
 		const row = await tx.testRun.upsert({
@@ -308,7 +273,6 @@ async function importProject(tx, entry, usersByEmail) {
 			create: { ...runData, projectId },
 			update: { title: runData.title, status: runData.status }
 		});
-		runIds.set(runData.id, row.id);
 
 		for (const entry of entries) {
 			const caseId = caseIds.get(entry.caseId) ?? entry.caseId;
@@ -316,45 +280,6 @@ async function importProject(tx, entry, usersByEmail) {
 				where: { id: entry.id },
 				create: { ...entry, runId: row.id, caseId },
 				update: { status: entry.status, notes: entry.notes, order: entry.order }
-			});
-		}
-	}
-
-	// Reports + recordings (opt-in: only present if this backup included them).
-	// Recordings are always deleted and recreated rather than upserted: same
-	// pattern as test steps above.
-	for (const report of reports) {
-		const { recordings = [], cronJobId: _staleCronJobId, ...reportData } = report;
-
-		// cronJobId can't be trusted as exported: cron jobs above are upserted
-		// keyed on taskName, not id, so the id a report recorded at export time
-		// may no longer point at the right row (or any row). Re-resolve it the
-		// same way reportService does when a report is first created: a scheduled
-		// report's triggerType is always its cron job's taskName.
-		const cronJob = reportData.triggerType
-			? await tx.cronJob.findUnique({
-					where: { projectId_taskName: { projectId, taskName: reportData.triggerType } }
-				})
-			: null;
-
-		const data = {
-			...reportData,
-			projectId,
-			cronJobId: cronJob?.id ?? null,
-			testRunId: reportData.testRunId ? (runIds.get(reportData.testRunId) ?? null) : null
-		};
-		await tx.report.upsert({ where: { id: data.id }, create: data, update: data });
-
-		await tx.recording.deleteMany({ where: { reportId: data.id } });
-		for (const rec of recordings) {
-			await tx.recording.create({
-				data: {
-					...rec,
-					reportId: data.id,
-					events: Buffer.from(rec.events, 'base64'),
-					startedAt: rec.startedAt !== null ? BigInt(rec.startedAt) : null,
-					endedAt: rec.endedAt !== null ? BigInt(rec.endedAt) : null
-				}
 			});
 		}
 	}

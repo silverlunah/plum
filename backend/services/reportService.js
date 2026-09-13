@@ -6,10 +6,12 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const crypto = require('crypto');
 const prisma = require('./prisma');
 const { isScheduledTrigger, normaliseTrigger, TRIGGER_TYPE } = require('../constants/triggers');
 const { DEFAULT_BROWSER } = require('../constants/defaults');
 const { REPORT_STATUS } = require('../constants/jobStatus');
+const { writeScreenshot, deleteScreenshot, screenshotPathFor } = require('../lib/screenshots');
 
 // Also declared in both scaffolds' recording code (_scaffold/cucumber/utils/recorder.ts and
 // _scaffold/playwright/fixtures/plum.ts). Those files are copied into user projects
@@ -259,6 +261,33 @@ function extractRecordings(scenario) {
 		.filter(Boolean);
 }
 
+const SCREENSHOT_MIME_TYPE = 'image/png';
+
+/**
+ * Playwright's own on-failure screenshot (see lib/playwrightReport.js's
+ * buildScreenshotStep), written to disk under lib/screenshots.js's
+ * SCREENSHOTS_DIR rather than Postgres: a PNG gains nothing from living in a
+ * JSONB column, and this is the same disk-not-DB split rrweb recordings
+ * deliberately moved away from (see backupService.js's export/import removal).
+ * Returns the filename to store on the scenario, or null.
+ */
+function extractScreenshot(scenario) {
+	const embedding = (scenario.steps || [])
+		.filter((s) => s.hidden)
+		.flatMap(
+			(step) => step.embeddings?.filter((e) => e.mime_type === SCREENSHOT_MIME_TYPE) ?? []
+		)[0];
+	if (!embedding) return null;
+	try {
+		const filename = `${crypto.randomBytes(12).toString('hex')}.png`;
+		writeScreenshot(filename, Buffer.from(embedding.data, 'base64'));
+		return filename;
+	} catch (e) {
+		console.error(`[report] Failed to write failure screenshot: ${e.message}`);
+		return null;
+	}
+}
+
 /**
  * Transforms raw Cucumber JSON into our stored format:
  * - Resolves pass/fail status per step/scenario/feature
@@ -272,6 +301,7 @@ function processCucumberJson(raw, attempts = {}) {
 	const features = raw.map((feature) => {
 		const scenarios = (feature.elements || []).map((scenario) => {
 			recordings.push(...extractRecordings(scenario));
+			const screenshot = extractScreenshot(scenario);
 
 			const visibleSteps = (scenario.steps || []).filter((s) => !s.hidden);
 
@@ -316,6 +346,7 @@ function processCucumberJson(raw, attempts = {}) {
 				flaky: worstStatus === 'passed' && scenarioAttempts > 1,
 				workerId: extractWorkerId(scenario),
 				runnerName: scenario.__plumRunnerName ?? null,
+				...(screenshot && { screenshot }),
 				steps
 			};
 		});
@@ -424,6 +455,95 @@ const getReportDetail = async (projectId, id) => {
 	const { content, ...meta } = report;
 	return { ...meta, features: content?.features ?? [] };
 };
+
+/**
+ * A failing report's scenarios plus each one's recent pass/fail history, for
+ * the AI agent's "AI Analyze" flow to judge flaky vs. a real regression
+ * without re-deriving it from raw report JSON itself. History is looked up by
+ * matching a scenario's own `@TC-xxx`-style tag to a TestCase.displayId, the
+ * same join syncAutomatedTags() writes through.
+ */
+// null when there's no screenshot, or the file's gone missing (deleted by
+// hand, or a report older than this feature) — the caller treats it the same
+// as "no screenshot" either way, never as an error.
+function readScreenshotBase64(filename) {
+	if (!filename) return null;
+	try {
+		return fs.readFileSync(screenshotPathFor(filename)).toString('base64');
+	} catch {
+		return null;
+	}
+}
+
+async function getReportAnalysis(projectId, reportId) {
+	const report = await getReportDetail(projectId, reportId);
+	if (!report) return null;
+
+	const failures = [];
+	for (const feature of report.features) {
+		for (const scenario of feature.scenarios ?? []) {
+			if (scenario.status === 'passed') continue;
+			failures.push({
+				feature: feature.name,
+				scenario: scenario.name,
+				tags: scenario.tags ?? [],
+				flaky: scenario.flaky ?? false,
+				status: scenario.status,
+				errors: (scenario.steps ?? []).filter((s) => s.error).map((s) => `${s.name}: ${s.error}`),
+				screenshot: readScreenshotBase64(scenario.screenshot)
+			});
+		}
+	}
+
+	const displayIds = [...new Set(failures.flatMap((f) => f.tags.map((t) => t.replace(/^@/, ''))))];
+	const cases = displayIds.length
+		? await prisma.testCase.findMany({
+				where: { projectId, displayId: { in: displayIds } },
+				select: { id: true, displayId: true }
+			})
+		: [];
+
+	// One query for every case's history instead of one per failure: Prisma has
+	// no "top 10 per group" clause, so the per-case cap is applied here in JS
+	// instead, walking rows already ordered newest-first across every case.
+	const caseIds = cases.map((c) => c.id);
+	const allHistory = caseIds.length
+		? await prisma.testCaseHistory.findMany({
+				where: { caseId: { in: caseIds } },
+				orderBy: { executedAt: 'desc' },
+				select: { caseId: true, result: true }
+			})
+		: [];
+	const historyByCase = new Map();
+	for (const h of allHistory) {
+		const list = historyByCase.get(h.caseId) ?? [];
+		if (list.length < 10) list.push(h.result);
+		historyByCase.set(h.caseId, list);
+	}
+
+	for (const f of failures) {
+		const testCase = cases.find((c) => f.tags.some((t) => t.replace(/^@/, '') === c.displayId));
+		const results = testCase ? (historyByCase.get(testCase.id) ?? []) : []; // most recent first
+		const failCount = results.filter((r) => r === 'fail').length;
+		f.recentResults = results;
+		f.flakySignal =
+			results.length === 0
+				? 'no history for this test case yet'
+				: failCount === results.length
+					? 'failed every recent run, likely a real regression'
+					: failCount > 0
+						? 'mixed pass/fail recently, likely flaky'
+						: 'passed every recent run before this one';
+	}
+
+	return {
+		reportId: report.id,
+		status: report.status,
+		browser: report.browser,
+		createdAt: report.createdAt,
+		failures
+	};
+}
 
 /**
  * Metadata for every recording on a report: deliberately excludes `events`
@@ -665,12 +785,31 @@ const attachDurationToLatestReport = async ({ projectId, afterTimestamp, duratio
 // Delete operations
 // ---------------------------------------------------------------------------
 
+// Screenshots live on disk, not in a cascade-deleting child table, a report
+// row going away has to take its screenshot files with it explicitly.
+function screenshotFilenames(content) {
+	return (content?.features ?? [])
+		.flatMap((f) => f.scenarios ?? [])
+		.map((s) => s.screenshot)
+		.filter(Boolean);
+}
+
+async function deleteReportScreenshots(where) {
+	const reports = await prisma.report.findMany({ where, select: { content: true } });
+	for (const filename of reports.flatMap((r) => screenshotFilenames(r.content))) {
+		deleteScreenshot(filename);
+	}
+}
+
 const deleteReport = async (projectId, id) => {
+	await deleteReportScreenshots({ id, projectId });
 	await prisma.report.deleteMany({ where: { id, projectId } });
 };
 
 const deleteReports = async (projectId, ids) => {
-	await prisma.report.deleteMany({ where: { id: { in: ids }, projectId } });
+	const where = { id: { in: ids }, projectId };
+	await deleteReportScreenshots(where);
+	await prisma.report.deleteMany({ where });
 };
 
 // Instance-wide nightly prune. Recordings cascade-delete with their report;
@@ -678,8 +817,9 @@ const deleteReports = async (projectId, ids) => {
 const pruneOldReports = async (retentionDays) => {
 	const days = Number(retentionDays);
 	if (!Number.isFinite(days) || days <= 0) return { count: 0 };
-	const cutoff = new Date(Date.now() - days * 86_400_000);
-	return prisma.report.deleteMany({ where: { createdAt: { lt: cutoff } } });
+	const where = { createdAt: { lt: new Date(Date.now() - days * 86_400_000) } };
+	await deleteReportScreenshots(where);
+	return prisma.report.deleteMany({ where });
 };
 
 /**
@@ -705,6 +845,7 @@ module.exports = {
 	getReports,
 	getLatestReportId,
 	getReportDetail,
+	getReportAnalysis,
 	getRecordings,
 	getRecordingEvents,
 	saveReport,

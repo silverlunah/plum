@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const settingsService = require('../services/settingsService');
+const githubService = require('../services/githubService');
 const testSuiteService = require('../services/testSuiteService');
 const testCaseService = require('../services/testCaseService');
 const { jwtAuth } = require('../middleware/jwtAuth');
@@ -45,6 +46,100 @@ router.post('/organization', orgOnly, async (req, res, next) => {
 				googleLoginEnabled,
 				googleClientId,
 				googleClientSecret
+			})
+		);
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/ai', orgOnly, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getAiConfig());
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/ai', orgOnly, async (req, res, next) => {
+	try {
+		const { anthropicApiKey, anthropicModel, openaiApiKey, openaiModel } = req.body;
+		res.json(
+			await settingsService.updateAiConfig({
+				anthropicApiKey,
+				anthropicModel,
+				openaiApiKey,
+				openaiModel
+			})
+		);
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/github', orgOnly, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getGithubConfig());
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/github', orgOnly, async (req, res, next) => {
+	try {
+		const { githubToken } = req.body;
+		res.json(await settingsService.updateGithubConfig({ githubToken }));
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/github/verify', orgOnly, async (req, res, next) => {
+	try {
+		res.json(await githubService.verifyConnection());
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/project/ai', scopedAdmin, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getProjectAiConfig(req.projectId));
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/project/ai', scopedAdmin, async (req, res, next) => {
+	try {
+		const { aiSystemPrompt, aiCodePractices } = req.body;
+		res.json(
+			await settingsService.updateProjectAiConfig(req.projectId, {
+				aiSystemPrompt,
+				aiCodePractices
+			})
+		);
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/project/github', scopedAdmin, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getProjectGithubConfig(req.projectId));
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/project/github', scopedAdmin, async (req, res, next) => {
+	try {
+		const { githubOwner, githubRepo, githubDefaultBranch } = req.body;
+		res.json(
+			await settingsService.updateProjectGithubConfig(req.projectId, {
+				githubOwner,
+				githubRepo,
+				githubDefaultBranch
 			})
 		);
 	} catch (e) {

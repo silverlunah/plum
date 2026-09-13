@@ -55,7 +55,9 @@ export async function setup({
 	name,
 	email,
 	password,
-	termsAccepted
+	termsAccepted,
+	githubToken,
+	repo
 }) {
 	const res = await fetchWithTimeout(`${API_BASE}/auth/setup`, {
 		method: 'POST',
@@ -67,7 +69,9 @@ export async function setup({
 			name,
 			email,
 			password,
-			termsAccepted
+			termsAccepted,
+			githubToken,
+			repo
 		})
 	});
 	const data = await res.json();

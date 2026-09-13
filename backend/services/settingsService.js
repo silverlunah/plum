@@ -149,8 +149,7 @@ const getBackupConfig = async () => {
 		backupS3SecretKeySet: org.backupS3SecretKey.length > 0,
 		backupS3Prefix: org.backupS3Prefix,
 		backupLastRunAt: org.backupLastRunAt,
-		backupLastStatus: org.backupLastStatus,
-		backupIncludeReports: org.backupIncludeReports
+		backupLastStatus: org.backupLastStatus
 	};
 };
 
@@ -163,8 +162,7 @@ const updateBackupConfig = async ({
 	backupS3Bucket,
 	backupS3AccessKey,
 	backupS3SecretKey,
-	backupS3Prefix,
-	backupIncludeReports
+	backupS3Prefix
 }) => {
 	const org = await getOrgRaw();
 	const updated = await prisma.organization.update({
@@ -178,8 +176,7 @@ const updateBackupConfig = async ({
 			...(backupS3Bucket !== undefined && { backupS3Bucket }),
 			...(backupS3AccessKey !== undefined && { backupS3AccessKey }),
 			...(backupS3SecretKey && { backupS3SecretKey }),
-			...(backupS3Prefix !== undefined && { backupS3Prefix }),
-			...(backupIncludeReports !== undefined && { backupIncludeReports })
+			...(backupS3Prefix !== undefined && { backupS3Prefix })
 		}
 	});
 	await activityService.record(ACTIVITY_ACTION.BACKUP_CONFIG_UPDATE, {
@@ -269,6 +266,116 @@ const updateActivityRetention = async (days) => {
 		metadata: { days: updated.activityRetentionDays }
 	});
 	return { activityRetentionDays: updated.activityRetentionDays };
+};
+
+// Owner view of the AI provider credentials. Never returns the keys themselves.
+const getAiConfig = async () => {
+	const org = await getOrgRaw();
+	return {
+		anthropicApiKeySet: org.anthropicApiKey !== '',
+		anthropicModel: org.anthropicModel,
+		openaiApiKeySet: org.openaiApiKey !== '',
+		openaiModel: org.openaiModel
+	};
+};
+
+const updateAiConfig = async ({ anthropicApiKey, anthropicModel, openaiApiKey, openaiModel }) => {
+	const org = await getOrgRaw();
+	const data = {};
+	// Blank means "leave the stored key alone", matching the Google OAuth secret UI.
+	if (anthropicApiKey) data.anthropicApiKey = String(anthropicApiKey).trim();
+	if (anthropicModel !== undefined) data.anthropicModel = String(anthropicModel).trim();
+	if (openaiApiKey) data.openaiApiKey = String(openaiApiKey).trim();
+	if (openaiModel !== undefined) data.openaiModel = String(openaiModel).trim();
+
+	await prisma.organization.update({ where: { id: org.id }, data });
+	await activityService.record(ACTIVITY_ACTION.AI_CONFIG_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'ai', label: 'AI provider settings' },
+		metadata: { changed: Object.keys(data) }
+	});
+	return getAiConfig();
+};
+
+// Owner view of the GitHub connection. Never returns the token itself.
+const getGithubConfig = async () => {
+	const org = await getOrgRaw();
+	return { githubTokenSet: org.githubToken !== '' };
+};
+
+const updateGithubConfig = async ({ githubToken }) => {
+	const org = await getOrgRaw();
+	const data = {};
+	if (githubToken) data.githubToken = String(githubToken).trim();
+
+	await prisma.organization.update({ where: { id: org.id }, data });
+	await activityService.record(ACTIVITY_ACTION.GITHUB_CONFIG_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'github', label: 'GitHub connection' },
+		metadata: { changed: Object.keys(data) }
+	});
+	return getGithubConfig();
+};
+
+// Per-project AI behaviour, not a secret: what the agent is told about this
+// project's tone and coding conventions.
+const getProjectAiConfig = async (projectId) => {
+	const project = await getProjectRaw(projectId);
+	return { aiSystemPrompt: project.aiSystemPrompt, aiCodePractices: project.aiCodePractices };
+};
+
+const updateProjectAiConfig = async (projectId, { aiSystemPrompt, aiCodePractices }) => {
+	const project = await prisma.project.update({
+		where: { id: projectId },
+		data: {
+			...(aiSystemPrompt !== undefined && { aiSystemPrompt: String(aiSystemPrompt) }),
+			...(aiCodePractices !== undefined && { aiCodePractices: String(aiCodePractices) })
+		},
+		select: { id: true, name: true, aiSystemPrompt: true, aiCodePractices: true }
+	});
+	await activityService.record(ACTIVITY_ACTION.PROJECT_AI_CONFIG_UPDATE, {
+		projectId,
+		target: { type: 'project', id: projectId, label: project.name }
+	});
+	return { aiSystemPrompt: project.aiSystemPrompt, aiCodePractices: project.aiCodePractices };
+};
+
+// Per-project GitHub repo mapping, not a secret: which repo this project's
+// tests live in. The credential that authenticates against it is org-wide,
+// see getGithubConfig/updateGithubConfig above.
+const getProjectGithubConfig = async (projectId) => {
+	const project = await getProjectRaw(projectId);
+	return {
+		githubOwner: project.githubOwner,
+		githubRepo: project.githubRepo,
+		githubDefaultBranch: project.githubDefaultBranch
+	};
+};
+
+const updateProjectGithubConfig = async (
+	projectId,
+	{ githubOwner, githubRepo, githubDefaultBranch }
+) => {
+	const project = await prisma.project.update({
+		where: { id: projectId },
+		data: {
+			...(githubOwner !== undefined && { githubOwner: String(githubOwner).trim() }),
+			...(githubRepo !== undefined && { githubRepo: String(githubRepo).trim() }),
+			...(githubDefaultBranch !== undefined && {
+				githubDefaultBranch: String(githubDefaultBranch).trim() || 'main'
+			})
+		},
+		select: { id: true, name: true, githubOwner: true, githubRepo: true, githubDefaultBranch: true }
+	});
+	await activityService.record(ACTIVITY_ACTION.PROJECT_GITHUB_CONFIG_UPDATE, {
+		projectId,
+		target: { type: 'project', id: projectId, label: project.name }
+	});
+	return {
+		githubOwner: project.githubOwner,
+		githubRepo: project.githubRepo,
+		githubDefaultBranch: project.githubDefaultBranch
+	};
 };
 
 // Owner view. Never returns googleClientSecret, only whether one is set.
@@ -397,5 +504,13 @@ module.exports = {
 	getReportRetention,
 	updateReportRetention,
 	getBuiltInRunnerEnabled,
-	updateBuiltInRunnerEnabled
+	updateBuiltInRunnerEnabled,
+	getAiConfig,
+	updateAiConfig,
+	getGithubConfig,
+	updateGithubConfig,
+	getProjectAiConfig,
+	updateProjectAiConfig,
+	getProjectGithubConfig,
+	updateProjectGithubConfig
 };

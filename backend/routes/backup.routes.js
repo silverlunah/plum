@@ -28,8 +28,7 @@ function restoreGate(req, res, next) {
 
 router.get('/export', jwtAuth, requireOwner, async (req, res) => {
 	try {
-		const { backupIncludeReports } = await settingsService.getBackupConfig();
-		const data = await backupService.exportAll(backupIncludeReports);
+		const data = await backupService.exportAll();
 		const fileName = `plum-backup-${new Date().toISOString().slice(0, 10)}.json`;
 		res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
 		res.setHeader('Content-Type', 'application/json');

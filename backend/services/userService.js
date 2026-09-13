@@ -9,6 +9,8 @@ const jwt = require('jsonwebtoken');
 const prisma = require('./prisma');
 const activityService = require('./activityService');
 const projectPaths = require('../lib/projectPaths');
+const projectService = require('./projectService');
+const notificationInboxService = require('./notificationInboxService');
 const { slugify } = require('../lib/slugify');
 const { ROLE } = require('../constants/roles');
 const { isFramework } = require('../constants/defaults');
@@ -65,12 +67,28 @@ async function createUser({ name, email, password, role = 'user' }) {
 
 // First boot: the organisation, its first project, and the owner, all or
 // nothing. The owner reaches every project implicitly, so no ProjectMember row.
-async function bootstrap({ organizationName, projectName, name, email, password, framework }) {
+// A GitHub token is accepted here (rather than requiring a later trip to
+// Integrations) only because it's the one moment a repo choice can be wired up
+// for the org's first project; every other org setting still lives in Settings.
+async function bootstrap({
+	organizationName,
+	projectName,
+	name,
+	email,
+	password,
+	framework,
+	githubToken,
+	repo
+}) {
 	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 	const slug = slugify(projectName);
 	const result = await prisma.$transaction(async (tx) => {
 		const org = await tx.organization.create({
-			data: { name: organizationName, termsAcceptedAt: new Date() }
+			data: {
+				name: organizationName,
+				termsAcceptedAt: new Date(),
+				...(githubToken && { githubToken })
+			}
 		});
 		const project = await tx.project.create({
 			data: { orgId: org.id, name: projectName, slug, ...(isFramework(framework) && { framework }) }
@@ -82,8 +100,22 @@ async function bootstrap({ organizationName, projectName, name, email, password,
 		return { org, project, user };
 	});
 	await projectPaths.refresh();
-	projectPaths.scaffoldProject(slug, result.project.framework);
-	return result;
+	if (repo?.repoMode !== 'existing') projectPaths.scaffoldProject(slug, result.project.framework);
+	// The org/project/user above are already committed: a bad token/repo name
+	// here must not throw, or needsSetup() wedges shut (an Organization row now
+	// exists) with no way back into the wizard, even though the account itself
+	// is real and usable. Connecting the repo later via Settings already works
+	// (Phase 3), so degrade to that instead of failing the whole first run.
+	let repoSetupError = null;
+	if (githubToken && repo?.repoMode) {
+		try {
+			await projectService.setupRepository(result.project, repo);
+		} catch (e) {
+			console.error('[setup] Repo setup failed during bootstrap:', e.message);
+			repoSetupError = e.message;
+		}
+	}
+	return { ...result, repoSetupError };
 }
 
 async function issueSession(user) {
@@ -108,11 +140,39 @@ async function issueSession(user) {
 	};
 }
 
+// Fires once per user, the first time they ever log in (checked via a column
+// set right here, not "first ever" in some more general sense). Never allowed
+// to fail the login itself.
+async function seedFirstLoginNotifications(user) {
+	if (user.firstLoginNotifiedAt) return;
+	try {
+		await prisma.user.update({
+			where: { id: user.id },
+			data: { firstLoginNotifiedAt: new Date() }
+		});
+		await notificationInboxService.create({
+			userId: user.id,
+			type: 'setup_project',
+			title: 'Set up your project',
+			body: 'Add a name and logo for your first project.',
+			link: '/settings?section=project'
+		});
+		await notificationInboxService.create({
+			userId: user.id,
+			type: 'connect_integrations',
+			title: 'Connect GitHub & AI',
+			body: 'Add provider keys and a GitHub token to unlock the AI agent.',
+			link: '/settings?section=integrations'
+		});
+	} catch {}
+}
+
 async function login({ email, password }) {
 	const user = await prisma.user.findUnique({ where: { email } });
 	if (!user) return null;
 	const match = await bcrypt.compare(password, user.password);
 	if (!match) return null;
+	await seedFirstLoginNotifications(user);
 	return issueSession(user);
 }
 
@@ -138,6 +198,7 @@ async function loginWithGoogle({ googleId, email, emailVerified, name }) {
 			data: { googleId, ...(name && user.name !== name && { name }) }
 		});
 	}
+	await seedFirstLoginNotifications(user);
 	return { ok: true, ...(await issueSession(user)) };
 }
 
