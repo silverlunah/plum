@@ -17,6 +17,8 @@
 	import { fetchRunners, fetchBuiltInEnabled } from '$lib/api/runners';
 	import { notify } from '$lib/stores/notifications';
 	import { relativeTime } from '$lib/utils/format';
+	import { LOADING_LABEL, BUILTIN_RUNNER_LABEL } from '$lib/copy/common';
+	import { AI_SESSION_ID_KEY, AI_KICKOFF_MESSAGE_KEY } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
@@ -47,6 +49,8 @@
 		BROWSER_PANEL_UNAVAILABLE,
 		NO_SESSIONS_YET_TITLE,
 		NO_SESSIONS_YET_DESC,
+		NO_MESSAGES_YET_LABEL,
+		END_SESSION_CONFIRM_BODY,
 		FAILED_TO_LOAD_SESSIONS,
 		FAILED_TO_START_SESSION,
 		FAILED_TO_SEND_MESSAGE,
@@ -96,7 +100,7 @@
 		try {
 			activeSession = await getAiSession(id);
 			try {
-				sessionStorage.setItem('plum:ai:sessionId', id);
+				sessionStorage.setItem(AI_SESSION_ID_KEY, id);
 			} catch {}
 			setTab('chat');
 		} finally {
@@ -122,7 +126,7 @@
 			activeSession = session;
 			sessions = [session, ...sessions];
 			try {
-				sessionStorage.setItem('plum:ai:sessionId', session.id);
+				sessionStorage.setItem(AI_SESSION_ID_KEY, session.id);
 			} catch {}
 			form = { provider: form.provider, title: '', runnerIds: ['built-in'] };
 		} catch (e) {
@@ -153,7 +157,7 @@
 		await endAiSession(activeSession.id);
 		activeSession = null;
 		try {
-			sessionStorage.removeItem('plum:ai:sessionId');
+			sessionStorage.removeItem(AI_SESSION_ID_KEY);
 		} catch {}
 		loadSessions();
 	}
@@ -161,7 +165,7 @@
 	function newSessionDraft() {
 		activeSession = null;
 		try {
-			sessionStorage.removeItem('plum:ai:sessionId');
+			sessionStorage.removeItem(AI_SESSION_ID_KEY);
 		} catch {}
 	}
 
@@ -202,9 +206,9 @@
 		loadSessions();
 		let savedId, kickoffMessage;
 		try {
-			savedId = sessionStorage.getItem('plum:ai:sessionId');
-			kickoffMessage = sessionStorage.getItem('plum:ai:kickoffMessage');
-			sessionStorage.removeItem('plum:ai:kickoffMessage');
+			savedId = sessionStorage.getItem(AI_SESSION_ID_KEY);
+			kickoffMessage = sessionStorage.getItem(AI_KICKOFF_MESSAGE_KEY);
+			sessionStorage.removeItem(AI_KICKOFF_MESSAGE_KEY);
 		} catch {}
 		if (savedId) {
 			await openSession(savedId);
@@ -236,7 +240,7 @@
 
 {#if tab === 'chat'}
 	{#if loadingActiveSession}
-		<p class="muted">Loading…</p>
+		<p class="muted">{LOADING_LABEL}</p>
 	{:else if !activeSession}
 		<div class="new-session" in:fly={{ y: 8, duration: 150 }}>
 			{#if !providers.anthropicApiKeySet && !providers.openaiApiKeySet}
@@ -275,7 +279,7 @@
 									checked={form.runnerIds.includes('built-in')}
 									on:change={() => toggleRunner('built-in')}
 								/>
-								<span>Built-in</span>
+								<span>{BUILTIN_RUNNER_LABEL}</span>
 							</label>
 						{/if}
 						{#each runnerOptions as r}
@@ -318,7 +322,7 @@
 			<div class="chat-pane">
 				<div class="messages" bind:this={messagesEl} on:scroll={onScroll}>
 					{#if activeSession.transcript.length === 0}
-						<EmptyState message="Say hello to get started." />
+						<EmptyState message={NO_MESSAGES_YET_LABEL} />
 					{/if}
 					{#each activeSession.transcript as msg}
 						<div class="message" class:from-user={msg.role === 'user'}>
@@ -376,7 +380,7 @@
 		</div>
 	{/if}
 {:else if loadingSessions}
-	<p class="muted">Loading…</p>
+	<p class="muted">{LOADING_LABEL}</p>
 {:else if sessions.length === 0}
 	<EmptyState title={NO_SESSIONS_YET_TITLE} description={NO_SESSIONS_YET_DESC} />
 {:else}
@@ -398,7 +402,7 @@
 	confirmLabel={END_SESSION_LABEL}
 	on:confirm={confirmEndSession}
 >
-	End this session? Its workspace will be removed.
+	{END_SESSION_CONFIRM_BODY}
 </ConfirmModal>
 
 <style>

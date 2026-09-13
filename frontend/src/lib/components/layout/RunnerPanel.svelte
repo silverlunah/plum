@@ -42,6 +42,7 @@
 		ELEVATED_ROLES
 	} from '$lib/constants';
 	import { BUILTIN_RUNNER_LABEL, CLEAR_LABEL, DISCORD_LABEL, SLACK_LABEL } from '$lib/copy/common';
+	import { AI_SESSION_ID_KEY } from '$lib/constants';
 	import {
 		RUN_ALL_TITLE,
 		RUN_ALL_CONFIRM_LABEL,
@@ -980,7 +981,7 @@
 							? () => {
 									if (isAiSession) {
 										try {
-											sessionStorage.setItem('plum:ai:sessionId', runId);
+											sessionStorage.setItem(AI_SESSION_ID_KEY, runId);
 										} catch {}
 									}
 									panelExpanded.set(false);

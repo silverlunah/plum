@@ -7,6 +7,8 @@
 	import { page } from '$app/stores';
 	import { slide } from 'svelte/transition';
 	import { onMount } from 'svelte';
+	import { notify } from '$lib/stores/notifications';
+	import { repoSetupWarning } from '$lib/copy/auth';
 	import { auth } from '$lib/stores/auth';
 	import { fetchProjects } from '$lib/api/projects';
 	import { branding, loadBranding } from '$lib/stores/branding';
@@ -43,6 +45,13 @@
 		} catch {}
 		loadBranding();
 		loadNotificationInbox().catch(() => {});
+		try {
+			const repoWarning = sessionStorage.getItem('plum:setup:repoWarning');
+			if (repoWarning) {
+				sessionStorage.removeItem('plum:setup:repoWarning');
+				notify('error', repoSetupWarning(repoWarning), { sticky: true });
+			}
+		} catch {}
 	});
 
 	function switchProject(id) {

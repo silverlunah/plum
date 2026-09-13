@@ -135,12 +135,24 @@ async function create({ name, framework, repo }) {
 	// An 'existing' repo brings its own content via clone; scaffolding first would
 	// leave the destination non-empty and the clone would refuse to run.
 	if (repo?.repoMode !== 'existing') projectPaths.scaffoldProject(slug, project.framework);
-	if (repo?.repoMode) await setupRepository(project, repo);
+	// The Project row above is already committed: a bad token/repo name here
+	// must not throw and leave the caller with neither a working project nor a
+	// clean error to retry against. Connecting the repo later via Settings
+	// already works (Phase 3), so degrade to that instead of failing outright.
+	let repoSetupError = null;
+	if (repo?.repoMode) {
+		try {
+			await setupRepository(project, repo);
+		} catch (e) {
+			console.error('[project] Repo setup failed during create:', e.message);
+			repoSetupError = e.message;
+		}
+	}
 	await activityService.record(ACTIVITY_ACTION.PROJECT_CREATE, {
 		scope: ACTIVITY_SCOPE.ORG,
 		target: { type: 'project', id: project.id, label: project.name }
 	});
-	return prisma.project.findUnique({
+	const created = await prisma.project.findUnique({
 		where: { id: project.id },
 		select: {
 			id: true,
@@ -153,6 +165,7 @@ async function create({ name, framework, repo }) {
 			githubDefaultBranch: true
 		}
 	});
+	return { ...created, repoSetupError };
 }
 
 // Wipes a project and everything under it: suites, cases, runs, reports, cron,

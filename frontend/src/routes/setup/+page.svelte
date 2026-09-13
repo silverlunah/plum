@@ -139,7 +139,7 @@
 		error = '';
 		loading = true;
 		try {
-			const { token, user } = await setup({
+			const { token, user, repoSetupError } = await setup({
 				organizationName,
 				projectName,
 				framework,
@@ -162,6 +162,14 @@
 							: undefined
 			});
 			auth.login(token, user);
+			// window.location.href below is a full page reload, which would drop a
+			// toast fired here before it ever renders — Nav.svelte picks this up on
+			// mount instead, same handoff pattern the AI Analyze flow already uses.
+			if (repoSetupError) {
+				try {
+					sessionStorage.setItem('plum:setup:repoWarning', repoSetupError);
+				} catch {}
+			}
 			window.location.href = '/';
 		} catch (e) {
 			error = e.message || SETUP_FAILED_FALLBACK;

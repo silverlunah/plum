@@ -41,6 +41,8 @@ export const NO_SESSIONS_YET_TITLE = 'No AI sessions yet';
 export const NO_SESSIONS_YET_DESC =
 	'Start a session to have the agent write and run tests for you.';
 export const NOT_YOUR_SESSION = 'Only the session creator can open it.';
+export const NO_MESSAGES_YET_LABEL = 'Say hello to get started.';
+export const END_SESSION_CONFIRM_BODY = 'End this session? Its workspace will be removed.';
 
 export const STATUS_LABEL = {
 	queued: 'Queued',

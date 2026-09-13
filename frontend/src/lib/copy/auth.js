@@ -28,6 +28,8 @@ export const PASSWORD_MIN_PLACEHOLDER = 'Min. 8 characters';
 export const ALL_FIELDS_REQUIRED = 'All fields are required.';
 export const PASSWORD_MIN_LENGTH_ERROR = 'Password must be at least 8 characters.';
 export const SETUP_FAILED_FALLBACK = 'Setup failed';
+export const repoSetupWarning = (message) =>
+	`Your account was created, but connecting the repo failed: ${message}. Connect it in Settings → Project.`;
 
 export const SETUP_STEP_ORG_TITLE = 'Name your organization';
 export const SETUP_STEP_ORG_SUBTITLE =

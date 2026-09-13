@@ -18,6 +18,7 @@
 		setProjectMembers
 	} from '$lib/api/projects';
 	import { fetchGithubConfig } from '$lib/api/settings';
+	import { repoSetupWarning } from '$lib/copy/auth';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Paginator from '$lib/components/ui/Paginator.svelte';
@@ -192,7 +193,7 @@
 		creating = true;
 		createError = '';
 		try {
-			await createProject({
+			const project = await createProject({
 				name: newName.trim(),
 				framework: newFramework,
 				repo:
@@ -218,6 +219,10 @@
 			githubDefaultBranch = 'main';
 			testsSubpath = 'tests';
 			newRepoName = '';
+			// The project itself was created either way, this just flags that the
+			// repo connection specifically needs another try (from this same form,
+			// picking the now-existing project's repo mode again).
+			if (project.repoSetupError) createError = repoSetupWarning(project.repoSetupError);
 		} catch (e) {
 			createError = e.message;
 		} finally {
