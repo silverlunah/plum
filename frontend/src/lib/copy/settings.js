@@ -54,12 +54,12 @@ export const PROJECT_DESC = 'Identity information shown across the UI';
 export const RUNNERS_DESC =
 	'Register self-hosted runner nodes to distribute tests across machines.';
 export const REPOSITORY_DESC = 'Configure ID prefixes for test suites and cases.';
-export const INTEGRATIONS_DESC =
-	'Connect Discord and Slack to receive run notifications with pass/fail results and report links.';
+export const INTEGRATIONS_DESC = 'Connect AI providers, GitHub, and notification webhooks.';
 export const MCP_DESC =
 	'Your personal API key for this project. It authenticates the REST API and an MCP client alike, acting as you with your role, so treat it like your password. Anything it creates or runs is tagged “(MCP)”.';
 export const ACCOUNT_DESC = 'Manage your profile, credentials and session.';
 export const USERS_DESC = 'Add and manage who can access Plum.';
+export const USERS_ADMIN_DESC = 'Reset the password of a user who is locked out.';
 export const BACKUP_DESC =
 	'Export your test cases, schedules, users, and project settings. Automate uploads to any S3-compatible storage, Cloudflare R2, Backblaze B2, AWS S3, or MinIO.';
 
@@ -82,7 +82,6 @@ export const PROJECT_NAME_PLACEHOLDER = 'My Test Suite';
 export const LOGO_URL_LABEL = 'Logo URL (optional)';
 export const LOGO_URL_HINT = 'Direct link to an image (PNG, SVG, JPG)';
 export const LOGO_URL_PLACEHOLDER = 'https://example.com/logo.png';
-export const PREVIEW_LABEL = 'Preview';
 export const LOGO_PREVIEW_ALT = 'Project logo preview';
 export const TIMEZONE_LABEL = 'Timezone';
 export const TIMEZONE_HINT = 'Used to schedule this project’s cron test runs';
@@ -182,15 +181,11 @@ export const runMigrationLabel = (migrating) => (migrating ? 'Migrating…' : 'R
 // ── Integrations ──
 export const WEBHOOKS_CARD_TITLE = 'Webhooks';
 export const DISCORD_WEBHOOK_LABEL = 'Discord Webhook URL';
-export const DISCORD_WEBHOOK_HINT = 'Leave blank to disable Discord notifications';
+export const DISCORD_WEBHOOK_HINT = 'Only sends when a run opts in to Discord notifications';
 export const DISCORD_WEBHOOK_PLACEHOLDER = 'https://discord.com/api/webhooks/…';
 export const SLACK_WEBHOOK_LABEL = 'Slack Webhook URL';
-export const SLACK_WEBHOOK_HINT = 'Leave blank to disable Slack notifications';
+export const SLACK_WEBHOOK_HINT = 'Only sends when a run opts in to Slack notifications';
 export const SLACK_WEBHOOK_PLACEHOLDER = 'https://hooks.slack.com/services/…';
-export const PUBLIC_URL_LABEL = 'Public URL';
-export const PUBLIC_URL_HINT =
-	'Base URL of this Plum instance, used to link reports in notifications, and by remote runner nodes to stream live test output back here';
-export const PUBLIC_URL_PLACEHOLDER = 'https://plum.yourcompany.com';
 export const INTEGRATIONS_SAVED_TOAST = 'Integration settings saved.';
 export const INTEGRATIONS_SAVE_FAILED = 'Failed to save integration settings.';
 
@@ -208,6 +203,66 @@ const COPY_WORKFLOW_STEP_LABEL = 'Copy Workflow Step';
 
 export const saveIntegrationsLabel = (saving) => (saving ? SAVING_LABEL : 'Save Integrations');
 export const copyCiSnippetLabel = (copied) => (copied ? COPIED_LABEL : COPY_WORKFLOW_STEP_LABEL);
+
+// ── Integrations: sub-tabs ──
+export const WEBHOOKS_TAB_LABEL = 'Webhooks';
+export const AI_TAB_LABEL = 'AI';
+export const GITHUB_TAB_LABEL = 'GitHub';
+
+// ── Integrations: AI ──
+export const AI_PROVIDER_CARD_TITLE = 'AI provider keys';
+export const AI_PROVIDER_CARD_DESC = 'Owner only. Instance-wide, every project shares these keys.';
+export const ANTHROPIC_API_KEY_LABEL = 'Anthropic API key';
+export const ANTHROPIC_API_KEY_PLACEHOLDER = 'sk-ant-…';
+export const ANTHROPIC_MODEL_LABEL = 'Anthropic model';
+export const ANTHROPIC_MODEL_PLACEHOLDER = 'claude-sonnet-5';
+export const OPENAI_API_KEY_LABEL = 'OpenAI API key';
+export const OPENAI_API_KEY_PLACEHOLDER = 'sk-…';
+export const OPENAI_MODEL_LABEL = 'OpenAI model';
+export const OPENAI_MODEL_PLACEHOLDER = 'gpt-5';
+export const AI_CONFIG_SAVED_TOAST = 'AI provider settings saved.';
+export const AI_CONFIG_SAVE_FAILED = 'Failed to save AI provider settings.';
+
+export const AI_BEHAVIOUR_CARD_TITLE = 'Agent behaviour';
+export const AI_BEHAVIOUR_CARD_DESC = 'How the AI agent should act in this project.';
+export const AI_SYSTEM_PROMPT_LABEL = 'Personality & tone';
+export const AI_SYSTEM_PROMPT_PLACEHOLDER = 'e.g. Be terse. Ask before deleting a test.';
+export const AI_CODE_PRACTICES_LABEL = 'Coding conventions';
+export const AI_CODE_PRACTICES_PLACEHOLDER =
+	'e.g. Use the Page Object Model. Prefer data-testid selectors.';
+export const AI_PROJECT_CONFIG_SAVED_TOAST = 'AI behaviour saved.';
+export const AI_PROJECT_CONFIG_SAVE_FAILED = 'Failed to save AI behaviour.';
+export const AI_OWNER_ONLY_NOTE = 'Ask an owner to connect provider keys before the agent can run.';
+
+export const saveAiKeysLabel = (saving) => (saving ? SAVING_LABEL : 'Save AI Keys');
+export const saveAiBehaviourLabel = (saving) => (saving ? SAVING_LABEL : 'Save Behaviour');
+
+// ── Integrations: GitHub ──
+export const GITHUB_CONNECTION_CARD_TITLE = 'GitHub connection';
+export const GITHUB_CONNECTION_CARD_DESC =
+	'Owner only. Instance-wide: a fine-grained personal access token with repo scope and "Administration: write" (to create private repos).';
+export const GITHUB_TOKEN_LABEL = 'Personal access token';
+export const GITHUB_TOKEN_PLACEHOLDER = 'github_pat_…';
+export const GITHUB_CONFIG_SAVED_TOAST = 'GitHub connection saved.';
+export const GITHUB_CONFIG_SAVE_FAILED = 'Failed to save GitHub connection.';
+
+export const GITHUB_REPO_CARD_TITLE = 'Repository';
+export const GITHUB_REPO_CARD_DESC = "Which GitHub repo this project's tests live in.";
+export const GITHUB_OWNER_LABEL = 'Owner';
+export const GITHUB_OWNER_PLACEHOLDER = 'silverlunah';
+export const GITHUB_REPO_LABEL = 'Repository';
+export const GITHUB_REPO_PLACEHOLDER = 'plum-tests';
+export const GITHUB_DEFAULT_BRANCH_LABEL = 'Default branch';
+export const GITHUB_DEFAULT_BRANCH_PLACEHOLDER = 'main';
+export const GITHUB_PROJECT_CONFIG_SAVED_TOAST = 'Repository settings saved.';
+export const GITHUB_PROJECT_CONFIG_SAVE_FAILED = 'Failed to save repository settings.';
+
+export const GITHUB_VERIFY_FAILED = 'Could not verify the GitHub connection.';
+export const githubConnectedAsLabel = (username) => `Connected as ${username}`;
+
+export const saveGithubConnectionLabel = (saving) => (saving ? SAVING_LABEL : 'Save Connection');
+export const verifyGithubConnectionLabel = (verifying) => (verifying ? 'Checking…' : 'Verify');
+export const saveGithubRepoLabel = (saving) => (saving ? SAVING_LABEL : 'Save Repository');
 
 // ── MCP ──
 export const API_KEY_CARD_TITLE = 'Your API Key';
@@ -235,6 +290,9 @@ export const copyMcpSnippetLabel = (copied) => (copied ? COPIED_LABEL : COPY_CON
 
 // ── Account ──
 export const PROFILE_CARD_TITLE = 'Profile';
+export const DEFAULT_PROJECT_LABEL = 'Default project';
+export const DEFAULT_PROJECT_HINT = 'Which project you land on right after signing in.';
+export const NO_DEFAULT_PROJECT_LABEL = 'No preference';
 export const CHANGE_PASSWORD_CARD_TITLE = 'Change password';
 export const CURRENT_PASSWORD_LABEL = 'Current password';
 export const NEW_PASSWORD_LABEL = 'New password';
@@ -248,11 +306,55 @@ export const PASSWORD_CHANGED_TOAST = 'Password changed.';
 export const saveProfileLabel = (saving) => (saving ? SAVING_LABEL : 'Save Profile');
 export const changePasswordLabel = (saving) => (saving ? SAVING_LABEL : 'Change Password');
 
+// ── Organization (owner only, its own settings tab) ──
+export const ORGANIZATION_LABEL = 'Organization';
+export const ORGANIZATION_DESC =
+	'Your organization name and logo, first set when Plum was installed. Both show on the login screen.';
+export const ORG_IDENTITY_CARD_TITLE = 'Identity';
+export const ORG_NAME_LABEL = 'Organization name';
+export const ORG_NAME_PLACEHOLDER = 'Acme Inc.';
+export const ORG_LOGO_URL_LABEL = 'Logo URL';
+export const ORG_LOGO_URL_HINT = 'Direct link to an image (PNG, SVG, JPG)';
+export const ORG_LOGO_URL_PLACEHOLDER = 'https://example.com/logo.png';
+export const ORG_LOGO_PREVIEW_ALT = 'Organization logo preview';
+export const ORG_SAVED_TOAST = 'Organization saved.';
+export const saveOrgLabel = (saving) => (saving ? SAVING_LABEL : 'Save');
+
+// ── Sign-in options (owner only, Users tab) ──
+export const SIGN_IN_CARD_TITLE = 'Sign-in options';
+export const SIGN_IN_PASSWORD_LABEL = 'Email & password';
+export const SIGN_IN_PASSWORD_DESC = 'The built-in sign-in form.';
+export const SIGN_IN_GOOGLE_LABEL = 'Sign in with Google';
+export const SIGN_IN_GOOGLE_DESC =
+	'Google accounts whose email already belongs to a Plum user. Needs a client ID and secret below.';
+export const SIGN_IN_LAST_METHOD_ERROR = 'At least one sign-in method must stay enabled.';
+export const GOOGLE_CLIENT_ID_LABEL = 'Google client ID';
+export const GOOGLE_CLIENT_ID_PLACEHOLDER = '1234567890-abc.apps.googleusercontent.com';
+export const GOOGLE_CLIENT_SECRET_LABEL = 'Google client secret';
+export const GOOGLE_CLIENT_SECRET_PLACEHOLDER = 'GOCSPX-…';
+export const GOOGLE_CLIENT_SECRET_KEEP_PLACEHOLDER = 'Leave blank to keep the current secret';
+export const GOOGLE_REDIRECT_URI_LABEL = 'Authorized redirect URI';
+export const GOOGLE_REDIRECT_URI_HINT = "Add this to your OAuth client's redirect URIs";
+export const SIGN_IN_SAVED_TOAST = 'Sign-in options saved.';
+export const COPY_LABEL = 'Copy';
+export const COPIED_LABEL_UI = 'Copied';
+export const saveSignInLabel = (saving) => (saving ? SAVING_LABEL : 'Save');
+
+// ── Auto-logout (owner only, Users tab) ──
+export const SESSION_CARD_TITLE = 'Auto-logout';
+export const SESSION_TIMEOUT_LABEL = 'End sessions after';
+export const SESSION_TIMEOUT_HINT =
+	'Applies to sessions started after you save. People are returned to the login screen once the limit is reached.';
+export const SESSION_SAVED_TOAST = 'Auto-logout updated.';
+export const saveSessionLabel = (saving) => (saving ? SAVING_LABEL : 'Save');
+export const sessionTimeoutOptionLabel = (hours) => `${hours} hours`;
+
 // ── Users ──
 export const REMOVE_USER_MODAL_TITLE = 'Remove User';
 export const REMOVE_USER_LABEL = 'Remove';
 export const REMOVE_USER_BODY_PREFIX = 'Remove';
 export const REMOVE_USER_BODY_SUFFIX = '? They will lose access immediately.';
+export const USER_MANAGEMENT_CARD_TITLE = 'User Management';
 export const ADD_USER_CARD_TITLE = 'Add User';
 export const ALL_USERS_CARD_TITLE = 'All Users';
 export const USER_NAME_PLACEHOLDER = 'Jane Smith';
@@ -269,6 +371,20 @@ export const USER_PROJECTS_LABEL = 'Assigned projects';
 export const USER_NO_PROJECTS = 'Not assigned to any project.';
 export const USER_ALL_PROJECTS = 'Every project (owner).';
 
+export const RESET_PASSWORD_ICON_TITLE = 'Reset password';
+export const RESET_PASSWORD_MODAL_TITLE = 'Reset Password';
+export const RESET_PASSWORD_BODY_PREFIX = 'Generate a new temporary password for';
+export const RESET_PASSWORD_BODY_SUFFIX =
+	'? Their current password stops working immediately, and the new one is shown only once.';
+export const RESET_PASSWORD_RESULT_TITLE = 'Temporary Password';
+export const RESET_PASSWORD_RESULT_DESC =
+	'Copy this now and hand it over securely. It will not be shown again.';
+export const RESET_PASSWORD_COPY_TITLE = 'Copy';
+export const RESET_PASSWORD_COPIED_TITLE = 'Copied';
+export const RESET_PASSWORD_DONE_LABEL = 'Done';
+export const resetPasswordLabel = (saving) => (saving ? 'Resetting…' : 'Reset password');
+export const passwordResetToast = (name) => `Password reset for "${name}".`;
+
 export const addUserLabel = (saving) => (saving ? 'Adding…' : 'Add User');
 export const userAddedToast = (name) => `User "${name}" added.`;
 export const userRemovedToast = (name) => `User "${name}" removed.`;
@@ -283,14 +399,8 @@ export const IMPORT_BLOCK_TITLE = 'Import';
 export const IMPORT_BLOCK_DESC =
 	'Restores all data from a previously exported backup. Existing records are overwritten. Cron jobs are re-scheduled after import.';
 export const CHOOSE_FILE_LABEL = 'Choose file…';
-export const INCLUDE_REPORTS_LABEL = 'Include reports & recordings';
-export const INCLUDE_REPORTS_HINT =
-	'Applies to both manual export and scheduled S3 backups. Can make backups significantly larger, recordings are session replays, not just screenshots.';
-export const includeReportsDisclaimer = (included) =>
-	included
-		? 'Reports and recordings are included in backups.'
-		: 'Reports are not included in backups, enable "Include reports & recordings" above, or run pg_dump directly on the PostgreSQL volume, to back up report history.';
-export const saveIncludeReportsLabel = (saving) => (saving ? SAVING_LABEL : SAVE_LABEL);
+export const BACKUP_NO_REPORTS_DISCLAIMER =
+	'Reports, recordings and screenshots are never included in a backup, run pg_dump directly on the PostgreSQL volume to back up report history.';
 
 export const S3_STORAGE_CARD_TITLE = 'S3 Storage';
 export const S3_STORAGE_DESC_PREFIX =
@@ -439,7 +549,9 @@ const ACTIVITY_ACTION_META = {
 	'user.create': { verb: 'added user', tone: 'create' },
 	'user.update': { verb: 'edited user', tone: 'update' },
 	'user.role_change': { verb: 'changed the role of', tone: 'update' },
+	'user.password_reset': { verb: 'reset the password of', tone: 'update' },
 	'user.delete': { verb: 'deleted user', tone: 'delete' },
+	'org.settings_update': { verb: 'updated', tone: 'update' },
 	'node.create': { verb: 'registered node', tone: 'create' },
 	'node.update': { verb: 'updated node', tone: 'update' },
 	'node.delete': { verb: 'removed node', tone: 'delete' },
@@ -503,6 +615,25 @@ const FRAMEWORK_LABELS = { playwright: 'Playwright', cucumber: 'Cucumber' };
 export const frameworkLabel = (id) => FRAMEWORK_LABELS[id] ?? id ?? '';
 export const FRAMEWORK_PERMANENT_HINT =
 	'Set once, when the project is created. A project cannot switch frameworks afterwards, its tests, run command and reports all depend on the choice.';
+
+export const REPO_MODE_SKIP_LABEL = "I'll do this later";
+export const REPO_MODE_EXISTING_LABEL = 'Existing GitHub repo';
+export const REPO_MODE_NEW_LABEL = 'New GitHub repo';
+export const REPO_NOT_CONNECTED_NOTE = 'Connect GitHub in Integrations first.';
+export const REPO_OWNER_LABEL = 'Owner';
+export const REPO_OWNER_PLACEHOLDER = 'silverlunah';
+export const REPO_NAME_LABEL = 'Repository';
+export const REPO_NAME_PLACEHOLDER = 'plum-tests';
+export const REPO_BRANCH_LABEL = 'Default branch';
+export const REPO_BRANCH_PLACEHOLDER = 'main';
+export const REPO_TESTS_SUBPATH_LABEL = 'Tests folder';
+export const REPO_TESTS_SUBPATH_HINT =
+	'Relative path inside the repo, e.g. apps/web/e2e for a monorepo.';
+export const REPO_TESTS_SUBPATH_PLACEHOLDER = 'tests';
+export const NEW_REPO_NAME_LABEL = 'New repository name';
+export const NEW_REPO_NAME_HINT =
+	'Created as a private repo and pushed with the scaffolded tests as its first commit. Leave blank to just set up git locally.';
+export const NEW_REPO_NAME_PLACEHOLDER = 'plum-tests';
 export const DELETE_PROJECT_MODAL_TITLE = 'Delete project';
 export const deleteProjectWarning = (name) =>
 	`Deleting “${name}” permanently removes every test case, run, report, schedule and its test folder. Users keep their accounts and their names stay on past runs, but the project itself cannot be recovered.`;

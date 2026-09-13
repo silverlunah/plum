@@ -7,8 +7,12 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { setup, checkNeedsSetup } from '$lib/api/auth';
+	import { importBackup } from '$lib/api/settings';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
+	import { FRAMEWORKS } from '$lib/constants';
+	import { frameworkLabel } from '$lib/copy/settings';
+	import IconSelect from '$lib/components/ui/IconSelect.svelte';
 	import { EMAIL_LABEL, PASSWORD_LABEL } from '$lib/copy/common';
 	import {
 		CHECKING_SERVER,
@@ -22,16 +26,46 @@
 		SETUP_FAILED_FALLBACK,
 		SETUP_STEP_ORG_TITLE,
 		SETUP_STEP_ORG_SUBTITLE,
+		SETUP_STEP_REPO_TITLE,
+		SETUP_STEP_REPO_SUBTITLE,
 		SETUP_STEP_ADMIN_TITLE,
 		SETUP_STEP_ADMIN_SUBTITLE,
 		ORG_NAME_LABEL,
 		ORG_NAME_PLACEHOLDER,
 		PROJECT_NAME_LABEL,
 		PROJECT_NAME_PLACEHOLDER,
+		SETUP_FRAMEWORK_LABEL,
+		SETUP_FRAMEWORK_HINT,
 		SETUP_CONTINUE_LABEL,
 		SETUP_BACK_LABEL,
 		setupStepLabel,
-		createAccountLabel
+		createAccountLabel,
+		REPO_MODE_SKIP_LABEL,
+		REPO_MODE_EXISTING_LABEL,
+		REPO_MODE_NEW_LABEL,
+		SETUP_GITHUB_TOKEN_LABEL,
+		SETUP_GITHUB_TOKEN_HINT,
+		SETUP_GITHUB_TOKEN_PLACEHOLDER,
+		REPO_OWNER_LABEL,
+		REPO_OWNER_PLACEHOLDER,
+		REPO_NAME_LABEL,
+		REPO_NAME_PLACEHOLDER,
+		REPO_BRANCH_LABEL,
+		REPO_BRANCH_PLACEHOLDER,
+		REPO_TESTS_SUBPATH_LABEL,
+		REPO_TESTS_SUBPATH_HINT,
+		REPO_TESTS_SUBPATH_PLACEHOLDER,
+		NEW_REPO_NAME_LABEL,
+		NEW_REPO_NAME_HINT,
+		NEW_REPO_NAME_PLACEHOLDER,
+		RESTORE_INSTEAD_LABEL,
+		RESTORE_TITLE,
+		RESTORE_SUBTITLE,
+		RESTORE_FILE_LABEL,
+		RESTORE_FILE_REQUIRED_ERROR,
+		INVALID_BACKUP_FILE_ERROR,
+		RESTORE_FAILED_FALLBACK,
+		restoreButtonLabel
 	} from '$lib/copy/auth';
 	import {
 		TERMS_HEADING,
@@ -42,8 +76,11 @@
 	} from '$lib/copy/legal';
 
 	let step = 1;
+	const TOTAL_STEPS = 3;
 	let organizationName = '';
 	let projectName = '';
+	let framework = FRAMEWORKS[0];
+	const frameworkOptions = FRAMEWORKS.map((id) => ({ id, label: frameworkLabel(id) }));
 	let name = '';
 	let email = '';
 	let password = '';
@@ -52,8 +89,23 @@
 	let loading = false;
 	let checking = true;
 
+	let mode = 'setup'; // 'setup' | 'restore'
+	let restoreFile = null;
+	let restoreError = '';
+	let restoring = false;
+
+	// 'skip' | 'existing' | 'new'. Blank until the operator picks one; blank
+	// behaves like 'skip', the project stays local-only until Settings.
+	let repoMode = '';
+	let githubToken = '';
+	let githubOwner = '';
+	let githubRepoName = '';
+	let githubDefaultBranch = 'main';
+	let testsSubpath = 'tests';
+	let newRepoName = '';
+
 	$: step1Ready = organizationName.trim() && projectName.trim();
-	$: step2Ready = name.trim() && email.trim() && password && termsAccepted;
+	$: step3Ready = name.trim() && email.trim() && password && termsAccepted;
 
 	onMount(async () => {
 		try {
@@ -87,20 +139,67 @@
 		error = '';
 		loading = true;
 		try {
-			const { token, user } = await setup({
+			const { token, user, repoSetupError } = await setup({
 				organizationName,
 				projectName,
+				framework,
 				name,
 				email,
 				password,
-				termsAccepted
+				termsAccepted,
+				githubToken: repoMode ? githubToken : undefined,
+				repo:
+					repoMode === 'existing'
+						? {
+								repoMode,
+								githubOwner,
+								githubRepo: githubRepoName,
+								githubDefaultBranch,
+								testsPath: testsSubpath
+							}
+						: repoMode === 'new'
+							? { repoMode, newRepoName }
+							: undefined
 			});
 			auth.login(token, user);
+			// window.location.href below is a full page reload, which would drop a
+			// toast fired here before it ever renders — Nav.svelte picks this up on
+			// mount instead, same handoff pattern the AI Analyze flow already uses.
+			if (repoSetupError) {
+				try {
+					sessionStorage.setItem('plum:setup:repoWarning', repoSetupError);
+				} catch {}
+			}
 			window.location.href = '/';
 		} catch (e) {
 			error = e.message || SETUP_FAILED_FALLBACK;
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function handleRestore() {
+		if (!restoreFile) {
+			restoreError = RESTORE_FILE_REQUIRED_ERROR;
+			return;
+		}
+		restoreError = '';
+		restoring = true;
+		try {
+			let data;
+			try {
+				data = JSON.parse(await restoreFile.text());
+			} catch {
+				throw new Error(INVALID_BACKUP_FILE_ERROR);
+			}
+			const result = await importBackup(data);
+			if (result?.error) throw new Error(result.error);
+			// The file's own owner account exists now, this page 404s from here.
+			window.location.href = '/login';
+		} catch (e) {
+			restoreError = e.message || RESTORE_FAILED_FALLBACK;
+		} finally {
+			restoring = false;
 		}
 	}
 </script>
@@ -117,12 +216,61 @@
 			</div>
 
 			<div class="heading">
-				<span class="step-label">{setupStepLabel(step, 2)}</span>
-				<h1 class="title">{step === 1 ? SETUP_STEP_ORG_TITLE : SETUP_STEP_ADMIN_TITLE}</h1>
-				<p class="subtitle">{step === 1 ? SETUP_STEP_ORG_SUBTITLE : SETUP_STEP_ADMIN_SUBTITLE}</p>
+				{#if mode !== 'restore'}
+					<span class="step-label">{setupStepLabel(step, TOTAL_STEPS)}</span>
+				{/if}
+				<h1 class="title">
+					{mode === 'restore'
+						? RESTORE_TITLE
+						: step === 1
+							? SETUP_STEP_ORG_TITLE
+							: step === 2
+								? SETUP_STEP_REPO_TITLE
+								: SETUP_STEP_ADMIN_TITLE}
+				</h1>
+				<p class="subtitle">
+					{mode === 'restore'
+						? RESTORE_SUBTITLE
+						: step === 1
+							? SETUP_STEP_ORG_SUBTITLE
+							: step === 2
+								? SETUP_STEP_REPO_SUBTITLE
+								: SETUP_STEP_ADMIN_SUBTITLE}
+				</p>
 			</div>
 
-			{#if step === 1}
+			{#if mode === 'restore'}
+				<div class="fields">
+					<div class="field">
+						<label class="label" for="restore-file">{RESTORE_FILE_LABEL}</label>
+						<input
+							id="restore-file"
+							type="file"
+							accept="application/json"
+							class="file-input"
+							on:change={(e) => (restoreFile = e.currentTarget.files?.[0] ?? null)}
+						/>
+					</div>
+				</div>
+
+				{#if restoreError}<p class="error">{restoreError}</p>{/if}
+
+				<div class="actions">
+					<button
+						class="ghost-btn"
+						on:click={() => {
+							mode = 'setup';
+							restoreError = '';
+						}}
+						disabled={restoring}
+					>
+						{SETUP_BACK_LABEL}
+					</button>
+					<button class="submit-btn" on:click={handleRestore} disabled={restoring || !restoreFile}>
+						{restoreButtonLabel(restoring)}
+					</button>
+				</div>
+			{:else if step === 1}
 				<div class="fields">
 					<div class="field">
 						<label class="label" for="org">{ORG_NAME_LABEL}</label>
@@ -142,6 +290,17 @@
 							placeholder={PROJECT_NAME_PLACEHOLDER}
 						/>
 					</div>
+					<div class="field">
+						<span class="label">{SETUP_FRAMEWORK_LABEL}</span>
+						<IconSelect
+							options={frameworkOptions}
+							value={framework}
+							ariaLabel={SETUP_FRAMEWORK_LABEL}
+							fullWidth
+							on:change={(e) => (framework = e.detail)}
+						/>
+						<p class="hint">{SETUP_FRAMEWORK_HINT}</p>
+					</div>
 				</div>
 
 				{#if error}<p class="error">{error}</p>{/if}
@@ -149,6 +308,113 @@
 				<button class="submit-btn" on:click={next} disabled={!step1Ready}>
 					{SETUP_CONTINUE_LABEL}
 				</button>
+				<button class="link-btn" type="button" on:click={() => (mode = 'restore')}>
+					{RESTORE_INSTEAD_LABEL}
+				</button>
+			{:else if step === 2}
+				<div class="fields">
+					<div class="mode-row">
+						<button
+							type="button"
+							class="mode-btn"
+							class:active={repoMode === ''}
+							on:click={() => (repoMode = '')}
+						>
+							{REPO_MODE_SKIP_LABEL}
+						</button>
+						<button
+							type="button"
+							class="mode-btn"
+							class:active={repoMode === 'existing'}
+							on:click={() => (repoMode = 'existing')}
+						>
+							{REPO_MODE_EXISTING_LABEL}
+						</button>
+						<button
+							type="button"
+							class="mode-btn"
+							class:active={repoMode === 'new'}
+							on:click={() => (repoMode = 'new')}
+						>
+							{REPO_MODE_NEW_LABEL}
+						</button>
+					</div>
+
+					{#if repoMode}
+						<div class="field">
+							<label class="label" for="gh-token">{SETUP_GITHUB_TOKEN_LABEL}</label>
+							<input
+								id="gh-token"
+								type="password"
+								class="input"
+								bind:value={githubToken}
+								placeholder={SETUP_GITHUB_TOKEN_PLACEHOLDER}
+								autocomplete="off"
+							/>
+							<p class="hint">{SETUP_GITHUB_TOKEN_HINT}</p>
+						</div>
+					{/if}
+
+					{#if repoMode === 'existing'}
+						<div class="field">
+							<label class="label" for="gh-owner">{REPO_OWNER_LABEL}</label>
+							<input
+								id="gh-owner"
+								class="input"
+								bind:value={githubOwner}
+								placeholder={REPO_OWNER_PLACEHOLDER}
+							/>
+						</div>
+						<div class="field">
+							<label class="label" for="gh-repo">{REPO_NAME_LABEL}</label>
+							<input
+								id="gh-repo"
+								class="input"
+								bind:value={githubRepoName}
+								placeholder={REPO_NAME_PLACEHOLDER}
+							/>
+						</div>
+						<div class="field">
+							<label class="label" for="gh-branch">{REPO_BRANCH_LABEL}</label>
+							<input
+								id="gh-branch"
+								class="input"
+								bind:value={githubDefaultBranch}
+								placeholder={REPO_BRANCH_PLACEHOLDER}
+							/>
+						</div>
+						<div class="field">
+							<label class="label" for="gh-subpath">{REPO_TESTS_SUBPATH_LABEL}</label>
+							<input
+								id="gh-subpath"
+								class="input"
+								bind:value={testsSubpath}
+								placeholder={REPO_TESTS_SUBPATH_PLACEHOLDER}
+							/>
+							<p class="hint">{REPO_TESTS_SUBPATH_HINT}</p>
+						</div>
+					{:else if repoMode === 'new'}
+						<div class="field">
+							<label class="label" for="new-repo-name">{NEW_REPO_NAME_LABEL}</label>
+							<input
+								id="new-repo-name"
+								class="input"
+								bind:value={newRepoName}
+								placeholder={NEW_REPO_NAME_PLACEHOLDER}
+							/>
+							<p class="hint">{NEW_REPO_NAME_HINT}</p>
+						</div>
+					{/if}
+				</div>
+
+				<div class="actions">
+					<button class="ghost-btn" type="button" on:click={() => (step = 1)}>
+						{SETUP_BACK_LABEL}
+					</button>
+					<button class="submit-btn" type="button" on:click={() => (step = 3)}>
+						{SETUP_CONTINUE_LABEL}
+					</button>
+				</div>
 			{:else}
 				<div class="fields">
 					<div class="field">
@@ -202,10 +468,10 @@
 				{#if error}<p class="error">{error}</p>{/if}
 
 				<div class="actions">
-					<button class="ghost-btn" on:click={() => (step = 1)} disabled={loading}>
+					<button class="ghost-btn" on:click={() => (step = 2)} disabled={loading}>
 						{SETUP_BACK_LABEL}
 					</button>
-					<button class="submit-btn" on:click={handleSubmit} disabled={loading || !step2Ready}>
+					<button class="submit-btn" on:click={handleSubmit} disabled={loading || !step3Ready}>
 						{createAccountLabel(loading)}
 					</button>
 				</div>
@@ -222,6 +488,14 @@
 		align-items: center;
 		justify-content: center;
 		padding: 1rem;
+	}
+	/* Otherwise native chrome (the file input's own button, checkboxes) renders
+	   for the OS's scheme regardless of the theme this page is actually showing. */
+	.page[data-theme='dark'] {
+		color-scheme: dark;
+	}
+	.page[data-theme='light'] {
+		color-scheme: light;
 	}
 
 	.checking {
@@ -296,6 +570,12 @@
 		font-weight: 500;
 		color: var(--text);
 	}
+	.hint {
+		margin: 0;
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		line-height: 1.5;
+	}
 	.input {
 		height: 38px;
 		padding: 0 0.75rem;
@@ -310,6 +590,11 @@
 	}
 	.input:focus {
 		border-color: var(--accent);
+	}
+	.file-input {
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		color: var(--text);
 	}
 
 	.error {
@@ -391,6 +676,31 @@
 		opacity: 0.88;
 	}
 
+	.mode-row {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+	.mode-btn {
+		flex: 1;
+		min-width: 100px;
+		padding: 0.5rem 0.75rem;
+		background: var(--bg);
+		color: var(--text-muted);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		cursor: pointer;
+		transition:
+			border-color var(--duration-fast),
+			color var(--duration-fast);
+	}
+	.mode-btn.active {
+		color: var(--accent);
+		border-color: var(--accent);
+	}
+
 	.ghost-btn {
 		min-height: 44px;
 		padding: 0 1rem;
@@ -405,5 +715,21 @@
 	.ghost-btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	.link-btn {
+		background: none;
+		border: none;
+		padding: 0;
+		font-family: var(--font-body);
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		cursor: pointer;
+		text-align: center;
+	}
+	.link-btn:hover {
+		color: var(--text);
 	}
 </style>

@@ -30,8 +30,17 @@ const SOCKET_EVENTS = Object.freeze({
 	// is attributable per worker instead of one flat interleaved stream.
 	BG_RUN_LANE_RRWEB_BATCH: 'bg-run-lane-rrweb-batch',
 
+	// Same "coarse start/done, global broadcast" shape as BG_RUN_START/DONE
+	// above, for an AI agent session's own lifecycle instead of a test run's.
+	AI_SESSION_START: 'ai-session-start',
+	AI_SESSION_DONE: 'ai-session-done',
+
 	// Global notifications (any client, not tied to a specific run)
 	REPORT_READY: 'report-ready',
+
+	// Server → the recipient's own room (`user:<id>`, auto-joined on connect):
+	// a new row landed in their notification bell.
+	NOTIFICATION_NEW: 'notification-new',
 
 	// Collaborative test-run execution: clients on one run's page join its room
 	// and get every assignment / result / structural change live.

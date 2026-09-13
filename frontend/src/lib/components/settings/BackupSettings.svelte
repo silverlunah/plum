@@ -32,10 +32,7 @@
 		IMPORT_BLOCK_TITLE,
 		IMPORT_BLOCK_DESC,
 		CHOOSE_FILE_LABEL,
-		INCLUDE_REPORTS_LABEL,
-		INCLUDE_REPORTS_HINT,
-		includeReportsDisclaimer,
-		saveIncludeReportsLabel,
+		BACKUP_NO_REPORTS_DISCLAIMER,
 		S3_STORAGE_CARD_TITLE,
 		S3_STORAGE_DESC_PREFIX,
 		ENDPOINT_URL_LABEL,
@@ -117,11 +114,9 @@
 		backupS3Bucket: '',
 		backupS3AccessKey: '',
 		backupS3SecretKey: '',
-		backupS3Prefix: '',
-		backupIncludeReports: false
+		backupS3Prefix: ''
 	};
 	let backupConfigSaving = false;
-	let includeReportsSaving = false;
 	// Save buttons stay disabled until the config differs from what was loaded.
 	const snapshot = (o) => JSON.stringify(o);
 	let backupConfigPristine = snapshot(backupConfig);
@@ -167,8 +162,7 @@
 				backupS3Bucket: bc.backupS3Bucket,
 				backupS3AccessKey: bc.backupS3AccessKey,
 				backupS3SecretKey: '',
-				backupS3Prefix: bc.backupS3Prefix,
-				backupIncludeReports: bc.backupIncludeReports
+				backupS3Prefix: bc.backupS3Prefix
 			};
 			backupConfigPristine = snapshot(backupConfig);
 		} catch {}
@@ -249,7 +243,6 @@
 	}
 
 	const handleSaveBackupConfig = () => saveConfig((v) => (backupConfigSaving = v));
-	const handleSaveIncludeReports = () => saveConfig((v) => (includeReportsSaving = v));
 
 	async function handleTestS3() {
 		backupTestingS3 = true;
@@ -384,33 +377,7 @@
 		</div>
 	</div>
 
-	<div class="include-reports-row">
-		<label class="field-label backup-toggle-label" for="include-reports">
-			<span>
-				{INCLUDE_REPORTS_LABEL}
-				<span class="field-hint">{INCLUDE_REPORTS_HINT}</span>
-			</span>
-			<button
-				id="include-reports"
-				class="toggle-btn"
-				class:active={backupConfig.backupIncludeReports}
-				on:click={() => (backupConfig.backupIncludeReports = !backupConfig.backupIncludeReports)}
-				role="switch"
-				aria-checked={backupConfig.backupIncludeReports}
-			>
-				<span class="toggle-thumb"></span>
-			</button>
-		</label>
-		<Button
-			variant="ghost"
-			on:click={handleSaveIncludeReports}
-			disabled={includeReportsSaving || !backupConfigDirty}
-		>
-			{saveIncludeReportsLabel(includeReportsSaving)}
-		</Button>
-	</div>
-
-	<p class="backup-disclaimer">{includeReportsDisclaimer(backupConfig.backupIncludeReports)}</p>
+	<p class="backup-disclaimer">{BACKUP_NO_REPORTS_DISCLAIMER}</p>
 </div>
 
 <!-- Report retention -->
@@ -757,22 +724,6 @@
 		background: var(--bg-subtle);
 		padding: 0.1em 0.3em;
 		border-radius: 3px;
-	}
-	.include-reports-row {
-		display: flex;
-		align-items: center;
-		gap: 1.25rem;
-		margin-top: 1.25rem;
-		padding-top: 1.25rem;
-		border-top: 1px solid var(--border);
-	}
-	.include-reports-row .backup-toggle-label {
-		flex: 1;
-	}
-	.include-reports-row .field-label > span {
-		display: flex;
-		flex-direction: column;
-		gap: 0.15rem;
 	}
 	.backup-disclaimer {
 		margin-top: 1rem;

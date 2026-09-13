@@ -3,23 +3,43 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('./prisma');
 const activityService = require('./activityService');
 const projectPaths = require('../lib/projectPaths');
+const projectService = require('./projectService');
+const notificationInboxService = require('./notificationInboxService');
 const { slugify } = require('../lib/slugify');
 const { ROLE } = require('../constants/roles');
+const { isFramework } = require('../constants/defaults');
 const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
+const { accessibleProjectIds } = require('../lib/projectContext');
 
 const { DEFAULT_JWT_SECRET } = require('../lib/appSecret');
+const { DEFAULT_SESSION_MAX_HOURS } = require('../constants/session');
 const SALT_ROUNDS = 10;
-const TOKEN_TTL = '30d';
 
 // Read at call time: server.js resolves the real secret into the env at boot.
 const jwtSecret = () => process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
 
-const userSelect = { id: true, name: true, email: true, role: true, createdAt: true };
+const userSelect = {
+	id: true,
+	name: true,
+	email: true,
+	role: true,
+	createdAt: true,
+	defaultProjectId: true
+};
+
+// Which roles each role may reset a password for. Deliberately role-based, not
+// project-scoped: an admin can reset any plain user, not only those sharing a
+// project. No entry (e.g. a plain user) means "may reset nobody".
+const RESETTABLE_BY = Object.freeze({
+	[ROLE.OWNER]: [ROLE.ADMIN, ROLE.USER],
+	[ROLE.ADMIN]: [ROLE.USER]
+});
 
 async function needsSetup() {
 	const count = await prisma.organization.count();
@@ -47,15 +67,31 @@ async function createUser({ name, email, password, role = 'user' }) {
 
 // First boot: the organisation, its first project, and the owner, all or
 // nothing. The owner reaches every project implicitly, so no ProjectMember row.
-async function bootstrap({ organizationName, projectName, name, email, password }) {
+// A GitHub token is accepted here (rather than requiring a later trip to
+// Integrations) only because it's the one moment a repo choice can be wired up
+// for the org's first project; every other org setting still lives in Settings.
+async function bootstrap({
+	organizationName,
+	projectName,
+	name,
+	email,
+	password,
+	framework,
+	githubToken,
+	repo
+}) {
 	const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 	const slug = slugify(projectName);
 	const result = await prisma.$transaction(async (tx) => {
 		const org = await tx.organization.create({
-			data: { name: organizationName, termsAcceptedAt: new Date() }
+			data: {
+				name: organizationName,
+				termsAcceptedAt: new Date(),
+				...(githubToken && { githubToken })
+			}
 		});
 		const project = await tx.project.create({
-			data: { orgId: org.id, name: projectName, slug }
+			data: { orgId: org.id, name: projectName, slug, ...(isFramework(framework) && { framework }) }
 		});
 		const user = await tx.user.create({
 			data: { name, email, password: hashed, role: ROLE.OWNER },
@@ -64,8 +100,71 @@ async function bootstrap({ organizationName, projectName, name, email, password 
 		return { org, project, user };
 	});
 	await projectPaths.refresh();
-	projectPaths.scaffoldProject(slug, result.project.framework);
-	return result;
+	if (repo?.repoMode !== 'existing') projectPaths.scaffoldProject(slug, result.project.framework);
+	// The org/project/user above are already committed: a bad token/repo name
+	// here must not throw, or needsSetup() wedges shut (an Organization row now
+	// exists) with no way back into the wizard, even though the account itself
+	// is real and usable. Connecting the repo later via Settings already works
+	// (Phase 3), so degrade to that instead of failing the whole first run.
+	let repoSetupError = null;
+	if (githubToken && repo?.repoMode) {
+		try {
+			await projectService.setupRepository(result.project, repo);
+		} catch (e) {
+			console.error('[setup] Repo setup failed during bootstrap:', e.message);
+			repoSetupError = e.message;
+		}
+	}
+	return { ...result, repoSetupError };
+}
+
+async function issueSession(user) {
+	const org = await prisma.organization.findFirst({
+		orderBy: { id: 'asc' },
+		select: { sessionMaxHours: true }
+	});
+	const token = jwt.sign(
+		{ userId: user.id, email: user.email, name: user.name, role: user.role },
+		jwtSecret(),
+		{ expiresIn: (org?.sessionMaxHours ?? DEFAULT_SESSION_MAX_HOURS) * 3600 }
+	);
+	return {
+		token,
+		user: {
+			id: user.id,
+			name: user.name,
+			email: user.email,
+			role: user.role,
+			defaultProjectId: user.defaultProjectId
+		}
+	};
+}
+
+// Fires once per user, the first time they ever log in (checked via a column
+// set right here, not "first ever" in some more general sense). Never allowed
+// to fail the login itself.
+async function seedFirstLoginNotifications(user) {
+	if (user.firstLoginNotifiedAt) return;
+	try {
+		await prisma.user.update({
+			where: { id: user.id },
+			data: { firstLoginNotifiedAt: new Date() }
+		});
+		await notificationInboxService.create({
+			userId: user.id,
+			type: 'setup_project',
+			title: 'Set up your project',
+			body: 'Add a name and logo for your first project.',
+			link: '/settings?section=project'
+		});
+		await notificationInboxService.create({
+			userId: user.id,
+			type: 'connect_integrations',
+			title: 'Connect GitHub & AI',
+			body: 'Add provider keys and a GitHub token to unlock the AI agent.',
+			link: '/settings?section=integrations'
+		});
+	} catch {}
 }
 
 async function login({ email, password }) {
@@ -73,12 +172,34 @@ async function login({ email, password }) {
 	if (!user) return null;
 	const match = await bcrypt.compare(password, user.password);
 	if (!match) return null;
-	const token = jwt.sign(
-		{ userId: user.id, email: user.email, name: user.name, role: user.role },
-		jwtSecret(),
-		{ expiresIn: TOKEN_TTL }
-	);
-	return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+	await seedFirstLoginNotifications(user);
+	return issueSession(user);
+}
+
+// Google has already vetted the account; we only sign in an email that an owner
+// has already added to Plum. The `sub` is linked to that row on first use.
+async function loginWithGoogle({ googleId, email, emailVerified, name }) {
+	if (!emailVerified) return { ok: false, error: 'Your Google email is not verified.' };
+
+	let user = await prisma.user.findUnique({ where: { googleId } });
+	if (!user) {
+		user = await prisma.user.findUnique({ where: { email } });
+		if (!user) {
+			return {
+				ok: false,
+				error: `No Plum account for ${email}. Ask an owner to add you first.`
+			};
+		}
+		if (user.googleId && user.googleId !== googleId) {
+			return { ok: false, error: 'This account is linked to a different Google identity.' };
+		}
+		user = await prisma.user.update({
+			where: { id: user.id },
+			data: { googleId, ...(name && user.name !== name && { name }) }
+		});
+	}
+	await seedFirstLoginNotifications(user);
+	return { ok: true, ...(await issueSession(user)) };
 }
 
 function verifyToken(token) {
@@ -137,16 +258,26 @@ async function getById(id) {
 	return prisma.user.findUnique({ where: { id }, select: userSelect });
 }
 
-async function updateProfile(id, { name, email }) {
+// `requester` is req.user (the JWT payload), needed only to check defaultProjectId
+// is somewhere the caller can actually reach, an owner or admin's own choice, not
+// enforced against other members.
+async function updateProfile(id, { name, email, defaultProjectId }, requester) {
 	if (email) {
 		const conflict = await prisma.user.findFirst({ where: { email, NOT: { id } } });
 		if (conflict) return { ok: false, error: 'Email already in use' };
+	}
+	if (defaultProjectId !== undefined && defaultProjectId !== null) {
+		const allowed = await accessibleProjectIds(requester);
+		if (!allowed.includes(defaultProjectId)) {
+			return { ok: false, error: 'You do not have access to that project' };
+		}
 	}
 	const user = await prisma.user.update({
 		where: { id },
 		data: {
 			...(name !== undefined && { name }),
-			...(email !== undefined && { email })
+			...(email !== undefined && { email }),
+			...(defaultProjectId !== undefined && { defaultProjectId })
 		},
 		select: userSelect
 	});
@@ -161,6 +292,36 @@ async function updatePassword(id, { currentPassword, newPassword }) {
 	const hashed = await bcrypt.hash(newPassword, SALT_ROUNDS);
 	await prisma.user.update({ where: { id }, data: { password: hashed } });
 	return { ok: true };
+}
+
+async function getResettableUsers(actorRole) {
+	const roles = RESETTABLE_BY[actorRole] ?? [];
+	if (roles.length === 0) return [];
+	return prisma.user.findMany({
+		where: { role: { in: roles } },
+		select: { id: true, name: true, email: true, role: true },
+		orderBy: { name: 'asc' }
+	});
+}
+
+// Sets a fresh random password and returns it once, in the clear, for the
+// owner/admin to hand over, it is never stored or shown again.
+async function resetPassword(actor, targetId) {
+	const target = await prisma.user.findUnique({ where: { id: targetId } });
+	if (!target) return { ok: false, status: 404, error: 'User not found' };
+	if (!(RESETTABLE_BY[actor.role] ?? []).includes(target.role)) {
+		return { ok: false, status: 403, error: 'You cannot reset this user’s password' };
+	}
+	const tempPassword = crypto.randomBytes(12).toString('base64url');
+	await prisma.user.update({
+		where: { id: targetId },
+		data: { password: await bcrypt.hash(tempPassword, SALT_ROUNDS) }
+	});
+	await activityService.record(ACTIVITY_ACTION.USER_PASSWORD_RESET, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'user', id: targetId, label: target.name }
+	});
+	return { ok: true, tempPassword };
 }
 
 // Refuses to demote the last owner: the instance must always have one.
@@ -221,6 +382,7 @@ module.exports = {
 	createUser,
 	bootstrap,
 	login,
+	loginWithGoogle,
 	verifyToken,
 	getAll,
 	getAssignablePool,
@@ -228,6 +390,8 @@ module.exports = {
 	getById,
 	updateProfile,
 	updatePassword,
+	getResettableUsers,
+	resetPassword,
 	updateUser,
 	deleteUser
 };

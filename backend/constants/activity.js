@@ -30,6 +30,8 @@ const ACTIVITY_ACTION = Object.freeze({
 	INTEGRATIONS_UPDATE: 'integrations.update',
 	PROJECT_SETTINGS_UPDATE: 'project.settings_update',
 	PROJECT_PREFIXES_UPDATE: 'project.prefixes_update',
+	PROJECT_AI_CONFIG_UPDATE: 'project.ai_config_update',
+	PROJECT_GITHUB_CONFIG_UPDATE: 'project.github_config_update',
 
 	MEMBER_ADD: 'member.add',
 	MEMBER_REMOVE: 'member.remove',
@@ -44,7 +46,10 @@ const ACTIVITY_ACTION = Object.freeze({
 	USER_CREATE: 'user.create',
 	USER_UPDATE: 'user.update',
 	USER_ROLE_CHANGE: 'user.role_change',
+	USER_PASSWORD_RESET: 'user.password_reset',
 	USER_DELETE: 'user.delete',
+
+	ORG_SETTINGS_UPDATE: 'org.settings_update',
 
 	NODE_CREATE: 'node.create',
 	NODE_UPDATE: 'node.update',
@@ -52,7 +57,13 @@ const ACTIVITY_ACTION = Object.freeze({
 
 	BACKUP_CONFIG_UPDATE: 'backup.config_update',
 	ACTIVITY_RETENTION_UPDATE: 'activity.retention_update',
-	REPORT_RETENTION_UPDATE: 'report.retention_update'
+	REPORT_RETENTION_UPDATE: 'report.retention_update',
+
+	AI_CONFIG_UPDATE: 'ai.config_update',
+	GITHUB_CONFIG_UPDATE: 'github.config_update',
+
+	AI_SESSION_CREATE: 'ai_session.create',
+	AI_SESSION_PR_OPENED: 'ai_session.pr_opened'
 });
 
 const ACTIVITY_SCOPE = Object.freeze({ PROJECT: 'project', ORG: 'org' });

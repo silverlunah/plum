@@ -30,6 +30,7 @@
 		TREND_HINT,
 		NO_REPORTS_MESSAGE,
 		SELECT_ALL_TITLE,
+		SELECT_ALL_LABEL,
 		SELECT_ROW_TITLE,
 		DELETE_REPORT_TITLE,
 		deleteReportsTitle,
@@ -215,6 +216,7 @@
 				indeterminate={someSelected && !allOnPageSelected}
 				on:change={toggleAll}
 			/>
+			<span class="select-all-label">{SELECT_ALL_LABEL}</span>
 		</label>
 		{#if someSelected}
 			<button class="btn-delete-selected" on:click={() => openDeleteModal([...selected])}>
@@ -472,8 +474,14 @@
 	.select-all-wrap {
 		display: flex;
 		align-items: center;
+		gap: 0.4rem;
 		cursor: pointer;
 		padding: 0.25rem;
+	}
+
+	.select-all-label {
+		font-size: 0.78rem;
+		color: var(--text-muted);
 	}
 
 	.btn-delete-selected {

@@ -11,8 +11,6 @@
 	import {
 		fetchProject,
 		saveProject,
-		fetchIntegrations,
-		saveIntegrations,
 		fetchMcpConfig,
 		generateMcpKey as generateMcpKeyApi,
 		revokeMcpKey as revokeMcpKeyApi
@@ -28,7 +26,7 @@
 	import LockIcon from '$lib/components/icons/LockIcon.svelte';
 	import { updateProfile, changePassword } from '$lib/api/auth';
 	import { fetchProjects } from '$lib/api/projects';
-	import { setProjects, activeProject, activeFramework } from '$lib/stores/project';
+	import { setProjects, activeProject, activeFramework, projects } from '$lib/stores/project';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { isMobile } from '$lib/stores/viewport';
@@ -43,17 +41,19 @@
 	} from '$lib/constants';
 	import { copyText } from '$lib/utils/clipboard';
 	import Button from '$lib/components/ui/Button.svelte';
+	import IconSelect from '$lib/components/ui/IconSelect.svelte';
 	import ProjectAccess from '$lib/components/settings/ProjectAccess.svelte';
 	import UpdateBanner from '$lib/components/settings/UpdateBanner.svelte';
 	import ActivityLog from '$lib/components/settings/ActivityLog.svelte';
 	import RunnersSettings from '$lib/components/settings/RunnersSettings.svelte';
 	import UsersSettings from '$lib/components/settings/UsersSettings.svelte';
+	import OrganizationSettings from '$lib/components/settings/OrganizationSettings.svelte';
 	import BackupSettings from '$lib/components/settings/BackupSettings.svelte';
+	import IntegrationsSettings from '$lib/components/settings/IntegrationsSettings.svelte';
 	import { notify, notifyProgress } from '$lib/stores/notifications';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 	import ExternalNavLink from '$lib/components/ui/ExternalNavLink.svelte';
-	import Badge from '$lib/components/ui/Badge.svelte';
 	import { EMAIL_LABEL, PLAYWRIGHT_LABEL, CUCUMBER_LABEL } from '$lib/copy/common';
 	import {
 		PAGE_TITLE,
@@ -83,12 +83,12 @@
 		MCP_HEADING,
 		ACCOUNT_LABEL,
 		USERS_LABEL,
+		ORGANIZATION_LABEL,
 		BACKUP_LABEL,
 		ACTIVITY_LABEL,
 		ACTIVITY_DESC,
 		PROJECT_DESC,
 		REPOSITORY_DESC,
-		INTEGRATIONS_DESC,
 		MCP_DESC,
 		ACCOUNT_DESC,
 		PROJECT_NAME_LABEL,
@@ -99,7 +99,6 @@
 		LOGO_URL_LABEL,
 		LOGO_URL_HINT,
 		LOGO_URL_PLACEHOLDER,
-		PREVIEW_LABEL,
 		LOGO_PREVIEW_ALT,
 		TIMEZONE_LABEL,
 		TIMEZONE_HINT,
@@ -142,27 +141,6 @@
 		MIGRATION_FAILED_TOAST,
 		savePrefixesLabel,
 		runMigrationLabel,
-		WEBHOOKS_CARD_TITLE,
-		DISCORD_WEBHOOK_LABEL,
-		DISCORD_WEBHOOK_HINT,
-		DISCORD_WEBHOOK_PLACEHOLDER,
-		SLACK_WEBHOOK_LABEL,
-		SLACK_WEBHOOK_HINT,
-		SLACK_WEBHOOK_PLACEHOLDER,
-		PUBLIC_URL_LABEL,
-		PUBLIC_URL_HINT,
-		PUBLIC_URL_PLACEHOLDER,
-		INTEGRATIONS_SAVED_TOAST,
-		INTEGRATIONS_SAVE_FAILED,
-		CI_TRIGGERS_CARD_TITLE,
-		CI_DESC_PART1,
-		CI_DESC_PART2,
-		CI_DESC_PART3,
-		MCP_TAB_LINK_LABEL,
-		CI_DESC_PART4,
-		EXTERNAL_BADGE_LABEL,
-		saveIntegrationsLabel,
-		copyCiSnippetLabel,
 		API_KEY_CARD_TITLE,
 		NO_KEY_GENERATED_MESSAGE,
 		HIDE_KEY_TITLE,
@@ -182,6 +160,9 @@
 		regenerateKeyLabel,
 		copyMcpSnippetLabel,
 		PROFILE_CARD_TITLE,
+		DEFAULT_PROJECT_LABEL,
+		DEFAULT_PROJECT_HINT,
+		NO_DEFAULT_PROJECT_LABEL,
 		CHANGE_PASSWORD_CARD_TITLE,
 		CURRENT_PASSWORD_LABEL,
 		NEW_PASSWORD_LABEL,
@@ -197,6 +178,7 @@
 	} from '$lib/copy/settings';
 
 	const VALID_SECTIONS = new Set([
+		'organization',
 		'project',
 		'runners',
 		'testcases',
@@ -208,10 +190,13 @@
 	]);
 
 	const querySection = $page.url.searchParams.get('section');
+	// Owners land on Organization (the first tab); everyone else on Project,
+	// their first reachable tab.
+	const defaultSection = $auth.user?.role === 'owner' ? 'organization' : 'project';
 	let section =
 		(VALID_SECTIONS.has(querySection) && querySection) ||
 		(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('plum:settings:section')) ||
-		'project';
+		defaultSection;
 
 	// On mobile the sidebar and content are separate views (a drill-down), so
 	// picking a section swaps to the content; the back control returns to the list.
@@ -255,11 +240,17 @@
 		(migrateForm.testCasePrefix !== prefixes.testCasePrefix ||
 			migrateForm.testSuitePrefix !== prefixes.testSuitePrefix);
 
-	let profileForm = { name: '', email: '' };
+	let profileForm = { name: '', email: '', defaultProjectId: '' };
 	let profileSaving = false;
 	let profileError = '';
 	let profilePristine = snapshot(profileForm);
 	$: profileDirty = snapshot(profileForm) !== profilePristine;
+	// '' means no preference (defaultProjectId: null); IconSelect needs one type
+	// for both the sentinel and every real (numeric) project id.
+	$: defaultProjectOptions = [
+		{ id: '', label: NO_DEFAULT_PROJECT_LABEL },
+		...$projects.map((p) => ({ id: p.id, label: p.name, icon: p.framework }))
+	];
 
 	let pwForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
 	let pwSaving = false;
@@ -270,18 +261,12 @@
 	let tcFileInput;
 	let tcImportResult = null;
 
-	let integrations = { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
-	let integrationsSaving = false;
-	let integrationsPristine = snapshot(integrations);
-	$: integrationsDirty = snapshot(integrations) !== integrationsPristine;
-
 	let mcpKey = '';
 	let mcpKeySet = false;
 	let mcpShowKey = false;
 	let mcpGenerating = false;
 	let mcpKeyCopied = false;
 	let mcpSnippetCopied = false;
-	let ciSnippetCopied = false;
 
 	onMount(async () => {
 		try {
@@ -297,16 +282,16 @@
 			};
 		} catch {}
 		try {
-			integrations = await fetchIntegrations();
-			integrationsPristine = snapshot(integrations);
-		} catch {}
-		try {
 			const mcp = await fetchMcpConfig();
 			mcpKeySet = mcp.mcpKeySet;
 			mcpKey = mcp.mcpKey;
 		} catch {}
 		if ($auth.user) {
-			profileForm = { name: $auth.user.name, email: $auth.user.email };
+			profileForm = {
+				name: $auth.user.name,
+				email: $auth.user.email,
+				defaultProjectId: $auth.user.defaultProjectId ?? ''
+			};
 			profilePristine = snapshot(profileForm);
 		}
 	});
@@ -404,7 +389,8 @@
 			const { user } = await updateProfile({
 				token: $auth.token,
 				name: profileForm.name,
-				email: profileForm.email
+				email: profileForm.email,
+				defaultProjectId: profileForm.defaultProjectId || null
 			});
 			auth.login($auth.token, { ...$auth.user, ...user });
 			profilePristine = snapshot(profileForm);
@@ -488,26 +474,6 @@
 		});
 	}
 
-	function handleCopyCiSnippet() {
-		copyText(ciWorkflowSnippet).then(() => {
-			ciSnippetCopied = true;
-			setTimeout(() => (ciSnippetCopied = false), COPY_TIMEOUT_MS);
-		});
-	}
-
-	async function handleSaveIntegrations() {
-		integrationsSaving = true;
-		try {
-			integrations = await saveIntegrations(integrations);
-			integrationsPristine = snapshot(integrations);
-			notify('success', INTEGRATIONS_SAVED_TOAST);
-		} catch {
-			notify('error', INTEGRATIONS_SAVE_FAILED);
-		} finally {
-			integrationsSaving = false;
-		}
-	}
-
 	// Per-project key, name the server per project so several can coexist in one client config.
 	$: mcpServerName = `plum-${$activeProject?.slug ?? 'project'}`;
 	$: mcpConfigSnippet = JSON.stringify(
@@ -526,19 +492,11 @@
 		2
 	);
 
-	$: ciWorkflowSnippet = [
-		'- name: Run Plum tests',
-		'  run: |',
-		`    curl -X POST ${API_BASE}/trigger \\`,
-		'      -H "Authorization: ApiKey ${{ secrets.PLUM_API_KEY }}" \\',
-		'      -H "Content-Type: application/json" \\',
-		'      -d \'{"tag": "@smoke", "baseUrl": "https://your-pr-preview-url"}\''
-	].join('\n');
-
-	// Per-project settings, the owner and an admin of the active project.
-	const ELEVATED_SECTIONS = new Set(['project', 'testcases', 'integrations', 'activity']);
+	// Visible to the owner and to an admin. Some show a reduced view for an admin
+	// ('activity' hides org events, 'users' allows password resets only).
+	const ELEVATED_SECTIONS = new Set(['project', 'testcases', 'integrations', 'activity', 'users']);
 	// Account-wide settings, the owner only.
-	const OWNER_SECTIONS = new Set(['runners', 'users', 'backup']);
+	const OWNER_SECTIONS = new Set(['organization', 'runners', 'backup']);
 
 	$: isOwner = $auth.user?.role === 'owner';
 	$: isElevated = $auth.user?.role === 'owner' || $auth.user?.role === 'admin';
@@ -549,6 +507,7 @@
 	}
 
 	$: navItems = [
+		...(isOwner ? [{ id: 'organization', label: ORGANIZATION_LABEL }] : []),
 		...(isElevated
 			? [
 					{ id: 'project', label: PROJECT_LABEL },
@@ -560,12 +519,8 @@
 		...(isElevated ? [{ id: 'activity', label: ACTIVITY_LABEL }] : []),
 		{ id: 'account', label: ACCOUNT_LABEL },
 		{ id: 'mcp', label: MCP_NAV_LABEL },
-		...(isOwner
-			? [
-					{ id: 'users', label: USERS_LABEL },
-					{ id: 'backup', label: BACKUP_LABEL }
-				]
-			: [])
+		...(isElevated ? [{ id: 'users', label: USERS_LABEL }] : []),
+		...(isOwner ? [{ id: 'backup', label: BACKUP_LABEL }] : [])
 	];
 </script>
 
@@ -693,15 +648,13 @@
 					</div>
 
 					{#if project.logoUrl}
-						<div class="logo-preview">
-							<span class="preview-label">{PREVIEW_LABEL}</span>
-							<img
-								src={project.logoUrl}
-								alt={LOGO_PREVIEW_ALT}
-								class="logo-img"
-								on:error={(e) => (e.target.style.display = 'none')}
-							/>
-						</div>
+						<img
+							class="logo-preview"
+							src={project.logoUrl}
+							alt={LOGO_PREVIEW_ALT}
+							on:error={(e) => (e.currentTarget.hidden = true)}
+							on:load={(e) => (e.currentTarget.hidden = false)}
+						/>
 					{/if}
 
 					<div class="field">
@@ -962,85 +915,7 @@
 			<!-- INTEGRATIONS -->
 		{:else if section === 'integrations'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
-				<div class="content-header">
-					<h2>{INTEGRATIONS_LABEL}</h2>
-					<p class="content-desc">
-						{INTEGRATIONS_DESC}
-					</p>
-				</div>
-
-				<div class="card settings-card">
-					<p class="card-title">{WEBHOOKS_CARD_TITLE}</p>
-
-					<div class="field">
-						<label class="field-label" for="discord-url">
-							<span><ServiceIcon service="discord" size={13} /> {DISCORD_WEBHOOK_LABEL}</span>
-							<span class="field-hint">{DISCORD_WEBHOOK_HINT}</span>
-						</label>
-						<input
-							id="discord-url"
-							type="url"
-							class="field-input"
-							bind:value={integrations.discordWebhookUrl}
-							placeholder={DISCORD_WEBHOOK_PLACEHOLDER}
-						/>
-					</div>
-
-					<div class="field">
-						<label class="field-label" for="slack-url">
-							<span><ServiceIcon service="slack" size={13} /> {SLACK_WEBHOOK_LABEL}</span>
-							<span class="field-hint">{SLACK_WEBHOOK_HINT}</span>
-						</label>
-						<input
-							id="slack-url"
-							type="url"
-							class="field-input"
-							bind:value={integrations.slackWebhookUrl}
-							placeholder={SLACK_WEBHOOK_PLACEHOLDER}
-						/>
-					</div>
-
-					<div class="field">
-						<label class="field-label" for="public-url">
-							<span>{PUBLIC_URL_LABEL}</span>
-							<span class="field-hint">{PUBLIC_URL_HINT}</span>
-						</label>
-						<input
-							id="public-url"
-							type="url"
-							class="field-input"
-							bind:value={integrations.notifyPublicUrl}
-							placeholder={PUBLIC_URL_PLACEHOLDER}
-						/>
-					</div>
-
-					<Button
-						on:click={handleSaveIntegrations}
-						disabled={integrationsSaving || !integrationsDirty}
-					>
-						{saveIntegrationsLabel(integrationsSaving)}
-					</Button>
-				</div>
-
-				<div class="card settings-card">
-					<p class="card-title">{CI_TRIGGERS_CARD_TITLE}</p>
-					<p class="content-desc">
-						{CI_DESC_PART1} <code class="code-sample">POST {API_BASE}/trigger</code>
-						{CI_DESC_PART2}
-						<code class="code-sample">Authorization: ApiKey …</code>
-						{CI_DESC_PART3}
-						<button class="link-btn" on:click={() => setSection('mcp')}>{MCP_TAB_LINK_LABEL}</button
-						>
-						{CI_DESC_PART4}
-						<Badge variant="external">{EXTERNAL_BADGE_LABEL}</Badge>.
-					</p>
-					<pre class="mcp-snippet">{ciWorkflowSnippet}</pre>
-					<div class="card-footer">
-						<Button variant="ghost" on:click={handleCopyCiSnippet}>
-							{copyCiSnippetLabel(ciSnippetCopied)}
-						</Button>
-					</div>
-				</div>
+				<IntegrationsSettings goToSection={setSection} />
 			</div>
 
 			<!-- MCP -->
@@ -1205,6 +1080,21 @@
 							bind:value={profileForm.email}
 						/>
 					</div>
+					{#if $projects.length > 1}
+						<div class="field">
+							<span class="field-label">
+								<span>{DEFAULT_PROJECT_LABEL}</span>
+								<span class="field-hint">{DEFAULT_PROJECT_HINT}</span>
+							</span>
+							<IconSelect
+								options={defaultProjectOptions}
+								value={profileForm.defaultProjectId}
+								ariaLabel={DEFAULT_PROJECT_LABEL}
+								fullWidth
+								on:change={(e) => (profileForm = { ...profileForm, defaultProjectId: e.detail })}
+							/>
+						</div>
+					{/if}
 					{#if profileError}<p class="form-error">{profileError}</p>{/if}
 					<div class="card-footer">
 						<Button
@@ -1267,6 +1157,12 @@
 		{:else if section === 'users'}
 			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
 				<UsersSettings on:navigate={(e) => setSection(e.detail)} />
+			</div>
+
+			<!-- ORGANIZATION (owner only) -->
+		{:else if section === 'organization'}
+			<div class="content-section" transition:fly={{ y: 6, duration: 180 }}>
+				<OrganizationSettings />
 			</div>
 
 			<!-- BACKUP -->
@@ -1522,24 +1418,14 @@
 	}
 
 	.logo-preview {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.preview-label {
-		font-size: 0.75rem;
-		color: var(--text-muted);
-		font-weight: 500;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-	}
-
-	.logo-img {
-		max-height: 56px;
+		align-self: flex-start;
+		max-height: 44px;
 		max-width: 200px;
 		object-fit: contain;
+		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
+		padding: 0.4rem 0.6rem;
+		background: var(--bg-subtle);
 	}
 
 	.card-footer {
@@ -1649,16 +1535,6 @@
 		background: var(--bg-subtle);
 		padding: 0.1em 0.3em;
 		border-radius: 3px;
-	}
-
-	.link-btn {
-		font: inherit;
-		color: var(--accent);
-		background: none;
-		border: none;
-		padding: 0;
-		cursor: pointer;
-		text-decoration: underline;
 	}
 
 	.form-error {

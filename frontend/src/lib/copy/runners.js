@@ -30,6 +30,15 @@ export const NO_TESTS_RUNNING = 'No tests currently running';
 export const LIVE_LABEL = 'Live';
 export const QUEUED_LABEL = 'Queued';
 export const CANCEL_RUN_LABEL = 'Cancel run';
+export const AI_SESSION_LABEL = 'AI session';
+export const ENV_OVERRIDE_LABEL = 'Env overrides';
+export const ENV_OVERRIDE_MODAL_TITLE = 'Override environment variables';
+export const ENV_OVERRIDE_DESC =
+	'Applied to the next run only, on top of the project’s own .env. One KEY=VALUE per line.';
+export const ENV_OVERRIDE_PLACEHOLDER = 'BASE_URL=https://staging.example.com';
+export const ENV_OVERRIDE_SAVE_LABEL = 'Save';
+export const lockedAiSessionTitle = () => 'Only this session’s creator can open it';
+export const envOverrideActiveLabel = (count) => `${count} override${count === 1 ? '' : 's'}`;
 
 export const automatedCaseCount = (count) => `${count} automated`;
 export const discordNotifyTitle = (active) =>

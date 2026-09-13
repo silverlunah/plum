@@ -51,6 +51,8 @@
 	let inspectAttachedDoc = null;
 	let inspectWatchRaf = null;
 	let currentStepIndex = -1;
+	// Whether the step times came from the report rather than from markers in the page.
+	let reportedStepTimes = false;
 	let stepTimestamps = [];
 
 	// Placed on one timeline so playback can auto-switch tabs, see computeRecordingSegments.
@@ -70,6 +72,7 @@
 	// only; single-tab's one player already has a correct native timeline).
 	let livePosition = 0;
 	let livePositionRaf = null;
+	let lastTickPosition = null;
 	function tickLivePosition() {
 		armClickGuard();
 		// Skip while finished: the finish handler snaps livePosition to overallTo
@@ -77,6 +80,20 @@
 		// immediately overwrite that.
 		const replayer = currentReplayer();
 		if (replayer && !finished) livePosition = mountedFirst + replayer.getCurrentTime();
+		// With the times from the report there is no custom event to cross, so the
+		// highlight follows the position instead. Only while it is actually moving:
+		// a paused seek from the rail lands on the next step's time on purpose (see
+		// jumpToStep), and recomputing there would highlight the step after the one
+		// the user asked for.
+		if (reportedStepTimes && !finished) {
+			if (livePosition !== lastTickPosition) {
+				if (lastTickPosition !== null) {
+					const idx = stepIndexAtAbsolute(livePosition);
+					if (idx > currentStepIndex) currentStepIndex = idx;
+				}
+				lastTickPosition = livePosition;
+			}
+		}
 		livePositionRaf = requestAnimationFrame(tickLivePosition);
 	}
 
@@ -200,6 +217,7 @@
 	function jumpToStep(i) {
 		if (stepTimestamps[i] === undefined || !player) return;
 		currentStepIndex = i;
+		lastTickPosition = null;
 		// Jump to the next marker, step i's own marker fires before its actions run.
 		// The last step has none: use the segment's real last event, not its `to`
 		// boundary (can sit past it), landing at/past the real end reads as a
@@ -502,13 +520,28 @@
 		mountedFirst = first;
 		const timeOffset = Math.max(0, targetAbs - first);
 
+		// rrweb only draws native tick marks from real Custom events in the page,
+		// which Playwright never emits (see reportedStepTimes above); synthesize them
+		// for parity with Cucumber. Tag deliberately isn't 'step': the listener below
+		// already advances currentStepIndex from playback position for
+		// reportedStepTimes, so tagging it 'step' too would double-count.
+		if (reportedStepTimes && events.length > 0) {
+			const last = events[events.length - 1].timestamp;
+			for (const ts of stepTimestamps) {
+				if (ts > first && ts <= last) {
+					events.push({ type: 5, timestamp: ts, data: { tag: 'step-marker', payload: {} } });
+				}
+			}
+			events.sort((a, b) => a.timestamp - b.timestamp);
+		}
+
 		player = new Player({
 			target: container,
 			props: {
 				events,
 				autoPlay: false,
 				showController: true,
-				speedOption: [0.5, 1, 2],
+				speedOption: [0.1, 0.5, 1, 2],
 				speed: 1,
 				width,
 				height
@@ -582,21 +615,39 @@
 			return;
 		}
 
-		const computed = computeRecordingSegments(recordings);
-		// Older recordings lack startedAt/endedAt, fall back to just the first tab.
-		segments =
-			computed.length > 0
-				? computed
-				: recordings[0]
-					? [{ recordingId: recordings[0].id, from: 0, to: 0 }]
-					: [];
+		const computed = computeRecordingSegments(recordings, eventsByRecordingId);
+		// Older recordings lack startedAt/endedAt; fall back to the first tab's own
+		// event bounds rather than a literal 0/0 — buildPlayer treats `to` as an upper
+		// bound on real (huge) epoch timestamps, so 0 would strip almost every event.
+		if (computed.length > 0) {
+			segments = computed;
+		} else if (recordings[0]) {
+			const fallbackEvents = eventsByRecordingId.get(recordings[0].id) ?? [];
+			segments = [
+				{
+					recordingId: recordings[0].id,
+					from: fallbackEvents[0]?.timestamp ?? 0,
+					to: fallbackEvents[fallbackEvents.length - 1]?.timestamp ?? 0
+				}
+			];
+		} else {
+			segments = [];
+		}
 
-		// Step markers are always written to the main tab (see markStepStart in browser.ts).
-		const mainRecording = recordings.find((r) => r.tabIndex === 0) ?? recordings[0];
-		const mainEvents = eventsByRecordingId.get(mainRecording?.id) ?? [];
-		stepTimestamps = mainEvents
-			.filter((e) => e.type === 5 && e.data?.tag === 'step')
-			.map((e) => e.timestamp);
+		// Playwright reports when each step started (stepTimingsReporter); Cucumber marks
+		// its steps inside the page instead (see markStepStart in browser.ts), always
+		// on the main tab. Both are wall-clock epoch ms, so seeking is identical.
+		const reported = steps.filter((s) => s.startedAt !== undefined).map((s) => s.startedAt);
+		reportedStepTimes = reported.length > 0;
+		if (reportedStepTimes) {
+			stepTimestamps = reported;
+		} else {
+			const mainRecording = recordings.find((r) => r.tabIndex === 0) ?? recordings[0];
+			const mainEvents = eventsByRecordingId.get(mainRecording?.id) ?? [];
+			stepTimestamps = mainEvents
+				.filter((e) => e.type === 5 && e.data?.tag === 'step')
+				.map((e) => e.timestamp);
+		}
 
 		buildPlayer();
 		loading = false;

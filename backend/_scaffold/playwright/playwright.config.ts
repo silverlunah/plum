@@ -7,6 +7,11 @@ dotenv.config();
 // so `npx playwright test` from this folder behaves the same way a Plum run does.
 export default defineConfig({
 	testDir: './specs',
+	// Spreads the tests inside a file across workers. Without it Playwright gives a
+	// whole file to one worker, so a worker count above 1 changes nothing for a
+	// single spec file. Tests then run in any order in separate browsers, so they
+	// must not depend on one another.
+	fullyParallel: true,
 	use: {
 		baseURL: process.env.BASE_URL,
 		// Server and node runs are always headless. IS_HEADLESS=false in .env lets you

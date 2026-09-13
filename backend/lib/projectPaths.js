@@ -130,10 +130,19 @@ const REQUIRED_FILES = {
 	// defaults, and writing ours into it broke both: a JS Cucumber repo that worked
 	// with zero config got one requiring ts-node and pointing at step_definitions/*.ts.
 	//
-	// utils/hooks.ts and utils/browser.ts are what record the session for replay, the
-	// Cucumber equivalent of fixtures/plum.ts below. They stay inert until the
-	// project's own config requires them, so filling them in is safe either way.
-	[FRAMEWORK.CUCUMBER]: ['package.json', 'tsconfig.json', 'utils/browser.ts', 'utils/hooks.ts'],
+	// utils/hooks.ts and utils/recorder.ts are what open the browser and record the
+	// session for replay, the Cucumber equivalent of fixtures/plum.ts below. They stay
+	// inert until the project's own config requires them, so filling them in is safe
+	// either way. world.ts comes too, because a step written against `this.page` needs
+	// the type; it is the one of the three a project is meant to edit, and the hooks
+	// assign onto whatever World is in play rather than requiring this one.
+	[FRAMEWORK.CUCUMBER]: [
+		'package.json',
+		'tsconfig.json',
+		'utils/recorder.ts',
+		'utils/hooks.ts',
+		'utils/world.ts'
+	],
 	// fixtures/plum.ts is what records the session for report replay, so a project
 	// without it produces reports that silently have no video.
 	[FRAMEWORK.PLAYWRIGHT]: ['package.json', 'tsconfig.json', 'fixtures/plum.ts']

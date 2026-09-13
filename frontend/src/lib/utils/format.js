@@ -30,6 +30,7 @@ export function triggerLabel(type) {
 	if (type === TRIGGER_TYPES.CLI || type === 'undefined') return 'CLI';
 	if (type === TRIGGER_TYPES.MCP) return 'MCP';
 	if (type === TRIGGER_TYPES.EXTERNAL) return 'External';
+	if (type === TRIGGER_TYPES.AI_AGENT) return 'AI Agent';
 	return 'Scheduled';
 }
 
@@ -38,7 +39,15 @@ export function triggerVariant(type) {
 	if (type === TRIGGER_TYPES.CLI || type === 'undefined') return 'neutral';
 	if (type === TRIGGER_TYPES.MCP) return 'mcp';
 	if (type === TRIGGER_TYPES.EXTERNAL) return 'external';
+	if (type === TRIGGER_TYPES.AI_AGENT) return 'ai';
 	return 'schedule';
+}
+
+// Live "how long has this chip been in the bar" display, ticked by the
+// caller (elapsed changes every second, `now` isn't reactive on its own).
+export function elapsedLabel(startedAt, now = Date.now()) {
+	if (!startedAt) return '';
+	return fmtTotalDuration(Math.max(0, now - startedAt));
 }
 
 /** Returns an inline style string for staggered fadeUp animations. */
@@ -63,6 +72,17 @@ export function relativeTime(iso) {
 export function fmtDuration(ms) {
 	if (ms >= 1000) return (ms / 1000).toFixed(2) + 's';
 	return ms + 'ms';
+}
+
+// Only for a report's overall duration; a single step/scenario still wants
+// fmtDuration's sub-second precision, not h:m:s.
+export function fmtTotalDuration(ms) {
+	const totalSeconds = Math.floor(ms / 1000);
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+	const pad = (n) => String(n).padStart(2, '0');
+	return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
 }
 
 /**
@@ -228,11 +248,81 @@ export function groupScenariosByRunnerAndWorker(features) {
  * startedAt/endedAt (written before that field existed) are dropped, nothing
  * to line up on a shared clock without them.
  *
- * Tabs are assumed to open/close like a stack (a popup nested inside the tab
- * that opened it), the only shape browser.ts's own tab tracking produces.
+ * With `eventsById` (a recordingId -> rrweb event array Map or object), the
+ * active tab at any instant is the one actually producing events. A tab that
+ * only stayed open in the background does not own the timeline while another
+ * tab is being driven — the Playwright fixture keeps its second tab open for
+ * the whole test, so open/close spans there would hand the replay to a blank
+ * or frozen tab for most of the run. Without the events (not fetched yet) tabs
+ * fall back to opening/closing like a stack, the shape the Cucumber scaffold's
+ * own tab tracking produces.
  */
-export function computeRecordingSegments(recordings) {
+export function computeRecordingSegments(recordings, eventsById = null) {
 	const usable = recordings.filter((r) => r.startedAt != null && r.endedAt != null);
+	if (usable.length < 2) return segmentsByOpenClose(usable);
+
+	const getEvents = (id) =>
+		typeof eventsById?.get === 'function' ? eventsById.get(id) : eventsById?.[id];
+
+	const samples = [];
+	for (const r of usable) {
+		const events = getEvents(r.id);
+		if (!events) return segmentsByOpenClose(usable);
+		// type 5 is a custom event (step markers): metadata, not a frame on screen.
+		for (const e of events) if (e.type !== 5) samples.push({ rec: r.id, ts: e.timestamp });
+	}
+	if (samples.length === 0) return segmentsByOpenClose(usable);
+	samples.sort((a, b) => a.ts - b.ts);
+
+	// A lone stray event from a backgrounded tab (an app timer firing, say)
+	// must not steal the timeline: hand it over only when the other tab
+	// out-produces the current one over the next SETTLE_MS. Re-checking that on
+	// every event from a chatty background tab is wasteful, so rate-limit it.
+	const SETTLE_MS = 600;
+	const EVAL_EVERY_MS = 150;
+	const raw = [];
+	let active = samples[0].rec;
+	let from = usable.reduce((min, r) => Math.min(min, r.startedAt), samples[0].ts);
+	let nextEval = samples[0].ts;
+
+	for (let i = 1; i < samples.length; i++) {
+		const s = samples[i];
+		if (s.rec === active || s.ts < nextEval) continue;
+		nextEval = s.ts + EVAL_EVERY_MS;
+		if (s.ts === from || !winsSettleWindow(samples, i, s.rec, active, SETTLE_MS)) continue;
+		raw.push({ recordingId: active, from, to: s.ts });
+		active = s.rec;
+		from = s.ts;
+	}
+	raw.push({ recordingId: active, from, to: Math.max(from, lastSampleTs(samples, active)) });
+
+	// A rejected switch can leave two consecutive segments on the same tab.
+	const merged = [];
+	for (const seg of raw) {
+		const prev = merged[merged.length - 1];
+		if (prev && prev.recordingId === seg.recordingId) prev.to = seg.to;
+		else merged.push(seg);
+	}
+	return merged;
+}
+
+function winsSettleWindow(samples, start, candidate, incumbent, windowMs) {
+	const deadline = samples[start].ts + windowMs;
+	let cand = 0;
+	let inc = 0;
+	for (let i = start; i < samples.length && samples[i].ts <= deadline; i++) {
+		if (samples[i].rec === candidate) cand++;
+		else if (samples[i].rec === incumbent) inc++;
+	}
+	return cand > inc;
+}
+
+function lastSampleTs(samples, rec) {
+	for (let i = samples.length - 1; i >= 0; i--) if (samples[i].rec === rec) return samples[i].ts;
+	return samples[samples.length - 1]?.ts ?? 0;
+}
+
+function segmentsByOpenClose(usable) {
 	if (usable.length === 0) return [];
 
 	const boundaries = usable.flatMap((r) => [

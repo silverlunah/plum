@@ -6,14 +6,146 @@
 const express = require('express');
 const router = express.Router();
 const settingsService = require('../services/settingsService');
+const githubService = require('../services/githubService');
 const testSuiteService = require('../services/testSuiteService');
 const testCaseService = require('../services/testCaseService');
 const { jwtAuth } = require('../middleware/jwtAuth');
 const { requireAdmin } = require('../middleware/requireAdmin');
+const { requireOwner } = require('../middleware/requireOwner');
 const { requireProjectAccess } = require('../middleware/requireProjectAccess');
 
 const scoped = [jwtAuth, requireProjectAccess];
 const scopedAdmin = [jwtAuth, requireProjectAccess, requireAdmin];
+const orgOnly = [jwtAuth, requireOwner];
+
+router.get('/organization', orgOnly, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getOrganization());
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/organization', orgOnly, async (req, res, next) => {
+	try {
+		const {
+			name,
+			logoUrl,
+			sessionMaxHours,
+			passwordLoginEnabled,
+			googleLoginEnabled,
+			googleClientId,
+			googleClientSecret
+		} = req.body;
+		res.json(
+			await settingsService.updateOrganization({
+				name,
+				logoUrl,
+				sessionMaxHours,
+				passwordLoginEnabled,
+				googleLoginEnabled,
+				googleClientId,
+				googleClientSecret
+			})
+		);
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/ai', orgOnly, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getAiConfig());
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/ai', orgOnly, async (req, res, next) => {
+	try {
+		const { anthropicApiKey, anthropicModel, openaiApiKey, openaiModel } = req.body;
+		res.json(
+			await settingsService.updateAiConfig({
+				anthropicApiKey,
+				anthropicModel,
+				openaiApiKey,
+				openaiModel
+			})
+		);
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/github', orgOnly, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getGithubConfig());
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/github', orgOnly, async (req, res, next) => {
+	try {
+		const { githubToken } = req.body;
+		res.json(await settingsService.updateGithubConfig({ githubToken }));
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/github/verify', orgOnly, async (req, res, next) => {
+	try {
+		res.json(await githubService.verifyConnection());
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/project/ai', scopedAdmin, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getProjectAiConfig(req.projectId));
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/project/ai', scopedAdmin, async (req, res, next) => {
+	try {
+		const { aiSystemPrompt, aiCodePractices } = req.body;
+		res.json(
+			await settingsService.updateProjectAiConfig(req.projectId, {
+				aiSystemPrompt,
+				aiCodePractices
+			})
+		);
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get('/project/github', scopedAdmin, async (req, res, next) => {
+	try {
+		res.json(await settingsService.getProjectGithubConfig(req.projectId));
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/project/github', scopedAdmin, async (req, res, next) => {
+	try {
+		const { githubOwner, githubRepo, githubDefaultBranch } = req.body;
+		res.json(
+			await settingsService.updateProjectGithubConfig(req.projectId, {
+				githubOwner,
+				githubRepo,
+				githubDefaultBranch
+			})
+		);
+	} catch (e) {
+		next(e);
+	}
+});
 
 router.get('/project', scopedAdmin, async (req, res, next) => {
 	try {
@@ -89,16 +221,14 @@ router.get('/integrations', scopedAdmin, async (req, res, next) => {
 
 router.post('/integrations', scopedAdmin, async (req, res, next) => {
 	try {
-		const { discordWebhookUrl, slackWebhookUrl, notifyPublicUrl } = req.body;
+		const { discordWebhookUrl, slackWebhookUrl } = req.body;
 		const project = await settingsService.updateWebhooks(req.projectId, {
 			discordWebhookUrl,
-			slackWebhookUrl,
-			notifyPublicUrl
+			slackWebhookUrl
 		});
 		res.json({
 			discordWebhookUrl: project.discordWebhookUrl,
-			slackWebhookUrl: project.slackWebhookUrl,
-			notifyPublicUrl: project.notifyPublicUrl
+			slackWebhookUrl: project.slackWebhookUrl
 		});
 	} catch (e) {
 		next(e);

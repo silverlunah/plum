@@ -29,6 +29,26 @@ router.get('/assignable', jwtAuth, requireAdmin, async (req, res, next) => {
 	}
 });
 
+// Owner and admin: the users the caller may reset a password for. An admin has
+// no other reach into user management, so this is not behind requireOwner.
+router.get('/resettable', jwtAuth, requireAdmin, async (req, res, next) => {
+	try {
+		res.json({ users: await userService.getResettableUsers(req.user.role) });
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/:id/reset-password', jwtAuth, requireAdmin, async (req, res, next) => {
+	try {
+		const result = await userService.resetPassword(req.user, req.params.id);
+		if (!result.ok) return res.status(result.status).json({ error: result.error });
+		res.json({ tempPassword: result.tempPassword });
+	} catch (e) {
+		next(e);
+	}
+});
+
 router.get('/', jwtAuth, requireOwner, async (req, res, next) => {
 	try {
 		const users = await userService.getAll();

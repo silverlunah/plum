@@ -1,7 +1,9 @@
-import { page } from '../utils/browser';
+import { Page, expect } from '@playwright/test';
 
 export class HomepagePage {
-	static async iShouldBeNavigatedToTheProductsPage() {
-		await page().waitForSelector('.title');
+	constructor(private readonly page: Page) {}
+
+	async iShouldBeNavigatedToTheProductsPage() {
+		await expect(this.page.locator('.title')).toBeVisible();
 	}
 }

@@ -5,7 +5,22 @@ This folder is yours: git-manage it and merge new tests straight in. Plum mounts
 1. Copy `.env.example` to `.env` and set `BASE_URL`. Plum does this for you on `plum project init`, and `.env` is gitignored.
 2. Add features under `features/`, steps under `step_definitions/`, page objects under `pages/`.
 3. Give every scenario its own tag, `@TC-001`. Tags are ids: two scenarios sharing one cannot be told apart in a report or matched to separate cases in the repository. A `Scenario Outline` shares its tag across all its rows.
-4. `utils/` holds Plum's session recording for report replay. Leave `hooks.ts` and `browser.ts` as they are; add your own `Before`/`After` hooks below the marked line in `hooks.ts`.
+4. `utils/world.ts` is the World, Cucumber's per-scenario state. Steps get it as `this`, so `this.page` is that scenario's own page. Add your own state to it.
+5. `utils/hooks.ts` and `utils/recorder.ts` open the browser and record the session for report replay. Leave them as they are; add your own `Before`/`After` hooks below the marked line in `hooks.ts`. Keeping `utils/hooks.ts` in `cucumber.js`'s `require` list is the only thing Plum asks of the config — reports and per-step results need nothing from it.
+
+Write steps with `function`, not an arrow, or there is no `this`:
+
+```ts
+import { When } from '@cucumber/cucumber';
+import { LoginPage } from '../pages/LoginPage';
+import { PlumWorld } from '../utils/world';
+
+When('I click on the login button', async function (this: PlumWorld) {
+	await new LoginPage(this.page).iClickOnTheLoginButton();
+});
+```
+
+`BASE_URL` is set as the context's `baseURL`, so a page object navigates with a relative path: `this.page.goto('/')`.
 
 New tests are picked up on the next run. `plum server restart` is only needed when `.env` changes.
 

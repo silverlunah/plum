@@ -5,6 +5,7 @@
 
 const path = require('path');
 const { FRAMEWORK, isBrowser } = require('../constants/defaults');
+const STEP_REPORTER = require.resolve('./stepTimingsReporter.cjs');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
 
@@ -61,7 +62,12 @@ function buildRunCommand({
 		// priority over a config outputFile, so a scaffolded project lands in the same
 		// place it always did. `list` is kept so the run still streams to the log.
 		env.PLAYWRIGHT_JSON_OUTPUT_FILE = reportFile;
-		const args = [cli, 'test', '--reporter=list,json'];
+		// Plum's own reporter rides along by absolute path, so it works the same in a
+		// scaffolded project and in an adopted repo that has never heard of Plum. It
+		// supplies the step start times and the in-hook steps the JSON report leaves
+		// out. describeCommand hides it: the logged line is there to be read and
+		// re-run, and an absolute path into Plum's container is neither.
+		const args = [cli, 'test', `--reporter=list,json,${STEP_REPORTER}`];
 		const grep = tagsToGrep(tag);
 		if (grep) args.push('--grep', grep);
 		// Validated rather than trusted: it arrives from a run request, and an
@@ -111,7 +117,12 @@ function tagsToGrep(tag) {
 function describeCommand({ args }) {
 	const [cli, ...rest] = args;
 	const name = /playwright/.test(cli) ? 'playwright' : 'cucumber-js';
-	return [name, ...rest].join(' ');
+	// Plum's internal reporter is stripped back out, so what is logged is the
+	// command a person could paste into their own terminal.
+	const shown = rest.map((arg) =>
+		arg.startsWith('--reporter=') ? arg.split(`,${STEP_REPORTER}`).join('') : arg
+	);
+	return [name, ...shown].join(' ');
 }
 
 module.exports = { buildRunCommand, describeCommand };

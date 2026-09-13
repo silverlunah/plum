@@ -7,24 +7,33 @@
 	import { onMount, createEventDispatcher } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import { notify } from '$lib/stores/notifications';
+	import { copyText } from '$lib/utils/clipboard';
+	import { API_BASE, COPY_TIMEOUT_MS, SESSION_TIMEOUT_OPTIONS } from '$lib/constants';
 	import Button from '$lib/components/ui/Button.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 	import Paginator from '$lib/components/ui/Paginator.svelte';
+	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 	import {
 		fetchUsers,
+		fetchResettableUsers,
 		createUser as createUserApi,
+		resetUserPassword as resetUserPasswordApi,
 		deleteUser as deleteUserApi
 	} from '$lib/api/users';
+	import { fetchOrganization, saveOrganization } from '$lib/api/settings';
 	import { EMAIL_LABEL, SEARCH_PLACEHOLDER } from '$lib/copy/common';
 	import {
 		NAME_LABEL,
 		USERS_LABEL,
 		USERS_DESC,
+		USERS_ADMIN_DESC,
 		MANAGE_PROJECTS_LINK_LABEL,
 		REMOVE_USER_MODAL_TITLE,
 		REMOVE_USER_LABEL,
 		REMOVE_USER_BODY_PREFIX,
 		REMOVE_USER_BODY_SUFFIX,
+		USER_MANAGEMENT_CARD_TITLE,
 		ADD_USER_CARD_TITLE,
 		ALL_USERS_CARD_TITLE,
 		USER_NAME_PLACEHOLDER,
@@ -35,18 +44,58 @@
 		ADMIN_ROLE_OPTION,
 		OWNER_ROLE_OPTION,
 		REMOVE_USER_ICON_TITLE,
+		RESET_PASSWORD_ICON_TITLE,
+		RESET_PASSWORD_MODAL_TITLE,
+		RESET_PASSWORD_BODY_PREFIX,
+		RESET_PASSWORD_BODY_SUFFIX,
+		RESET_PASSWORD_RESULT_TITLE,
+		RESET_PASSWORD_RESULT_DESC,
+		RESET_PASSWORD_COPY_TITLE,
+		RESET_PASSWORD_COPIED_TITLE,
+		RESET_PASSWORD_DONE_LABEL,
 		YOU_CHIP_LABEL,
 		USER_FORM_REQUIRED_ERROR,
 		USER_PROJECTS_LABEL,
 		USER_NO_PROJECTS,
 		USER_ALL_PROJECTS,
+		SESSION_CARD_TITLE,
+		SESSION_TIMEOUT_LABEL,
+		SESSION_TIMEOUT_HINT,
+		SESSION_SAVED_TOAST,
+		SIGN_IN_CARD_TITLE,
+		SIGN_IN_PASSWORD_LABEL,
+		SIGN_IN_PASSWORD_DESC,
+		SIGN_IN_GOOGLE_LABEL,
+		SIGN_IN_GOOGLE_DESC,
+		SIGN_IN_LAST_METHOD_ERROR,
+		GOOGLE_CLIENT_ID_LABEL,
+		GOOGLE_CLIENT_ID_PLACEHOLDER,
+		GOOGLE_CLIENT_SECRET_LABEL,
+		GOOGLE_CLIENT_SECRET_PLACEHOLDER,
+		GOOGLE_CLIENT_SECRET_KEEP_PLACEHOLDER,
+		GOOGLE_REDIRECT_URI_LABEL,
+		GOOGLE_REDIRECT_URI_HINT,
+		SIGN_IN_SAVED_TOAST,
+		COPY_LABEL,
+		COPIED_LABEL_UI,
 		addUserLabel,
+		resetPasswordLabel,
+		passwordResetToast,
+		saveSessionLabel,
+		saveSignInLabel,
+		sessionTimeoutOptionLabel,
 		userAddedToast,
 		userRemovedToast
 	} from '$lib/copy/settings';
 
 	const dispatch = createEventDispatcher();
 	const USERS_PER_PAGE = 20;
+
+	$: role = $auth.user?.role;
+	$: isOwner = role === 'owner';
+	// owner may reset admins and users; admin may reset users only.
+	const RESETTABLE_BY = { owner: ['admin', 'user'], admin: ['user'] };
+	$: canReset = (targetRole) => (RESETTABLE_BY[role] ?? []).includes(targetRole);
 
 	let allUsers = [];
 	let userQuery = '';
@@ -57,6 +106,30 @@
 	let userFormError = '';
 	let confirmDeleteUser = null;
 	let confirmDeleteUserOpen = false;
+	let confirmResetUser = null;
+	let confirmResetOpen = false;
+	let resetting = false;
+	let resetResult = null;
+	let resetResultOpen = false;
+	let tempPasswordCopied = false;
+
+	let sessionMaxHours = SESSION_TIMEOUT_OPTIONS.at(-1);
+	let sessionSaving = false;
+
+	let signIn = {
+		passwordLoginEnabled: true,
+		googleLoginEnabled: false,
+		googleClientId: '',
+		googleClientSecretSet: false
+	};
+	let googleClientSecret = ''; // input only; blank on save = keep the stored one
+	let signInSaving = false;
+	let redirectUriCopied = false;
+	const redirectUri = `${API_BASE}/auth/google/callback`;
+	$: canEnableGoogle =
+		signIn.googleClientId.trim() && (signIn.googleClientSecretSet || googleClientSecret.trim());
+
+	$: if (!resetResultOpen) resetResult = null;
 
 	$: filteredUsers = allUsers.filter(
 		(u) =>
@@ -67,9 +140,73 @@
 
 	onMount(async () => {
 		try {
-			allUsers = await fetchUsers();
+			allUsers = isOwner ? await fetchUsers() : await fetchResettableUsers();
 		} catch {}
+		if (isOwner) {
+			try {
+				const org = await fetchOrganization();
+				sessionMaxHours = org.sessionMaxHours;
+				signIn = {
+					passwordLoginEnabled: org.passwordLoginEnabled,
+					googleLoginEnabled: org.googleLoginEnabled,
+					googleClientId: org.googleClientId,
+					googleClientSecretSet: org.googleClientSecretSet
+				};
+			} catch {}
+		}
 	});
+
+	async function handleSaveSession() {
+		sessionSaving = true;
+		try {
+			sessionMaxHours = (await saveOrganization({ sessionMaxHours })).sessionMaxHours;
+			notify('success', SESSION_SAVED_TOAST);
+		} catch (e) {
+			notify('error', e.message);
+		} finally {
+			sessionSaving = false;
+		}
+	}
+
+	function toggleMethod(key) {
+		const other = key === 'passwordLoginEnabled' ? 'googleLoginEnabled' : 'passwordLoginEnabled';
+		if (signIn[key] && !signIn[other]) {
+			notify('error', SIGN_IN_LAST_METHOD_ERROR);
+			return;
+		}
+		if (key === 'googleLoginEnabled' && !signIn.googleLoginEnabled && !canEnableGoogle) return;
+		signIn = { ...signIn, [key]: !signIn[key] };
+	}
+
+	async function handleSaveSignIn() {
+		signInSaving = true;
+		try {
+			const org = await saveOrganization({
+				passwordLoginEnabled: signIn.passwordLoginEnabled,
+				googleLoginEnabled: signIn.googleLoginEnabled,
+				googleClientId: signIn.googleClientId,
+				...(googleClientSecret.trim() && { googleClientSecret: googleClientSecret.trim() })
+			});
+			signIn = {
+				passwordLoginEnabled: org.passwordLoginEnabled,
+				googleLoginEnabled: org.googleLoginEnabled,
+				googleClientId: org.googleClientId,
+				googleClientSecretSet: org.googleClientSecretSet
+			};
+			googleClientSecret = '';
+			notify('success', SIGN_IN_SAVED_TOAST);
+		} catch (e) {
+			notify('error', e.message);
+		} finally {
+			signInSaving = false;
+		}
+	}
+
+	async function copyRedirectUri() {
+		await copyText(redirectUri);
+		redirectUriCopied = true;
+		setTimeout(() => (redirectUriCopied = false), COPY_TIMEOUT_MS);
+	}
 
 	async function handleCreateUser() {
 		userFormError = '';
@@ -90,6 +227,30 @@
 		}
 	}
 
+	async function handleResetPassword(user) {
+		resetting = true;
+		try {
+			const tempPassword = await resetUserPasswordApi(user.id);
+			resetResult = { name: user.name, tempPassword };
+			resetResultOpen = true;
+			tempPasswordCopied = false;
+			notify('success', passwordResetToast(user.name));
+		} catch (e) {
+			notify('error', e.message);
+		} finally {
+			resetting = false;
+			confirmResetUser = null;
+			confirmResetOpen = false;
+		}
+	}
+
+	async function copyTempPassword() {
+		if (!resetResult) return;
+		await copyText(resetResult.tempPassword);
+		tempPasswordCopied = true;
+		setTimeout(() => (tempPasswordCopied = false), COPY_TIMEOUT_MS);
+	}
+
 	async function handleDeleteUser(id, name) {
 		try {
 			await deleteUserApi(id);
@@ -105,10 +266,12 @@
 
 <div class="content-header">
 	<h2>{USERS_LABEL}</h2>
-	<p class="content-desc">{USERS_DESC}</p>
-	<button class="content-link" on:click={() => dispatch('navigate', 'project')}>
-		{MANAGE_PROJECTS_LINK_LABEL}
-	</button>
+	<p class="content-desc">{isOwner ? USERS_DESC : USERS_ADMIN_DESC}</p>
+	{#if isOwner}
+		<button class="content-link" on:click={() => dispatch('navigate', 'project')}>
+			{MANAGE_PROJECTS_LINK_LABEL}
+		</button>
+	{/if}
 </div>
 
 <ConfirmModal
@@ -123,137 +286,321 @@
 	{/if}
 </ConfirmModal>
 
-<div class="card settings-card">
-	<p class="card-title">{ADD_USER_CARD_TITLE}</p>
-	<div class="field-row">
-		<div class="field">
-			<label class="field-label" for="u-name">{NAME_LABEL}</label>
-			<input
-				id="u-name"
-				type="text"
-				class="field-input"
-				bind:value={userForm.name}
-				placeholder={USER_NAME_PLACEHOLDER}
-			/>
-		</div>
-		<div class="field">
-			<label class="field-label" for="u-email">{EMAIL_LABEL}</label>
-			<input
-				id="u-email"
-				type="email"
-				class="field-input"
-				bind:value={userForm.email}
-				placeholder={USER_EMAIL_PLACEHOLDER}
-			/>
-		</div>
-	</div>
-	<div class="field-row">
-		<div class="field">
-			<label class="field-label" for="u-pw">{PASSWORD_LABEL}</label>
-			<input
-				id="u-pw"
-				type="password"
-				class="field-input"
-				bind:value={userForm.password}
-				autocomplete="new-password"
-			/>
-		</div>
-		<div class="field">
-			<label class="field-label" for="u-role">{ROLE_LABEL}</label>
-			<select id="u-role" class="field-input" bind:value={userForm.role}>
-				<option value="user">{USER_ROLE_OPTION}</option>
-				<option value="admin">{ADMIN_ROLE_OPTION}</option>
-				<option value="owner">{OWNER_ROLE_OPTION}</option>
-			</select>
-		</div>
-	</div>
-	{#if userFormError}<p class="form-error">{userFormError}</p>{/if}
-	<div class="card-footer">
-		<Button
-			on:click={handleCreateUser}
-			disabled={userFormSaving ||
-				!userForm.name.trim() ||
-				!userForm.email.trim() ||
-				!userForm.password}
-		>
-			{addUserLabel(userFormSaving)}
-		</Button>
-	</div>
-</div>
+<ConfirmModal
+	bind:open={confirmResetOpen}
+	title={RESET_PASSWORD_MODAL_TITLE}
+	confirmLabel={resetPasswordLabel(resetting)}
+	loading={resetting}
+	on:confirm={() => confirmResetUser && handleResetPassword(confirmResetUser)}
+>
+	{#if confirmResetUser}
+		{RESET_PASSWORD_BODY_PREFIX}
+		<strong>{confirmResetUser.name}</strong>{RESET_PASSWORD_BODY_SUFFIX}
+	{/if}
+</ConfirmModal>
 
-{#if allUsers.length > 0}
+<Modal bind:open={resetResultOpen} title={RESET_PASSWORD_RESULT_TITLE}>
+	{#if resetResult}
+		<p class="reset-result-desc">{RESET_PASSWORD_RESULT_DESC}</p>
+		<div class="reset-result-row">
+			<input class="field-input" value={resetResult.tempPassword} readonly spellcheck="false" />
+			<button class="reset-copy-btn" on:click={copyTempPassword}>
+				{tempPasswordCopied ? RESET_PASSWORD_COPIED_TITLE : RESET_PASSWORD_COPY_TITLE}
+			</button>
+		</div>
+		<div class="reset-result-actions">
+			<Button on:click={() => (resetResultOpen = false)}>{RESET_PASSWORD_DONE_LABEL}</Button>
+		</div>
+	{/if}
+</Modal>
+
+{#if isOwner || allUsers.length > 0}
 	<div class="card settings-card">
-		<p class="card-title">{ALL_USERS_CARD_TITLE}</p>
-		{#if allUsers.length > 1}
-			<input
-				class="field-input user-search"
-				bind:value={userQuery}
-				placeholder={SEARCH_PLACEHOLDER}
-				on:input={() => (userPage = 0)}
-			/>
-		{/if}
-		<div class="users-table">
-			{#each pagedUsers as u (u.id)}
-				<div class="user-row" class:expanded={expandedUserId === u.id}>
-					<div class="user-row-head">
-						<button
-							class="user-info"
-							aria-expanded={expandedUserId === u.id}
-							on:click={() => (expandedUserId = expandedUserId === u.id ? null : u.id)}
-						>
-							<span class="user-name">{u.name}</span>
-							<span class="user-email">{u.email}</span>
-						</button>
-						<span class="role-chip {u.role}">{u.role}</span>
-						{#if u.id !== $auth.user?.id}
-							<button
-								class="icon-btn danger"
-								title={REMOVE_USER_ICON_TITLE}
-								on:click={() => {
-									confirmDeleteUser = { id: u.id, name: u.name };
-									confirmDeleteUserOpen = true;
-								}}
-							>
-								<svg
-									width="13"
-									height="13"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<polyline points="3 6 5 6 21 6" /><path
-										d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
-									/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
-								</svg>
-							</button>
-						{:else}
-							<span class="you-chip">{YOU_CHIP_LABEL}</span>
-						{/if}
+		<p class="card-title">{USER_MANAGEMENT_CARD_TITLE}</p>
+
+		{#if isOwner}
+			<div class="subsection">
+				<p class="subsection-title">{ADD_USER_CARD_TITLE}</p>
+				<div class="field-row">
+					<div class="field">
+						<label class="field-label" for="u-name">{NAME_LABEL}</label>
+						<input
+							id="u-name"
+							type="text"
+							class="field-input"
+							bind:value={userForm.name}
+							placeholder={USER_NAME_PLACEHOLDER}
+						/>
 					</div>
-					{#if expandedUserId === u.id}
-						<div class="user-projects">
-							<p class="user-projects-label">{USER_PROJECTS_LABEL}</p>
-							{#if u.role === 'owner'}
-								<p class="user-projects-hint">{USER_ALL_PROJECTS}</p>
-							{:else if (u.projects ?? []).length === 0}
-								<p class="user-projects-hint">{USER_NO_PROJECTS}</p>
-							{:else}
-								<ul class="user-project-list">
-									{#each u.projects as p (p.id)}
-										<li><span>{p.name}</span><span class="slug">{p.slug}</span></li>
-									{/each}
-								</ul>
+					<div class="field">
+						<label class="field-label" for="u-email">{EMAIL_LABEL}</label>
+						<input
+							id="u-email"
+							type="email"
+							class="field-input"
+							bind:value={userForm.email}
+							placeholder={USER_EMAIL_PLACEHOLDER}
+						/>
+					</div>
+				</div>
+				<div class="field-row">
+					<div class="field">
+						<label class="field-label" for="u-pw">{PASSWORD_LABEL}</label>
+						<input
+							id="u-pw"
+							type="password"
+							class="field-input"
+							bind:value={userForm.password}
+							autocomplete="new-password"
+						/>
+					</div>
+					<div class="field">
+						<label class="field-label" for="u-role">{ROLE_LABEL}</label>
+						<select id="u-role" class="field-input" bind:value={userForm.role}>
+							<option value="user">{USER_ROLE_OPTION}</option>
+							<option value="admin">{ADMIN_ROLE_OPTION}</option>
+							<option value="owner">{OWNER_ROLE_OPTION}</option>
+						</select>
+					</div>
+				</div>
+				{#if userFormError}<p class="form-error">{userFormError}</p>{/if}
+				<div class="card-footer">
+					<Button
+						on:click={handleCreateUser}
+						disabled={userFormSaving ||
+							!userForm.name.trim() ||
+							!userForm.email.trim() ||
+							!userForm.password}
+					>
+						{addUserLabel(userFormSaving)}
+					</Button>
+				</div>
+			</div>
+		{/if}
+
+		{#if allUsers.length > 0}
+			<div class="subsection">
+				<p class="subsection-title">{ALL_USERS_CARD_TITLE}</p>
+				{#if allUsers.length > 1}
+					<input
+						class="field-input user-search"
+						bind:value={userQuery}
+						placeholder={SEARCH_PLACEHOLDER}
+						on:input={() => (userPage = 0)}
+					/>
+				{/if}
+				<div class="users-table">
+					{#each pagedUsers as u (u.id)}
+						<div class="user-row" class:expanded={isOwner && expandedUserId === u.id}>
+							<div class="user-row-head">
+								{#if isOwner}
+									<button
+										class="user-info"
+										aria-expanded={expandedUserId === u.id}
+										on:click={() => (expandedUserId = expandedUserId === u.id ? null : u.id)}
+									>
+										<span class="user-name">{u.name}</span>
+										<span class="user-email">{u.email}</span>
+									</button>
+								{:else}
+									<div class="user-info">
+										<span class="user-name">{u.name}</span>
+										<span class="user-email">{u.email}</span>
+									</div>
+								{/if}
+								<span class="role-chip {u.role}">{u.role}</span>
+								{#if canReset(u.role)}
+									<button
+										class="icon-btn"
+										title={RESET_PASSWORD_ICON_TITLE}
+										on:click={() => {
+											confirmResetUser = u;
+											confirmResetOpen = true;
+										}}
+									>
+										<svg
+											width="13"
+											height="13"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<path
+												d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"
+											/><circle cx="16.5" cy="7.5" r="1.25" fill="currentColor" stroke="none" />
+										</svg>
+									</button>
+								{/if}
+								{#if isOwner}
+									{#if u.id !== $auth.user?.id}
+										<button
+											class="icon-btn danger"
+											title={REMOVE_USER_ICON_TITLE}
+											on:click={() => {
+												confirmDeleteUser = { id: u.id, name: u.name };
+												confirmDeleteUserOpen = true;
+											}}
+										>
+											<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<polyline points="3 6 5 6 21 6" /><path
+													d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+												/><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+											</svg>
+										</button>
+									{:else}
+										<span class="you-chip">{YOU_CHIP_LABEL}</span>
+									{/if}
+								{/if}
+							</div>
+							{#if isOwner && expandedUserId === u.id}
+								<div class="user-projects">
+									<p class="user-projects-label">{USER_PROJECTS_LABEL}</p>
+									{#if u.role === 'owner'}
+										<p class="user-projects-hint">{USER_ALL_PROJECTS}</p>
+									{:else if (u.projects ?? []).length === 0}
+										<p class="user-projects-hint">{USER_NO_PROJECTS}</p>
+									{:else}
+										<ul class="user-project-list">
+											{#each u.projects as p (p.id)}
+												<li><span>{p.name}</span><span class="slug">{p.slug}</span></li>
+											{/each}
+										</ul>
+									{/if}
+								</div>
 							{/if}
 						</div>
-					{/if}
+					{/each}
 				</div>
-			{/each}
-		</div>
-		<Paginator bind:page={userPage} total={filteredUsers.length} perPage={USERS_PER_PAGE} />
+				<Paginator bind:page={userPage} total={filteredUsers.length} perPage={USERS_PER_PAGE} />
+			</div>
+		{/if}
 	</div>
+
+	{#if isOwner}
+		<div class="card settings-card">
+			<p class="card-title">{SIGN_IN_CARD_TITLE}</p>
+
+			<div class="toggle-row">
+				<div class="toggle-left">
+					<ServiceIcon service="email" size={20} />
+					<div class="toggle-info">
+						<span class="toggle-label">{SIGN_IN_PASSWORD_LABEL}</span>
+						<span class="toggle-desc">{SIGN_IN_PASSWORD_DESC}</span>
+					</div>
+				</div>
+				<button
+					class="toggle-switch"
+					class:on={signIn.passwordLoginEnabled}
+					role="switch"
+					aria-checked={signIn.passwordLoginEnabled}
+					on:click={() => toggleMethod('passwordLoginEnabled')}
+				>
+					<span class="toggle-thumb"></span>
+				</button>
+			</div>
+
+			<div class="toggle-row">
+				<div class="toggle-left">
+					<ServiceIcon service="google" size={20} />
+					<div class="toggle-info">
+						<span class="toggle-label">{SIGN_IN_GOOGLE_LABEL}</span>
+						<span class="toggle-desc">{SIGN_IN_GOOGLE_DESC}</span>
+					</div>
+				</div>
+				<button
+					class="toggle-switch"
+					class:on={signIn.googleLoginEnabled}
+					role="switch"
+					aria-checked={signIn.googleLoginEnabled}
+					disabled={!signIn.googleLoginEnabled && !canEnableGoogle}
+					on:click={() => toggleMethod('googleLoginEnabled')}
+				>
+					<span class="toggle-thumb"></span>
+				</button>
+			</div>
+
+			<div class="field">
+				<label class="field-label" for="google-client-id">{GOOGLE_CLIENT_ID_LABEL}</label>
+				<input
+					id="google-client-id"
+					type="text"
+					class="field-input"
+					bind:value={signIn.googleClientId}
+					placeholder={GOOGLE_CLIENT_ID_PLACEHOLDER}
+					autocomplete="off"
+					spellcheck="false"
+				/>
+			</div>
+			<div class="field">
+				<label class="field-label" for="google-client-secret">{GOOGLE_CLIENT_SECRET_LABEL}</label>
+				<input
+					id="google-client-secret"
+					type="password"
+					class="field-input"
+					bind:value={googleClientSecret}
+					placeholder={signIn.googleClientSecretSet
+						? GOOGLE_CLIENT_SECRET_KEEP_PLACEHOLDER
+						: GOOGLE_CLIENT_SECRET_PLACEHOLDER}
+					autocomplete="off"
+					spellcheck="false"
+				/>
+			</div>
+			<div class="field">
+				<label class="field-label" for="google-redirect-uri">
+					<span>{GOOGLE_REDIRECT_URI_LABEL}</span>
+					<span class="field-hint">{GOOGLE_REDIRECT_URI_HINT}</span>
+				</label>
+				<div class="redirect-row">
+					<input
+						id="google-redirect-uri"
+						class="field-input"
+						value={redirectUri}
+						readonly
+						spellcheck="false"
+					/>
+					<button class="redirect-copy-btn" on:click={copyRedirectUri}>
+						{redirectUriCopied ? COPIED_LABEL_UI : COPY_LABEL}
+					</button>
+				</div>
+			</div>
+
+			<div class="card-footer">
+				<Button on:click={handleSaveSignIn} disabled={signInSaving}>
+					{saveSignInLabel(signInSaving)}
+				</Button>
+			</div>
+		</div>
+
+		<div class="card settings-card">
+			<p class="card-title">{SESSION_CARD_TITLE}</p>
+			<div class="field field-sm">
+				<label class="field-label" for="org-session">{SESSION_TIMEOUT_LABEL}</label>
+				<select id="org-session" class="field-input" bind:value={sessionMaxHours}>
+					{#each SESSION_TIMEOUT_OPTIONS as hours (hours)}
+						<option value={hours}>{sessionTimeoutOptionLabel(hours)}</option>
+					{/each}
+				</select>
+				<p class="field-hint">{SESSION_TIMEOUT_HINT}</p>
+			</div>
+			<div class="card-footer">
+				<Button on:click={handleSaveSession} disabled={sessionSaving}>
+					{saveSessionLabel(sessionSaving)}
+				</Button>
+			</div>
+		</div>
+	{/if}
 {/if}
 
 <style>
@@ -277,6 +624,23 @@
 		flex-direction: column;
 		gap: 1.25rem;
 	}
+	.subsection {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+	.subsection + .subsection {
+		border-top: 1px solid var(--border);
+		padding-top: 1.5rem;
+	}
+	.subsection-title {
+		margin: 0;
+		font-size: 0.8rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--text-muted);
+	}
 	.field-label {
 		display: flex;
 		align-items: baseline;
@@ -289,6 +653,13 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 0.75rem;
+	}
+	.field-sm {
+		max-width: 220px;
+	}
+	.field-hint {
+		margin: 0.125rem 0 0;
+		line-height: 1.5;
 	}
 	.card-footer {
 		padding-top: 0.5rem;
@@ -443,9 +814,136 @@
 			color var(--duration-fast);
 		flex-shrink: 0;
 	}
+	.icon-btn:hover {
+		background: var(--bg-subtle);
+		color: var(--text);
+	}
 	.icon-btn.danger:hover {
 		background: var(--fail-soft);
 		color: var(--fail);
+	}
+
+	.reset-result-desc {
+		margin: 0;
+		font-size: 0.85rem;
+		color: var(--text-muted);
+		line-height: 1.5;
+	}
+	.reset-result-row {
+		display: flex;
+		gap: 0.5rem;
+	}
+	.reset-result-row .field-input {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.85rem;
+	}
+	.reset-copy-btn {
+		flex-shrink: 0;
+		padding: 0 0.85rem;
+		font: inherit;
+		font-size: 0.8125rem;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		color: var(--text);
+		cursor: pointer;
+		transition: background var(--duration-fast);
+	}
+	.reset-copy-btn:hover {
+		background: var(--bg-elevated);
+	}
+	.reset-result-actions {
+		display: flex;
+		justify-content: flex-end;
+	}
+
+	.toggle-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1.5rem;
+		padding: 0.875rem 1rem;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+	}
+	.toggle-left {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		min-width: 0;
+	}
+	.toggle-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		min-width: 0;
+	}
+	.toggle-label {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--text);
+	}
+	.toggle-desc {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		line-height: 1.4;
+	}
+	.toggle-switch {
+		flex-shrink: 0;
+		width: 40px;
+		height: 22px;
+		border-radius: var(--radius-pill);
+		border: none;
+		background: var(--border);
+		cursor: pointer;
+		position: relative;
+		transition: background 0.2s var(--ease-out);
+	}
+	.toggle-switch.on {
+		background: var(--accent);
+	}
+	.toggle-switch:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.toggle-thumb {
+		position: absolute;
+		top: 3px;
+		left: 3px;
+		width: 16px;
+		height: 16px;
+		border-radius: 50%;
+		background: white;
+		transition: transform 0.2s var(--ease-out);
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+	}
+	.toggle-switch.on .toggle-thumb {
+		transform: translateX(18px);
+	}
+
+	.redirect-row {
+		display: flex;
+		gap: 0.5rem;
+	}
+	.redirect-row .field-input {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.8rem;
+	}
+	.redirect-copy-btn {
+		flex-shrink: 0;
+		padding: 0 0.85rem;
+		font: inherit;
+		font-size: 0.8125rem;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		color: var(--text);
+		cursor: pointer;
+		transition: background var(--duration-fast);
+	}
+	.redirect-copy-btn:hover {
+		background: var(--bg-elevated);
 	}
 
 	@media (max-width: 640px) {

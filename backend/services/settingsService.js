@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const prisma = require('./prisma');
 const activityService = require('./activityService');
 const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
+const { isSessionMaxHours } = require('../constants/session');
 const { sanitizeTestsPath } = require('../lib/sanitizeTestsPath');
 
 const getProjectRaw = async (projectId) => {
@@ -112,21 +113,16 @@ const getWebhooks = async (projectId) => {
 	const project = await getProjectRaw(projectId);
 	return {
 		discordWebhookUrl: project.discordWebhookUrl ?? '',
-		slackWebhookUrl: project.slackWebhookUrl ?? '',
-		notifyPublicUrl: project.notifyPublicUrl ?? ''
+		slackWebhookUrl: project.slackWebhookUrl ?? ''
 	};
 };
 
-const updateWebhooks = async (
-	projectId,
-	{ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl }
-) => {
+const updateWebhooks = async (projectId, { discordWebhookUrl, slackWebhookUrl }) => {
 	const project = await prisma.project.update({
 		where: { id: projectId },
 		data: {
 			discordWebhookUrl: discordWebhookUrl ?? '',
-			slackWebhookUrl: slackWebhookUrl ?? '',
-			notifyPublicUrl: notifyPublicUrl ?? ''
+			slackWebhookUrl: slackWebhookUrl ?? ''
 		}
 	});
 	await activityService.record(ACTIVITY_ACTION.INTEGRATIONS_UPDATE, {
@@ -134,8 +130,7 @@ const updateWebhooks = async (
 		target: { type: 'project', id: projectId, label: project.name },
 		metadata: {
 			discord: (discordWebhookUrl ?? '').length > 0,
-			slack: (slackWebhookUrl ?? '').length > 0,
-			ci: (notifyPublicUrl ?? '').length > 0
+			slack: (slackWebhookUrl ?? '').length > 0
 		}
 	});
 	return project;
@@ -154,8 +149,7 @@ const getBackupConfig = async () => {
 		backupS3SecretKeySet: org.backupS3SecretKey.length > 0,
 		backupS3Prefix: org.backupS3Prefix,
 		backupLastRunAt: org.backupLastRunAt,
-		backupLastStatus: org.backupLastStatus,
-		backupIncludeReports: org.backupIncludeReports
+		backupLastStatus: org.backupLastStatus
 	};
 };
 
@@ -168,8 +162,7 @@ const updateBackupConfig = async ({
 	backupS3Bucket,
 	backupS3AccessKey,
 	backupS3SecretKey,
-	backupS3Prefix,
-	backupIncludeReports
+	backupS3Prefix
 }) => {
 	const org = await getOrgRaw();
 	const updated = await prisma.organization.update({
@@ -183,8 +176,7 @@ const updateBackupConfig = async ({
 			...(backupS3Bucket !== undefined && { backupS3Bucket }),
 			...(backupS3AccessKey !== undefined && { backupS3AccessKey }),
 			...(backupS3SecretKey && { backupS3SecretKey }),
-			...(backupS3Prefix !== undefined && { backupS3Prefix }),
-			...(backupIncludeReports !== undefined && { backupIncludeReports })
+			...(backupS3Prefix !== undefined && { backupS3Prefix })
 		}
 	});
 	await activityService.record(ACTIVITY_ACTION.BACKUP_CONFIG_UPDATE, {
@@ -276,6 +268,209 @@ const updateActivityRetention = async (days) => {
 	return { activityRetentionDays: updated.activityRetentionDays };
 };
 
+// Owner view of the AI provider credentials. Never returns the keys themselves.
+const getAiConfig = async () => {
+	const org = await getOrgRaw();
+	return {
+		anthropicApiKeySet: org.anthropicApiKey !== '',
+		anthropicModel: org.anthropicModel,
+		openaiApiKeySet: org.openaiApiKey !== '',
+		openaiModel: org.openaiModel
+	};
+};
+
+const updateAiConfig = async ({ anthropicApiKey, anthropicModel, openaiApiKey, openaiModel }) => {
+	const org = await getOrgRaw();
+	const data = {};
+	// Blank means "leave the stored key alone", matching the Google OAuth secret UI.
+	if (anthropicApiKey) data.anthropicApiKey = String(anthropicApiKey).trim();
+	if (anthropicModel !== undefined) data.anthropicModel = String(anthropicModel).trim();
+	if (openaiApiKey) data.openaiApiKey = String(openaiApiKey).trim();
+	if (openaiModel !== undefined) data.openaiModel = String(openaiModel).trim();
+
+	await prisma.organization.update({ where: { id: org.id }, data });
+	await activityService.record(ACTIVITY_ACTION.AI_CONFIG_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'ai', label: 'AI provider settings' },
+		metadata: { changed: Object.keys(data) }
+	});
+	return getAiConfig();
+};
+
+// Owner view of the GitHub connection. Never returns the token itself.
+const getGithubConfig = async () => {
+	const org = await getOrgRaw();
+	return { githubTokenSet: org.githubToken !== '' };
+};
+
+const updateGithubConfig = async ({ githubToken }) => {
+	const org = await getOrgRaw();
+	const data = {};
+	if (githubToken) data.githubToken = String(githubToken).trim();
+
+	await prisma.organization.update({ where: { id: org.id }, data });
+	await activityService.record(ACTIVITY_ACTION.GITHUB_CONFIG_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'github', label: 'GitHub connection' },
+		metadata: { changed: Object.keys(data) }
+	});
+	return getGithubConfig();
+};
+
+// Per-project AI behaviour, not a secret: what the agent is told about this
+// project's tone and coding conventions.
+const getProjectAiConfig = async (projectId) => {
+	const project = await getProjectRaw(projectId);
+	return { aiSystemPrompt: project.aiSystemPrompt, aiCodePractices: project.aiCodePractices };
+};
+
+const updateProjectAiConfig = async (projectId, { aiSystemPrompt, aiCodePractices }) => {
+	const project = await prisma.project.update({
+		where: { id: projectId },
+		data: {
+			...(aiSystemPrompt !== undefined && { aiSystemPrompt: String(aiSystemPrompt) }),
+			...(aiCodePractices !== undefined && { aiCodePractices: String(aiCodePractices) })
+		},
+		select: { id: true, name: true, aiSystemPrompt: true, aiCodePractices: true }
+	});
+	await activityService.record(ACTIVITY_ACTION.PROJECT_AI_CONFIG_UPDATE, {
+		projectId,
+		target: { type: 'project', id: projectId, label: project.name }
+	});
+	return { aiSystemPrompt: project.aiSystemPrompt, aiCodePractices: project.aiCodePractices };
+};
+
+// Per-project GitHub repo mapping, not a secret: which repo this project's
+// tests live in. The credential that authenticates against it is org-wide,
+// see getGithubConfig/updateGithubConfig above.
+const getProjectGithubConfig = async (projectId) => {
+	const project = await getProjectRaw(projectId);
+	return {
+		githubOwner: project.githubOwner,
+		githubRepo: project.githubRepo,
+		githubDefaultBranch: project.githubDefaultBranch
+	};
+};
+
+const updateProjectGithubConfig = async (
+	projectId,
+	{ githubOwner, githubRepo, githubDefaultBranch }
+) => {
+	const project = await prisma.project.update({
+		where: { id: projectId },
+		data: {
+			...(githubOwner !== undefined && { githubOwner: String(githubOwner).trim() }),
+			...(githubRepo !== undefined && { githubRepo: String(githubRepo).trim() }),
+			...(githubDefaultBranch !== undefined && {
+				githubDefaultBranch: String(githubDefaultBranch).trim() || 'main'
+			})
+		},
+		select: { id: true, name: true, githubOwner: true, githubRepo: true, githubDefaultBranch: true }
+	});
+	await activityService.record(ACTIVITY_ACTION.PROJECT_GITHUB_CONFIG_UPDATE, {
+		projectId,
+		target: { type: 'project', id: projectId, label: project.name }
+	});
+	return {
+		githubOwner: project.githubOwner,
+		githubRepo: project.githubRepo,
+		githubDefaultBranch: project.githubDefaultBranch
+	};
+};
+
+// Owner view. Never returns googleClientSecret, only whether one is set.
+const getOrganization = async () => {
+	const org = await getOrgRaw();
+	return {
+		name: org.name,
+		logoUrl: org.logoUrl,
+		sessionMaxHours: org.sessionMaxHours,
+		passwordLoginEnabled: org.passwordLoginEnabled,
+		googleLoginEnabled: org.googleLoginEnabled,
+		googleClientId: org.googleClientId,
+		googleClientSecretSet: org.googleClientSecret !== ''
+	};
+};
+
+// Unauthenticated: what the login screen needs to render itself, and nothing
+// that would help an attacker (no client id/secret).
+const getPublicBranding = async () => {
+	const org = await prisma.organization.findFirst({
+		orderBy: { id: 'asc' },
+		select: {
+			name: true,
+			logoUrl: true,
+			passwordLoginEnabled: true,
+			googleLoginEnabled: true
+		}
+	});
+	return {
+		name: org?.name ?? '',
+		logoUrl: org?.logoUrl ?? '',
+		// No org row yet (first-run) → only password login, so setup can proceed.
+		passwordLoginEnabled: org?.passwordLoginEnabled ?? true,
+		googleLoginEnabled: org?.googleLoginEnabled ?? false
+	};
+};
+
+// The raw Google OAuth credentials, for the auth flow only. Never goes near a route.
+const getGoogleOAuthConfig = async () => {
+	const org = await getOrgRaw();
+	return {
+		enabled: org.googleLoginEnabled,
+		clientId: org.googleClientId,
+		clientSecret: org.googleClientSecret
+	};
+};
+
+const updateOrganization = async ({
+	name,
+	logoUrl,
+	sessionMaxHours,
+	passwordLoginEnabled,
+	googleLoginEnabled,
+	googleClientId,
+	googleClientSecret
+}) => {
+	const org = await getOrgRaw();
+	const data = {};
+	if (name !== undefined) data.name = String(name).trim();
+	if (logoUrl !== undefined) data.logoUrl = String(logoUrl).trim();
+	if (sessionMaxHours !== undefined) {
+		if (!isSessionMaxHours(sessionMaxHours)) {
+			const e = new Error('sessionMaxHours must be one of 6, 12, 18 or 24');
+			e.status = 400;
+			throw e;
+		}
+		data.sessionMaxHours = Number(sessionMaxHours);
+	}
+	if (googleClientId !== undefined) data.googleClientId = String(googleClientId).trim();
+	// Blank means "leave the stored secret alone", matching the UI's placeholder.
+	if (googleClientSecret) data.googleClientSecret = String(googleClientSecret).trim();
+	if (passwordLoginEnabled !== undefined) data.passwordLoginEnabled = Boolean(passwordLoginEnabled);
+	if (googleLoginEnabled !== undefined) data.googleLoginEnabled = Boolean(googleLoginEnabled);
+
+	const next = { ...org, ...data };
+	if (!next.passwordLoginEnabled && !next.googleLoginEnabled) {
+		const e = new Error('At least one sign-in method must stay enabled.');
+		e.status = 400;
+		throw e;
+	}
+	if (next.googleLoginEnabled && !(next.googleClientId && next.googleClientSecret)) {
+		const e = new Error('Add a Google client ID and secret before enabling Google sign-in.');
+		e.status = 400;
+		throw e;
+	}
+
+	const updated = await prisma.organization.update({ where: { id: org.id }, data });
+	await activityService.record(ACTIVITY_ACTION.ORG_SETTINGS_UPDATE, {
+		scope: ACTIVITY_SCOPE.ORG,
+		target: { type: 'organization', label: updated.name || 'Organization' },
+		metadata: { changed: Object.keys(data) }
+	});
+	return getOrganization();
+};
+
 const revokeMcpKey = async (projectId, userId) => {
 	const { count } = await prisma.mcpKey.deleteMany({ where: { projectId, userId } });
 	if (count > 0) {
@@ -290,6 +485,10 @@ module.exports = {
 	getProject,
 	getProjectRaw,
 	getOrgRaw,
+	getOrganization,
+	getPublicBranding,
+	getGoogleOAuthConfig,
+	updateOrganization,
 	updateProject,
 	getTestPrefixes,
 	updateTestPrefixes,
@@ -305,5 +504,13 @@ module.exports = {
 	getReportRetention,
 	updateReportRetention,
 	getBuiltInRunnerEnabled,
-	updateBuiltInRunnerEnabled
+	updateBuiltInRunnerEnabled,
+	getAiConfig,
+	updateAiConfig,
+	getGithubConfig,
+	updateGithubConfig,
+	getProjectAiConfig,
+	updateProjectAiConfig,
+	getProjectGithubConfig,
+	updateProjectGithubConfig
 };

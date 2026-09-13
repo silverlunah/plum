@@ -70,14 +70,24 @@ function scaffold(framework) {
 	return tests;
 }
 
+// Located rather than hardcoded: a line number goes stale the moment the example
+// spec is edited, and a stale one fails as "selected 0 tests" instead of saying so.
+function lineOf(tests, spec, needle) {
+	const lines = fs.readFileSync(path.join(tests, spec), 'utf8').split('\n');
+	return lines.findIndex((l) => l.includes(needle)) + 1;
+}
+
 function checkPlaywright(tests) {
 	const all = sh('npx', ['playwright', 'test', '--project=chromium'], tests);
 	record('playwright: full suite', all.code === 0, `${passedCount(all.out) ?? '?'} passed`);
 	if (!FULL) return;
 
+	const spec = 'specs/LoginPage.spec.ts';
+	const soloLine = lineOf(tests, spec, 'User cannot log in with invalid credentials');
+
 	const cases = [
 		['by tag', ['playwright', 'test', '--project=chromium', '--grep', '@TC-001'], 1],
-		['by file:line', ['playwright', 'test', '--project=chromium', 'specs/LoginPage.spec.ts:33'], 1],
+		['by file:line', ['playwright', 'test', '--project=chromium', `${spec}:${soloLine}`], 1],
 		['firefox project', ['playwright', 'test', '--project=firefox', '--grep', '@TC-001'], 1],
 		['4 workers, both browsers', ['playwright', 'test', '--workers=4'], 12],
 		['shard 1/2', ['playwright', 'test', '--project=chromium', '--shard=1/2'], 3],

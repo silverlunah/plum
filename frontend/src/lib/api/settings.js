@@ -50,6 +50,24 @@ export async function saveProject({
 	return res.json();
 }
 
+export async function fetchOrganization() {
+	const res = await fetch(`${API_BASE}/settings/organization`, { headers: authHeaders() });
+	if (!res.ok) throw new Error('Failed to load organization settings');
+	return res.json();
+}
+
+// `patch` is a subset of the org fields; the backend applies only what's present.
+export async function saveOrganization(patch) {
+	const res = await fetch(`${API_BASE}/settings/organization`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', ...authHeaders() },
+		body: JSON.stringify(patch)
+	});
+	const data = await res.json();
+	if (!res.ok) throw new Error(data.error ?? 'Failed to save organization settings');
+	return data;
+}
+
 export async function exportBackup() {
 	const res = await fetch(`${API_BASE}/backup/export`, { headers: authHeaders() });
 	if (!res.ok) throw new Error('Export failed');
@@ -79,8 +97,7 @@ export async function fetchBackupConfig() {
 			backupS3SecretKeySet: false,
 			backupS3Prefix: '',
 			backupLastRunAt: null,
-			backupLastStatus: '',
-			backupIncludeReports: false
+			backupLastStatus: ''
 		};
 	return res.json();
 }
@@ -140,16 +157,93 @@ export async function restoreFromS3(key) {
 
 export async function fetchIntegrations() {
 	const res = await fetch(`${API_BASE}/settings/integrations`, { headers: authHeaders() });
-	if (!res.ok) return { discordWebhookUrl: '', slackWebhookUrl: '', notifyPublicUrl: '' };
+	if (!res.ok) return { discordWebhookUrl: '', slackWebhookUrl: '' };
 	return res.json();
 }
 
-export async function saveIntegrations({ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl }) {
+export async function saveIntegrations({ discordWebhookUrl, slackWebhookUrl }) {
 	const res = await fetch(`${API_BASE}/settings/integrations`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', ...authHeaders() },
-		body: JSON.stringify({ discordWebhookUrl, slackWebhookUrl, notifyPublicUrl })
+		body: JSON.stringify({ discordWebhookUrl, slackWebhookUrl })
 	});
+	return res.json();
+}
+
+export async function fetchAiConfig() {
+	const res = await fetch(`${API_BASE}/settings/ai`, { headers: authHeaders() });
+	if (!res.ok)
+		return {
+			anthropicApiKeySet: false,
+			anthropicModel: '',
+			openaiApiKeySet: false,
+			openaiModel: ''
+		};
+	return res.json();
+}
+
+export async function saveAiConfig({ anthropicApiKey, anthropicModel, openaiApiKey, openaiModel }) {
+	const res = await fetch(`${API_BASE}/settings/ai`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', ...authHeaders() },
+		body: JSON.stringify({ anthropicApiKey, anthropicModel, openaiApiKey, openaiModel })
+	});
+	if (!res.ok) throw new Error('Failed to save AI provider settings');
+	return res.json();
+}
+
+export async function fetchGithubConfig() {
+	const res = await fetch(`${API_BASE}/settings/github`, { headers: authHeaders() });
+	if (!res.ok) return { githubTokenSet: false };
+	return res.json();
+}
+
+export async function saveGithubConfig({ githubToken }) {
+	const res = await fetch(`${API_BASE}/settings/github`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', ...authHeaders() },
+		body: JSON.stringify({ githubToken })
+	});
+	if (!res.ok) throw new Error('Failed to save GitHub connection');
+	return res.json();
+}
+
+export async function verifyGithubConnection() {
+	const res = await fetch(`${API_BASE}/settings/github/verify`, { headers: authHeaders() });
+	const data = await res.json();
+	if (!res.ok) throw new Error(data.error ?? 'Could not verify the GitHub connection');
+	return data;
+}
+
+export async function fetchProjectAiConfig() {
+	const res = await fetch(`${API_BASE}/settings/project/ai`, { headers: authHeaders() });
+	if (!res.ok) return { aiSystemPrompt: '', aiCodePractices: '' };
+	return res.json();
+}
+
+export async function saveProjectAiConfig({ aiSystemPrompt, aiCodePractices }) {
+	const res = await fetch(`${API_BASE}/settings/project/ai`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', ...authHeaders() },
+		body: JSON.stringify({ aiSystemPrompt, aiCodePractices })
+	});
+	if (!res.ok) throw new Error('Failed to save AI behaviour');
+	return res.json();
+}
+
+export async function fetchProjectGithubConfig() {
+	const res = await fetch(`${API_BASE}/settings/project/github`, { headers: authHeaders() });
+	if (!res.ok) return { githubOwner: '', githubRepo: '', githubDefaultBranch: 'main' };
+	return res.json();
+}
+
+export async function saveProjectGithubConfig({ githubOwner, githubRepo, githubDefaultBranch }) {
+	const res = await fetch(`${API_BASE}/settings/project/github`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', ...authHeaders() },
+		body: JSON.stringify({ githubOwner, githubRepo, githubDefaultBranch })
+	});
+	if (!res.ok) throw new Error('Failed to save repository settings');
 	return res.json();
 }
 

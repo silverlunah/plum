@@ -21,6 +21,14 @@ async function fetchWithTimeout(url, options = {}) {
 	}
 }
 
+export async function fetchMe(token) {
+	const res = await fetchWithTimeout(`${API_BASE}/auth/me`, {
+		headers: { Authorization: `Bearer ${token}` }
+	});
+	if (!res.ok) throw new Error('Session is not valid');
+	return (await res.json()).user;
+}
+
 export async function checkNeedsSetup() {
 	const res = await fetchWithTimeout(`${API_BASE}/auth/needs-setup`);
 	if (!res.ok) return false;
@@ -28,18 +36,43 @@ export async function checkNeedsSetup() {
 	return data.needsSetup;
 }
 
+// Public. Returns null on any failure, the login screen just falls back to the
+// plain Plum wordmark.
+export async function fetchBranding() {
+	try {
+		const res = await fetchWithTimeout(`${API_BASE}/auth/branding`);
+		if (!res.ok) return null;
+		return await res.json();
+	} catch {
+		return null;
+	}
+}
+
 export async function setup({
 	organizationName,
 	projectName,
+	framework,
 	name,
 	email,
 	password,
-	termsAccepted
+	termsAccepted,
+	githubToken,
+	repo
 }) {
 	const res = await fetchWithTimeout(`${API_BASE}/auth/setup`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ organizationName, projectName, name, email, password, termsAccepted })
+		body: JSON.stringify({
+			organizationName,
+			projectName,
+			framework,
+			name,
+			email,
+			password,
+			termsAccepted,
+			githubToken,
+			repo
+		})
 	});
 	const data = await res.json();
 	if (!res.ok) throw new Error(data.error ?? 'Setup failed');
@@ -57,11 +90,11 @@ export async function login({ email, password }) {
 	return data;
 }
 
-export async function updateProfile({ token, name, email }) {
+export async function updateProfile({ token, name, email, defaultProjectId }) {
 	const res = await fetchWithTimeout(`${API_BASE}/auth/update-profile`, {
 		method: 'PUT',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-		body: JSON.stringify({ name, email })
+		body: JSON.stringify({ name, email, defaultProjectId })
 	});
 	const data = await res.json();
 	if (!res.ok) throw new Error(data.error ?? 'Failed to update profile');

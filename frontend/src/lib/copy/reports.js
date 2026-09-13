@@ -18,6 +18,7 @@ export const RECENT_LABEL = 'Recent';
 export const TREND_HINT = '← older · newer →';
 export const NO_REPORTS_MESSAGE = 'No reports yet. Run a test to generate one.';
 export const SELECT_ALL_TITLE = 'Select all on this page';
+export const SELECT_ALL_LABEL = 'Select all';
 export const SELECT_ROW_TITLE = 'Select';
 export const DELETE_REPORT_TITLE = 'Delete report';
 
@@ -47,6 +48,19 @@ export const FLAKY_LABEL = 'flaky';
 export const FLAKY_TITLE = 'Failed at least once, then passed on a retry';
 export const WATCH_REPLAY_TITLE = 'Watch replay';
 export const REPLAY_LABEL = 'Replay';
+export const FAILURE_SCREENSHOT_ALT = 'Screenshot at the moment this scenario failed';
+export const FLAKY_GROUP_TITLE = 'Flaky';
+export const JUMP_TO_SCENARIO_TITLE = 'Jump to this scenario';
+export const BACK_TO_TOP_LABEL = 'Back to top';
+export const AI_ANALYZE_LABEL = 'AI Analyze';
+export const AI_ANALYZE_STARTING_LABEL = 'Starting…';
+export const AI_ANALYZE_FAILED = 'Failed to start AI analysis.';
+export const aiAnalyzeSessionTitle = (reportId) => `Analyze report #${reportId}`;
+export const aiAnalyzeKickoffMessage = (reportId) =>
+	`Analyze report #${reportId}: find out why it failed, tell me if it's flaky or a real bug, ` +
+	'and if you can identify a fix, make the change and open a PR.';
+
+export const failuresGroupTitle = (n) => `${n} ${pluralize(n, 'failure')}`;
 
 export const runnersBadge = (count) => `${count} runners`;
 export const casesCountLabel = (count) => `${count} cases`;

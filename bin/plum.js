@@ -117,11 +117,6 @@ function cancelAndExit() {
 
 const VALID_BROWSERS = ['chromium', 'firefox'];
 
-const FRAMEWORK_HINTS = {
-	playwright: 'spec files, native runner, recommended',
-	cucumber: 'Gherkin .feature files and step definitions'
-};
-
 // A bare host:port silently breaks link generation and CORS, so require a scheme.
 async function promptPublicUrl(message, initial) {
 	for (;;) {
@@ -251,22 +246,6 @@ async function configureServer({ force }) {
 	const interactive = force || (interactiveAllowed() && !hasFlags);
 
 	if (interactive) {
-		const framework = await clack.select({
-			message: 'Which test framework should new projects on this server use?',
-			options: FRAMEWORKS.map((id) => ({
-				value: id,
-				label: frameworkLabel(id),
-				hint: FRAMEWORK_HINTS[id]
-			})),
-			initialValue: isFramework(cfg.framework) ? cfg.framework : DEFAULT_FRAMEWORK
-		});
-		if (clack.isCancel(framework)) cancelAndExit();
-		cfg.framework = framework;
-		clack.log.info(
-			`Each project picks its framework when it is created, and cannot change afterwards. ` +
-				`${frameworkLabel(framework)} will be pre-selected.`
-		);
-
 		const mode = await clack.select({
 			message: 'Where are you setting up Plum?',
 			options: [
@@ -320,11 +299,13 @@ async function configureServer({ force }) {
 			cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
 		}
 	} else {
-		if (!isFramework(cfg.framework)) cfg.framework = DEFAULT_FRAMEWORK;
 		// No URL given and none saved means local, which is loopback on the chosen ports.
 		if (!cfg.apiUrl) cfg.apiUrl = `http://localhost:${cfg.backendPort}`;
 		if (!cfg.uiUrl) cfg.uiUrl = `http://localhost:${cfg.frontendPort}`;
 	}
+	// No question asks for this anymore (see the first-run setup page instead), only
+	// `--framework` or a saved config can set it, so guard whatever that left behind.
+	if (!isFramework(cfg.framework)) cfg.framework = DEFAULT_FRAMEWORK;
 
 	const urlProblem = serverUrlProblem(cfg.apiUrl, cfg.uiUrl);
 	if (urlProblem) {
@@ -395,7 +376,8 @@ function buildTestsReadme(framework) {
 				'features/              Gherkin .feature files',
 				'step_definitions/      TypeScript step implementations',
 				'pages/                 Page Object Models (optional)',
-				'utils/                 browser setup and hooks (Plum’s recording lives here)',
+				'utils/world.ts         the World: your per-scenario state',
+				'utils/                 hooks and recording (Plum’s, leave them alone)',
 				'cucumber.js            paths, requires, formatters',
 				'.env                   BASE_URL and IS_HEADLESS'
 			];
@@ -403,7 +385,7 @@ function buildTestsReadme(framework) {
 	const tagExample = pw
 		? [
 				'```ts',
-				"test('User can log in', { tag: '@TC-001' }, async ({ page, plumStep }) => {",
+				"test('User can log in', { tag: '@TC-001' }, async ({ page }) => {",
 				'\t// ...',
 				'});',
 				'```'
@@ -513,6 +495,7 @@ function applyServerConfig(cfg) {
 			backendPort: cfg.backendPort,
 			framework: cfg.framework,
 			apiUrl: cfg.apiUrl,
+			uiUrl: cfg.uiUrl,
 			plumVersion: readPlumVersion()
 		}),
 		'utf8'
@@ -1757,6 +1740,22 @@ switch (command) {
 		break;
 	}
 
+	case 'check': {
+		const checkScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'check.mjs');
+		try {
+			execFileSync(process.execPath, [checkScript, ...process.argv.slice(3)], {
+				cwd: process.cwd(),
+				stdio: 'inherit',
+				env: { ...process.env, TESTS_ROOT: resolveLocalTestsRoot() ?? '' }
+			});
+		} catch (e) {
+			// The script exits non-zero when it finds problems, which is the point of
+			// running it in a hook. Pass that through rather than reporting a crash.
+			process.exit(e.status ?? 1);
+		}
+		break;
+	}
+
 	case 'create-test': {
 		const createTestScript = path.join(plumRoot, 'backend', 'config', 'scripts', 'create-test.mjs');
 		execFileSync(process.execPath, [createTestScript, ...process.argv.slice(3)], {
@@ -1830,5 +1829,9 @@ switch (command) {
 		console.log(
 			'  create-test          Scaffold a new test. --page adds a page object, --name skips prompts'
 		);
+		console.log(
+			'  check                Report duplicate test ids, untagged tests, and files the runner'
+		);
+		console.log('                       cannot read. Exits non-zero, so it fits a hook or CI');
 		console.log('\n--------------------------------------\n');
 }

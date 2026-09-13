@@ -35,10 +35,13 @@
 		visibleOfTotal,
 		testCountLabel,
 		suiteSummary,
-		collapseOrExpandSuiteLabel
+		collapseOrExpandSuiteLabel,
+		DISCOVERY_FAILED_HEADING,
+		DISCOVERY_FAILED_HINT
 	} from '$lib/copy/dashboard';
 
 	let suites = [];
+	let discoveryError = null;
 	let search = '';
 	let expandedSteps = new Set();
 	// Suites are expanded by default, this tracks the exceptions (collapsed ones).
@@ -72,7 +75,9 @@
 
 	async function loadSuites() {
 		try {
-			suites = await fetchSuites();
+			const result = await fetchSuites();
+			suites = result.suites;
+			discoveryError = result.error;
 		} catch (e) {
 			console.error('Failed to fetch suites', e);
 		}
@@ -244,7 +249,13 @@
 	</div>
 {/if}
 
-{#if filtered.length === 0}
+{#if discoveryError}
+	<div class="discovery-error">
+		<div class="discovery-error-heading">{DISCOVERY_FAILED_HEADING}</div>
+		<p class="discovery-error-hint">{DISCOVERY_FAILED_HINT}</p>
+		<pre class="discovery-error-detail">{discoveryError}</pre>
+	</div>
+{:else if filtered.length === 0}
 	<EmptyState message={q ? noMatchMessage(search) : NO_SUITES_MESSAGE} />
 {:else}
 	<div class="suites">
@@ -804,6 +815,39 @@
 		border-radius: var(--radius-pill);
 		margin-left: 0.4rem;
 		vertical-align: middle;
+	}
+
+	.discovery-error {
+		border: 1px solid var(--fail);
+		background: var(--fail-soft);
+		border-radius: 10px;
+		padding: 1rem 1.15rem;
+		margin: 0.5rem 0 1rem;
+	}
+
+	.discovery-error-heading {
+		font-weight: 600;
+		color: var(--fail);
+		margin-bottom: 0.35rem;
+	}
+
+	.discovery-error-hint {
+		margin: 0 0 0.7rem;
+		color: var(--text-muted);
+		font-size: 0.86rem;
+		line-height: 1.5;
+	}
+
+	.discovery-error-detail {
+		margin: 0;
+		padding: 0.6rem 0.75rem;
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		font-size: 0.8rem;
+		white-space: pre-wrap;
+		overflow-x: auto;
+		color: var(--text);
 	}
 
 	.steps-toggle {
