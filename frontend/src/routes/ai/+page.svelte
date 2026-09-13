@@ -169,9 +169,10 @@
 		} catch {}
 	}
 
-	// The agent's own screenshot tool calls are the only "live browser" view for
-	// Claude sessions, OpenAI has no browser MCP wired at all (see
-	// aiAgentService.runOpenAiTurn), so the panel just isn't shown for it.
+	// No live video: the panel just shows the most recent screenshot the agent's
+	// own Playwright MCP tool calls happened to return, pulled out of the
+	// persisted transcript. OpenAI has no browser MCP wired at all (see
+	// aiAgentService.runOpenAiTurn), so the panel isn't shown for it.
 	$: latestScreenshot = (() => {
 		if (!activeSession) return null;
 		for (let i = activeSession.transcript.length - 1; i >= 0; i--) {

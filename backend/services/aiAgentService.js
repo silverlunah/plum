@@ -15,6 +15,15 @@ function buildSystemPrompt(project, session) {
 			'give you access to, never the real project. Propose every change as a pull request, ' +
 			'you cannot push to the default branch or merge anything yourself.'
 	];
+	// Only Anthropic sessions get Playwright MCP (see runOpenAiTurn) - telling an
+	// OpenAI session to screenshot a browser it doesn't have would just confuse it.
+	if (session.provider !== 'openai') {
+		parts.push(
+			'There is no live video of your browser, only screenshots you explicitly take. Take one ' +
+				"after a navigation or action whose result isn't obvious from the page snapshot alone, " +
+				'and always take one if the user asks to see the page or what the browser looks like.'
+		);
+	}
 	if (session.reportId) {
 		parts.push(
 			'This session was started from a failing report, call analyze_report first to see its ' +
