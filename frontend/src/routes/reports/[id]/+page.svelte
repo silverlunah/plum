@@ -5,7 +5,6 @@
 
 <script>
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
 	import { onMount, tick } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import {
@@ -14,7 +13,6 @@
 		downloadReportExport,
 		screenshotUrl
 	} from '$lib/api/reports';
-	import { createAiSession } from '$lib/api/aiSessions';
 	import { fetchAiConfig } from '$lib/api/settings';
 	import {
 		isScheduled,
@@ -28,9 +26,10 @@
 		parseRunnerLogs,
 		featureSuiteTag,
 		visibleTags,
-		browserLabel
+		browserLabel,
+		screenshotStepIndex
 	} from '$lib/utils/format';
-	import { BROWSERS, AI_SESSION_ID_KEY, AI_KICKOFF_MESSAGE_KEY } from '$lib/constants';
+	import { BROWSERS } from '$lib/constants';
 	import { panelExpanded } from '$lib/stores/runner';
 	import { pluralize } from '$lib/copy/common';
 	import {
@@ -64,14 +63,10 @@
 		REPORT_EXPORT_MENU_ITEMS,
 		NO_TESTS_MATCHED_HEADING,
 		noTestsMatchedBody,
-		AI_ANALYZE_LABEL,
-		AI_ANALYZE_STARTING_LABEL,
-		AI_ANALYZE_FAILED,
-		aiAnalyzeSessionTitle,
-		aiAnalyzeKickoffMessage
+		ENLARGE_SCREENSHOT_TITLE
 	} from '$lib/copy/reports';
 	import { exportFailedToast, exportedToast, exportingToast } from '$lib/copy/common';
-	import { notify, notifyProgress } from '$lib/stores/notifications';
+	import { notifyProgress } from '$lib/stores/notifications';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import BackLink from '$lib/components/ui/BackLink.svelte';
 	import ExportMenu from '$lib/components/ui/ExportMenu.svelte';
@@ -82,7 +77,9 @@
 	import StepStatusIcon from '$lib/components/ui/StepStatusIcon.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
+	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
 	import RecordingPlayer from '$lib/components/reports/RecordingPlayer.svelte';
+	import AiAnalysisCard from '$lib/components/reports/AiAnalysisCard.svelte';
 
 	const reportId = parseInt($page.params.id, 10);
 
@@ -97,6 +94,9 @@
 	let scenarioRecordings = [];
 	let replayInspecting = false;
 
+	// The AI Analysis card only makes sense once an owner has connected a provider.
+	let aiConnected = false;
+
 	let exporting = false;
 	async function handleExport(format) {
 		exporting = true;
@@ -108,29 +108,6 @@
 			settle('error', exportFailedToast('this report'));
 		} finally {
 			exporting = false;
-		}
-	}
-
-	let analyzing = false;
-	async function handleAiAnalyze() {
-		analyzing = true;
-		try {
-			const ai = await fetchAiConfig();
-			const provider = ai.anthropicApiKeySet ? 'anthropic' : ai.openaiApiKeySet ? 'openai' : null;
-			if (!provider) throw new Error(AI_ANALYZE_FAILED);
-			const session = await createAiSession({
-				provider,
-				reportId,
-				title: aiAnalyzeSessionTitle(reportId)
-			});
-			try {
-				sessionStorage.setItem(AI_SESSION_ID_KEY, session.id);
-				sessionStorage.setItem(AI_KICKOFF_MESSAGE_KEY, aiAnalyzeKickoffMessage(reportId));
-			} catch {}
-			goto('/ai');
-		} catch (e) {
-			notify('error', e.message || AI_ANALYZE_FAILED);
-			analyzing = false;
 		}
 	}
 
@@ -174,6 +151,10 @@
 		} catch {
 			error = LOAD_ERROR;
 		}
+		try {
+			const ai = await fetchAiConfig();
+			aiConnected = ai.anthropicApiKeySet || ai.openaiApiKeySet;
+		} catch {}
 	});
 
 	function toggleScenario(id) {
@@ -181,6 +162,8 @@
 		else expandedScenarios.add(id);
 		expandedScenarios = expandedScenarios;
 	}
+
+	let lightboxSrc = '';
 
 	let activeLogTab = 0;
 	$: logSections = parseRunnerLogs(detail?.logs ?? null);
@@ -253,11 +236,6 @@
 	<BackLink href="/reports" label={REPORTS_BACK_LABEL} />
 	{#if detail}
 		<div class="detail-top-actions">
-			{#if !overallPass}
-				<button class="ai-analyze-btn" on:click={handleAiAnalyze} disabled={analyzing}>
-					{analyzing ? AI_ANALYZE_STARTING_LABEL : AI_ANALYZE_LABEL}
-				</button>
-			{/if}
 			<ExportMenu
 				items={REPORT_EXPORT_MENU_ITEMS}
 				busy={exporting}
@@ -479,6 +457,10 @@
 			</div>
 		</div>
 	</div>
+
+	{#if !overallPass && aiConnected}
+		<AiAnalysisCard {reportId} />
+	{/if}
 
 	{#if logSections.length > 0}
 		<details class="logs-section">
@@ -761,7 +743,8 @@
 												</div>
 											{/if}
 
-											{#each scenario.steps as step}
+											{@const shotStep = screenshotStepIndex(scenario)}
+											{#each scenario.steps as step, stepIndex}
 												<div
 													class="step"
 													class:step-fail={step.status === 'failed'}
@@ -791,18 +774,24 @@
 															</tbody>
 														</table>
 													{/if}
+
+													{#if stepIndex === shotStep}
+														<button
+															class="failure-screenshot-btn"
+															title={ENLARGE_SCREENSHOT_TITLE}
+															on:click={() => (lightboxSrc = screenshotUrl(scenario.screenshot))}
+														>
+															<img
+																class="failure-screenshot"
+																src={screenshotUrl(scenario.screenshot)}
+																alt={FAILURE_SCREENSHOT_ALT}
+																loading="lazy"
+																on:error={(e) => (e.currentTarget.parentElement.hidden = true)}
+															/>
+														</button>
+													{/if}
 												</div>
 											{/each}
-
-											{#if scenario.screenshot}
-												<img
-													class="failure-screenshot"
-													src={screenshotUrl(scenario.screenshot)}
-													alt={FAILURE_SCREENSHOT_ALT}
-													loading="lazy"
-													on:error={(e) => (e.currentTarget.hidden = true)}
-												/>
-											{/if}
 										{/each}
 									</div>
 								{/if}
@@ -879,6 +868,8 @@
 	</div>
 {/if}
 
+<ImageLightbox bind:src={lightboxSrc} alt={FAILURE_SCREENSHOT_ALT} />
+
 <style>
 	.detail-top {
 		display: flex;
@@ -892,29 +883,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
-	}
-
-	.ai-analyze-btn {
-		display: inline-flex;
-		align-items: center;
-		height: 32px;
-		padding: 0 0.85rem;
-		background: var(--accent-soft);
-		color: var(--accent);
-		border: 1px solid var(--accent);
-		border-radius: var(--radius-sm);
-		font-family: var(--font-body);
-		font-size: 0.8125rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: opacity var(--duration-fast);
-	}
-	.ai-analyze-btn:hover:not(:disabled) {
-		opacity: 0.85;
-	}
-	.ai-analyze-btn:disabled {
-		opacity: 0.6;
-		cursor: default;
 	}
 
 	.report-header {
@@ -1380,13 +1348,27 @@
 		font-size: 0.75rem;
 	}
 
-	.failure-screenshot {
+	.failure-screenshot-btn {
 		display: block;
 		margin: 0.5rem 0 0.25rem 1.75rem;
+		padding: 0;
 		max-width: 480px;
 		width: calc(100% - 1.75rem);
+		background: none;
+		border: none;
+		cursor: zoom-in;
+	}
+
+	.failure-screenshot {
+		display: block;
+		width: 100%;
 		border-radius: var(--radius-sm);
 		border: 1px solid var(--border);
+		transition: border-color var(--duration-fast);
+	}
+
+	.failure-screenshot-btn:hover .failure-screenshot {
+		border-color: var(--accent);
 	}
 
 	.step-datatable td {
@@ -1791,11 +1773,11 @@
 
 		.step-error,
 		.step-datatable,
-		.failure-screenshot {
+		.failure-screenshot-btn {
 			margin-left: 0.5rem;
 		}
 
-		.failure-screenshot {
+		.failure-screenshot-btn {
 			width: calc(100% - 0.5rem);
 		}
 

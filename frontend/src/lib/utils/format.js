@@ -358,3 +358,12 @@ function segmentsByOpenClose(usable) {
 	}
 	return segments;
 }
+
+// A failure screenshot is captured per scenario, but it reads best next to the
+// step that actually failed. Falls back to the last step for a scenario that
+// passed on a retry and still carries one.
+export function screenshotStepIndex(scenario) {
+	if (!scenario.screenshot) return -1;
+	const failed = scenario.steps.findIndex((s) => s.status === 'failed');
+	return failed >= 0 ? failed : scenario.steps.length - 1;
+}

@@ -7,46 +7,29 @@ const fs = require('fs');
 const path = require('path');
 
 const BACKEND_DIR = path.resolve(__dirname, '..');
-// Deliberately outside projects/: an AI session's worktree must never be
-// mistaken for (or accidentally reconciled alongside) a real project folder.
+// Outside projects/ so an analysis clone is never mistaken for a real project folder.
 const AI_WORKSPACES_DIR =
 	process.env.AI_WORKSPACES_DIR || path.join(BACKEND_DIR, 'data', 'ai-workspaces');
 
-function workspacePathFor(sessionId) {
-	return path.join(AI_WORKSPACES_DIR, sessionId);
-}
-
-// Separate from the git worktree above on purpose: this is a Chrome profile
-// (cookies, localStorage), it must never show up in `git status` or end up
-// diffed into a PR.
-const AI_BROWSER_PROFILES_DIR =
-	process.env.AI_BROWSER_PROFILES_DIR || path.join(BACKEND_DIR, 'data', 'ai-browser-profiles');
-
-function browserProfilePathFor(sessionId) {
-	return path.join(AI_BROWSER_PROFILES_DIR, sessionId);
+function workspacePathFor(analysisId) {
+	return path.join(AI_WORKSPACES_DIR, analysisId);
 }
 
 function escapeError(relativePath) {
-	const e = new Error(`Path "${relativePath}" escapes the session workspace`);
+	const e = new Error(`Path "${relativePath}" escapes the workspace`);
 	e.status = 400;
 	throw e;
 }
 
-// A workspace is a fresh `git clone` of whatever repo the project connects,
-// content this instance doesn't control: a symlink committed there (planted
-// deliberately, or via a compromised dependency/template) resolves at the OS
-// level regardless of how lexically "inside" the path looks, and
-// readFileSync/writeFileSync follow it transparently. The lexical check above
-// alone would let read_file/write_file escape through one. Walk up from the
-// target to its nearest existing ancestor, resolve *that* for real symlinks,
-// and confirm the real path still lands inside the workspace's own real root.
+// A workspace is a clone of a repo this instance doesn't control, so a committed
+// symlink would slip past a purely lexical containment check.
 function assertRealPathInside(realRoot, target, relativePath) {
 	let existing = target;
 	let suffix = '';
 	while (!fs.existsSync(existing)) {
 		suffix = path.join(path.basename(existing), suffix);
 		const parent = path.dirname(existing);
-		if (parent === existing) break; // reached the filesystem root
+		if (parent === existing) break;
 		existing = parent;
 	}
 	const realExisting = fs.realpathSync(existing);
@@ -56,11 +39,9 @@ function assertRealPathInside(realRoot, target, relativePath) {
 	}
 }
 
-// The one function every workspace MCP tool funnels file paths through. An AI
-// provider is an untrusted caller as far as the filesystem is concerned: this
-// is the actual security boundary, not something enforced by prompting.
-function resolveInWorkspace(workspaceRoot, relativePath) {
-	const root = path.resolve(workspaceRoot);
+// The security boundary every AI file tool funnels through, not something prompting enforces.
+function resolveInside(rootDir, relativePath) {
+	const root = path.resolve(rootDir);
 	const target = path.resolve(root, relativePath || '.');
 	if (target !== root && !target.startsWith(root + path.sep)) {
 		escapeError(relativePath);
@@ -69,10 +50,13 @@ function resolveInWorkspace(workspaceRoot, relativePath) {
 	return target;
 }
 
+async function removeWorkspace(analysisId) {
+	await fs.promises.rm(workspacePathFor(analysisId), { recursive: true, force: true });
+}
+
 module.exports = {
 	AI_WORKSPACES_DIR,
 	workspacePathFor,
-	resolveInWorkspace,
-	AI_BROWSER_PROFILES_DIR,
-	browserProfilePathFor
+	resolveInside,
+	removeWorkspace
 };

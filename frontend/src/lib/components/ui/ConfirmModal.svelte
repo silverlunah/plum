@@ -12,6 +12,8 @@
 	export let title = CONFIRM_TITLE;
 	export let confirmLabel = CONFIRM_LABEL;
 	export let loading = false;
+	/** @type {'danger' | 'primary'} */
+	export let variant = 'danger';
 
 	const dispatch = createEventDispatcher();
 </script>
@@ -21,7 +23,7 @@
 		<slot />
 	</div>
 	<div class="actions">
-		<button class="btn-danger" on:click={() => dispatch('confirm')} disabled={loading}>
+		<button class="btn-confirm {variant}" on:click={() => dispatch('confirm')} disabled={loading}>
 			{loading ? WORKING_LABEL : confirmLabel}
 		</button>
 		<button class="btn-cancel" on:click={() => (open = false)} disabled={loading}
@@ -48,24 +50,32 @@
 		padding-top: 0.25rem;
 	}
 
-	.btn-danger {
+	.btn-confirm {
 		height: 34px;
 		padding: 0 1rem;
 		font-size: 0.8125rem;
 		font-family: inherit;
 		font-weight: 500;
-		background: var(--fail);
-		border: 1px solid var(--fail);
 		border-radius: var(--radius-sm);
 		cursor: pointer;
 		color: var(--white);
 		transition: opacity var(--duration-fast);
 	}
 
-	.btn-danger:hover:not(:disabled) {
+	.btn-confirm.danger {
+		background: var(--fail);
+		border: 1px solid var(--fail);
+	}
+
+	.btn-confirm.primary {
+		background: var(--accent);
+		border: 1px solid var(--accent);
+	}
+
+	.btn-confirm:hover:not(:disabled) {
 		opacity: 0.85;
 	}
-	.btn-danger:disabled {
+	.btn-confirm:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
