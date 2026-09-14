@@ -29,12 +29,12 @@ export const ALL_FIELDS_REQUIRED = 'All fields are required.';
 export const PASSWORD_MIN_LENGTH_ERROR = 'Password must be at least 8 characters.';
 export const SETUP_FAILED_FALLBACK = 'Setup failed';
 export const repoSetupWarning = (message) =>
-	`Your account was created, but connecting the repo failed: ${message}. Connect it in Settings → Project.`;
+	`Your account was created, but connecting the repo failed: ${message}. Connect it in Settings → Integrations → GitHub.`;
 
 export const SETUP_STEP_ORG_TITLE = 'Name your organization';
 export const SETUP_STEP_ORG_SUBTITLE =
 	'Plus a first project, a project keeps its tests and reports separate.';
-export const SETUP_STEP_REPO_TITLE = 'Connect your tests';
+export const SETUP_STEP_REPO_TITLE = 'Connect GitHub';
 export const SETUP_STEP_REPO_SUBTITLE =
 	'Optional, only GitHub is supported here, do this later in Settings if you prefer.';
 export const SETUP_STEP_ADMIN_TITLE = 'Create your admin account';
