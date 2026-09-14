@@ -105,6 +105,9 @@ async function start() {
 	// then resume anything still queued.
 	if (runQueueService) await runQueueService.init(io);
 
+	// Same reconcile for AI analyses a crash left mid-run.
+	if (!isNodeMode) await require('./services/reportAnalysisService').resetStale();
+
 	// Load the saved MCP API key into the environment for the MCP server.
 	await bootstrapMcpKey(isNodeMode);
 

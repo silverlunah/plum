@@ -54,8 +54,8 @@ router.post('/organization', orgOnly, async (req, res, next) => {
 });
 
 // GET is any project member - masked booleans only (getAiConfig never returns
-// the keys themselves), needed by every member's own /ai tab and nav, not just
-// the owner who's allowed to change them (POST below stays owner-only).
+// the keys themselves), so a report page can tell whether AI Analysis is
+// available at all. POST stays owner-only.
 router.get('/ai', scoped, async (req, res, next) => {
 	try {
 		res.json(await settingsService.getAiConfig());

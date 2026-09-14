@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const reportService = require('../services/reportService');
+const reportAnalysisService = require('../services/reportAnalysisService');
 const exportService = require('../services/exportService');
 const { sendExport, exportFormat } = require('../lib/exportResponse');
 const { jwtAuth } = require('../middleware/jwtAuth');
@@ -67,6 +68,47 @@ router.get('/:id/recordings/:recordingId/events', async (req, res) => {
 		res.json({ events });
 	} catch {
 		res.status(500).json({ error: 'Failed to fetch recording events' });
+	}
+});
+
+router.get('/:id/analysis', async (req, res, next) => {
+	const id = parseInt(req.params.id, 10);
+	if (isNaN(id)) return res.status(400).json({ error: 'Invalid report id' });
+	try {
+		res.json({ analysis: await reportAnalysisService.getLatest(req.projectId, id) });
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/:id/analysis', async (req, res, next) => {
+	const id = parseInt(req.params.id, 10);
+	if (isNaN(id)) return res.status(400).json({ error: 'Invalid report id' });
+	try {
+		const analysis = await reportAnalysisService.start({
+			projectId: req.projectId,
+			reportId: id,
+			userId: req.user.userId,
+			runnerIds: req.body?.runnerIds
+		});
+		res.status(201).json({ analysis });
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.post('/:id/analysis/:analysisId/fix', async (req, res, next) => {
+	const id = parseInt(req.params.id, 10);
+	if (isNaN(id)) return res.status(400).json({ error: 'Invalid report id' });
+	try {
+		const analysis = await reportAnalysisService.startFix({
+			projectId: req.projectId,
+			reportId: id,
+			analysisId: req.params.analysisId
+		});
+		res.json({ analysis });
+	} catch (e) {
+		next(e);
 	}
 });
 

@@ -38,11 +38,9 @@
 		WORKERS_MAX,
 		RUN_PICKER_LIMIT,
 		REDIRECT_DELAY_MS,
-		TRIGGER_TYPES,
-		ELEVATED_ROLES
+		TRIGGER_TYPES
 	} from '$lib/constants';
 	import { BUILTIN_RUNNER_LABEL, CLEAR_LABEL, DISCORD_LABEL, SLACK_LABEL } from '$lib/copy/common';
-	import { AI_SESSION_ID_KEY } from '$lib/constants';
 	import {
 		RUN_ALL_TITLE,
 		RUN_ALL_CONFIRM_LABEL,
@@ -64,7 +62,6 @@
 		NO_TESTS_RUNNING,
 		QUEUED_LABEL,
 		CANCEL_RUN_LABEL,
-		AI_SESSION_LABEL,
 		ENV_OVERRIDE_LABEL,
 		ENV_OVERRIDE_MODAL_TITLE,
 		ENV_OVERRIDE_DESC,
@@ -78,7 +75,6 @@
 		collapseOrExpandLabel,
 		queuePositionLabel,
 		lockedRunTitle,
-		lockedAiSessionTitle,
 		envOverrideActiveLabel,
 		OFFLINE_LABEL,
 		statusLabel as computeStatusLabel,
@@ -369,34 +365,6 @@
 				});
 			}, REDIRECT_DELAY_MS + 5000);
 		});
-
-		s.on(
-			SOCKET_EVENTS.AI_SESSION_START,
-			({ sessionId, projectId, projectName, createdById, label, meta, startedAt }) => {
-				backgroundRuns.update((r) => ({
-					...r,
-					[sessionId]: makeRunEntry({
-						projectId,
-						projectName,
-						kind: TRIGGER_TYPES.AI_SESSION,
-						label,
-						meta,
-						status: 'running',
-						createdById,
-						startedAt
-					})
-				}));
-				panelExpanded.set(true);
-			}
-		);
-
-		s.on(SOCKET_EVENTS.AI_SESSION_DONE, ({ sessionId }) => {
-			backgroundRuns.update((r) => {
-				const next = { ...r };
-				delete next[sessionId];
-				return next;
-			});
-		});
 	});
 
 	onDestroy(() => {
@@ -418,14 +386,7 @@
 	// A run is openable only when it belongs to the project the viewer is currently
 	// in. Runs from other projects still show in the bar for awareness, but you
 	// have to switch to that project to open one, even if you're a member.
-	// An AI session chip has a second gate on top: the route itself only lets the
-	// creator (or an elevated role) in (see aiSessions.routes.js canOpen), this
-	// mirrors that here so the chip doesn't look clickable when it isn't.
-	$: canOpenRun = (run) => {
-		if (run.projectId != null && run.projectId !== $activeProjectId) return false;
-		if (run.kind !== TRIGGER_TYPES.AI_SESSION) return true;
-		return run.createdById === $auth.user?.userId || ELEVATED_ROLES.includes($auth.user?.role);
-	};
+	$: canOpenRun = (run) => run.projectId == null || run.projectId === $activeProjectId;
 	$: runningCount = activeRunEntries.filter(([, r]) => r.status === 'running').length;
 	$: queuedCount = activeRunEntries.filter(([, r]) => r.status === 'queued').length;
 	$: anyRunning = activeRunEntries.length > 0;
@@ -952,8 +913,6 @@
 		<div class="body" transition:slide={{ duration: 200 }}>
 			{#each activeRunEntries as [runId, run], i (runId)}
 				{@const openable = canOpenRun(run)}
-				{@const isAiSession = run.kind === TRIGGER_TYPES.AI_SESSION}
-				{@const crossProject = run.projectId != null && run.projectId !== $activeProjectId}
 				<div
 					class="run-card"
 					class:active-run={run.status === 'running'}
@@ -968,25 +927,12 @@
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<svelte:element
 						this={openable ? 'a' : 'div'}
-						href={openable ? (isAiSession ? '/ai' : `/live/${runId}`) : undefined}
+						href={openable ? `/live/${runId}` : undefined}
 						role={openable ? undefined : 'presentation'}
 						class="run-card-main"
 						class:locked={!openable}
-						title={openable
-							? undefined
-							: crossProject
-								? lockedRunTitle(run.projectName)
-								: lockedAiSessionTitle()}
-						on:click={openable
-							? () => {
-									if (isAiSession) {
-										try {
-											sessionStorage.setItem(AI_SESSION_ID_KEY, runId);
-										} catch {}
-									}
-									panelExpanded.set(false);
-								}
-							: undefined}
+						title={openable ? undefined : lockedRunTitle(run.projectName)}
+						on:click={openable ? () => panelExpanded.set(false) : undefined}
 					>
 						<div class="run-card-info">
 							<span class="run-card-label">{run.label || MANUAL_RUN_LABEL}</span>
@@ -1005,9 +951,7 @@
 											activeRunEntries.slice(0, i).filter(([, r]) => r.status === 'queued').length +
 												1
 										)
-									: isAiSession
-										? AI_SESSION_LABEL
-										: runKindLabel(run.kind)}
+									: runKindLabel(run.kind)}
 								{#if run.startedAt}
 									<span class="meta-dot">·</span>
 									<span class="run-card-elapsed">{elapsedLabel(run.startedAt, now)}</span>
@@ -1020,18 +964,8 @@
 								{/if}
 							</span>
 						</div>
-						<Badge
-							variant={run.status === 'queued'
-								? 'tag'
-								: isAiSession
-									? 'ai'
-									: triggerVariant(run.kind)}
-						>
-							{run.status === 'queued'
-								? QUEUED_LABEL
-								: isAiSession
-									? AI_SESSION_LABEL
-									: triggerLabel(run.kind)}
+						<Badge variant={run.status === 'queued' ? 'tag' : triggerVariant(run.kind)}>
+							{run.status === 'queued' ? QUEUED_LABEL : triggerLabel(run.kind)}
 						</Badge>
 						{#if openable}
 							<svg
@@ -1048,7 +982,7 @@
 							</svg>
 						{/if}
 					</svelte:element>
-					{#if openable && !isAiSession}
+					{#if openable}
 						<button
 							class="run-card-cancel"
 							title={CANCEL_RUN_LABEL}
