@@ -9,6 +9,7 @@ const activityService = require('./activityService');
 const { ACTIVITY_ACTION, ACTIVITY_SCOPE } = require('../constants/activity');
 const { isSessionMaxHours } = require('../constants/session');
 const { sanitizeTestsPath } = require('../lib/sanitizeTestsPath');
+const { verifyAnthropicKey, verifyOpenAiKey } = require('../lib/aiProviderVerify');
 
 const getProjectRaw = async (projectId) => {
 	return prisma.project.findUnique({ where: { id: projectId } });
@@ -283,9 +284,21 @@ const updateAiConfig = async ({ anthropicApiKey, anthropicModel, openaiApiKey, o
 	const org = await getOrgRaw();
 	const data = {};
 	// Blank means "leave the stored key alone", matching the Google OAuth secret UI.
-	if (anthropicApiKey) data.anthropicApiKey = String(anthropicApiKey).trim();
+	// A NEW key is verified against the provider itself before it's ever written -
+	// otherwise "connected" only ever meant "a non-empty string is stored", true
+	// even for a copy-pasted Claude.ai subscription token that will 401 on the
+	// first real request.
+	if (anthropicApiKey) {
+		const trimmed = String(anthropicApiKey).trim();
+		await verifyAnthropicKey(trimmed);
+		data.anthropicApiKey = trimmed;
+	}
 	if (anthropicModel !== undefined) data.anthropicModel = String(anthropicModel).trim();
-	if (openaiApiKey) data.openaiApiKey = String(openaiApiKey).trim();
+	if (openaiApiKey) {
+		const trimmed = String(openaiApiKey).trim();
+		await verifyOpenAiKey(trimmed);
+		data.openaiApiKey = trimmed;
+	}
 	if (openaiModel !== undefined) data.openaiModel = String(openaiModel).trim();
 
 	await prisma.organization.update({ where: { id: org.id }, data });

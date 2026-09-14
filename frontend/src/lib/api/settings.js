@@ -188,8 +188,9 @@ export async function saveAiConfig({ anthropicApiKey, anthropicModel, openaiApiK
 		headers: { 'Content-Type': 'application/json', ...authHeaders() },
 		body: JSON.stringify({ anthropicApiKey, anthropicModel, openaiApiKey, openaiModel })
 	});
-	if (!res.ok) throw new Error('Failed to save AI provider settings');
-	return res.json();
+	const data = await res.json().catch(() => ({}));
+	if (!res.ok) throw new Error(data.error ?? 'Failed to save AI provider settings');
+	return data;
 }
 
 export async function fetchGithubConfig() {

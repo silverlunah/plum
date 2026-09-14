@@ -5,7 +5,7 @@
 
 <script>
 	// One of: chromium/chrome, firefox, discord, slack, playwright, cucumber,
-	// google, email, claude, openai. Anything else renders nothing.
+	// google, email, claude, openai, github. Anything else renders nothing.
 	export let service = '';
 	export let size = 14;
 
@@ -20,7 +20,8 @@
 		google: 'google.svg',
 		email: 'email.svg',
 		claude: 'claude.svg',
-		openai: 'openai.svg'
+		openai: 'openai.svg',
+		github: 'github.svg'
 	};
 	$: file = FILES[String(service).toLowerCase()] ?? null;
 </script>
