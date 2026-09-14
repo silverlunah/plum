@@ -53,7 +53,10 @@ router.post('/organization', orgOnly, async (req, res, next) => {
 	}
 });
 
-router.get('/ai', orgOnly, async (req, res, next) => {
+// GET is any project member - masked booleans only (getAiConfig never returns
+// the keys themselves), needed by every member's own /ai tab and nav, not just
+// the owner who's allowed to change them (POST below stays owner-only).
+router.get('/ai', scoped, async (req, res, next) => {
 	try {
 		res.json(await settingsService.getAiConfig());
 	} catch (e) {
