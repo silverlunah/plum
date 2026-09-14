@@ -185,8 +185,8 @@
 			});
 			aiKeyInputs[id] = '';
 			notify('success', AI_CONFIG_SAVED_TOAST);
-		} catch {
-			notify('error', AI_CONFIG_SAVE_FAILED);
+		} catch (e) {
+			notify('error', e.message || AI_CONFIG_SAVE_FAILED);
 		} finally {
 			savingProvider = '';
 		}
@@ -430,7 +430,10 @@
 {:else if integrationsTab === 'github'}
 	{#if isOwner}
 		<div class="card settings-card">
-			<p class="card-title">{GITHUB_CONNECTION_CARD_TITLE}</p>
+			<p class="card-title card-title-icon">
+				<ServiceIcon service="github" size={18} />
+				{GITHUB_CONNECTION_CARD_TITLE}
+			</p>
 			<p class="content-desc">{GITHUB_CONNECTION_CARD_DESC}</p>
 
 			<div class="field">
@@ -574,6 +577,11 @@
 {/if}
 
 <style>
+	.card-title-icon {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
 	.content-header {
 		margin-bottom: 0.25rem;
 	}

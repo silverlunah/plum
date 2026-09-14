@@ -125,6 +125,11 @@ async function cloneRepo({ owner, repo, destPath, branch }) {
 		}
 		throw e;
 	}
+	// `-c` on clone persists into .git/config, so a later push adding its own -c
+	// sends the header twice - GitHub rejects that outright. Strip it back out.
+	await simpleGit(destPath)
+		.raw(['config', '--unset', 'http.extraheader'])
+		.catch(() => {});
 	return destPath;
 }
 

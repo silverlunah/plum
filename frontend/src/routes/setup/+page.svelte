@@ -13,6 +13,7 @@
 	import { FRAMEWORKS } from '$lib/constants';
 	import { frameworkLabel } from '$lib/copy/settings';
 	import IconSelect from '$lib/components/ui/IconSelect.svelte';
+	import ServiceIcon from '$lib/components/icons/ServiceIcon.svelte';
 	import { EMAIL_LABEL, PASSWORD_LABEL } from '$lib/copy/common';
 	import {
 		CHECKING_SERVER,
@@ -219,7 +220,10 @@
 				{#if mode !== 'restore'}
 					<span class="step-label">{setupStepLabel(step, TOTAL_STEPS)}</span>
 				{/if}
-				<h1 class="title">
+				<h1 class="title" class:title-icon={mode !== 'restore' && step === 2}>
+					{#if mode !== 'restore' && step === 2}
+						<ServiceIcon service="github" size={22} />
+					{/if}
 					{mode === 'restore'
 						? RESTORE_TITLE
 						: step === 1
@@ -548,6 +552,11 @@
 		font-weight: 600;
 		color: var(--text);
 		margin: 0;
+	}
+	.title-icon {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	.subtitle {
 		font-size: 0.875rem;
