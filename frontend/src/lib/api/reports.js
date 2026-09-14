@@ -81,3 +81,29 @@ export async function deleteReports(ids) {
 	if (!res.ok) throw new Error('Failed to delete reports');
 	return res.json();
 }
+
+async function analysisRequest(url, init) {
+	const res = await fetch(url, init);
+	const data = await res.json().catch(() => ({}));
+	if (!res.ok) throw new Error(data.error || 'The AI analysis request failed.');
+	return data.analysis;
+}
+
+export function fetchReportAnalysis(reportId) {
+	return analysisRequest(`${API_BASE}/reports/${reportId}/analysis`, { headers: apiHeaders() });
+}
+
+export function startReportAnalysis(reportId, runnerIds) {
+	return analysisRequest(`${API_BASE}/reports/${reportId}/analysis`, {
+		method: 'POST',
+		headers: apiHeaders({ json: true }),
+		body: JSON.stringify({ runnerIds })
+	});
+}
+
+export function startReportAnalysisFix(reportId, analysisId) {
+	return analysisRequest(`${API_BASE}/reports/${reportId}/analysis/${analysisId}/fix`, {
+		method: 'POST',
+		headers: apiHeaders({ json: true })
+	});
+}

@@ -80,7 +80,7 @@ model Report {
   createdAt   DateTime          @default(now())
   testHistory TestCaseHistory[]
   recordings  Recording[]
-  aiSessions  AiSession[]
+  analyses    ReportAnalysis[]
 
   @@index([createdAt])
   @@index([status])
@@ -239,7 +239,6 @@ model Project {
   runQueue        RunQueue[]
   mcpKeys         McpKey[]
   activity        ActivityLog[]
-  aiSessions      AiSession[]
   notifications   Notification[]
   defaultForUsers User[]          @relation("UserDefaultProject")
 }
@@ -301,7 +300,7 @@ model User {
   projectMemberships ProjectMember[]
   mcpKeys            McpKey[]
   activity           ActivityLog[]
-  aiSessions         AiSession[]
+  reportAnalyses     ReportAnalysis[]
   notifications      Notification[]
 }
 
@@ -454,40 +453,36 @@ model TestCaseHistory {
   @@index([reportId])
 }
 
-// One row per AI agent chat session (live-browser test authoring, or launched
-// from a report's "AI Analyze"). workspacePath is an isolated git worktree the
-// agent's tools are confined to: it never writes into the project's own
-// projects/<slug>/<testsPath> directly, only proposes changes via prUrl.
-model AiSession {
-  id                String   @id @default(cuid())
-  projectId         Int
-  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdById       String
-  createdBy         User     @relation(fields: [createdById], references: [id])
-  provider          String
-  status            String   @default("queued")
-  title             String   @default("")
-  workspacePath     String   @default("")
-  reportId          Int?
-  report            Report?  @relation(fields: [reportId], references: [id], onDelete: SetNull)
-  prUrl             String   @default("")
-  // Anthropic: the Claude Agent SDK's own session_id, passed back as `resume`
-  // on the next turn. OpenAI: the previous Response's id, passed back as
-  // `previous_response_id`. Either way, this is how the provider keeps
-  // conversation continuity, we never replay full history ourselves.
-  providerSessionId String   @default("")
-  // Normalised turns for the chat UI, see lib/aiTranscript.js. Never
-  // reconstructed from provider state, this is the source of truth for replay.
-  transcript        Json     @default("[]")
-  // Comma-separated node ids, same encoding as CronJob.runnerIds. Default for
-  // the agent's own run_tests tool calls when it doesn't specify runnerIds.
-  allowedRunnerIds  String   @default("built-in")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+// One row per AI investigation of a failed report. Investigating is read-only;
+// fixing happens in a throwaway clone and can only ever propose a pull request,
+// so the project's own projects/<slug>/<testsPath> is never written to.
+model ReportAnalysis {
+  id               String   @id @default(cuid())
+  reportId         Int
+  report           Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  createdById      String
+  createdBy        User     @relation(fields: [createdById], references: [id])
+  // Earlier attempts are kept so a re-analyze is told what it already rejected.
+  attempt          Int      @default(1)
+  status           String   @default("analyzing")
+  // See constants/ai.js. Only "test-code" unlocks the fix-and-open-a-PR step.
+  verdict          String   @default("")
+  summary          String   @default("")
+  // [{ scenario, cause, evidence }], as submitted by the agent.
+  findings         Json     @default("[]")
+  recommendation   String   @default("")
+  prUrl            String   @default("")
+  // Set on a hard failure, and also when the agent declined to attempt a fix.
+  error            String   @default("")
+  // The throwaway clone used while fixing, blank outside that window.
+  workspacePath    String   @default("")
+  // Same encoding as CronJob.runnerIds: the only nodes the agent may re-run on.
+  allowedRunnerIds String   @default("built-in")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  @@index([projectId])
-  @@index([createdById])
   @@index([reportId])
+  @@index([createdById])
 }
 
 // In-app only, no email. projectId is null for an account-wide notification.

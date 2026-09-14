@@ -5,6 +5,7 @@
 
 <script>
 	import { onMount } from 'svelte';
+	import { slide } from 'svelte/transition';
 	import { notify } from '$lib/stores/notifications';
 	import { auth } from '$lib/stores/auth';
 	import { API_BASE, COPY_TIMEOUT_MS } from '$lib/constants';
@@ -51,17 +52,14 @@
 		copyCiSnippetLabel,
 		AI_PROVIDER_CARD_TITLE,
 		AI_PROVIDER_CARD_DESC,
-		ANTHROPIC_API_KEY_LABEL,
-		ANTHROPIC_API_KEY_PLACEHOLDER,
-		ANTHROPIC_MODEL_LABEL,
-		ANTHROPIC_MODEL_PLACEHOLDER,
-		OPENAI_API_KEY_LABEL,
-		OPENAI_API_KEY_PLACEHOLDER,
-		OPENAI_MODEL_LABEL,
-		OPENAI_MODEL_PLACEHOLDER,
+		AI_PROVIDER_CARDS,
+		API_KEY_LABEL,
+		MODEL_LABEL,
+		PROVIDER_CONNECTED_LABEL,
+		PROVIDER_DISCONNECTED_LABEL,
 		AI_CONFIG_SAVED_TOAST,
 		AI_CONFIG_SAVE_FAILED,
-		saveAiKeysLabel,
+		saveProviderKeyLabel,
 		AI_BEHAVIOUR_CARD_TITLE,
 		AI_BEHAVIOUR_CARD_DESC,
 		AI_SYSTEM_PROMPT_LABEL,
@@ -159,29 +157,38 @@
 		openaiApiKeySet: false,
 		openaiModel: ''
 	};
-	let aiConfigInputs = { anthropicApiKey: '', openaiApiKey: '' };
-	let aiConfigSaving = false;
+	// Keyed by provider id so the two cards share one set of handlers.
+	let aiKeyInputs = { anthropic: '', openai: '' };
+	let aiModels = { anthropic: '', openai: '' };
+	let openProvider = '';
+	let savingProvider = '';
+
+	// Keyed by id rather than read through a helper: Svelte can't see an
+	// `aiConfig` lookup hidden inside a function call, so the badge would go stale.
+	$: providerConnected = {
+		anthropic: aiConfig.anthropicApiKeySet === true,
+		openai: aiConfig.openaiApiKeySet === true
+	};
 
 	let projectAiConfig = { aiSystemPrompt: '', aiCodePractices: '' };
 	let projectAiConfigSaving = false;
 	let projectAiConfigPristine = snapshot(projectAiConfig);
 	$: projectAiConfigDirty = snapshot(projectAiConfig) !== projectAiConfigPristine;
 
-	async function handleSaveAiKeys() {
-		aiConfigSaving = true;
+	// Omits the other provider's fields entirely, which the backend leaves unchanged.
+	async function handleSaveProvider(id) {
+		savingProvider = id;
 		try {
 			aiConfig = await saveAiConfig({
-				anthropicApiKey: aiConfigInputs.anthropicApiKey,
-				anthropicModel: aiConfig.anthropicModel,
-				openaiApiKey: aiConfigInputs.openaiApiKey,
-				openaiModel: aiConfig.openaiModel
+				[`${id}ApiKey`]: aiKeyInputs[id],
+				[`${id}Model`]: aiModels[id]
 			});
-			aiConfigInputs = { anthropicApiKey: '', openaiApiKey: '' };
+			aiKeyInputs[id] = '';
 			notify('success', AI_CONFIG_SAVED_TOAST);
 		} catch {
 			notify('error', AI_CONFIG_SAVE_FAILED);
 		} finally {
-			aiConfigSaving = false;
+			savingProvider = '';
 		}
 	}
 
@@ -266,6 +273,9 @@
 		if (isOwner) {
 			try {
 				aiConfig = await fetchAiConfig();
+				aiModels = { anthropic: aiConfig.anthropicModel, openai: aiConfig.openaiModel };
+				// So a fresh instance shows a form instead of two closed rows.
+				openProvider = AI_PROVIDER_CARDS.find((p) => !aiConfig[`${p.id}ApiKeySet`])?.id ?? '';
 			} catch {}
 			try {
 				githubConfig = await fetchGithubConfig();
@@ -297,69 +307,87 @@
 
 {#if integrationsTab === 'ai'}
 	{#if isOwner}
-		<div class="card settings-card">
+		<div class="provider-section">
 			<p class="card-title">{AI_PROVIDER_CARD_TITLE}</p>
 			<p class="content-desc">{AI_PROVIDER_CARD_DESC}</p>
+		</div>
 
-			<div class="field-row">
-				<div class="field">
-					<label class="field-label" for="anthropic-key">
-						<span>{ANTHROPIC_API_KEY_LABEL}</span>
-						<span class="field-hint">{secretKeyHint(aiConfig.anthropicApiKeySet)}</span>
-					</label>
-					<input
-						id="anthropic-key"
-						type="password"
-						class="field-input"
-						bind:value={aiConfigInputs.anthropicApiKey}
-						placeholder={secretKeyPlaceholder(aiConfig.anthropicApiKeySet)}
-						autocomplete="new-password"
-					/>
-				</div>
-				<div class="field">
-					<label class="field-label" for="anthropic-model">{ANTHROPIC_MODEL_LABEL}</label>
-					<input
-						id="anthropic-model"
-						type="text"
-						class="field-input"
-						bind:value={aiConfig.anthropicModel}
-						placeholder={ANTHROPIC_MODEL_PLACEHOLDER}
-					/>
-				</div>
-			</div>
+		<div class="provider-list">
+			{#each AI_PROVIDER_CARDS as provider}
+				{@const connected = providerConnected[provider.id]}
+				{@const open = openProvider === provider.id}
+				<div class="card provider-card" class:provider-card-open={open}>
+					<button
+						class="provider-header"
+						aria-expanded={open}
+						on:click={() => (openProvider = open ? '' : provider.id)}
+					>
+						<span class="provider-logo"><ServiceIcon service={provider.icon} size={20} /></span>
+						<span class="provider-heading">
+							<span class="provider-name">{provider.name}</span>
+							<span class="provider-desc">{provider.desc}</span>
+						</span>
+						<span class="provider-state" class:provider-state-on={connected}>
+							{connected ? PROVIDER_CONNECTED_LABEL : PROVIDER_DISCONNECTED_LABEL}
+						</span>
+						<svg
+							width="13"
+							height="13"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							class="provider-chevron"
+							class:rotated={open}
+						>
+							<polyline points="9 18 15 12 9 6" />
+						</svg>
+					</button>
 
-			<div class="field-row">
-				<div class="field">
-					<label class="field-label" for="openai-key">
-						<span>{OPENAI_API_KEY_LABEL}</span>
-						<span class="field-hint">{secretKeyHint(aiConfig.openaiApiKeySet)}</span>
-					</label>
-					<input
-						id="openai-key"
-						type="password"
-						class="field-input"
-						bind:value={aiConfigInputs.openaiApiKey}
-						placeholder={secretKeyPlaceholder(aiConfig.openaiApiKeySet)}
-						autocomplete="new-password"
-					/>
-				</div>
-				<div class="field">
-					<label class="field-label" for="openai-model">{OPENAI_MODEL_LABEL}</label>
-					<input
-						id="openai-model"
-						type="text"
-						class="field-input"
-						bind:value={aiConfig.openaiModel}
-						placeholder={OPENAI_MODEL_PLACEHOLDER}
-					/>
-				</div>
-			</div>
+					{#if open}
+						<div class="provider-body" transition:slide={{ duration: 200 }}>
+							<div class="field-row">
+								<div class="field">
+									<label class="field-label" for="{provider.id}-key">
+										<span>{API_KEY_LABEL}</span>
+										<span class="field-hint">{secretKeyHint(connected)}</span>
+									</label>
+									<input
+										id="{provider.id}-key"
+										type="password"
+										class="field-input"
+										bind:value={aiKeyInputs[provider.id]}
+										placeholder={connected
+											? secretKeyPlaceholder(connected)
+											: provider.keyPlaceholder}
+										autocomplete="new-password"
+									/>
+								</div>
+								<div class="field">
+									<label class="field-label" for="{provider.id}-model">{MODEL_LABEL}</label>
+									<input
+										id="{provider.id}-model"
+										type="text"
+										class="field-input"
+										bind:value={aiModels[provider.id]}
+										placeholder={provider.modelPlaceholder}
+									/>
+								</div>
+							</div>
 
-			<div class="card-footer">
-				<Button on:click={handleSaveAiKeys} disabled={aiConfigSaving}>
-					{saveAiKeysLabel(aiConfigSaving)}
-				</Button>
-			</div>
+							<div class="card-footer">
+								<Button
+									on:click={() => handleSaveProvider(provider.id)}
+									disabled={savingProvider === provider.id}
+								>
+									{saveProviderKeyLabel(savingProvider === provider.id)}
+								</Button>
+							</div>
+						</div>
+					{/if}
+				</div>
+			{/each}
 		</div>
 	{:else}
 		<p class="content-desc owner-note">{AI_OWNER_ONLY_NOTE}</p>
@@ -569,6 +597,107 @@
 		flex-direction: column;
 		gap: 1.25rem;
 		margin-bottom: 1.25rem;
+	}
+	.provider-section {
+		margin-bottom: 1rem;
+	}
+	.provider-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		margin-bottom: 1.25rem;
+	}
+	.provider-card {
+		padding: 0;
+		overflow: hidden;
+	}
+	.provider-card-open {
+		border-color: var(--accent);
+	}
+	.provider-header {
+		display: flex;
+		align-items: center;
+		gap: 0.875rem;
+		width: 100%;
+		padding: 1rem 1.25rem;
+		font-family: inherit;
+		text-align: left;
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		transition: background var(--duration-fast);
+	}
+	.provider-header:hover {
+		background: var(--bg-subtle);
+	}
+	.provider-logo {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		flex-shrink: 0;
+		border-radius: var(--radius-md);
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+	}
+	.provider-heading {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		min-width: 0;
+	}
+	.provider-name {
+		font-size: 0.9375rem;
+		font-weight: 500;
+		color: var(--text);
+	}
+	.provider-desc {
+		font-size: 0.78rem;
+		line-height: 1.4;
+		color: var(--text-muted);
+	}
+	.provider-state {
+		margin-left: auto;
+		flex-shrink: 0;
+		font-size: 0.7rem;
+		font-weight: 500;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-pill);
+		padding: 0.15rem 0.55rem;
+	}
+	.provider-state-on {
+		color: var(--pass);
+		background: var(--pass-soft);
+		border-color: transparent;
+	}
+	.provider-chevron {
+		flex-shrink: 0;
+		color: var(--text-muted);
+		transition: transform var(--duration-fast) var(--ease-out);
+	}
+	.provider-chevron.rotated {
+		transform: rotate(90deg);
+	}
+	.provider-body {
+		display: flex;
+		flex-direction: column;
+		gap: 1.25rem;
+		padding: 1.25rem;
+		border-top: 1px solid var(--border);
+	}
+	@media (max-width: 640px) {
+		.provider-desc,
+		.provider-state {
+			display: none;
+		}
+		.provider-state-on {
+			display: inline-block;
+		}
 	}
 	.field-row {
 		display: flex;

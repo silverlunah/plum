@@ -66,7 +66,6 @@ function wireRealtimeServices(io, isNodeMode) {
 	runQueueService.setSocketIO(io);
 	require('../services/testRunService').setSocketIO(io);
 	require('../services/notificationInboxService').setSocketIO(io);
-	require('../services/aiSessionService').setSocketIO(io);
 
 	return {
 		cronService,

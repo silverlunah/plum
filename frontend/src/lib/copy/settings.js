@@ -211,15 +211,30 @@ export const GITHUB_TAB_LABEL = 'GitHub';
 
 // ── Integrations: AI ──
 export const AI_PROVIDER_CARD_TITLE = 'AI provider keys';
-export const AI_PROVIDER_CARD_DESC = 'Owner only. Instance-wide, every project shares these keys.';
-export const ANTHROPIC_API_KEY_LABEL = 'Anthropic API key';
-export const ANTHROPIC_API_KEY_PLACEHOLDER = 'sk-ant-…';
-export const ANTHROPIC_MODEL_LABEL = 'Anthropic model';
-export const ANTHROPIC_MODEL_PLACEHOLDER = 'claude-sonnet-5';
-export const OPENAI_API_KEY_LABEL = 'OpenAI API key';
-export const OPENAI_API_KEY_PLACEHOLDER = 'sk-…';
-export const OPENAI_MODEL_LABEL = 'OpenAI model';
-export const OPENAI_MODEL_PLACEHOLDER = 'gpt-5';
+export const AI_PROVIDER_CARD_DESC =
+	'Owner only. Instance-wide, every project shares these keys. Connect either one, Claude is used first when both are set.';
+export const API_KEY_LABEL = 'API key';
+export const MODEL_LABEL = 'Model';
+export const PROVIDER_CONNECTED_LABEL = 'Connected';
+export const PROVIDER_DISCONNECTED_LABEL = 'Not connected';
+export const AI_PROVIDER_CARDS = [
+	{
+		id: 'anthropic',
+		icon: 'claude',
+		name: 'Claude',
+		desc: 'Anthropic. Preferred when both providers are connected.',
+		keyPlaceholder: 'sk-ant-…',
+		modelPlaceholder: 'claude-sonnet-5'
+	},
+	{
+		id: 'openai',
+		icon: 'openai',
+		name: 'OpenAI',
+		desc: 'Used when Claude is not connected.',
+		keyPlaceholder: 'sk-…',
+		modelPlaceholder: 'gpt-5'
+	}
+];
 export const AI_CONFIG_SAVED_TOAST = 'AI provider settings saved.';
 export const AI_CONFIG_SAVE_FAILED = 'Failed to save AI provider settings.';
 
@@ -234,7 +249,7 @@ export const AI_PROJECT_CONFIG_SAVED_TOAST = 'AI behaviour saved.';
 export const AI_PROJECT_CONFIG_SAVE_FAILED = 'Failed to save AI behaviour.';
 export const AI_OWNER_ONLY_NOTE = 'Ask an owner to connect provider keys before the agent can run.';
 
-export const saveAiKeysLabel = (saving) => (saving ? SAVING_LABEL : 'Save AI Keys');
+export const saveProviderKeyLabel = (saving) => (saving ? SAVING_LABEL : 'Save');
 export const saveAiBehaviourLabel = (saving) => (saving ? SAVING_LABEL : 'Save Behaviour');
 
 // ── Integrations: GitHub ──
@@ -538,6 +553,8 @@ const ACTIVITY_ACTION_META = {
 	'schedule.delete': { verb: 'deleted schedule', tone: 'delete' },
 	'schedule.toggle': { verb: 'toggled schedule', tone: 'neutral' },
 	'integrations.update': { verb: 'updated integrations for', tone: 'update' },
+	'report_analysis.run': { verb: 'ran an AI analysis of', tone: 'neutral' },
+	'report_analysis.pr_opened': { verb: 'opened an AI fix PR for', tone: 'create' },
 	'project.settings_update': { verb: 'updated settings for', tone: 'update' },
 	'project.prefixes_update': { verb: 'changed ID prefixes for', tone: 'update' },
 	'member.add': { verb: 'added', tone: 'create' },

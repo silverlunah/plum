@@ -12,7 +12,6 @@
 	import { auth } from '$lib/stores/auth';
 	import { fetchProjects } from '$lib/api/projects';
 	import { branding, loadBranding } from '$lib/stores/branding';
-	import { fetchAiConfig } from '$lib/api/settings';
 	import { activeProjectId, activeProject, projects, setProjects } from '$lib/stores/project';
 	import {
 		notificationInbox,
@@ -40,20 +39,12 @@
 	// Shared store, so a project created or deleted in Settings shows here without a reload.
 	$: projectList = $projects;
 
-	// Whether to show the AI tab at all - not just whether the current session
-	// can open one. Starts hidden so it never flashes in before we know either way.
-	let aiLinked = false;
-
 	onMount(async () => {
 		try {
 			setProjects(await fetchProjects());
 		} catch {}
 		loadBranding();
 		loadNotificationInbox().catch(() => {});
-		try {
-			const ai = await fetchAiConfig();
-			aiLinked = ai.anthropicApiKeySet || ai.openaiApiKeySet;
-		} catch {}
 		try {
 			const repoWarning = sessionStorage.getItem('plum:setup:repoWarning');
 			if (repoWarning) {
@@ -77,21 +68,17 @@
 		{ href: '/scheduled-tests', label: 'Scheduled' }
 	];
 	const REPO_LINK = { href: '/test-repository', label: 'Test Repository' };
-	const AI_LINK = { href: '/ai', label: 'AI', sep: true };
 
 	// Manual-only hides the automation surface entirely. Otherwise `sep` just
 	// draws a divider between the Test Repository link and the automation group,
 	// on whichever side the repository sits.
 	$: manualOnly = $activeProject?.manualRepositoryOnly ?? false;
 	$: repoFirst = manualOnly || $activeProject?.defaultHome === 'repository';
-	$: links = [
-		...(manualOnly
-			? [REPO_LINK]
-			: repoFirst
-				? [REPO_LINK, { ...AUTOMATION_LINKS[0], sep: true }, ...AUTOMATION_LINKS.slice(1)]
-				: [...AUTOMATION_LINKS, { ...REPO_LINK, sep: true }]),
-		...(aiLinked ? [AI_LINK] : [])
-	];
+	$: links = manualOnly
+		? [REPO_LINK]
+		: repoFirst
+			? [REPO_LINK, { ...AUTOMATION_LINKS[0], sep: true }, ...AUTOMATION_LINKS.slice(1)]
+			: [...AUTOMATION_LINKS, { ...REPO_LINK, sep: true }];
 
 	function closeMenu() {
 		menuOpen = false;
