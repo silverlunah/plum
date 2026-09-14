@@ -88,9 +88,24 @@ async function openPullRequest({ owner, repo, head, base, title, body }) {
 
 // Every git operation below authenticates via a per-invocation `http.extraheader`
 // rather than embedding the token in the remote URL, so the token never lands in
-// a worktree's committed/persisted .git/config.
+// a worktree's committed/persisted .git/config. GitHub's git-over-HTTPS backend
+// only accepts Basic auth here (same as actions/checkout's own credential
+// helper) - a bearer-scheme header gets a 401, and git's own fallback to an
+// interactive prompt on that 401 is what actually surfaces, a generic "could
+// not read Username" with no hint the header scheme itself was the problem.
 function authArgs(token) {
-	return ['-c', `http.extraheader=AUTHORIZATION: bearer ${token}`];
+	const basic = Buffer.from(`x-access-token:${token}`).toString('base64');
+	return ['-c', `http.extraheader=AUTHORIZATION: basic ${basic}`];
+}
+
+// A rejected credential and a git-protocol-level auth failure look identical
+// by the time they reach here (git retries with an interactive prompt either
+// way, which fails the same way in a container with no TTY), so both need
+// this rewrite: raw text like "could not read Username ... No such device or
+// address" means nothing to whoever pasted the token, not what actually went
+// wrong with it.
+function isGitAuthFailure(message) {
+	return /could not read username|authentication failed|invalid credentials/i.test(message || '');
 }
 
 async function cloneRepo({ owner, repo, destPath, branch }) {
@@ -98,7 +113,18 @@ async function cloneRepo({ owner, repo, destPath, branch }) {
 	const url = `https://github.com/${owner}/${repo}.git`;
 	const args = [...authArgs(token)];
 	if (branch) args.push('--branch', branch);
-	await simpleGit().clone(url, destPath, args);
+	try {
+		await simpleGit().clone(url, destPath, args);
+	} catch (e) {
+		if (isGitAuthFailure(e.message)) {
+			const err = new Error(
+				`GitHub rejected this token for ${owner}/${repo}. Check it hasn't expired and has repo access.`
+			);
+			err.status = 400;
+			throw err;
+		}
+		throw e;
+	}
 	return destPath;
 }
 
@@ -126,7 +152,18 @@ async function createBranch({ repoPath, branch }) {
 
 async function pushBranch({ repoPath, branch }) {
 	const token = await ownToken();
-	await simpleGit(repoPath).raw([...authArgs(token), 'push', '-u', 'origin', branch]);
+	try {
+		await simpleGit(repoPath).raw([...authArgs(token), 'push', '-u', 'origin', branch]);
+	} catch (e) {
+		if (isGitAuthFailure(e.message)) {
+			const err = new Error(
+				"GitHub rejected this token. Check it hasn't expired and has repo write access."
+			);
+			err.status = 400;
+			throw err;
+		}
+		throw e;
+	}
 }
 
 module.exports = {
